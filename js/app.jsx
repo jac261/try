@@ -202,7 +202,7 @@ function WorkoutRow({ w, done, onClick, eff, moved }) {
   const disc = D[w.discipline];
   return (
     <div className={'wk' + (done ? ' done' : '')} onClick={onClick}>
-      <div className="dot" style={{ background: disc.color }}>{disc.icon}</div>
+      <div className="dot" style={{ background: disc.grad }}>{disc.icon}</div>
       <div className="meta">
         <div className="t">{w.title} {w.key && !w.race && <span className="tag key">Key</span>}{moved && <span className="tag moved">Moved</span>}</div>
         <div className="s">{w.type}{w.distance ? ' · ' + w.distance + ' ' + w.unit : ''} · {T.fmtDuration(w.durationMin || 0)}</div>
@@ -223,7 +223,7 @@ function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove }) {
       <div className="sheet" onClick={e => e.stopPropagation()}>
         <div className="grab" />
         <div className="hero">
-          <div className="dot" style={{ background: disc.color }}>{disc.icon}</div>
+          <div className="dot" style={{ background: disc.grad }}>{disc.icon}</div>
           <div><h2>{w.title}</h2><div className="s">{T.fmtDate(shown, { weekday: 'long', month: 'long', day: 'numeric' })} · {w.phase} phase</div></div>
         </div>
         {!w.race && <div className="statline">
@@ -492,7 +492,7 @@ function App() {
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
 
   const tabs = [
-    ['today', '🏠', 'Today'], ['calendar', '🗓️', 'Calendar'],
+    ['today', '☀️', 'Today'], ['calendar', '🗓️', 'Calendar'],
     ['plan', '📋', 'Plan'], ['progress', '📈', 'Progress'], ['settings', '⚙️', 'You'],
   ];
 
