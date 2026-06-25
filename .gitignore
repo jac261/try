@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Exported plans / local archives
+*.ics
+*.zip
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
