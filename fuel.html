@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0e1217" />
+  <title>Try — Fuel Planner</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    Babel.registerPreset('react-classic', {
+      presets: [[Babel.availablePresets.react, { runtime: 'classic' }]],
+    });
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="js/fuel.js"></script>
+  <script type="text/babel" data-presets="react-classic">
+    const { useState, useMemo } = React;
+    const F = window.TFUEL;
+
+    const RACES = [
+      { key: 'sprint', name: 'Sprint' },
+      { key: 'olympic', name: 'Olympic' },
+      { key: 'half', name: '70.3' },
+      { key: 'full', name: 'Ironman' },
+    ];
+
+    function Stat({ big, sub }) {
+      return <div className="s"><b>{big}</b><span>{sub}</span></div>;
+    }
+
+    function App() {
+      const [race, setRace] = useState('half');
+      const [hours, setHours] = useState(F.RACE_HOURS.half);
+      const [weight, setWeight] = useState(72);
+      const [carbs, setCarbs] = useState(F.targetCarbs(F.RACE_HOURS.half));
+      const [touchedCarbs, setTouchedCarbs] = useState(false);
+
+      function pickRace(k) {
+        setRace(k);
+        const h = F.RACE_HOURS[k];
+        setHours(h);
+        if (!touchedCarbs) setCarbs(F.targetCarbs(h));
+      }
+      function setH(h) {
+        setHours(h);
+        if (!touchedCarbs) setCarbs(F.targetCarbs(h));
+      }
+
+      const p = useMemo(
+        () => F.plan({ hours: hours, gPerHour: carbs, weightKg: weight }),
+        [hours, carbs, weight]
+      );
+
+      return (
+        <div className="app">
+          <div className="topbar">
+            <h1>⚡ Fuel Planner</h1>
+            <div className="sub">Dial in your race-day carbs — and make them yourself for pennies</div>
+          </div>
+
+          <div className="section-title">Your race</div>
+          <div className="card">
+            <div className="choice" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+              {RACES.map(r => (
+                <div key={r.key} className={'opt' + (race === r.key ? ' on' : '')}
+                     onClick={() => pickRace(r.key)} style={{ textAlign: 'center' }}>{r.name}</div>
+              ))}
+            </div>
+            <div style={{ height: 14 }} />
+            <label className="field">
+              <span className="lab">Estimated finish time · <b>{hours.toFixed(1)} h</b></span>
+              <input type="range" min="0.5" max="16" step="0.5" value={hours}
+                     onChange={e => setH(Number(e.target.value))} />
+            </label>
+            <label className="field">
+              <span className="lab">Body weight · <b>{weight} kg</b></span>
+              <input type="range" min="45" max="110" step="1" value={weight}
+                     onChange={e => setWeight(Number(e.target.value))} />
+            </label>
+            <label className="field">
+              <span className="lab">Carb target · <b>{carbs} g/h</b>
+                {!touchedCarbs && <span className="hint"> · auto from duration</span>}</span>
+              <input type="range" min="30" max="120" step="5" value={carbs}
+                     onChange={e => { setTouchedCarbs(true); setCarbs(Number(e.target.value)); }} />
+            </label>
+          </div>
+
+          <div className="section-title">Race-day fuel</div>
+          <div className="kpis">
+            <div className="kpi"><div className="v">{p.totalCarb}<small> g</small></div><div className="k">Total carbs needed</div></div>
+            <div className="kpi"><div className="v">{p.gPerHour}<small> g/h</small></div><div className="k">Intake rate</div></div>
+            <div className="kpi"><div className="v">{p.fluid}<small> ml/h</small></div><div className="k">Fluid target</div></div>
+            <div className="kpi"><div className="v">{p.sodium}<small> mg/h</small></div><div className="k">Sodium target</div></div>
+          </div>
+
+          <div className="section-title">Your pre-mix recipe <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(1:0.8 dual-carb)</span></div>
+          <div className="card">
+            <div className="seg">
+              <div className="bar" style={{ background: 'var(--accent)' }} />
+              <div><div className="l">Maltodextrin</div><div className="d">fast-emptying glucose polymer</div></div>
+              <div className="m">{p.malto} g</div>
+            </div>
+            <div className="seg">
+              <div className="bar" style={{ background: 'var(--bike, #e9a13b)' }} />
+              <div><div className="l">Fructose</div><div className="d">second transporter — unlocks higher g/h</div></div>
+              <div className="m">{p.fruc} g</div>
+            </div>
+            <div className="seg">
+              <div className="bar" style={{ background: 'var(--swim, #3aa0ff)' }} />
+              <div><div className="l">Electrolyte + flavour</div><div className="d">~{Math.round(p.sodium * p.hours)} mg sodium total + citric acid to taste</div></div>
+              <div className="m">{p.additives} g</div>
+            </div>
+            <p className="lead" style={{ margin: '10px 2px 0' }}>
+              Whisk into {Math.round(p.fluid * p.hours / 100) / 10} L of water (or split across bottles/gel flasks).
+              Always test in training before race day.
+            </p>
+          </div>
+
+          <div className="section-title">Cost vs buying gels</div>
+          <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)' }}>
+            <div className="statline" style={{ justifyContent: 'center' }}>
+              <Stat big={F.fmtMoney(p.cost)} sub="make it yourself" />
+              <Stat big={F.fmtMoney(p.commCost)} sub="commercial gels" />
+              <Stat big={Math.round(p.savingPct * 100) + '%'} sub="you save" />
+            </div>
+            <p className="lead" style={{ margin: '8px 2px 0' }}>
+              That's <b>{F.fmtMoney(p.saving)}</b> saved on this race alone — at wholesale ingredient prices.
+            </p>
+          </div>
+
+          <div className="center muted" style={{ fontSize: 12, marginTop: 16 }}>
+            Try · Fuel Planner — integration sketch
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

@@ -1,116 +1,151 @@
 # 🏊‍♀️🚴‍♂️🏃‍♀️ Try
 
-A Runna-style triathlon training app. Generates a personalised, periodised
-swim/bike/run plan from your race, schedule and current fitness — then lets you
-work through it week by week and track progress.
+A Runna-style triathlon training app. It builds a personalised, periodised
+swim/bike/run plan from your race, schedule and fitness — then lets you work
+through it week by week and track progress.
 
 **▶ Live demo:** https://jac261.github.io/try/
 
-> **Naming:** the app is called **Try**. The folder and the `localStorage` key
-> prefix are still `triflow` internally — kept deliberately so existing saved data
-> isn't wiped by the rename (see the `LS` helper in [`js/app.jsx`](js/app.jsx)).
+> **Naming:** the app is called **Try**, but the folder and `localStorage` keys are
+> still prefixed `triflow` internally — kept deliberately so existing saved data
+> survives the rename (see the `LS` helper in [`js/app.jsx`](js/app.jsx)).
 
-## Features
-- **Plan generator** — pick Sprint / Olympic / 70.3 / 140.6, your race date,
-  training days/week and experience (Beginner → Elite). Produces a full
-  Base → Build → Peak → Taper block with recovery weeks and a race-day plan.
-- **Experience levels that matter** — each level changes volume, workout intensity,
-  and recovery-week frequency, not just total hours.
-- **Structured workouts** — warm-up / main set / cool-down with target paces
-  (from your 5k time), swim CSS pace, and bike power zones (from FTP). New to the
-  sport? Skip the numbers and every session is guided by effort (RPE / HR zones),
-  with ballpark paces estimated from your level.
-- **Weekly calendar** with reschedule + adaptive "catch-up" for missed sessions.
-- **Progress dashboard** — days to race, completion %, streak, weekly-volume chart
-  and discipline-balance donut.
+---
+
+## 1. What it does
+- **Generates a full training plan** for a Sprint / Olympic / 70.3 / 140.6 race from
+  your race date, days-per-week and experience level — periodised into
+  Base → Build → Peak → Taper with recovery weeks and a race-day entry.
+- **Structured workouts** with warm-up / main set / cool-down and target paces
+  (run from your 5k, swim from CSS pace, bike power from FTP). No numbers? Sessions
+  are guided by effort (RPE / HR zones) with paces estimated from your level.
+- **Weekly calendar** with drag-free reschedule and an adaptive "catch-up" that
+  spreads missed sessions onto free days.
+- **Progress dashboard** — countdown, completion %, streak, weekly-volume chart and
+  discipline-balance donut.
 - **Calendar export** (`.ics`) and an **installable, offline-capable PWA**.
 
-Data is saved in your browser (localStorage) — no account, no server.
+Everything is stored locally in the browser — **no account, no server.**
 
-## Tech Stack
-- **UI:** [React 18](https://react.dev/) (UMD build from a CDN — no bundler)
-- **JSX:** [Babel Standalone](https://babeljs.io/docs/babel-standalone) transpiles
-  `js/app.jsx` in the browser at load time (classic runtime → `React.createElement`)
-- **Styling:** hand-written CSS with custom properties (dark, Runna-inspired theme);
-  [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans) via Google Fonts
-- **Charts & icons:** hand-rolled inline SVG (no chart/icon library)
-- **State / persistence:** plain `window.TF.*` globals + `localStorage` (no backend)
-- **PWA:** `manifest.webmanifest` + a service worker (`sw.js`) for offline use
-- **Hosting:** static files on **GitHub Pages**
-- **Tooling:** none required to run. Local dev uses any static file server
-  (examples use Python's `http.server`). Icons were generated with Python + Pillow.
+## 2. How it works
+Try is a **zero-build static web app**. There is no bundler, no `package.json`, and
+no `node_modules` — the source files *are* what ships.
 
-There is **no build step, no `package.json`, and no `node_modules`** — the source
-files *are* what ships.
+- **`index.html`** loads React 18 and Babel from a CDN, then loads the app scripts.
+- **JSX is transpiled in the browser** by Babel Standalone at page load. `index.html`
+  registers a `react-classic` Babel preset so JSX compiles to `React.createElement`
+  against the global `React` (rather than emitting an ESM `import`, which a plain
+  `<script>` can't use).
+- **Scripts load in order and share a `window.TF` namespace:**
+  `data.js` (domain data + helpers) → `plan.js` (plan generator) → `app.jsx` (React UI).
+- **The plan generator** (`plan.js`) is pure functions: `generatePlan(profile)` returns
+  weeks → workouts → segments. Given a profile it computes the phase split, weekly
+  volume ramp, per-session intensity and target paces. The UI just renders that object.
+- **State lives in `localStorage`** (`triflow.plan`, `triflow.log`, `triflow.moves`) and
+  is layered: the generated plan is immutable; completion (`log`) and reschedules
+  (`moves`) are overlays applied at render time.
+- **PWA:** `manifest.webmanifest` + a service worker (`sw.js`) cache the app shell and
+  CDN libs so it installs to a home screen and works offline.
 
-## Prerequisites
-- A modern web browser.
-- Any static file server, so the app is served over **http** (see the `file://`
-  note in Quick Start). Common options:
-  - **Python 3** — `python3 -m http.server` (used in the examples below)
-  - **Node** — `npx serve`
-  - any other (PHP, `caddy file-server`, the VS Code "Live Server" extension, …)
-- **No Node.js, npm, or build toolchain is needed.**
-- *Optional:* `git` + a GitHub Pages-enabled repo to deploy; Python + `Pillow`
-  only if you want to regenerate the icons.
+**Tech stack:** React 18 (CDN UMD) · Babel Standalone (in-browser JSX) · hand-written
+CSS with custom properties + Plus Jakarta Sans · hand-rolled inline-SVG charts & icons ·
+`localStorage` · service-worker PWA · hosted on GitHub Pages.
 
-## Quick Start
+### Project structure
+```
+try/
+├── index.html              # entry point: CDN React+Babel, classic-JSX preset, SW registration
+├── styles.css              # all styling — CSS variables, dark Runna-style theme
+├── js/
+│   ├── data.js             # races, disciplines, zones, fitness levels, date/pace helpers (window.TF)
+│   ├── plan.js             # periodised plan generator + per-discipline workout builders
+│   └── app.jsx             # React UI: onboarding, Today, Calendar, Plan, Progress, Settings, icons, charts
+├── manifest.webmanifest    # PWA metadata (name, icons, theme, display)
+├── sw.js                   # service worker — offline caching
+├── icons/                  # PWA icons (PNG sizes + maskable + apple-touch + SVG favicon)
+├── .github/workflows/
+│   └── deploy.yml          # GitHub Actions: auto-deploy to Pages on push to main
+├── .nojekyll               # serve files as-is on Pages
+└── README.md
+```
+
+## 3. Getting started (development)
+**Prerequisites:** a modern browser and any static file server (so the app is served
+over **http**). No Node, npm, or build toolchain required.
+
 ```bash
-# 1. Get the code
+# 1. Clone
 git clone https://github.com/jac261/try.git
 cd try
 
-# 2. Serve it over http (pick any static server)
-python3 -m http.server 8733      # or: npx serve
+# 2. Serve over http (any static server works)
+python3 -m http.server 8733       # or: npx serve
 
-# 3. Open it
+# 3. Open
 #    http://localhost:8733
 ```
 
 > ⚠️ **Serve over http — don't open `index.html` with `file://`.** Babel fetches
 > `js/app.jsx` at runtime to transpile it, and browsers block that under `file://`.
-> A dev server (or GitHub Pages) handles this; double-clicking the file won't.
 
-## Project Structure
-```
-try/
-├── index.html            # entry point: loads React + Babel (CDN), registers the service worker
-├── styles.css            # all styling — CSS variables, dark Runna-style theme
-├── js/
-│   ├── data.js           # races, disciplines, training zones, fitness levels, date/pace helpers (window.TF)
-│   ├── plan.js           # periodised plan generator + per-discipline workout builders
-│   └── app.jsx           # React UI: onboarding, Today, Calendar, Plan, Progress, Settings, SVG icons & charts
-├── manifest.webmanifest  # PWA metadata (name, icons, theme, display mode)
-├── sw.js                 # service worker — offline caching (network-first for app files, cache-first for CDN)
-├── icons/                # app / PWA icons (PNG sizes + maskable + apple-touch + SVG favicon)
-├── .nojekyll             # tell GitHub Pages to serve files as-is
-├── .gitignore
-└── README.md
-```
+**Dev loop:** edit a file → refresh the browser. Logic lives in `js/plan.js`
+(plan generation) and `js/data.js` (the tunable constants below); UI lives in
+`js/app.jsx`; styling in `styles.css`.
 
-Scripts load in order — `data.js` → `plan.js` (both plain JS, attaching to a global
-`window.TF` namespace) → `app.jsx` (JSX, transpiled by Babel). `index.html` registers
-a `react-classic` Babel preset so JSX compiles against the global React rather than
-emitting an ESM `import`.
+> 🧹 **Service-worker caching during dev:** the SW serves cached assets, which can
+> mask edits. If a change doesn't appear, hard-refresh, or in DevTools →
+> Application → Service Workers tick **"Update on reload"** (or Unregister). The SW
+> is network-first for the app's own files, so a normal reload while online usually
+> picks up changes on the second load.
 
-## Install it (PWA)
-Open the live site, then **Add to Home Screen** (iOS Safari) or **Install**
-(Chrome/Edge) to run it full-screen like a native app. After the first visit it
-works **offline** — the service worker caches the app shell and CDN libraries, so
-your plan is available with no signal.
+*Optional:* regenerating the icons needs Python with `Pillow` (the only dev-time
+dependency, used once to produce `icons/`).
 
-State persists in `localStorage` under `triflow.plan`, `triflow.log` and
-`triflow.moves`.
+## 4. Building
+**There is no build step.** The browser runs the source directly (JSX is transpiled
+on the fly by Babel). To ship, you deploy the files as-is.
 
-## Deploying
-It's static, so any static host works. This repo deploys to **GitHub Pages** from
-the `main` branch (root) — every push redeploys automatically in ~1 minute. The
-relative paths in `index.html` and `manifest.webmanifest` keep it working under a
-project subpath like `/try/`.
+If you later want a conventional build (fast HMR, npm packages like a Strava SDK, a
+minified bundle), migrate to [Vite](https://vitejs.dev/): `npm create vite@latest`
+(React template), move `js/*` into `src/`, convert the `window.TF` globals to ES
+module imports, and drop the CDN/Babel `<script>` tags from `index.html`.
 
-## Moving to a real build (optional)
-Once Node is installed you can migrate to [Vite](https://vitejs.dev/):
-`npm create vite@latest` (React template), move `js/*` into `src/`, convert the
-`window.TF` globals into ES module imports, and remove the CDN/Babel `<script>`
-tags from `index.html`. This gets you fast HMR, real npm dependencies (e.g. a
-Strava SDK) and a minified production bundle — at the cost of a build step.
+## 5. Deploying
+The app is static, so any static host works. This repo deploys to **GitHub Pages**.
+
+**Automatic (GitHub Actions):** [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+runs on every push to `main` (or manually via *Actions → Run workflow*). It uploads
+the repo root and deploys to Pages — no build, ~1 minute.
+
+> **One-time setup:** in the repo, go to **Settings → Pages → Build and deployment →
+> Source** and select **"GitHub Actions"**. (If it's on "Deploy from a branch", the
+> workflow can't publish.) After that, pushes deploy automatically and appear in the
+> **Actions** tab.
+
+Relative paths in `index.html` and `manifest.webmanifest` keep everything working
+under a project subpath like `/try/`.
+
+## 6. Configuration & tuning knobs
+There are no runtime feature toggles; behaviour is driven by a handful of plain-data
+constants you can edit directly. The most useful:
+
+| Knob | File | What it controls |
+|---|---|---|
+| `TF.RACES` | `js/data.js` | Race types and their swim/bike/run distances + `taperWeeks`. Add a race by adding an entry. |
+| `TF.FITNESS` | `js/data.js` | Per experience level: `factor` (volume ×), `intensity` (shifts quality sessions along the ladder), `recoveryEvery` (recovery week every N weeks), `recoveryDepth` (how much volume drops then), `est5k`/`estCss` (fallback paces when fields are blank). |
+| `TF.DISCIPLINES` | `js/data.js` | Per discipline: `color`, `grad` (icon gradient), `icon` (icon-set name). |
+| `TF.ZONES` | `js/data.js` | Training zones Z1–Z5 (names + RPE strings). |
+| `TEMPLATES` | `js/plan.js` | Weekly session composition for 3–7 days/week (tokens like `swim:quality`, `bike:long`). |
+| `INTENSITY_LADDER` | `js/plan.js` | Per-discipline easy→hard workout progression; the chosen rung = phase position + level `intensity`. |
+| `LONG_RUN` / `LONG_BIKE` / `LONG_BRICK` | `js/plan.js` | Base long-session durations (minutes) per race type. |
+| `loadFactor()` | `js/plan.js` | Within-phase volume ramp (e.g. Base 0.82→1.0, Build 1.0→1.12, Peak 1.12→1.18, Taper drop). |
+| `computePhases()` | `js/plan.js` | Base/Build/Peak/Taper split (Peak ≈20%, Build ≈40%, Base = remainder; taper from the race). |
+| `WEEKDAY_ORDER` / `WEEKEND` | `js/plan.js` | Which weekdays sessions land on (long/brick → weekend). |
+| `CACHE` | `sw.js` | Service-worker cache name (`try-vN`). **Bump it** when you change cached assets to force clients to re-cache. |
+| `localStorage` keys | `js/app.jsx` (`LS`) | `triflow.plan` (the generated plan), `triflow.log` (completed sessions), `triflow.moves` (reschedules). |
+| `react-classic` preset | `index.html` | Forces Babel's classic JSX runtime so JSX uses global React. Don't remove it. |
+| PWA config | `manifest.webmanifest` | App name, icons, `theme_color`, `display: standalone`, etc. |
+
+**Example — make Beginners even gentler:** in `TF.FITNESS.beginner` lower `factor`
+(less volume) or `intensity` (easier sessions), or set `recoveryEvery: 3` (more rest).
+The change flows through the next generated plan automatically.
