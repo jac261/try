@@ -1,5 +1,5 @@
 /* Try — service worker for offline support (PWA). */
-const CACHE = 'try-v1';
+const CACHE = 'try-v2';
 
 // App shell + the CDN libraries the app needs to boot offline.
 const SHELL = [
@@ -10,6 +10,8 @@ const SHELL = [
   './js/plan.js',
   './js/app.jsx',
   './manifest.webmanifest',
+  './icons/icon.svg',
+  './icons/favicon-48.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon-180.png',
