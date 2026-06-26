@@ -146,7 +146,7 @@ function Onboarding({ onCreate }) {
   const [step, setStep] = useState(0);
   const [f, setF] = useState({
     name: '', raceType: 'olympic', fitness: 'intermediate', daysPerWeek: 5,
-    raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '25:00', css100: '2:00', ftp: '',
+    raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '', css100: '', ftp: '',
   });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
 
@@ -203,14 +203,14 @@ function Onboarding({ onCreate }) {
         </>}
 
         {step === 2 && <>
-          <h2>Your current fitness</h2>
-          <p className="lead">Used to set precise paces & power. Estimates are fine — leave blank to train by feel (RPE).</p>
-          <label className="field"><span className="lab">Recent 5 km run time <span className="hint">mm:ss</span></span>
-            <input value={f.fivek} placeholder="25:00" onChange={e => set('fivek', e.target.value)} /></label>
-          <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">mm:ss</span></span>
-            <input value={f.css100} placeholder="2:00" onChange={e => set('css100', e.target.value)} /></label>
-          <label className="field"><span className="lab">Cycling FTP <span className="hint">watts — optional</span></span>
-            <input value={f.ftp} placeholder="e.g. 220" inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
+          <h2>Your current fitness <span className="hint" style={{ fontWeight: 500 }}>· optional</span></h2>
+          <p className="lead"><b>New to triathlon? You can skip all of these.</b> We'll then guide every session by effort (RPE / heart-rate zones), with ballpark paces estimated from your {T.FITNESS[f.fitness].name} level. Add any numbers you do know to make it precise.</p>
+          <label className="field"><span className="lab">Recent 5 km run time <span className="hint">optional · mm:ss</span></span>
+            <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>
+          <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
+            <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>
+          <label className="field"><span className="lab">Cycling FTP <span className="hint">optional · watts</span></span>
+            <input value={f.ftp} placeholder="e.g. 200" inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
           <div className="row"><button className="btn ghost" onClick={() => setStep(1)}>Back</button>
             <button className="btn primary" onClick={finish}>Generate plan →</button></div>
         </>}
@@ -480,9 +480,9 @@ function SettingsView({ plan, onRegenerate, onReset, onExport }) {
           <div className="s"><b>{plan.totalWeeks}</b><span>weeks</span></div>
         </div>
         <div className="statline">
-          <div className="s"><b>{p.fivekSec ? T.fmtPace(p.fivekSec / 5) : '—'}</b><span>5k pace/km</span></div>
-          <div className="s"><b>{p.css100Sec ? T.fmtPace(p.css100Sec) : '—'}</b><span>swim /100m</span></div>
-          <div className="s"><b>{p.ftp || '—'}</b><span>FTP watts</span></div>
+          <div className="s"><b>{p.fivekSec ? T.fmtPace(p.fivekSec / 5) : '~' + T.fmtPace((T.FITNESS[p.fitness] || T.FITNESS.intermediate).est5k / 5)}</b><span>{p.fivekSec ? '5k pace/km' : '5k pace · est'}</span></div>
+          <div className="s"><b>{p.css100Sec ? T.fmtPace(p.css100Sec) : '~' + T.fmtPace((T.FITNESS[p.fitness] || T.FITNESS.intermediate).estCss)}</b><span>{p.css100Sec ? 'swim /100m' : 'swim · est'}</span></div>
+          <div className="s"><b>{p.ftp || 'RPE'}</b><span>{p.ftp ? 'FTP watts' : 'bike by feel'}</span></div>
         </div>
       </div>
       <div className="card">

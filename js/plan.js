@@ -4,13 +4,15 @@
 
   /* ---- paces derived from the athlete's baselines ---- */
   function computePaces(profile) {
-    const fivek = profile.fivekSec || 1500;          // default 25:00 5k
+    const lvl = T.FITNESS[profile.fitness] || T.FITNESS.intermediate;
+    // Use the athlete's own numbers if given, otherwise estimate from their level.
+    const fivek = profile.fivekSec || lvl.est5k;
     const p = fivek / 5;                             // sec per km at 5k effort
-    const css = profile.css100Sec || 120;            // default 2:00 / 100m
-    const ftp = profile.ftp || null;                 // watts (optional)
+    const css = profile.css100Sec || lvl.estCss;
+    const ftp = profile.ftp || null;                 // watts (optional, no estimate)
     return {
-      hasRun: !!profile.fivekSec,
-      hasSwim: !!profile.css100Sec,
+      runEstimated: !profile.fivekSec,               // true when paces are level-based guesses
+      swimEstimated: !profile.css100Sec,
       ftp: ftp,
       run: { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8 },
       swim: { easy: css + 12, steady: css + 6, css: css, fast: css - 6 },
@@ -19,12 +21,13 @@
 
   function runDetail(pc, key, zone) {
     const z = T.ZONES[zone];
-    if (pc.hasRun) return T.fmtPace(pc.run[key]) + ' /km · ' + zone + ' ' + z.name;
-    return zone + ' ' + z.name + ' · ' + z.rpe;
+    if (pc.runEstimated) return '~' + T.fmtPace(pc.run[key]) + ' /km · ' + zone + ' · ' + z.rpe;
+    return T.fmtPace(pc.run[key]) + ' /km · ' + zone + ' ' + z.name;
   }
   function swimDetail(pc, key, zone) {
-    if (pc.hasSwim) return T.fmtPace(pc.swim[key]) + ' /100m · ' + zone;
-    return zone + ' ' + T.ZONES[zone].name;
+    const z = T.ZONES[zone];
+    if (pc.swimEstimated) return '~' + T.fmtPace(pc.swim[key]) + ' /100m · ' + zone + ' · ' + z.rpe;
+    return T.fmtPace(pc.swim[key]) + ' /100m · ' + zone;
   }
   function bikeDetail(pc, lo, hi, zone) {
     const z = T.ZONES[zone];
@@ -66,7 +69,7 @@
         { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1') },
       ];
     }
-    const dist = pc.hasRun ? +(dur * 60 / pc.run.easy).toFixed(1) : null;
+    const dist = +(dur * 60 / pc.run.easy).toFixed(1);
     return { title: title, segments: segs, distance: dist, unit: 'km' };
   }
 
