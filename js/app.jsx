@@ -38,6 +38,44 @@ function catchUpMoves(plan, log, moves) {
   return { next: next, count: missed.length };
 }
 
+// ---- adaptive pace tuning from post-session feedback ----
+// Reviews how recent sessions (since the last baseline change) have felt, per
+// discipline, and suggests a gentle pace nudge when a discipline trends one way.
+function paceSuggestions(plan, log) {
+  const since = plan.updatedAt || plan.createdAt || '0';
+  const all = plan.weeks.flatMap(w => w.workouts).filter(w => !w.race && w.discipline !== 'rest');
+  const byDisc = { run: [], bike: [], swim: [] };
+  all.forEach(w => {
+    const l = log[w.id];
+    if (l && l.feel && l.at && l.at > since && byDisc[w.discipline]) byDisc[w.discipline].push(l.feel);
+  });
+  const out = [];
+  ['run', 'bike', 'swim'].forEach(d => {
+    if (d === 'bike' && !plan.profile.ftp) return;   // bike runs on RPE without an FTP — nothing to nudge
+    const fs = byDisc[d];
+    if (fs.length < 3) return;
+    const easy = fs.filter(x => x === 'easy').length;
+    const hard = fs.filter(x => x === 'hard').length;
+    if (easy - hard >= 2) out.push({ discipline: d, direction: 'faster' });
+    else if (hard - easy >= 2) out.push({ discipline: d, direction: 'easier' });
+  });
+  return out;
+}
+
+// Translate suggestions into adjusted baseline fields (~2% nudge each).
+function tuneFields(profile, suggestions) {
+  const lvl = T.FITNESS[profile.fitness] || T.FITNESS.intermediate;
+  const fields = {};
+  suggestions.forEach(s => {
+    const t = s.direction === 'faster' ? 0.98 : 1.02;   // run/swim: less time = faster
+    const w = s.direction === 'faster' ? 1.02 : 0.98;   // bike: more watts = faster
+    if (s.discipline === 'run') fields.fivekSec = Math.round((profile.fivekSec || lvl.est5k) * t);
+    if (s.discipline === 'swim') fields.css100Sec = Math.round((profile.css100Sec || lvl.estCss) * t);
+    if (s.discipline === 'bike' && profile.ftp) fields.ftp = Math.round(profile.ftp * w);
+  });
+  return fields;
+}
+
 // ---- calendar (.ics) export ----
 function icsEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n'); }
 function buildICS(plan, moves) {
@@ -243,7 +281,7 @@ function WorkoutRow({ w, done, onClick, eff, moved }) {
   );
 }
 
-function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult }) {
+function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel }) {
   const disc = D[w.discipline];
   const shown = eff || w.date;
   const moved = shown !== w.date;
@@ -286,6 +324,13 @@ function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove, onL
         {w.test && onLogResult && <><button className="btn primary" onClick={onLogResult}><Icon name="trend" size={18} /> Log result &amp; re-target</button><div style={{ height: 10 }} /></>}
         {!w.race && <button className={'btn ' + (done ? 'done' : (w.test ? 'ghost' : 'primary'))} onClick={onToggle}>
           {done ? '✓ Completed — tap to undo' : 'Mark as complete'}</button>}
+        {done && !w.race && onFeel && <div className="feel">
+          <div className="feel-q">How did it feel?</div>
+          <div className="feel-row">
+            {[['easy', 'Easy'], ['right', 'Just right'], ['hard', 'Hard']].map(([k, lab]) =>
+              <button key={k} className={'feelbtn' + (feel === k ? ' on ' + k : '')} onClick={() => onFeel(w.id, k)}>{lab}</button>)}
+          </div>
+        </div>}
         {w.race && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="flag" size={18} /> You've got this.</b></div>}
       </div>
     </div>
@@ -333,7 +378,7 @@ function FitnessEditor({ profile, onClose, onSave }) {
 }
 
 /* ---------------- views ---------------- */
-function TodayView({ plan, log, moves, open, onCatchUp }) {
+function TodayView({ plan, log, moves, open, onCatchUp, onTune }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
@@ -343,6 +388,7 @@ function TodayView({ plan, log, moves, open, onCatchUp }) {
   const curWeek = plan.weeks.find(w => w.workouts.some(x => x.date >= todayISO)) || plan.weeks[plan.weeks.length - 1];
   const weekStart = weekRange(todayISO)[0];
   const missed = sessions.filter(w => { const d = effDate(w, moves); return d < todayISO && d >= weekStart && !log[w.id]; });
+  const suggestions = paceSuggestions(plan, log);
   const row = w => <WorkoutRow key={w.id} w={w} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} />;
 
   return (
@@ -351,6 +397,11 @@ function TodayView({ plan, log, moves, open, onCatchUp }) {
         <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">{missed.length} session{missed.length > 1 ? 's' : ''} missed this week</div>
           <div className="bs">Tap to reschedule onto your free days →</div></div>
+      </div>}
+      {suggestions.length > 0 && <div className="banner tune" onClick={onTune}>
+        <div className="bi"><Icon name="trend" size={20} /></div>
+        <div><div className="bt">Time to tune your paces</div>
+          <div className="bs">{suggestions.map(s => D[s.discipline].name + (s.direction === 'faster' ? ' feels easy' : ' feels hard')).join(' · ')} — tap to adjust →</div></div>
       </div>}
       <div className="section-title">Today · {T.fmtDate(todayISO, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <div className="card">
@@ -571,7 +622,7 @@ function App() {
   const catchUp = () => setMoves(m => catchUpMoves(plan, log, m).next);
   // Re-target the plan from updated fitness. Same level/days/race → identical
   // week/day IDs, so the log & moves overlays stay valid; only paces change.
-  const updateFitness = fields => {
+  const retarget = fields => {
     const old = plan.profile;
     const snapshot = { date: T.iso(new Date()), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness };
     const profile = Object.assign({}, old, fields, { fitnessHistory: (old.fitnessHistory || []).concat([snapshot]) });
@@ -579,8 +630,10 @@ function App() {
     np.createdAt = plan.createdAt;
     np.updatedAt = new Date().toISOString();
     setPlan(np);
-    setEditFitness(false);
   };
+  const updateFitness = fields => { retarget(fields); setEditFitness(false); };
+  const applyTune = () => { const s = paceSuggestions(plan, log); if (s.length) retarget(tuneFields(plan.profile, s)); };
+  const setFeel = (id, feel) => setLog(l => ({ ...l, [id]: Object.assign({}, l[id], { done: true, at: (l[id] && l[id].at) || new Date().toISOString(), feel: feel }) }));
   const race = T.RACES[plan.race];
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
 
@@ -597,7 +650,7 @@ function App() {
         <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
       </div>
 
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} />}
       {view === 'plan' && <PlanView plan={plan} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} />}
@@ -610,6 +663,7 @@ function App() {
       {editFitness && <FitnessEditor profile={plan.profile} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
 
       {detail && <DetailSheet w={detail} done={!!log[detail.id]} eff={effDate(detail, moves)}
+        feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)}
         onLogResult={() => { setDetail(null); setEditFitness(true); }} />}
