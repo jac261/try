@@ -284,7 +284,7 @@
         if (wo.date === raceISO) {
           workouts[i] = {
             id: wo.id, week: w, phase: 'Taper', date: raceISO, discipline: 'brick',
-            type: 'RACE', title: '🏁 RACE DAY — ' + race.name, durationMin: 0, distance: null, unit: '',
+            type: 'RACE', title: 'RACE DAY — ' + race.name, durationMin: 0, distance: null, unit: '',
             segments: [
               { label: 'Swim ' + race.swim + ' km', detail: 'Steady, sight often, settle into rhythm' },
               { label: 'Bike ' + race.bike + ' km', detail: 'Hold race watts, fuel every 20 min' },

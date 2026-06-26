@@ -81,6 +81,10 @@ const ICON_PATHS = {
   plan: '<rect x="5" y="4.5" width="14" height="17" rx="2.5"/><rect x="9" y="3" width="6" height="3.6" rx="1.3"/><path d="M8.5 11.5 15.5 11.5"/><path d="M8.5 15.5 13.5 15.5"/>',
   progress: '<path d="M4 20.5 20 20.5"/><path d="M7 20.5 7 13"/><path d="M12 20.5 12 7"/><path d="M17 20.5 17 10"/>',
   you: '<circle cx="12" cy="8" r="3.5"/><path d="M5.5 20A6.5 6.5 0 0 1 18.5 20"/>',
+  bolt: '<path d="M13 2.5 5 13 11 13 10.5 21.5 19 10.5 12.5 10.5Z"/>',
+  flag: '<path d="M6 21.5 6 3.5"/><path d="M6 4.5 17.5 4.5 14.6 8 17.5 11.5 6 11.5"/>',
+  flame: '<path d="M12 3c.5 3.5 4.5 5 4.5 9.5a4.5 4.5 0 0 1-9 0c0-1.7.8-2.8 1.7-3.7.2 1.2 1 1.8 1.6 1.3C12 9 11 6.5 12 3Z"/>',
+  download: '<path d="M12 3.5 12 14.5"/><path d="M7.5 10 12 14.5 16.5 10"/><path d="M5 20 19 20"/>',
 };
 // Bold silhouette-style icons render with a heavier stroke (filled-figure look).
 const ICON_BOLD = { swim: 2.7, bike: 2.5, run: 3 };
@@ -279,7 +283,7 @@ function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove }) {
         <div style={{ height: 16 }} />
         {!w.race && <button className={'btn ' + (done ? 'done' : 'primary')} onClick={onToggle}>
           {done ? '✓ Completed — tap to undo' : 'Mark as complete'}</button>}
-        {w.race && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b>You've got this. 🏁</b></div>}
+        {w.race && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="flag" size={18} /> You've got this.</b></div>}
       </div>
     </div>
   );
@@ -301,13 +305,13 @@ function TodayView({ plan, log, moves, open, onCatchUp }) {
   return (
     <>
       {missed.length > 0 && <div className="banner" onClick={onCatchUp}>
-        <div className="bi">⚡</div>
+        <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">{missed.length} session{missed.length > 1 ? 's' : ''} missed this week</div>
           <div className="bs">Tap to reschedule onto your free days →</div></div>
       </div>}
       <div className="section-title">Today · {T.fmtDate(todayISO, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <div className="card">
-        {today.length === 0 ? <div className="empty"><div className="big">🛌</div>No session scheduled today.</div>
+        {today.length === 0 ? <div className="empty"><div className="big"><Icon name="rest" size={40} /></div>No session scheduled today.</div>
           : today.map(row)}
       </div>
       {curWeek && <div className="card">
@@ -319,7 +323,7 @@ function TodayView({ plan, log, moves, open, onCatchUp }) {
       <div className="section-title">Coming up</div>
       <div className="card">
         {upcoming.length ? upcoming.map(row)
-          : <div className="empty">All done — race time! 🏁</div>}
+          : <div className="empty"><div className="big"><Icon name="flag" size={40} /></div>All done — race time!</div>}
       </div>
     </>
   );
@@ -437,7 +441,7 @@ function ProgressView({ plan, log }) {
         <div className="kpi"><div className="v">{daysToRace}<small> days</small></div><div className="k">Until race day</div></div>
         <div className="kpi"><div className="v">{pct}<small>%</small></div><div className="k">Sessions completed</div></div>
         <div className="kpi"><div className="v">{done.length}<small>/{all.length}</small></div><div className="k">Workouts done</div></div>
-        <div className="kpi"><div className="v">{streak} 🔥</div><div className="k">Current streak</div></div>
+        <div className="kpi"><div className="v" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>{streak}<Icon name="flame" size={22} /></div><div className="k">Current streak</div></div>
       </div>
 
       <div className="section-title">Weekly volume <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(planned vs completed)</span></div>
@@ -483,7 +487,7 @@ function SettingsView({ plan, onRegenerate, onReset, onExport }) {
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Sync & export</h2>
-        <button className="btn primary" onClick={onExport}>📅 Export plan to calendar (.ics)</button>
+        <button className="btn primary" onClick={onExport}><Icon name="download" size={18} /> Export plan to calendar (.ics)</button>
         <p className="lead" style={{ margin: '10px 2px 0' }}>Downloads every session as all-day events with the full workout in the notes — import into Apple Calendar, Google Calendar or Outlook.</p>
       </div>
       <div className="card">
