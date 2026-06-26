@@ -234,7 +234,7 @@ function WorkoutRow({ w, done, onClick, eff, moved }) {
     <div className={'wk' + (done ? ' done' : '')} onClick={onClick}>
       <div className="dot" style={{ background: disc.grad }}><Icon name={disc.icon} size={22} /></div>
       <div className="meta">
-        <div className="t">{w.title} {w.key && !w.race && <span className="tag key">Key</span>}{moved && <span className="tag moved">Moved</span>}</div>
+        <div className="t">{w.title} {w.test ? <span className="tag test">Test</span> : (w.key && !w.race && <span className="tag key">Key</span>)}{moved && <span className="tag moved">Moved</span>}</div>
         <div className="s">{w.type}{w.distance ? ' · ' + w.distance + ' ' + w.unit : ''} · {T.fmtDuration(w.durationMin || 0)}</div>
       </div>
       <div className="right">{T.fmtDate(eff || w.date, { weekday: 'short' })}</div>
@@ -243,7 +243,7 @@ function WorkoutRow({ w, done, onClick, eff, moved }) {
   );
 }
 
-function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove }) {
+function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult }) {
   const disc = D[w.discipline];
   const shown = eff || w.date;
   const moved = shown !== w.date;
@@ -282,7 +282,9 @@ function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove }) {
           </div>
         </>}
         <div style={{ height: 16 }} />
-        {!w.race && <button className={'btn ' + (done ? 'done' : 'primary')} onClick={onToggle}>
+        {w.test && w.note && <div className="testnote"><Icon name="trend" size={18} /><span>{w.note}</span></div>}
+        {w.test && onLogResult && <><button className="btn primary" onClick={onLogResult}><Icon name="trend" size={18} /> Log result &amp; re-target</button><div style={{ height: 10 }} /></>}
+        {!w.race && <button className={'btn ' + (done ? 'done' : (w.test ? 'ghost' : 'primary'))} onClick={onToggle}>
           {done ? '✓ Completed — tap to undo' : 'Mark as complete'}</button>}
         {w.race && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="flag" size={18} /> You've got this.</b></div>}
       </div>
@@ -609,7 +611,8 @@ function App() {
 
       {detail && <DetailSheet w={detail} done={!!log[detail.id]} eff={effDate(detail, moves)}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
-        onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} />}
+        onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)}
+        onLogResult={() => { setDetail(null); setEditFitness(true); }} />}
 
       <div className="nav">
         {tabs.map(([k, ic, label]) => (

@@ -152,6 +152,47 @@
     };
   }
 
+  // Benchmark fitness tests — the athlete logs the result to re-target paces/power.
+  function buildTest(kind, pc) {
+    if (kind === 'run5k') {
+      return {
+        title: 'Fitness Test · 5k Run', durationMin: 45, distance: 5, unit: 'km',
+        segments: [
+          { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2') + ' + 3 × 20 s strides' },
+          { label: '5 km time trial — all out', min: 22, detail: 'Even effort, finish hard. Note your finish time.' },
+          { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1') },
+        ],
+        note: 'Enter your 5k time in Update fitness to re-target your run paces.',
+      };
+    }
+    if (kind === 'bikeFtp') {
+      return {
+        title: 'Fitness Test · Bike FTP', durationMin: 60, distance: null, unit: 'km',
+        segments: [
+          { label: 'Warm-up', min: 18, detail: 'Build + 3 × 1 min fast spins' },
+          { label: '20 min time trial — max sustainable', min: 20, detail: 'Hold the hardest steady power you can hold for 20 min.' },
+          { label: 'Cool-down', min: 22, detail: 'Easy spin' },
+        ],
+        note: 'FTP ≈ 95% of your 20-min average power. Enter it in Update fitness.',
+      };
+    }
+    // swimCss
+    return {
+      title: 'Fitness Test · Swim CSS', durationMin: 45, distance: 1.4, unit: 'km',
+      segments: [
+        { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2') },
+        { label: '400 m time trial — all out', detail: 'Note your time (T400).' },
+        { label: 'Easy 200 m', detail: 'Recover fully.' },
+        { label: '200 m time trial — all out', detail: 'Note your time (T200).' },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+      ],
+      note: 'CSS pace per 100 m = (T400 − T200) ÷ 2. Enter it in Update fitness.',
+    };
+  }
+
+  const TEST_ROTATION = ['run5k', 'bikeFtp', 'swimCss'];
+  const TEST_DISC = { run5k: 'run', bikeFtp: 'bike', swimCss: 'swim' };
+
   /* ---- base session durations (minutes, intermediate athlete) ---- */
   const LONG_RUN = { sprint: 55, olympic: 70, half: 95, full: 120 };
   const LONG_BIKE = { sprint: 70, olympic: 100, half: 160, full: 210 };
@@ -248,6 +289,22 @@
     const phaseLen = {}, phasePos = {};
     phases.forEach(p => { phaseLen[p] = (phaseLen[p] || 0) + 1; });
 
+    // Place up to 3 benchmark tests (run → bike → swim) spread across the Base/Build
+    // weeks — never on recovery / Peak / Taper — so paces recalibrate as fitness grows.
+    const eligibleTestWeeks = [];
+    for (let w = 0; w < totalWeeks; w++) {
+      const ph = phases[w];
+      const rec = ((w + 1) % fitness.recoveryEvery === 0) && ph !== 'Taper' && w < totalWeeks - 2;
+      if ((ph === 'Base' || ph === 'Build') && !rec && w >= 1) eligibleTestWeeks.push(w);
+    }
+    const testByWeek = {};
+    const nTests = Math.min(TEST_ROTATION.length, eligibleTestWeeks.length);
+    for (let i = 0; i < nTests; i++) {
+      const pos = nTests === 1 ? Math.floor(eligibleTestWeeks.length / 2)
+        : Math.round((i + 0.5) / nTests * (eligibleTestWeeks.length - 1));
+      testByWeek[eligibleTestWeeks[pos]] = TEST_ROTATION[i];
+    }
+
     const weeks = [];
     for (let w = 0; w < totalWeeks; w++) {
       const phase = phases[w];
@@ -255,6 +312,8 @@
       const isRecovery = ((w + 1) % fitness.recoveryEvery === 0) && phase !== 'Taper' && w < totalWeeks - 2;
       let load = loadFactor(phase, phasePos[phase], phaseLen[phase]) * fitness.factor;
       if (isRecovery) load *= fitness.recoveryDepth;
+
+      const testKind = testByWeek[w] || null;
 
       // split template into weekend (long/brick) vs weekday slots
       const longs = [], mids = [];
@@ -304,6 +363,22 @@
           };
         }
       });
+
+      // Inject the scheduled benchmark test, replacing that discipline's session
+      // for the week (keeps the workout id stable so logs/moves still apply).
+      if (testKind) {
+        const disc = TEST_DISC[testKind];
+        let ti = workouts.findIndex(x => x.discipline === disc && x.role === 'quality');
+        if (ti < 0) ti = workouts.findIndex(x => x.discipline === disc && !x.race);
+        if (ti >= 0) {
+          const built = buildTest(testKind, pc);
+          workouts[ti] = Object.assign({}, workouts[ti], {
+            type: 'Test', title: built.title, durationMin: built.durationMin,
+            distance: built.distance, unit: built.unit, segments: built.segments,
+            test: true, testKind: testKind, note: built.note, key: true,
+          });
+        }
+      }
 
       const totalMin = workouts.reduce((a, b) => a + (b.durationMin || 0), 0);
       weeks.push({ index: w, phase: phase, isRecovery: isRecovery, start: T.iso(T.addDays(weekStart0, w * 7)), totalMin: totalMin, workouts: workouts });
