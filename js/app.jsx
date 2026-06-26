@@ -192,9 +192,9 @@ function Onboarding({ onCreate }) {
           </div>
           <div style={{ height: 16 }} />
           <label className="field"><span className="lab">Experience level</span></label>
-          <div className="choice" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
+          <div className="choice">
             {Object.values(T.FITNESS).map(l => (
-              <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} onClick={() => set('fitness', l.key)}>{l.name}</div>
+              <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} onClick={() => set('fitness', l.key)}>{l.name}<small>{l.blurb}</small></div>
             ))}
           </div>
           <div style={{ height: 12 }} />

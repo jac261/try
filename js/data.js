@@ -25,10 +25,16 @@ TF.ZONES = {
   Z5: { name: 'VO2 Max',    rpe: 'RPE 9-10' },
 };
 
+// Experience levels differ across four dials:
+//   factor        — weekly volume multiplier (session durations)
+//   intensity     — shifts quality sessions up/down the workout ladder (see plan.js)
+//   recoveryEvery — a step-back recovery week every N weeks
+//   recoveryDepth — how much volume drops on a recovery week (lower = bigger cut)
 TF.FITNESS = {
-  beginner:     { key: 'beginner',     name: 'Beginner',     factor: 0.8 },
-  intermediate: { key: 'intermediate', name: 'Intermediate', factor: 1.0 },
-  advanced:     { key: 'advanced',     name: 'Advanced',     factor: 1.15 },
+  beginner:     { key: 'beginner',     name: 'Beginner',     factor: 0.75, intensity: -1, recoveryEvery: 3, recoveryDepth: 0.6,  blurb: 'New to multisport — build the base' },
+  intermediate: { key: 'intermediate', name: 'Intermediate', factor: 1.0,  intensity: 0,  recoveryEvery: 4, recoveryDepth: 0.72, blurb: 'A few seasons in, training consistently' },
+  advanced:     { key: 'advanced',     name: 'Advanced',     factor: 1.2,  intensity: 1,  recoveryEvery: 4, recoveryDepth: 0.75, blurb: 'Experienced & chasing a result' },
+  elite:        { key: 'elite',        name: 'Elite',        factor: 1.42, intensity: 2,  recoveryEvery: 4, recoveryDepth: 0.82, blurb: 'Semi-pro / front-of-pack age-grouper' },
 };
 
 TF.PHASE_INFO = {

@@ -166,16 +166,24 @@
   const WEEKDAY_ORDER = [1, 3, 0, 2, 4]; // Tue, Thu, Mon, Wed, Fri
   const WEEKEND = [5, 6];                 // Sat, Sun
 
-  function typeFor(discipline, role, phase, isRecovery) {
+  // Quality-session ladders, easiest → hardest. The chosen rung = phase position
+  // (Base 0, Build 1, Peak/Taper 2) shifted by the athlete's intensity level, so a
+  // beginner trains one rung easier and an elite two rungs harder for the same week.
+  const INTENSITY_LADDER = {
+    run:  ['Easy', 'Tempo', 'Threshold', 'VO2 Intervals'],
+    bike: ['Endurance', 'Sweet Spot', 'Threshold'],
+    swim: ['Technique', 'CSS Intervals', 'Race Pace'],
+  };
+  function typeFor(discipline, role, phase, isRecovery, intensity) {
     if (role === 'long') return 'Long';
     if (role === 'easy') return discipline === 'swim' ? 'Technique' : 'Easy';
     if (role === 'brick') return 'Brick';
     // role === 'quality'
     if (isRecovery) return discipline === 'swim' ? 'Technique' : (discipline === 'bike' ? 'Endurance' : 'Easy');
-    if (discipline === 'swim') return phase === 'Base' ? 'Technique' : (phase === 'Peak' ? 'Race Pace' : 'CSS Intervals');
-    if (discipline === 'run') return phase === 'Base' ? 'Tempo' : (phase === 'Peak' ? 'Threshold' : 'VO2 Intervals');
-    if (discipline === 'bike') return phase === 'Base' ? 'Endurance' : (phase === 'Peak' ? 'Threshold' : 'Sweet Spot');
-    return 'Easy';
+    const ladder = INTENSITY_LADDER[discipline] || ['Easy'];
+    const phaseIdx = phase === 'Base' ? 0 : (phase === 'Build' ? 1 : 2);
+    const idx = T.clamp(phaseIdx + (intensity || 0), 0, ladder.length - 1);
+    return ladder[idx];
   }
 
   function baseDuration(discipline, role, race) {
@@ -241,9 +249,9 @@
     for (let w = 0; w < totalWeeks; w++) {
       const phase = phases[w];
       phasePos[phase] = phasePos[phase] === undefined ? 0 : phasePos[phase] + 1;
-      const isRecovery = ((w + 1) % 4 === 0) && phase !== 'Taper' && w < totalWeeks - 2;
+      const isRecovery = ((w + 1) % fitness.recoveryEvery === 0) && phase !== 'Taper' && w < totalWeeks - 2;
       let load = loadFactor(phase, phasePos[phase], phaseLen[phase]) * fitness.factor;
-      if (isRecovery) load *= 0.72;
+      if (isRecovery) load *= fitness.recoveryDepth;
 
       // split template into weekend (long/brick) vs weekday slots
       const longs = [], mids = [];
@@ -266,7 +274,7 @@
           continue;
         }
         const isLast = w === totalWeeks - 1;
-        const type = typeFor(s.disc, s.role, phase, isRecovery);
+        const type = typeFor(s.disc, s.role, phase, isRecovery, fitness.intensity);
         const dur = T.round5(baseDuration(s.disc, s.role, race.key) * load);
         const built = buildWorkout(s.disc, type, dur, pc);
         workouts.push({
