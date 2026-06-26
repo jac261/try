@@ -10,3 +10,7 @@
 .idea/
 *.swp
 *~
+
+# Unrelated Fuel Planner sketch that shares this folder
+fuel.html
+js/fuel.js
