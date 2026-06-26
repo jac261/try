@@ -37,6 +37,13 @@ then open <http://localhost:8733>. (Any static file server works.)
 > `js/app.jsx` at runtime to transpile it, and browsers block that under `file://`.
 > The dev server above (or GitHub Pages) handles this; double-clicking the file won't.
 
+## Install it (PWA)
+Try is a Progressive Web App: open the live site, then **Add to Home Screen**
+(iOS Safari) or **Install** (Chrome/Edge) to run it full-screen like a native app.
+After the first visit it works **offline** — a service worker (`sw.js`) caches the
+app shell and the CDN libraries, so your plan is available with no signal.
+Icons live in `icons/`, app metadata in `manifest.webmanifest`.
+
 Data persists in the browser via `localStorage` under the keys `triflow.plan`,
 `triflow.log` and `triflow.moves` — there is no backend or account.
 
