@@ -85,6 +85,7 @@ const ICON_PATHS = {
   flag: '<path d="M6 21.5 6 3.5"/><path d="M6 4.5 17.5 4.5 14.6 8 17.5 11.5 6 11.5"/>',
   flame: '<path d="M12 3c.5 3.5 4.5 5 4.5 9.5a4.5 4.5 0 0 1-9 0c0-1.7.8-2.8 1.7-3.7.2 1.2 1 1.8 1.6 1.3C12 9 11 6.5 12 3Z"/>',
   download: '<path d="M12 3.5 12 14.5"/><path d="M7.5 10 12 14.5 16.5 10"/><path d="M5 20 19 20"/>',
+  trend: '<path d="M3 16.5 9 10.5 13 14.5 21 6.5"/><path d="M15 6.5 21 6.5 21 12.5"/>',
 };
 // Bold silhouette-style icons render with a heavier stroke (filled-figure look).
 const ICON_BOLD = { swim: 2.7, bike: 2.5, run: 3 };
@@ -289,6 +290,46 @@ function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove }) {
   );
 }
 
+/* ---------------- update-fitness editor ---------------- */
+function FitnessEditor({ profile, onClose, onSave }) {
+  const lvl0 = T.FITNESS[profile.fitness] ? profile.fitness : 'intermediate';
+  const [f, setF] = useState({
+    fitness: lvl0,
+    fivek: profile.fivekSec ? T.fmtPace(profile.fivekSec) : '',
+    css100: profile.css100Sec ? T.fmtPace(profile.css100Sec) : '',
+    ftp: profile.ftp || '',
+  });
+  const set = (k, v) => setF(s => ({ ...s, [k]: v }));
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="sheet" onClick={e => e.stopPropagation()}>
+        <div className="grab" />
+        <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 800 }}>Update fitness</h2>
+        <p className="lead">Logged a test, race or just got fitter? Update your numbers and every <b>upcoming</b> session re-targets to the new paces. Completed sessions and reschedules stay put.</p>
+        <label className="field"><span className="lab">Experience level</span></label>
+        <div className="choice">
+          {Object.values(T.FITNESS).map(l => (
+            <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} onClick={() => set('fitness', l.key)}>{l.name}<small>{l.blurb}</small></div>
+          ))}
+        </div>
+        <div style={{ height: 16 }} />
+        <label className="field"><span className="lab">Recent 5 km run time <span className="hint">optional · mm:ss</span></span>
+          <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>
+        <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
+          <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>
+        <label className="field"><span className="lab">Cycling FTP <span className="hint">optional · watts</span></span>
+          <input value={f.ftp} placeholder="e.g. 200" inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
+        <button className="btn primary" onClick={() => onSave({
+          fitness: f.fitness,
+          fivekSec: T.parseTimeToSec(f.fivek),
+          css100Sec: T.parseTimeToSec(f.css100),
+          ftp: f.ftp ? Number(f.ftp) : null,
+        })}>Save &amp; re-target plan</button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- views ---------------- */
 function TodayView({ plan, log, moves, open, onCatchUp }) {
   const todayISO = T.iso(new Date());
@@ -466,7 +507,7 @@ function ProgressView({ plan, log }) {
   );
 }
 
-function SettingsView({ plan, onRegenerate, onReset, onExport }) {
+function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness }) {
   const p = plan.profile;
   return (
     <>
@@ -484,6 +525,14 @@ function SettingsView({ plan, onRegenerate, onReset, onExport }) {
           <div className="s"><b>{p.css100Sec ? T.fmtPace(p.css100Sec) : '~' + T.fmtPace((T.FITNESS[p.fitness] || T.FITNESS.intermediate).estCss)}</b><span>{p.css100Sec ? 'swim /100m' : 'swim · est'}</span></div>
           <div className="s"><b>{p.ftp || 'RPE'}</b><span>{p.ftp ? 'FTP watts' : 'bike by feel'}</span></div>
         </div>
+        <div style={{ height: 12 }} />
+        <button className="btn primary" onClick={onEditFitness}><Icon name="trend" size={18} /> Update fitness &amp; re-target</button>
+        {plan.updatedAt && (() => {
+          const prev = (p.fitnessHistory || []).slice(-1)[0];
+          const delta = prev && prev.fivekSec && p.fivekSec
+            ? ' · 5k ' + T.fmtPace(prev.fivekSec) + ' → ' + T.fmtPace(p.fivekSec) : '';
+          return <p className="lead" style={{ margin: '10px 2px 0' }}>Paces re-targeted {T.fmtDate(T.iso(plan.updatedAt.slice(0, 10)), { month: 'short', day: 'numeric' })}{delta}</p>;
+        })()}
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Sync & export</h2>
@@ -507,6 +556,7 @@ function App() {
   const [moves, setMoves] = useState(() => LS.load('moves', {}));
   const [view, setView] = useState('today');
   const [detail, setDetail] = useState(null);
+  const [editFitness, setEditFitness] = useState(false);
 
   useEffect(() => { if (plan) LS.save('plan', plan); }, [plan]);
   useEffect(() => { LS.save('log', log); }, [log]);
@@ -517,6 +567,18 @@ function App() {
   const toggle = id => setLog(l => { const n = { ...l }; if (n[id]) delete n[id]; else n[id] = { done: true, at: new Date().toISOString() }; return n; });
   const moveWorkout = (id, date) => setMoves(m => { const n = { ...m }; if (date === null) delete n[id]; else n[id] = date; return n; });
   const catchUp = () => setMoves(m => catchUpMoves(plan, log, m).next);
+  // Re-target the plan from updated fitness. Same level/days/race → identical
+  // week/day IDs, so the log & moves overlays stay valid; only paces change.
+  const updateFitness = fields => {
+    const old = plan.profile;
+    const snapshot = { date: T.iso(new Date()), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness };
+    const profile = Object.assign({}, old, fields, { fitnessHistory: (old.fitnessHistory || []).concat([snapshot]) });
+    const np = T.generatePlan(profile);
+    np.createdAt = plan.createdAt;
+    np.updatedAt = new Date().toISOString();
+    setPlan(np);
+    setEditFitness(false);
+  };
   const race = T.RACES[plan.race];
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
 
@@ -538,9 +600,12 @@ function App() {
       {view === 'plan' && <PlanView plan={plan} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} />}
       {view === 'settings' && <SettingsView plan={plan}
+        onEditFitness={() => setEditFitness(true)}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { LS.clear(); setLog({}); setMoves({}); setPlan(null); } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} />}
+
+      {editFitness && <FitnessEditor profile={plan.profile} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
 
       {detail && <DetailSheet w={detail} done={!!log[detail.id]} eff={effDate(detail, moves)}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
