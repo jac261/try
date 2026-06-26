@@ -48,8 +48,7 @@ function buildICS(plan, moves) {
     const d = effDate(w, moves);
     const start = d.replace(/-/g, '');
     const end = T.iso(T.addDays(d, 1)).replace(/-/g, '');
-    const disc = D[w.discipline];
-    const sum = (disc.icon ? disc.icon + ' ' : '') + w.title + (w.durationMin ? ' (' + T.fmtDuration(w.durationMin) + ')' : '');
+    const sum = w.title + (w.durationMin ? ' (' + T.fmtDuration(w.durationMin) + ')' : '');
     const desc = w.segments.map(s => s.label + (s.detail ? ' — ' + s.detail : '') + (s.min ? ' [' + s.min + ' min]' : '')).join('\n');
     L.push('BEGIN:VEVENT', 'UID:try-' + w.id + '@try.app', 'DTSTAMP:' + stamp,
       'DTSTART;VALUE=DATE:' + start, 'DTEND;VALUE=DATE:' + end,
@@ -65,6 +64,32 @@ function downloadICS(plan, moves) {
   a.href = url; a.download = 'try-' + plan.race + '-plan.ics';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ---------------- minimalist line icons ----------------
+   Monoline (stroke = currentColor) so they inherit text colour. */
+const ICON_PATHS = {
+  logo: '<path d="M12 3.2 20.4 18.6 3.6 18.6Z"/><circle cx="12" cy="13.4" r="1.6" fill="currentColor" stroke="none"/>',
+  swim: '<circle cx="13.8" cy="9" r="2.1" fill="currentColor" stroke="none"/><path d="M19 7.6 12.6 10 7 11.7 3.4 12.6"/><path d="M3 15.9q2.5-2.2 5 0 t5 0 5 0 4 0"/><path d="M3 19.3q2.5-2.2 5 0 t5 0 5 0 4 0"/>',
+  bike: '<circle cx="5.5" cy="16.3" r="3.6"/><circle cx="18.5" cy="16.3" r="3.6"/><circle cx="15" cy="6" r="2" fill="currentColor" stroke="none"/><path d="M8.5 9 13.7 7.4 17 11.6"/><path d="M8.5 9 11 12.6 12 16.3"/><path d="M12 16.3 17 11.6 18.5 16.3"/>',
+  run: '<circle cx="16.5" cy="4.8" r="2.1" fill="currentColor" stroke="none"/><path d="M15.6 6.7 9.8 12.2"/><path d="M9.8 12.2 14.8 11 15.6 14.8"/><path d="M9.8 12.2 7 14.6 8.6 18"/><path d="M15.3 7.1 18 8.2 16.4 10.4"/><path d="M15.3 7.1 11.6 8.7 12.6 11.2"/>',
+  brick: '<path d="M5.5 10A7 7 0 0 1 17.5 6.5L19 8"/><path d="M19 5 19 8 16 8"/><path d="M18.5 14A7 7 0 0 1 6.5 17.5L5 16"/><path d="M5 19 5 16 8 16"/>',
+  rest: '<path d="M20 14.5A8.5 8.5 0 1 1 10 4 6.5 6.5 0 0 0 20 14.5Z"/>',
+  strength: '<path d="M6 9 6 15"/><path d="M3.5 10.5 3.5 13.5"/><path d="M18 9 18 15"/><path d="M20.5 10.5 20.5 13.5"/><path d="M6 12 18 12"/>',
+  today: '<circle cx="12" cy="12" r="3.8"/><path d="M12 2.5 12 5"/><path d="M12 19 12 21.5"/><path d="M2.5 12 5 12"/><path d="M19 12 21.5 12"/><path d="M5.2 5.2 7 7"/><path d="M17 17 18.8 18.8"/><path d="M18.8 5.2 17 7"/><path d="M7 17 5.2 18.8"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5 20.5 9.5"/><path d="M8 3 8 6.5"/><path d="M16 3 16 6.5"/>',
+  plan: '<rect x="5" y="4.5" width="14" height="17" rx="2.5"/><rect x="9" y="3" width="6" height="3.6" rx="1.3"/><path d="M8.5 11.5 15.5 11.5"/><path d="M8.5 15.5 13.5 15.5"/>',
+  progress: '<path d="M4 20.5 20 20.5"/><path d="M7 20.5 7 13"/><path d="M12 20.5 12 7"/><path d="M17 20.5 17 10"/>',
+  you: '<circle cx="12" cy="8" r="3.5"/><path d="M5.5 20A6.5 6.5 0 0 1 18.5 20"/>',
+};
+// Bold silhouette-style icons render with a heavier stroke (filled-figure look).
+const ICON_BOLD = { swim: 2.7, bike: 2.5, run: 3 };
+function Icon({ name, size }) {
+  const s = size || 22;
+  return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth={ICON_BOLD[name] || 2} strokeLinecap="round" strokeLinejoin="round"
+    style={{ display: 'block', flex: 'none' }}
+    dangerouslySetInnerHTML={{ __html: ICON_PATHS[name] || '' }} />;
 }
 
 /* ---------------- tiny SVG charts ---------------- */
@@ -132,7 +157,7 @@ function Onboarding({ onCreate }) {
 
   return (
     <div className="app">
-      <div className="topbar"><h1>🏊‍♀️🚴‍♂️🏃‍♀️ Try</h1><div className="sub">Your personalised triathlon coach</div></div>
+      <div className="topbar"><h1><Icon name="logo" size={24} /> Try</h1><div className="sub">Your personalised triathlon coach</div></div>
       <div className="card">
         {step === 0 && <>
           <h2>Let's build your plan</h2>
@@ -195,14 +220,14 @@ function Onboarding({ onCreate }) {
 function WorkoutRow({ w, done, onClick, eff, moved }) {
   if (w.discipline === 'rest') return (
     <div className="wk" style={{ opacity: .6, cursor: 'default' }}>
-      <div className="dot" style={{ background: 'var(--rest)' }}>😴</div>
+      <div className="dot" style={{ background: 'var(--rest)' }}><Icon name="rest" size={22} /></div>
       <div className="meta"><div className="t">Rest day</div><div className="s">Recover & adapt</div></div>
     </div>
   );
   const disc = D[w.discipline];
   return (
     <div className={'wk' + (done ? ' done' : '')} onClick={onClick}>
-      <div className="dot" style={{ background: disc.grad }}>{disc.icon}</div>
+      <div className="dot" style={{ background: disc.grad }}><Icon name={disc.icon} size={22} /></div>
       <div className="meta">
         <div className="t">{w.title} {w.key && !w.race && <span className="tag key">Key</span>}{moved && <span className="tag moved">Moved</span>}</div>
         <div className="s">{w.type}{w.distance ? ' · ' + w.distance + ' ' + w.unit : ''} · {T.fmtDuration(w.durationMin || 0)}</div>
@@ -223,7 +248,7 @@ function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove }) {
       <div className="sheet" onClick={e => e.stopPropagation()}>
         <div className="grab" />
         <div className="hero">
-          <div className="dot" style={{ background: disc.grad }}>{disc.icon}</div>
+          <div className="dot" style={{ background: disc.grad }}><Icon name={disc.icon} size={26} /></div>
           <div><h2>{w.title}</h2><div className="s">{T.fmtDate(shown, { weekday: 'long', month: 'long', day: 'numeric' })} · {w.phase} phase</div></div>
         </div>
         {!w.race && <div className="statline">
@@ -492,14 +517,14 @@ function App() {
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
 
   const tabs = [
-    ['today', '☀️', 'Today'], ['calendar', '🗓️', 'Calendar'],
-    ['plan', '📋', 'Plan'], ['progress', '📈', 'Progress'], ['settings', '⚙️', 'You'],
+    ['today', 'today', 'Today'], ['calendar', 'calendar', 'Calendar'],
+    ['plan', 'plan', 'Plan'], ['progress', 'progress', 'Progress'], ['settings', 'you', 'You'],
   ];
 
   return (
     <div className="app">
       <div className="topbar">
-        <h1>🏊‍♀️🚴‍♂️🏃‍♀️ Try</h1>
+        <h1><Icon name="logo" size={26} /> Try</h1>
         <div className="sub">Hi {plan.profile.name} — let's get to the finish line</div>
         <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
       </div>
@@ -520,7 +545,7 @@ function App() {
       <div className="nav">
         {tabs.map(([k, ic, label]) => (
           <button key={k} className={view === k ? 'active' : ''} onClick={() => setView(k)}>
-            <span className="ic">{ic}</span>{label}</button>
+            <span className="ic"><Icon name={ic} size={22} /></span>{label}</button>
         ))}
       </div>
     </div>

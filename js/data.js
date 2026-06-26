@@ -9,12 +9,12 @@ TF.RACES = {
 };
 
 TF.DISCIPLINES = {
-  swim:     { name: 'Swim',     color: '#38bdf8', grad: 'linear-gradient(135deg, #38bdf8, #2563eb)', icon: '🏊' },
-  bike:     { name: 'Bike',     color: '#fb923c', grad: 'linear-gradient(135deg, #fbbf24, #f97316)', icon: '🚴' },
-  run:      { name: 'Run',      color: '#34d399', grad: 'linear-gradient(135deg, #4ade80, #10b981)', icon: '🏃' },
-  brick:    { name: 'Brick',    color: '#c084fc', grad: 'linear-gradient(135deg, #c084fc, #8b5cf6)', icon: '🔁' },
-  strength: { name: 'Strength', color: '#94a3b8', grad: 'linear-gradient(135deg, #94a3b8, #64748b)', icon: '💪' },
-  rest:     { name: 'Rest',     color: '#3a3f4a', grad: 'linear-gradient(135deg, #3a3f4a, #2a2f38)', icon: '😴' },
+  swim:     { name: 'Swim',     color: '#38bdf8', grad: 'linear-gradient(135deg, #38bdf8, #2563eb)', icon: 'swim' },
+  bike:     { name: 'Bike',     color: '#fb923c', grad: 'linear-gradient(135deg, #fbbf24, #f97316)', icon: 'bike' },
+  run:      { name: 'Run',      color: '#34d399', grad: 'linear-gradient(135deg, #4ade80, #10b981)', icon: 'run' },
+  brick:    { name: 'Brick',    color: '#c084fc', grad: 'linear-gradient(135deg, #c084fc, #8b5cf6)', icon: 'brick' },
+  strength: { name: 'Strength', color: '#94a3b8', grad: 'linear-gradient(135deg, #94a3b8, #64748b)', icon: 'strength' },
+  rest:     { name: 'Rest',     color: '#3a3f4a', grad: 'linear-gradient(135deg, #3a3f4a, #2a2f38)', icon: 'rest' },
 };
 
 TF.ZONES = {
