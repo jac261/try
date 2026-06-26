@@ -184,6 +184,43 @@ function Donut({ segments, size }) {
   );
 }
 
+// Sparkline: a small trend line where "better" always points up (so for pace
+// metrics, where lower is better, the line is inverted).
+function Sparkline({ values, betterDown, color }) {
+  const W = 120, H = 40;
+  const min = Math.min(...values), max = Math.max(...values), range = max - min || 1;
+  const norm = v => (betterDown ? (max - v) : (v - min)) / range;
+  const n = values.length;
+  const pts = values.map((v, i) => {
+    const x = n === 1 ? W / 2 : (i / (n - 1)) * (W - 6) + 3;
+    const y = H - 5 - norm(v) * (H - 10);
+    return [x, y];
+  });
+  const path = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const last = pts[pts.length - 1];
+  return (
+    <svg viewBox={'0 0 ' + W + ' ' + H} style={{ width: W, height: H, flex: 'none' }} preserveAspectRatio="none">
+      <polyline points={path} fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={last[0]} cy={last[1]} r="3" fill={color} />
+    </svg>
+  );
+}
+
+// Reconstruct each baseline's value over time from fitnessHistory + current value.
+// history[i] holds the value that was active *before* history[i].date, so the value
+// that became active at dates[i] is values[i] (current for the final point).
+function fitnessSeries(profile, startDate) {
+  const hist = profile.fitnessHistory || [];
+  const series = key => {
+    const dates = [startDate].concat(hist.map(h => h.date));
+    const vals = hist.map(h => h[key]).concat([profile[key]]);
+    const pts = [];
+    for (let i = 0; i < vals.length; i++) if (vals[i] != null) pts.push({ date: dates[i], value: vals[i] });
+    return pts;
+  };
+  return { run: series('fivekSec'), swim: series('css100Sec'), bike: series('ftp') };
+}
+
 /* ---------------- onboarding ---------------- */
 function Onboarding({ onCreate }) {
   const [step, setStep] = useState(0);
@@ -532,6 +569,28 @@ function ProgressView({ plan, log }) {
   const twSess = thisWeek.workouts.filter(x => x.discipline !== 'rest' && !x.race);
   const twDone = twSess.filter(x => log[x.id]).length;
 
+  // fitness progression (from fitnessHistory snapshots + current baselines)
+  const startISO = plan.profile.startDate || (plan.createdAt || '').slice(0, 10) || todayISO;
+  const series = fitnessSeries(plan.profile, startISO);
+  const METRICS = [
+    { key: 'run', label: 'Run · 5k pace', fmt: v => T.fmtPace(v / 5) + ' /km', div: 5, color: D.run.color, betterDown: true },
+    { key: 'swim', label: 'Swim · CSS', fmt: v => T.fmtPace(v) + ' /100m', div: 1, color: D.swim.color, betterDown: true },
+    { key: 'bike', label: 'Bike · FTP', fmt: v => v + ' W', color: D.bike.color, betterDown: false },
+  ];
+  const trends = METRICS.map(m => {
+    const pts = series[m.key];
+    if (!pts.length) return null;
+    const first = pts[0].value, latest = pts[pts.length - 1].value, changed = latest !== first;
+    const improved = m.betterDown ? latest < first : latest > first;
+    let deltaStr = null;
+    if (changed) {
+      const d = Math.abs(latest - first);
+      deltaStr = m.key === 'bike' ? (improved ? '+' : '−') + d + ' W'
+        : T.fmtPace(d / m.div) + (improved ? ' faster' : ' slower');
+    }
+    return { key: m.key, label: m.label, color: m.color, betterDown: m.betterDown, vals: pts.map(p => p.value), latest: m.fmt(latest), changed, improved, deltaStr };
+  }).filter(Boolean);
+
   return (
     <>
       <div className="section-title">Progress</div>
@@ -544,6 +603,23 @@ function ProgressView({ plan, log }) {
 
       <div className="section-title">Weekly volume <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(planned vs completed)</span></div>
       <div className="card"><BarChart data={bars} height={160} /></div>
+
+      <div className="section-title">Fitness progression</div>
+      {trends.length === 0 ? (
+        <div className="card"><div className="empty" style={{ padding: '24px 16px' }}><div className="big"><Icon name="trend" size={34} /></div>Log a benchmark test or update your fitness, and your pace &amp; power trends will appear here.</div></div>
+      ) : (
+        <div className="card">
+          {trends.map(t => (
+            <div className="trend" key={t.key}>
+              <div className="trend-info">
+                <div className="trend-label">{t.label}</div>
+                <div className="trend-val">{t.latest}{t.deltaStr && <span className={'trend-delta ' + (t.improved ? 'up' : 'down')}>{t.deltaStr}</span>}</div>
+              </div>
+              {t.vals.length >= 2 ? <Sparkline values={t.vals} betterDown={t.betterDown} color={t.color} /> : <span className="trend-base">baseline</span>}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="section-title">This week</div>
       <div className="card">
