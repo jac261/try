@@ -21,8 +21,14 @@ through it week by week and track progress.
   are guided by effort (RPE / HR zones) with paces estimated from your level.
 - **Weekly calendar** with drag-free reschedule and an adaptive "catch-up" that
   spreads missed sessions onto free days.
-- **Progress dashboard** — countdown, completion %, streak, weekly-volume chart and
-  discipline-balance donut.
+- **Adapts as you get fitter** — auto-schedules benchmark tests (5k TT, bike FTP,
+  swim CSS); re-targets every upcoming session's paces when you log a result or
+  update your fitness; and nudges paces from how your *hard* sessions felt (a quick
+  Easy / Just-right / Hard tap after each workout — easy and long sessions are
+  ignored, since they're meant to feel easy).
+- **Progress dashboard** — countdown, completion %, streak, weekly-volume chart,
+  discipline-balance donut, and a **fitness-progression** view (5k pace / swim CSS /
+  bike FTP trending over the season).
 - **Calendar export** (`.ics`) and an **installable, offline-capable PWA**.
 
 Everything is stored locally in the browser — **no account, no server.**
@@ -42,8 +48,14 @@ no `node_modules` — the source files *are* what ships.
   weeks → workouts → segments. Given a profile it computes the phase split, weekly
   volume ramp, per-session intensity and target paces. The UI just renders that object.
 - **State lives in `localStorage`** (`triflow.plan`, `triflow.log`, `triflow.moves`) and
-  is layered: the generated plan is immutable; completion (`log`) and reschedules
-  (`moves`) are overlays applied at render time.
+  is layered: the generated plan is immutable; completion + per-session feel (`log`)
+  and reschedules (`moves`) are overlays applied at render time.
+- **Adaptive re-targeting:** changing your fitness re-runs `generatePlan` from the
+  updated profile. Because level / days / race are unchanged, the week/day IDs stay
+  identical — so the `log` and `moves` overlays remain valid and only the target
+  paces change. Each change appends a `fitnessHistory` snapshot to the profile (which
+  powers the progression view), and consistent feedback on *hard* sessions can nudge
+  a discipline's paces ~2% between the formal tests.
 - **PWA:** `manifest.webmanifest` + a service worker (`sw.js`) cache the app shell and
   CDN libs so it installs to a home screen and works offline.
 
@@ -141,8 +153,11 @@ constants you can edit directly. The most useful:
 | `loadFactor()` | `js/plan.js` | Within-phase volume ramp (e.g. Base 0.82→1.0, Build 1.0→1.12, Peak 1.12→1.18, Taper drop). |
 | `computePhases()` | `js/plan.js` | Base/Build/Peak/Taper split (Peak ≈20%, Build ≈40%, Base = remainder; taper from the race). |
 | `WEEKDAY_ORDER` / `WEEKEND` | `js/plan.js` | Which weekdays sessions land on (long/brick → weekend). |
+| `buildTest` / `TEST_ROTATION` | `js/plan.js` | Benchmark-test protocols (5k run TT, 20-min bike FTP, swim CSS) and the discipline rotation; up to 3 are auto-scheduled across the Base/Build weeks. |
+| `INTENSITY_TYPES` | `js/app.jsx` | Which workout *types* (Tempo / Threshold / VO2 / Sweet Spot / CSS / Race Pace) let post-session feedback tune paces — easy / long / recovery sessions are excluded. |
+| `paceSuggestions` / `tuneFields` | `js/app.jsx` | The feedback rule: ≥3 same-direction "feel" ratings on a discipline's hard sessions → a ~2% pace nudge. |
 | `CACHE` | `sw.js` | Service-worker cache name (`try-vN`). **Bump it** when you change cached assets to force clients to re-cache. |
-| `localStorage` keys | `js/app.jsx` (`LS`) | `triflow.plan` (the generated plan), `triflow.log` (completed sessions), `triflow.moves` (reschedules). |
+| `localStorage` keys | `js/app.jsx` (`LS`) | `triflow.plan` (generated plan, incl. `profile.fitnessHistory`), `triflow.log` (completed sessions + per-session `feel`), `triflow.moves` (reschedules). |
 | `react-classic` preset | `index.html` | Forces Babel's classic JSX runtime so JSX uses global React. Don't remove it. |
 | PWA config | `manifest.webmanifest` | App name, icons, `theme_color`, `display: standalone`, etc. |
 
