@@ -41,9 +41,13 @@ function catchUpMoves(plan, log, moves) {
 // ---- adaptive pace tuning from post-session feedback ----
 // Reviews how recent sessions (since the last baseline change) have felt, per
 // discipline, and suggests a gentle pace nudge when a discipline trends one way.
+// Workout types that genuinely tax the target paces. Easy / Long / Technique /
+// Endurance (and recovery-week sessions, which downgrade to those) are *meant* to
+// feel easy, so they don't signal that targets are too soft.
+const INTENSITY_TYPES = { 'Tempo': 1, 'Threshold': 1, 'VO2 Intervals': 1, 'Sweet Spot': 1, 'CSS Intervals': 1, 'Race Pace': 1 };
 function paceSuggestions(plan, log) {
   const since = plan.updatedAt || plan.createdAt || '0';
-  const all = plan.weeks.flatMap(w => w.workouts).filter(w => !w.race && w.discipline !== 'rest');
+  const all = plan.weeks.flatMap(w => w.workouts).filter(w => INTENSITY_TYPES[w.type] && !w.test && !w.race);
   const byDisc = { run: [], bike: [], swim: [] };
   all.forEach(w => {
     const l = log[w.id];
