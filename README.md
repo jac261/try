@@ -6,9 +6,6 @@ through it week by week and track progress.
 
 **▶ Live demo:** https://jac261.github.io/try/
 
-> **Naming:** the app is called **Try**, but the folder and `localStorage` keys are
-> still prefixed `triflow` internally — kept deliberately so existing saved data
-> survives the rename (see the `LS` helper in [`js/app.jsx`](js/app.jsx)).
 
 ---
 
@@ -23,10 +20,12 @@ through it week by week and track progress.
 - **Varied session types** — easy / tempo / threshold / VO2 runs, endurance /
   sweet-spot / threshold rides, technique / CSS / open-water swims, strength
   sessions (Base/Build), and bricks that ramp from easy to race-pace by phase.
-  High-volume (6–7 day) plans fit strength in as a **two-a-day**, stacked on a hard
-  session day (so easy days stay easy).
+  Strength is a **two-a-day**, stacked on the hardest session day (so easy/rest days
+  stay easy/rest).
+- **Scheduling preferences** — choose exactly which weekdays you train (the rest are
+  rest days) and which day hosts your long ride/run.
 - **Editable after onboarding** — update your fitness (re-paces future sessions) or
-  change race / date / training days (rebuilds the plan), keeping your progress.
+  change race / date / schedule (rebuilds the plan), keeping your progress.
 - **Weekly calendar** with drag-free reschedule and an adaptive "catch-up" that
   spreads missed sessions onto free days.
 - **Adapts as you get fitter** — auto-schedules benchmark tests (5k TT, bike FTP,
@@ -55,7 +54,7 @@ no `node_modules` — the source files *are* what ships.
 - **The plan generator** (`plan.js`) is pure functions: `generatePlan(profile)` returns
   weeks → workouts → segments. Given a profile it computes the phase split, weekly
   volume ramp, per-session intensity and target paces. The UI just renders that object.
-- **State lives in `localStorage`** (`triflow.plan`, `triflow.log`, `triflow.moves`) and
+- **State lives in `localStorage`** (`try.plan`, `try.log`, `try.moves`) and
   is layered: the generated plan is immutable; completion + per-session feel (`log`)
   and reschedules (`moves`) are overlays applied at render time.
 - **Adaptive re-targeting:** changing your fitness re-runs `generatePlan` from the
@@ -160,14 +159,16 @@ constants you can edit directly. The most useful:
 | `LONG_RUN` / `LONG_BIKE` / `LONG_BRICK` | `js/plan.js` | Base long-session durations (minutes) per race type. |
 | `loadFactor()` | `js/plan.js` | Within-phase volume ramp (e.g. Base 0.82→1.0, Build 1.0→1.12, Peak 1.12→1.18, Taper drop). |
 | `computePhases()` | `js/plan.js` | Base/Build/Peak/Taper split (Peak ≈20%, Build ≈40%, Base = remainder; taper from the race). |
-| `WEEKDAY_ORDER` / `WEEKEND` | `js/plan.js` | Which weekdays sessions land on (long/brick → weekend). |
+| `WEEKDAY_ORDER` / `WEEKEND` | `js/plan.js` | Legacy fixed weekday layout, used when a profile has no `trainingDays`. |
+| `profile.trainingDays` / `longDay` | set in `js/app.jsx` (`DaySelector`) | Chosen training weekdays (0=Mon..6=Sun) + the long-session day. The generator schedules around these. |
+| `DEFAULT_DAYS` | `js/app.jsx` | Default training-day sets per count, used to seed the day picker. |
 | `buildTest` / `TEST_ROTATION` | `js/plan.js` | Benchmark-test protocols (5k run TT, 20-min bike FTP, swim CSS) and the discipline rotation; up to 3 are auto-scheduled across the Base/Build weeks. |
 | `INTENSITY_TYPES` | `js/app.jsx` | Which workout *types* (Tempo / Threshold / VO2 / Sweet Spot / CSS / Race Pace) let post-session feedback tune paces — easy / long / recovery sessions are excluded. |
 | `paceSuggestions` / `tuneFields` | `js/app.jsx` | The feedback rule: ≥3 same-direction "feel" ratings on a discipline's hard sessions → a ~2% pace nudge. |
 | `WHY` | `js/app.jsx` | The per-workout-type "why this session" coaching notes shown in the detail sheet. Edit the copy here. |
 | `reshapePlan` / `PlanSettingsEditor` | `js/app.jsx` | Edit race / date / days after onboarding; rebuilds the plan and prunes `log`/`moves` to surviving workout IDs. |
 | `CACHE` | `sw.js` | Service-worker cache name (`try-vN`). **Bump it** when you change cached assets to force clients to re-cache. |
-| `localStorage` keys | `js/app.jsx` (`LS`) | `triflow.plan` (generated plan, incl. `profile.fitnessHistory`), `triflow.log` (completed sessions + per-session `feel`), `triflow.moves` (reschedules). |
+| `localStorage` keys | `js/app.jsx` (`LS`/`NS`) | `try.plan` (generated plan, incl. `profile.fitnessHistory`), `try.log` (completed sessions + per-session `feel`), `try.moves` (reschedules). Legacy `triflow.*` data is auto-migrated once. |
 | `react-classic` preset | `index.html` | Forces Babel's classic JSX runtime so JSX uses global React. Don't remove it. |
 | PWA config | `manifest.webmanifest` | App name, icons, `theme_color`, `display: standalone`, etc. |
 
