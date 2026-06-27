@@ -101,6 +101,7 @@ body {
 .tag.recovery { background: rgba(56, 189, 248, .15); color: var(--swim); }
 .tag.moved { background: rgba(192, 132, 252, .16); color: var(--brick); }
 .tag.test { background: rgba(251, 191, 36, .18); color: var(--bike); }
+.tag.second { background: rgba(148, 163, 184, .2); color: #cbd5e1; }
 
 /* test "log result" note */
 .testnote { display: flex; gap: 10px; align-items: center; background: var(--blue-soft); border: 1px solid rgba(91, 140, 255, .3); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; color: #aac3ff; font-size: 13px; font-weight: 600; line-height: 1.4; }

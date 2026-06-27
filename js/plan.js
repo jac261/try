@@ -415,19 +415,23 @@
         }
       }
 
-      // Add a strength session on a spare mid-week rest day during Base/Build,
-      // when there are rest days to spare (≤ 5 training days). Keeps the day's id.
-      const restDays = workouts.filter(x => x.discipline === 'rest').length;
-      if ((phase === 'Base' || phase === 'Build') && restDays >= 2) {
-        let ri = workouts.findIndex((x, idx) => x.discipline === 'rest' && idx >= 1 && idx <= 4);
-        if (ri < 0) ri = workouts.findIndex(x => x.discipline === 'rest');
-        if (ri >= 0) {
-          const built = buildStrength(phase);
-          const wo = workouts[ri];
-          workouts[ri] = {
-            id: wo.id, week: w, phase: phase, date: wo.date, discipline: 'strength', role: 'strength',
-            type: 'Strength', title: built.title, durationMin: built.durationMin, distance: null, unit: '', segments: built.segments,
-          };
+      // Add a strength session during Base/Build. With ≥2 rest days to spare, drop it
+      // on a mid-week rest day; otherwise stack it as a second session ("double") on the
+      // lightest day, so high-volume (6–7 day) athletes still get it without losing rest.
+      if (phase === 'Base' || phase === 'Build') {
+        const restDays = workouts.filter(x => x.discipline === 'rest').length;
+        const built = buildStrength(phase);
+        const mk = (id, date) => ({ id: id, week: w, phase: phase, date: date, discipline: 'strength', role: 'strength', type: 'Strength', title: built.title, durationMin: built.durationMin, distance: null, unit: '', segments: built.segments });
+        if (restDays >= 2) {
+          let ri = workouts.findIndex((x, idx) => x.discipline === 'rest' && idx >= 1 && idx <= 4);
+          if (ri < 0) ri = workouts.findIndex(x => x.discipline === 'rest');
+          if (ri >= 0) workouts[ri] = mk(workouts[ri].id, workouts[ri].date);
+        } else {
+          // Double up on the lightest training session (avoid long / brick / test / race days).
+          const hosts = workouts.filter(x => x.discipline !== 'rest' && !x.race && !x.test && x.role !== 'long' && x.discipline !== 'brick');
+          hosts.sort((a, b) => a.durationMin - b.durationMin);
+          const host = hosts[0];
+          if (host) workouts.push(Object.assign(mk(w + '-' + host.id.split('-')[1] + '-1', host.date), { second: true }));
         }
       }
 
