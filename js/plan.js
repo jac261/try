@@ -313,7 +313,16 @@
     totalWeeks = T.clamp(totalWeeks, 4, 40);
 
     const phases = computePhases(totalWeeks, race.taperWeeks);
-    const template = TEMPLATES[T.clamp(profile.daysPerWeek, 3, 7)];
+    // Scheduling preference: explicit training weekdays (0=Mon..6=Sun) + a long-session
+    // day. Falls back to the legacy fixed layout when a profile predates the preference.
+    const prefDays = (profile.trainingDays && profile.trainingDays.length >= 3)
+      ? profile.trainingDays.slice().sort((a, b) => a - b) : null;
+    const days = prefDays ? prefDays.length : profile.daysPerWeek;
+    const template = TEMPLATES[T.clamp(days, 3, 7)];
+    let longDay = profile.longDay;
+    if (prefDays && (longDay === undefined || prefDays.indexOf(longDay) < 0)) {
+      longDay = prefDays.indexOf(5) >= 0 ? 5 : (prefDays.indexOf(6) >= 0 ? 6 : prefDays[prefDays.length - 1]);
+    }
 
     // phase position bookkeeping
     const phaseLen = {}, phasePos = {};
@@ -353,13 +362,25 @@
       });
 
       const dayMap = {}; // weekday index -> slot
-      const weekdayQueue = WEEKDAY_ORDER.slice();
-      // Long/brick sessions take the weekend first; any overflow spills onto a weekday.
-      longs.forEach((s, i) => {
-        if (WEEKEND[i] !== undefined) dayMap[WEEKEND[i]] = s;
-        else { const wd = weekdayQueue.shift(); if (wd !== undefined) dayMap[wd] = s; }
-      });
-      mids.forEach(s => { const wd = weekdayQueue.shift(); if (wd !== undefined) dayMap[wd] = s; });
+      if (prefDays) {
+        // Long/brick → the preferred long day first, then other weekend days, then weekdays.
+        const isWknd = d => d >= 5;
+        const longSlots = [longDay]
+          .concat(prefDays.filter(d => d !== longDay && isWknd(d)))
+          .concat(prefDays.filter(d => d !== longDay && !isWknd(d)));
+        const used = {};
+        longs.forEach((s, i) => { const d = longSlots[i]; if (d !== undefined) { dayMap[d] = s; used[d] = 1; } });
+        const midSlots = prefDays.filter(d => !used[d]);
+        mids.forEach((s, i) => { const d = midSlots[i]; if (d !== undefined) dayMap[d] = s; });
+      } else {
+        const weekdayQueue = WEEKDAY_ORDER.slice();
+        // Long/brick sessions take the weekend first; any overflow spills onto a weekday.
+        longs.forEach((s, i) => {
+          if (WEEKEND[i] !== undefined) dayMap[WEEKEND[i]] = s;
+          else { const wd = weekdayQueue.shift(); if (wd !== undefined) dayMap[wd] = s; }
+        });
+        mids.forEach(s => { const wd = weekdayQueue.shift(); if (wd !== undefined) dayMap[wd] = s; });
+      }
 
       const workouts = [];
       let slot = 0;
@@ -415,27 +436,20 @@
         }
       }
 
-      // Add a strength session during Base/Build. With ≥2 rest days to spare, drop it
-      // on a mid-week rest day; otherwise stack it as a second session ("double") on the
-      // lightest day, so high-volume (6–7 day) athletes still get it without losing rest.
+      // Add a strength session during Base/Build, stacked as a second session ("double")
+      // on the hardest training day — so easy days and (chosen) rest days stay easy/rest.
       if (phase === 'Base' || phase === 'Build') {
-        const restDays = workouts.filter(x => x.discipline === 'rest').length;
         const built = buildStrength(phase);
-        const mk = (id, date) => ({ id: id, week: w, phase: phase, date: date, discipline: 'strength', role: 'strength', type: 'Strength', title: built.title, durationMin: built.durationMin, distance: null, unit: '', segments: built.segments });
-        if (restDays >= 2) {
-          let ri = workouts.findIndex((x, idx) => x.discipline === 'rest' && idx >= 1 && idx <= 4);
-          if (ri < 0) ri = workouts.findIndex(x => x.discipline === 'rest');
-          if (ri >= 0) workouts[ri] = mk(workouts[ri].id, workouts[ri].date);
-        } else {
-          // Stack strength on the hardest training day (not an easy day) so hard days stay
-          // concentrated and easy days stay easy. Avoid long / brick / test / race days.
-          const HARD = { 'Tempo': 3, 'Threshold': 4, 'VO2 Intervals': 5, 'Sweet Spot': 3, 'CSS Intervals': 3, 'Race Pace': 4 };
-          const score = x => (HARD[x.type] || 0) + (x.role === 'quality' ? 1 : 0);
-          const hosts = workouts.filter(x => x.discipline !== 'rest' && !x.race && !x.test && x.role !== 'long' && x.discipline !== 'brick');
-          hosts.sort((a, b) => score(b) - score(a) || b.durationMin - a.durationMin);
-          const host = hosts[0];
-          if (host) workouts.push(Object.assign(mk(w + '-' + host.id.split('-')[1] + '-1', host.date), { second: true }));
-        }
+        const HARD = { 'Tempo': 3, 'Threshold': 4, 'VO2 Intervals': 5, 'Sweet Spot': 3, 'CSS Intervals': 3, 'Race Pace': 4 };
+        const score = x => (HARD[x.type] || 0) + (x.role === 'quality' ? 1 : 0);
+        const hosts = workouts.filter(x => x.discipline !== 'rest' && !x.race && !x.test && x.role !== 'long' && x.discipline !== 'brick');
+        hosts.sort((a, b) => score(b) - score(a) || b.durationMin - a.durationMin);
+        const host = hosts[0];
+        if (host) workouts.push({
+          id: w + '-' + host.id.split('-')[1] + '-1', week: w, phase: phase, date: host.date,
+          discipline: 'strength', role: 'strength', type: 'Strength', title: built.title,
+          durationMin: built.durationMin, distance: null, unit: '', segments: built.segments, second: true,
+        });
       }
 
       const totalMin = workouts.reduce((a, b) => a + (b.durationMin || 0), 0);

@@ -221,11 +221,44 @@ function fitnessSeries(profile, startDate) {
   return { run: series('fivekSec'), swim: series('css100Sec'), bike: series('ftp') };
 }
 
+// Sensible default training weekdays per count (0=Mon..6=Sun), matching the legacy layout.
+const DEFAULT_DAYS = { 3: [1, 5, 6], 4: [0, 1, 3, 5], 5: [0, 1, 3, 5, 6], 6: [0, 1, 2, 3, 5, 6], 7: [0, 1, 2, 3, 4, 5, 6] };
+const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+// Pick training days (≥3) and the long-session day. days = sorted weekday indices.
+function DaySelector({ days, longDay, onChange }) {
+  const toggle = d => {
+    let nd = days.indexOf(d) >= 0 ? days.filter(x => x !== d) : days.concat([d]);
+    if (nd.length < 3) return;                       // always keep at least 3 training days
+    nd.sort((a, b) => a - b);
+    let nl = longDay;
+    if (nd.indexOf(nl) < 0) nl = nd.indexOf(5) >= 0 ? 5 : (nd.indexOf(6) >= 0 ? 6 : nd[nd.length - 1]);
+    onChange(nd, nl);
+  };
+  return (
+    <>
+      <div className="days">
+        {[0, 1, 2, 3, 4, 5, 6].map(d =>
+          <div key={d} className={'d' + (days.indexOf(d) >= 0 ? ' on' : '')} onClick={() => toggle(d)}>{DAY_LETTERS[d]}</div>)}
+      </div>
+      <div className="hint" style={{ marginTop: 8 }}>{days.length} training days · the rest are rest days</div>
+      <label className="field" style={{ marginTop: 16, marginBottom: 0 }}><span className="lab">Long session day <span className="hint">your big ride / run</span></span></label>
+      <div className="days" style={{ marginTop: 8 }}>
+        {[0, 1, 2, 3, 4, 5, 6].map(d => {
+          const sel = days.indexOf(d) >= 0;
+          return <div key={d} className={'d' + (longDay === d ? ' on' : '')} onClick={() => sel && onChange(days, d)}
+            style={{ opacity: sel ? 1 : .3, cursor: sel ? 'pointer' : 'default' }}>{DAY_LETTERS[d]}</div>;
+        })}
+      </div>
+    </>
+  );
+}
+
 /* ---------------- onboarding ---------------- */
 function Onboarding({ onCreate }) {
   const [step, setStep] = useState(0);
   const [f, setF] = useState({
-    name: '', raceType: 'olympic', fitness: 'intermediate', daysPerWeek: 5,
+    name: '', raceType: 'olympic', fitness: 'intermediate', trainingDays: [0, 1, 3, 5, 6], longDay: 5,
     raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '', css100: '', ftp: '',
   });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
@@ -233,7 +266,9 @@ function Onboarding({ onCreate }) {
   function finish() {
     onCreate({
       name: f.name.trim() || 'Athlete', raceType: f.raceType, fitness: f.fitness,
+      trainingDays: f.trainingDays, longDay: f.longDay,
       daysPerWeek: f.daysPerWeek, raceDate: f.raceDate,
+      daysPerWeek: f.trainingDays.length,
       fivekSec: T.parseTimeToSec(f.fivek), css100Sec: T.parseTimeToSec(f.css100),
       ftp: f.ftp ? Number(f.ftp) : null, startDate: T.iso(new Date()),
     });
@@ -264,13 +299,9 @@ function Onboarding({ onCreate }) {
           <p className="lead">This shapes your volume, intensity and ramp rate.</p>
           <label className="field"><span className="lab">Race date</span>
             <input type="date" value={f.raceDate} onChange={e => set('raceDate', e.target.value)} /></label>
-          <label className="field"><span className="lab">Training days per week</span></label>
-          <div className="days">
-            {[3, 4, 5, 6, 7].map(n => (
-              <div key={n} className={'d' + (f.daysPerWeek === n ? ' on' : '')} onClick={() => set('daysPerWeek', n)}>{n}</div>
-            ))}
-          </div>
-          <div style={{ height: 16 }} />
+          <label className="field" style={{ marginBottom: 8 }}><span className="lab">Which days will you train?</span></label>
+          <DaySelector days={f.trainingDays} longDay={f.longDay} onChange={(d, l) => setF(s => ({ ...s, trainingDays: d, longDay: l }))} />
+          <div style={{ height: 18 }} />
           <label className="field"><span className="lab">Experience level</span></label>
           <div className="choice">
             {Object.values(T.FITNESS).map(l => (
@@ -439,10 +470,16 @@ function FitnessEditor({ profile, onClose, onSave }) {
 
 /* ---------------- edit-plan (race / schedule) editor ---------------- */
 function PlanSettingsEditor({ profile, onClose, onSave }) {
+  const initDays = (profile.trainingDays && profile.trainingDays.length >= 3)
+    ? profile.trainingDays.slice().sort((a, b) => a - b)
+    : (DEFAULT_DAYS[Math.max(3, Math.min(7, profile.daysPerWeek))] || DEFAULT_DAYS[5]);
+  const initLong = (profile.longDay !== undefined && initDays.indexOf(profile.longDay) >= 0)
+    ? profile.longDay : (initDays.indexOf(5) >= 0 ? 5 : initDays[initDays.length - 1]);
   const [f, setF] = useState({
     raceType: profile.raceType,
     raceDate: T.iso(profile.raceDate),
-    daysPerWeek: profile.daysPerWeek,
+    trainingDays: initDays,
+    longDay: initLong,
   });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
   const todayISO = T.iso(new Date());
@@ -461,14 +498,10 @@ function PlanSettingsEditor({ profile, onClose, onSave }) {
         <div style={{ height: 16 }} />
         <label className="field"><span className="lab">Race date</span>
           <input type="date" value={f.raceDate} min={todayISO} onChange={e => set('raceDate', e.target.value)} /></label>
-        <label className="field"><span className="lab">Training days per week</span></label>
-        <div className="days">
-          {[3, 4, 5, 6, 7].map(n => (
-            <div key={n} className={'d' + (f.daysPerWeek === n ? ' on' : '')} onClick={() => set('daysPerWeek', n)}>{n}</div>
-          ))}
-        </div>
+        <label className="field" style={{ marginBottom: 8 }}><span className="lab">Which days will you train?</span></label>
+        <DaySelector days={f.trainingDays} longDay={f.longDay} onChange={(d, l) => setF(s => ({ ...s, trainingDays: d, longDay: l }))} />
         <div style={{ height: 18 }} />
-        <button className="btn primary" onClick={() => onSave({ raceType: f.raceType, raceDate: f.raceDate, daysPerWeek: f.daysPerWeek })}>Save &amp; rebuild plan</button>
+        <button className="btn primary" onClick={() => onSave({ raceType: f.raceType, raceDate: f.raceDate, daysPerWeek: f.trainingDays.length, trainingDays: f.trainingDays, longDay: f.longDay })}>Save &amp; rebuild plan</button>
       </div>
     </div>
   );
