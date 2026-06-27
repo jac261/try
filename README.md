@@ -23,6 +23,8 @@ through it week by week and track progress.
 - **Varied session types** — easy / tempo / threshold / VO2 runs, endurance /
   sweet-spot / threshold rides, technique / CSS / open-water swims, strength
   sessions (Base/Build), and bricks that ramp from easy to race-pace by phase.
+  High-volume (6–7 day) plans fit strength in as a **two-a-day** (second session
+  on the lightest day).
 - **Editable after onboarding** — update your fitness (re-paces future sessions) or
   change race / date / training days (rebuilds the plan), keeping your progress.
 - **Weekly calendar** with drag-free reschedule and an adaptive "catch-up" that
