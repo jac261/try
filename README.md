@@ -16,9 +16,12 @@ through it week by week and track progress.
 - **Generates a full training plan** for a Sprint / Olympic / 70.3 / 140.6 race from
   your race date, days-per-week and experience level — periodised into
   Base → Build → Peak → Taper with recovery weeks and a race-day entry.
-- **Structured workouts** with warm-up / main set / cool-down and target paces
-  (run from your 5k, swim from CSS pace, bike power from FTP). No numbers? Sessions
-  are guided by effort (RPE / HR zones) with paces estimated from your level.
+- **Structured workouts** with warm-up / main set / cool-down, target paces
+  (run from your 5k, swim from CSS pace, bike power from FTP), and a one-line
+  **"why this session"** coaching note. No numbers? Sessions are guided by effort
+  (RPE / HR zones) with paces estimated from your level.
+- **Editable after onboarding** — update your fitness (re-paces future sessions) or
+  change race / date / training days (rebuilds the plan), keeping your progress.
 - **Weekly calendar** with drag-free reschedule and an adaptive "catch-up" that
   spreads missed sessions onto free days.
 - **Adapts as you get fitter** — auto-schedules benchmark tests (5k TT, bike FTP,
@@ -156,6 +159,8 @@ constants you can edit directly. The most useful:
 | `buildTest` / `TEST_ROTATION` | `js/plan.js` | Benchmark-test protocols (5k run TT, 20-min bike FTP, swim CSS) and the discipline rotation; up to 3 are auto-scheduled across the Base/Build weeks. |
 | `INTENSITY_TYPES` | `js/app.jsx` | Which workout *types* (Tempo / Threshold / VO2 / Sweet Spot / CSS / Race Pace) let post-session feedback tune paces — easy / long / recovery sessions are excluded. |
 | `paceSuggestions` / `tuneFields` | `js/app.jsx` | The feedback rule: ≥3 same-direction "feel" ratings on a discipline's hard sessions → a ~2% pace nudge. |
+| `WHY` | `js/app.jsx` | The per-workout-type "why this session" coaching notes shown in the detail sheet. Edit the copy here. |
+| `reshapePlan` / `PlanSettingsEditor` | `js/app.jsx` | Edit race / date / days after onboarding; rebuilds the plan and prunes `log`/`moves` to surviving workout IDs. |
 | `CACHE` | `sw.js` | Service-worker cache name (`try-vN`). **Bump it** when you change cached assets to force clients to re-cache. |
 | `localStorage` keys | `js/app.jsx` (`LS`) | `triflow.plan` (generated plan, incl. `profile.fitnessHistory`), `triflow.log` (completed sessions + per-session `feel`), `triflow.moves` (reschedules). |
 | `react-classic` preset | `index.html` | Forces Babel's classic JSX runtime so JSX uses global React. Don't remove it. |
