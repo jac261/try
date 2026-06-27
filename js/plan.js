@@ -427,9 +427,12 @@
           if (ri < 0) ri = workouts.findIndex(x => x.discipline === 'rest');
           if (ri >= 0) workouts[ri] = mk(workouts[ri].id, workouts[ri].date);
         } else {
-          // Double up on the lightest training session (avoid long / brick / test / race days).
+          // Stack strength on the hardest training day (not an easy day) so hard days stay
+          // concentrated and easy days stay easy. Avoid long / brick / test / race days.
+          const HARD = { 'Tempo': 3, 'Threshold': 4, 'VO2 Intervals': 5, 'Sweet Spot': 3, 'CSS Intervals': 3, 'Race Pace': 4 };
+          const score = x => (HARD[x.type] || 0) + (x.role === 'quality' ? 1 : 0);
           const hosts = workouts.filter(x => x.discipline !== 'rest' && !x.race && !x.test && x.role !== 'long' && x.discipline !== 'brick');
-          hosts.sort((a, b) => a.durationMin - b.durationMin);
+          hosts.sort((a, b) => score(b) - score(a) || b.durationMin - a.durationMin);
           const host = hosts[0];
           if (host) workouts.push(Object.assign(mk(w + '-' + host.id.split('-')[1] + '-1', host.date), { second: true }));
         }
