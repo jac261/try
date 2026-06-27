@@ -335,6 +335,8 @@ const WHY = {
   'CSS Intervals': 'Build sustainable swim speed. Hold your CSS pace — smooth and controlled, not a sprint.',
   'Race Pace': 'Rehearse race effort so it feels familiar. Strong and relaxed at your goal pace.',
   'Brick': 'Teach your legs to run off the bike. Expect heaviness at first — find your run rhythm quickly.',
+  'Strength': 'Build durability and power to resist fatigue and injury. Quality over quantity — move well, brace your core.',
+  'Open Water': 'Rehearse race-day swimming. Practise sighting, drafting and holding a straight line without walls to push off.',
 };
 
 function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel }) {

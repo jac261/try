@@ -125,6 +125,15 @@
         { label: reps + ' × 100 m @ CSS', detail: swimDetail(pc, 'css', 'Z4') + ' · 15 s rest' },
         { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
       ];
+    } else if (type === 'Open Water') {
+      title = 'Open Water Swim';
+      main = reps * 100;
+      segs = [
+        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2') },
+        { label: '4 × 200 m @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes' },
+        { label: 'Open-water skills', detail: 'Deep-water start, drafting, buoy turns — practise swimming straight' },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+      ];
     } else { // Endurance / Race Pace
       title = type === 'Race Pace' ? 'Race-Pace Swim' : 'Endurance Swim';
       main = reps * 100;
@@ -138,17 +147,35 @@
     return { title: title, segments: segs, distance: dist, unit: 'km' };
   }
 
-  function buildBrick(dur, pc) {
-    const bikeMin = Math.round(dur * 0.68);
+  function buildBrick(dur, pc, phase) {
+    const base = phase === 'Base', peak = phase === 'Peak';
+    const bikeMin = Math.round(dur * (peak ? 0.62 : 0.7));   // more run off the bike at peak
     const runMin = dur - bikeMin;
     return {
       title: 'Brick',
       segments: [
-        { label: 'Bike — build to race effort', min: bikeMin, detail: bikeDetail(pc, 0.7, 0.85, 'Z3') },
+        { label: base ? 'Bike — steady aerobic' : 'Bike — build to race effort', min: bikeMin,
+          detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.88, base ? 'Z2' : 'Z3') },
         { label: 'T2 — quick transition', detail: 'Rack bike, shoes on, < 60 s' },
-        { label: 'Run off the bike', min: runMin, detail: runDetail(pc, 'tempo', 'Z3') },
+        { label: base ? 'Run off the bike — easy' : (peak ? 'Run off the bike — race pace' : 'Run off the bike — tempo'), min: runMin,
+          detail: runDetail(pc, base ? 'easy' : (peak ? 'threshold' : 'tempo'), base ? 'Z2' : (peak ? 'Z4' : 'Z3')) },
       ],
       distance: null, unit: 'km',
+    };
+  }
+
+  // Strength session — durability, power and injury resistance (Base/Build only).
+  function buildStrength(phase) {
+    const base = phase === 'Base';
+    return {
+      title: 'Strength', durationMin: base ? 40 : 35, distance: null, unit: '',
+      segments: [
+        { label: 'Mobility & activation', min: 8, detail: 'Hips, ankles, glutes & core switch-on' },
+        base
+          ? { label: 'Foundation circuit · 3 rounds', min: 24, detail: 'Goblet squat, Romanian deadlift, split squat, push-up — 12–15 reps' }
+          : { label: 'Strength · 4 sets', min: 20, detail: 'Back squat, deadlift, single-leg work — 5–8 strong reps, full recovery' },
+        { label: 'Core & balance', min: base ? 8 : 7, detail: 'Plank & side plank, dead bug, single-leg balance' },
+      ],
     };
   }
 
@@ -220,8 +247,10 @@
   };
   function typeFor(discipline, role, phase, isRecovery, intensity) {
     if (role === 'long') return 'Long';
-    if (role === 'easy') return discipline === 'swim' ? 'Technique' : 'Easy';
     if (role === 'brick') return 'Brick';
+    // Peak swims become race-specific open-water sessions (any role, but not recovery weeks).
+    if (discipline === 'swim' && phase === 'Peak' && !isRecovery) return 'Open Water';
+    if (role === 'easy') return discipline === 'swim' ? 'Technique' : 'Easy';
     // role === 'quality'
     if (isRecovery) return discipline === 'swim' ? 'Technique' : (discipline === 'bike' ? 'Endurance' : 'Easy');
     const ladder = INTENSITY_LADDER[discipline] || ['Easy'];
@@ -239,11 +268,12 @@
     return 40;
   }
 
-  function buildWorkout(discipline, type, dur, pc) {
+  function buildWorkout(discipline, type, dur, pc, phase) {
     if (discipline === 'run') return buildRun(type, dur, pc);
     if (discipline === 'bike') return buildBike(type, dur, pc);
     if (discipline === 'swim') return buildSwim(type, dur, pc);
-    if (discipline === 'brick') return buildBrick(dur, pc);
+    if (discipline === 'brick') return buildBrick(dur, pc, phase);
+    if (discipline === 'strength') return buildStrength(phase);
     return { title: 'Session', segments: [], distance: null, unit: '' };
   }
 
@@ -323,8 +353,13 @@
       });
 
       const dayMap = {}; // weekday index -> slot
-      longs.forEach((s, i) => { if (WEEKEND[i] !== undefined) dayMap[WEEKEND[i]] = s; });
-      mids.forEach((s, i) => { if (WEEKDAY_ORDER[i] !== undefined) dayMap[WEEKDAY_ORDER[i]] = s; });
+      const weekdayQueue = WEEKDAY_ORDER.slice();
+      // Long/brick sessions take the weekend first; any overflow spills onto a weekday.
+      longs.forEach((s, i) => {
+        if (WEEKEND[i] !== undefined) dayMap[WEEKEND[i]] = s;
+        else { const wd = weekdayQueue.shift(); if (wd !== undefined) dayMap[wd] = s; }
+      });
+      mids.forEach(s => { const wd = weekdayQueue.shift(); if (wd !== undefined) dayMap[wd] = s; });
 
       const workouts = [];
       let slot = 0;
@@ -338,7 +373,7 @@
         const isLast = w === totalWeeks - 1;
         const type = typeFor(s.disc, s.role, phase, isRecovery, fitness.intensity);
         const dur = T.round5(baseDuration(s.disc, s.role, race.key) * load);
-        const built = buildWorkout(s.disc, type, dur, pc);
+        const built = buildWorkout(s.disc, type, dur, pc, phase);
         workouts.push({
           id: w + '-' + d, week: w, phase: phase, date: date,
           discipline: s.disc, role: s.role, type: type, title: built.title,
@@ -377,6 +412,22 @@
             distance: built.distance, unit: built.unit, segments: built.segments,
             test: true, testKind: testKind, note: built.note, key: true,
           });
+        }
+      }
+
+      // Add a strength session on a spare mid-week rest day during Base/Build,
+      // when there are rest days to spare (≤ 5 training days). Keeps the day's id.
+      const restDays = workouts.filter(x => x.discipline === 'rest').length;
+      if ((phase === 'Base' || phase === 'Build') && restDays >= 2) {
+        let ri = workouts.findIndex((x, idx) => x.discipline === 'rest' && idx >= 1 && idx <= 4);
+        if (ri < 0) ri = workouts.findIndex(x => x.discipline === 'rest');
+        if (ri >= 0) {
+          const built = buildStrength(phase);
+          const wo = workouts[ri];
+          workouts[ri] = {
+            id: wo.id, week: w, phase: phase, date: wo.date, discipline: 'strength', role: 'strength',
+            type: 'Strength', title: built.title, durationMin: built.durationMin, distance: null, unit: '', segments: built.segments,
+          };
         }
       }
 

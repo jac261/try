@@ -20,6 +20,9 @@ through it week by week and track progress.
   (run from your 5k, swim from CSS pace, bike power from FTP), and a one-line
   **"why this session"** coaching note. No numbers? Sessions are guided by effort
   (RPE / HR zones) with paces estimated from your level.
+- **Varied session types** — easy / tempo / threshold / VO2 runs, endurance /
+  sweet-spot / threshold rides, technique / CSS / open-water swims, strength
+  sessions (Base/Build), and bricks that ramp from easy to race-pace by phase.
 - **Editable after onboarding** — update your fitness (re-paces future sessions) or
   change race / date / training days (rebuilds the plan), keeping your progress.
 - **Weekly calendar** with drag-free reschedule and an adaptive "catch-up" that
