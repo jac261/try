@@ -418,6 +418,43 @@ function FitnessEditor({ profile, onClose, onSave }) {
   );
 }
 
+/* ---------------- edit-plan (race / schedule) editor ---------------- */
+function PlanSettingsEditor({ profile, onClose, onSave }) {
+  const [f, setF] = useState({
+    raceType: profile.raceType,
+    raceDate: T.iso(profile.raceDate),
+    daysPerWeek: profile.daysPerWeek,
+  });
+  const set = (k, v) => setF(s => ({ ...s, [k]: v }));
+  const todayISO = T.iso(new Date());
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="sheet" onClick={e => e.stopPropagation()}>
+        <div className="grab" />
+        <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 800 }}>Edit plan</h2>
+        <p className="lead">Change your race or schedule and the plan rebuilds around it. Completed sessions and reschedules are kept for the days that still exist; your fitness, paces and progress carry over.</p>
+        <label className="field"><span className="lab">Race</span></label>
+        <div className="choice">
+          {Object.values(T.RACES).map(r => (
+            <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} onClick={() => set('raceType', r.key)}>{r.name}<small>{r.swim}k · {r.bike}k · {r.run}k</small></div>
+          ))}
+        </div>
+        <div style={{ height: 16 }} />
+        <label className="field"><span className="lab">Race date</span>
+          <input type="date" value={f.raceDate} min={todayISO} onChange={e => set('raceDate', e.target.value)} /></label>
+        <label className="field"><span className="lab">Training days per week</span></label>
+        <div className="days">
+          {[3, 4, 5, 6, 7].map(n => (
+            <div key={n} className={'d' + (f.daysPerWeek === n ? ' on' : '')} onClick={() => set('daysPerWeek', n)}>{n}</div>
+          ))}
+        </div>
+        <div style={{ height: 18 }} />
+        <button className="btn primary" onClick={() => onSave({ raceType: f.raceType, raceDate: f.raceDate, daysPerWeek: f.daysPerWeek })}>Save &amp; rebuild plan</button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- views ---------------- */
 function TodayView({ plan, log, moves, open, onCatchUp, onTune }) {
   const todayISO = T.iso(new Date());
@@ -640,7 +677,7 @@ function ProgressView({ plan, log }) {
   );
 }
 
-function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness }) {
+function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan }) {
   const p = plan.profile;
   return (
     <>
@@ -666,6 +703,8 @@ function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness }) 
             ? ' · 5k ' + T.fmtPace(prev.fivekSec) + ' → ' + T.fmtPace(p.fivekSec) : '';
           return <p className="lead" style={{ margin: '10px 2px 0' }}>Paces re-targeted {T.fmtDate(T.iso(plan.updatedAt.slice(0, 10)), { month: 'short', day: 'numeric' })}{delta}</p>;
         })()}
+        <div style={{ height: 10 }} />
+        <button className="btn ghost" onClick={onEditPlan}><Icon name="calendar" size={18} /> Edit race &amp; schedule</button>
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Sync & export</h2>
@@ -690,6 +729,7 @@ function App() {
   const [view, setView] = useState('today');
   const [detail, setDetail] = useState(null);
   const [editFitness, setEditFitness] = useState(false);
+  const [editPlan, setEditPlan] = useState(false);
 
   useEffect(() => { if (plan) LS.save('plan', plan); }, [plan]);
   useEffect(() => { LS.save('log', log); }, [log]);
@@ -714,6 +754,19 @@ function App() {
   const updateFitness = fields => { retarget(fields); setEditFitness(false); };
   const applyTune = () => { const s = paceSuggestions(plan, log); if (s.length) retarget(tuneFields(plan.profile, s)); };
   const setFeel = (id, feel) => setLog(l => ({ ...l, [id]: Object.assign({}, l[id], { done: true, at: (l[id] && l[id].at) || new Date().toISOString(), feel: feel }) }));
+  // Rebuild the plan after a race/schedule change. This reshapes the structure, so we
+  // prune log & moves to the workout IDs that still exist (fitness/history carry over).
+  const reshapePlan = fields => {
+    const profile = Object.assign({}, plan.profile, fields);
+    const np = T.generatePlan(profile);
+    np.createdAt = plan.createdAt;
+    if (plan.updatedAt) np.updatedAt = plan.updatedAt;
+    const valid = new Set(np.weeks.flatMap(w => w.workouts).map(w => w.id));
+    setLog(l => { const n = {}; Object.keys(l).forEach(id => { if (valid.has(id)) n[id] = l[id]; }); return n; });
+    setMoves(m => { const n = {}; Object.keys(m).forEach(id => { if (valid.has(id)) n[id] = m[id]; }); return n; });
+    setPlan(np);
+    setEditPlan(false);
+  };
   const race = T.RACES[plan.race];
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
 
@@ -736,11 +789,13 @@ function App() {
       {view === 'progress' && <ProgressView plan={plan} log={log} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
+        onEditPlan={() => setEditPlan(true)}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { LS.clear(); setLog({}); setMoves({}); setPlan(null); } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} />}
 
       {editFitness && <FitnessEditor profile={plan.profile} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
+      {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
 
       {detail && <DetailSheet w={detail} done={!!log[detail.id]} eff={effDate(detail, moves)}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
