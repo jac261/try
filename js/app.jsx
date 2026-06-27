@@ -322,8 +322,24 @@ function WorkoutRow({ w, done, onClick, eff, moved }) {
   );
 }
 
+// One-line "why this session" coaching note, keyed by workout type.
+const WHY = {
+  'Easy': 'Build your aerobic base. Keep it conversational — easy enough to chat the whole way.',
+  'Long': 'Build endurance for race day. Stay aerobic and relaxed, and practise your fuelling.',
+  'Tempo': 'Raise the pace you can hold for the long haul. Settle into a steady "comfortably hard" effort.',
+  'Threshold': 'Lift your threshold — the effort you could just sustain for an hour. Strong and controlled, never all-out.',
+  'VO2 Intervals': 'Sharpen your top-end fitness. Commit to the target pace on every rep, then recover fully.',
+  'Endurance': 'Lay down aerobic base on the bike. Smooth, steady and mostly Zone 2.',
+  'Sweet Spot': 'Big aerobic and threshold gains for the time spent. Sustained, just below threshold.',
+  'Technique': 'Groove efficient form while fresh. Focus on a clean catch and a long, balanced body line.',
+  'CSS Intervals': 'Build sustainable swim speed. Hold your CSS pace — smooth and controlled, not a sprint.',
+  'Race Pace': 'Rehearse race effort so it feels familiar. Strong and relaxed at your goal pace.',
+  'Brick': 'Teach your legs to run off the bike. Expect heaviness at first — find your run rhythm quickly.',
+};
+
 function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel }) {
   const disc = D[w.discipline];
+  const why = !w.race && !w.test ? WHY[w.type] : null;
   const shown = eff || w.date;
   const moved = shown !== w.date;
   const days = weekRange(w.date);
@@ -340,6 +356,7 @@ function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove, onL
           {w.distance && <div className="s"><b>{w.distance}</b><span>{w.unit}</span></div>}
           <div className="s"><b>{disc.name}</b><span>{w.type}</span></div>
         </div>}
+        {why && <div className="why" style={{ borderColor: disc.color }}><span className="why-label">Why this session</span>{why}</div>}
         <div className="section-title" style={{ margin: '8px 0 2px' }}>{w.race ? 'Race plan' : 'Workout'}</div>
         {w.segments.map((s, i) => (
           <div className="seg" key={i}>
