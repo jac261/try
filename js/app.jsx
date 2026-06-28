@@ -779,6 +779,47 @@ function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, on
   );
 }
 
+/* ---------------- building screen ---------------- */
+// A brief, on-brand interstitial shown right after onboarding. The plan is
+// already generated synchronously — this is purely a moment of anticipation
+// so the hand-off doesn't feel abrupt. Messages are personalised to the plan.
+function BuildingPlan({ plan, onDone }) {
+  const p = plan.profile;
+  const race = (T.RACES[plan.race] || {}).name || 'race';
+  const steps = [
+    'Reading your goals…',
+    'Mapping out your ' + race + ' race day…',
+    'Periodising Base → Build → Peak → Taper…',
+    'Scheduling ' + p.daysPerWeek + ' sessions a week across ' + plan.totalWeeks + ' weeks…',
+    'Setting your target paces…',
+    'Your plan is ready',
+  ];
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const per = 460;
+    const tick = setInterval(() => setStep(s => (s < steps.length - 1 ? s + 1 : s)), per);
+    const done = setTimeout(onDone, per * (steps.length - 1) + 750);
+    return () => { clearInterval(tick); clearTimeout(done); };
+  }, []);
+  const last = step === steps.length - 1;
+  return (
+    <div className="building">
+      <div className="building-inner">
+        <div className={'build-tiles' + (last ? ' done' : '')}>
+          {['swim', 'bike', 'run'].map(k =>
+            <span key={k} className="build-tile" style={{ background: D[k].grad }}>
+              <Icon name={k} size={26} />
+            </span>
+          )}
+        </div>
+        <h1 className="build-title">{last ? "You're all set" : 'Building your plan'}</h1>
+        <div key={step} className="build-step">{steps[step]}</div>
+        <div className="build-bar"><span style={{ width: ((step + 1) / steps.length * 100) + '%' }} /></div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- root ---------------- */
 function App() {
   const [plan, setPlan] = useState(() => LS.load('plan', null));
@@ -788,12 +829,14 @@ function App() {
   const [detail, setDetail] = useState(null);
   const [editFitness, setEditFitness] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
+  const [building, setBuilding] = useState(false);
 
   useEffect(() => { if (plan) LS.save('plan', plan); }, [plan]);
   useEffect(() => { LS.save('log', log); }, [log]);
   useEffect(() => { LS.save('moves', moves); }, [moves]);
 
-  if (!plan) return <Onboarding onCreate={p => { setPlan(T.generatePlan(p)); setView('today'); }} />;
+  if (!plan) return <Onboarding onCreate={p => { setPlan(T.generatePlan(p)); setView('today'); setBuilding(true); }} />;
+  if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
 
   const toggle = id => setLog(l => { const n = { ...l }; if (n[id]) delete n[id]; else n[id] = { done: true, at: new Date().toISOString() }; return n; });
   const moveWorkout = (id, date) => setMoves(m => { const n = { ...m }; if (date === null) delete n[id]; else n[id] = date; return n; });
