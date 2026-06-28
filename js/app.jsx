@@ -134,6 +134,7 @@ const ICON_PATHS = {
   flame: '<path d="M12 3c.5 3.5 4.5 5 4.5 9.5a4.5 4.5 0 0 1-9 0c0-1.7.8-2.8 1.7-3.7.2 1.2 1 1.8 1.6 1.3C12 9 11 6.5 12 3Z"/>',
   download: '<path d="M12 3.5 12 14.5"/><path d="M7.5 10 12 14.5 16.5 10"/><path d="M5 20 19 20"/>',
   trend: '<path d="M3 16.5 9 10.5 13 14.5 21 6.5"/><path d="M15 6.5 21 6.5 21 12.5"/>',
+  watch: '<rect x="7" y="6" width="10" height="12" rx="2.6"/><path d="M9 6 9.4 3 14.6 3 15 6"/><path d="M9 18 9.4 21 14.6 21 15 18"/><circle cx="12" cy="12" r="2.1"/>',
 };
 // Bold silhouette-style icons render with a heavier stroke (filled-figure look).
 const ICON_BOLD = { swim: 2.7, bike: 2.5, run: 3 };
@@ -376,7 +377,8 @@ const WHY = {
   'Open Water': 'Rehearse race-day swimming. Practise sighting, drafting and holding a straight line without walls to push off.',
 };
 
-function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel }) {
+function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel }) {
+  const canFit = T.FIT && T.FIT.supports(w);
   const disc = D[w.discipline];
   const why = !w.race && !w.test ? WHY[w.type] : null;
   const shown = eff || w.date;
@@ -421,6 +423,12 @@ function DetailSheet({ w, done, onClose, onToggle, eff, onMove, onResetMove, onL
         {w.test && onLogResult && <><button className="btn primary" onClick={onLogResult}><Icon name="trend" size={18} /> Log result &amp; re-target</button><div style={{ height: 10 }} /></>}
         {!w.race && <button className={'btn ' + (done ? 'done' : (w.test ? 'ghost' : 'primary'))} onClick={onToggle}>
           {done ? '✓ Completed — tap to undo' : 'Mark as complete'}</button>}
+        {canFit && <>
+          <div style={{ height: 10 }} />
+          <button className="btn ghost" onClick={() => T.FIT.download(w, plan)}>
+            <Icon name="watch" size={18} /> Send to watch (.FIT)</button>
+          <div className="fithint">Structured workout with {w.discipline === 'bike' ? (plan.paces.ftp ? 'power' : 'effort (RPE)') : 'pace'} targets — load onto a Garmin to follow it step by step.</div>
+        </>}
         {done && !w.race && onFeel && <div className="feel">
           <div className="feel-q">How did it feel?</div>
           <div className="feel-row">
@@ -898,7 +906,7 @@ function App() {
       {editFitness && <FitnessEditor profile={plan.profile} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
 
-      {detail && <DetailSheet w={detail} done={!!log[detail.id]} eff={effDate(detail, moves)}
+      {detail && <DetailSheet w={detail} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)}

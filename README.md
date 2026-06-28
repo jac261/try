@@ -36,6 +36,9 @@ through it week by week and track progress.
 - **Progress dashboard** — countdown, completion %, streak, weekly-volume chart,
   discipline-balance donut, and a **fitness-progression** view (5k pace / swim CSS /
   bike FTP trending over the season).
+- **Send to watch** — export any run / bike / swim session as a Garmin **`.FIT`
+  structured workout** with personalised pace (run/swim) or power (bike) targets, to
+  follow step by step on a watch. See [docs/WORKOUT_LIBRARY.md](docs/WORKOUT_LIBRARY.md).
 - **Calendar export** (`.ics`) and an **installable, offline-capable PWA**.
 
 Everything is stored locally in the browser — **no account, no server.**
@@ -78,6 +81,7 @@ try/
 ├── js/
 │   ├── data.js             # races, disciplines, zones, fitness levels, date/pace helpers (window.TF)
 │   ├── plan.js             # periodised plan generator + per-discipline workout builders
+│   ├── fit.js              # structured-workout library + in-browser .FIT (Garmin) encoder
 │   └── app.jsx             # React UI: onboarding, Today, Calendar, Plan, Progress, Settings, icons, charts
 ├── manifest.webmanifest    # PWA metadata (name, icons, theme, display)
 ├── sw.js                   # service worker — offline caching
@@ -156,6 +160,7 @@ constants you can edit directly. The most useful:
 | `TF.ZONES` | `js/data.js` | Training zones Z1–Z5 (names + RPE strings). |
 | `TEMPLATES` | `js/plan.js` | Weekly session composition for 3–7 days/week (tokens like `swim:quality`, `bike:long`). |
 | `INTENSITY_LADDER` | `js/plan.js` | Per-discipline easy→hard workout progression; the chosen rung = phase position + level `intensity`. |
+| `runLib` / `bikeLib` / `swimLib` | `js/fit.js` | Structured-step library per session type for `.FIT` export (durations, repeats, pace/power targets). Mirror a `plan.js` builder here when you add a session type. |
 | `LONG_RUN` / `LONG_BIKE` / `LONG_BRICK` | `js/plan.js` | Base long-session durations (minutes) per race type. |
 | `loadFactor()` | `js/plan.js` | Within-phase volume ramp (e.g. Base 0.82→1.0, Build 1.0→1.12, Peak 1.12→1.18, Taper drop). |
 | `computePhases()` | `js/plan.js` | Base/Build/Peak/Taper split (Peak ≈20%, Build ≈40%, Base = remainder; taper from the race). |
