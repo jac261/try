@@ -41,11 +41,11 @@ through it week by week and track progress.
   follow step by step on a watch. See [docs/WORKOUT_LIBRARY.md](docs/WORKOUT_LIBRARY.md).
 - **Calendar export** (`.ics`) and an **installable, offline-capable PWA**.
 
-Everything is stored locally in the browser — **no account, no server.**
+The app is gated by Clerk sign-in. Training state is still stored locally in the browser, scoped per Clerk user, while the backend is currently used only for the authenticated API connection test.
 
 ## 2. How it works
 Try is a **[Vite](https://vitejs.dev/) + React single-page app**. Vite handles JSX,
-bundling, the dev server (HMR), and the production build; there's no server or backend.
+bundling, the dev server (HMR), and the production build.
 
 - **`index.html`** is the Vite entry — a `<div id="root">` and a single
   `<script type="module" src="/src/main.jsx">`. Vite injects the hashed bundle and the
@@ -59,9 +59,14 @@ bundling, the dev server (HMR), and the production build; there's no server or b
 - **The plan generator** (`plan.js`) is pure functions: `generatePlan(profile)` returns
   weeks → workouts → segments. Given a profile it computes the phase split, weekly
   volume ramp, per-session intensity and target paces. The UI just renders that object.
-- **State lives in `localStorage`** (`try.plan`, `try.log`, `try.moves`) and
-  is layered: the generated plan is immutable; completion + per-session feel (`log`)
-  and reschedules (`moves`) are overlays applied at render time.
+- **Clerk gates the app** before onboarding, plan views, logging, exporting, or settings render.
+- **State lives in per-user `localStorage`** (`try.user.<clerkUserId>.plan`,
+  `.log`, `.moves`, `.wellness`) and is layered: the generated plan is immutable;
+  completion + per-session feel (`log`) and reschedules (`moves`) are overlays
+  applied at render time.
+- **Backend API connection test:** Settings can call the Try backend
+  `GET /api/auth-test` endpoint with the current Clerk token. This does not sync
+  plan state to the backend.
 - **Adaptive re-targeting:** changing your fitness re-runs `generatePlan` from the
   updated profile. Because level / days / race are unchanged, the week/day IDs stay
   identical — so the `log` and `moves` overlays remain valid and only the target
@@ -72,7 +77,7 @@ bundling, the dev server (HMR), and the production build; there's no server or b
   and a Workbox service worker that precaches the hashed build, so it installs to a home
   screen and works offline. Configured in `vite.config.js`.
 
-**Tech stack:** Vite 6 · React 18 · `@vitejs/plugin-react` · `vite-plugin-pwa` (Workbox) ·
+**Tech stack:** Vite 6 · React 18 · `@clerk/react` · `@vitejs/plugin-react` · `vite-plugin-pwa` (Workbox) ·
 hand-written CSS with custom properties + Plus Jakarta Sans · hand-rolled inline-SVG
 charts & icons · `localStorage` · hosted on GitHub Pages (built in CI).
 
@@ -84,6 +89,7 @@ try/
 ├── vite.config.js          # base '/try/', React plugin, PWA (manifest + service worker)
 ├── src/
 │   ├── main.jsx            # app entry: imports domain modules, mounts React; the whole UI
+│   ├── api.js              # backend API helpers, currently auth-test only
 │   ├── data.js             # races, disciplines, zones, fitness levels, date/pace helpers (window.TF)
 │   ├── plan.js             # periodised plan generator + per-discipline workout builders
 │   ├── fit.js              # structured-workout library + in-browser .FIT (Garmin) encoder
@@ -105,7 +111,16 @@ try/
 git clone https://github.com/jac261/try.git
 cd try
 npm install
+```
 
+Create `.env.local` for local development. The file is ignored by git.
+
+```text
+VITE_CLERK_PUBLISHABLE_KEY=<Clerk publishable key>
+VITE_API_BASE_URL=http://localhost:5032
+```
+
+```bash
 # 2. Start the dev server (hot-reloading)
 npm run dev          # → http://localhost:5173/try/
 
@@ -122,6 +137,36 @@ npm run preview      # serve dist/ locally at the /try/ base
 > the root locally instead, run `npm run dev -- --base /`.
 
 *Optional:* regenerating the icons in `public/icons/` needs Python with `Pillow`.
+
+### Auth-Gated Local Smoke Test
+
+This checks that the Vite app requires Clerk sign-in, can obtain a session token, and can call the backend `GET /api/auth-test` endpoint. It does not sync plan data.
+
+Use two PowerShell windows.
+
+Backend window:
+
+```powershell
+cd C:\Users\jackg\vscode-repos\try-backend
+$env:APP_ALLOWED_ORIGINS = "http://localhost:5173,https://jac261.github.io"
+$env:CLERK_ISSUER = "https://mint-wahoo-90.clerk.accounts.dev"
+$env:CLERK_AUTHORIZED_PARTIES = "http://localhost:5173,https://jac261.github.io"
+dotnet run --project src/TryBackend.Api
+```
+
+Frontend window:
+
+```powershell
+cd C:\Users\jackg\vscode-repos\try
+npm install
+npm run dev
+```
+
+Then open `http://localhost:5173/try/`. Signed-out users should see only the sign-in gate. After signing in, create or use a local plan, go to Settings, and use Sync & export -> Account & API. Click `Test API connection` and expect a success message with the backend-authenticated Clerk `user_...` subject.
+
+If the app says Clerk is not configured, update `.env.local` with the real publishable key and restart `npm run dev`. If sign-in lands on Vite's `/try/` base warning, update Clerk's Account Portal/User redirects so after sign-up fallback, after sign-in fallback, and after logo click use `$DEVHOST` + `/try/`, not `/health`. The app also passes explicit Clerk React redirect props for sign-in, sign-up, and sign-out; these dashboard redirects are still needed as Clerk fallbacks. If the API call fails with CORS or unauthorized, re-check the backend environment variables and Clerk redirect URL `http://localhost:5173/try/`.
+
+To shut the local test down, press `Ctrl+C` in the frontend PowerShell window running `npm run dev`, then press `Ctrl+C` in the backend PowerShell window running `dotnet run`. Both commands should return to a normal prompt. If a port still appears busy, close the terminal that started that server and start it again.
 
 ## 4. Building
 `npm run build` runs Vite, which bundles and minifies into **`dist/`** (hashed JS/CSS,
@@ -143,6 +188,13 @@ deps (`npm ci`), runs `npm run build`, and deploys the **`dist/`** artifact to P
 > **Actions** tab.
 
 The Vite `base` of `/try/` makes every asset resolve correctly under the project subpath.
+
+The Pages build reads these GitHub repository variables:
+
+- `VITE_CLERK_PUBLISHABLE_KEY` - Clerk publishable key for the frontend; required for the gated app.
+- `VITE_API_BASE_URL` - deployed Try backend URL, for example `https://api-production-2931.up.railway.app`.
+
+Without `VITE_CLERK_PUBLISHABLE_KEY`, the app still builds but shows a configuration error instead of the training UI.
 
 ## 6. Configuration & tuning knobs
 There are no runtime feature toggles; behaviour is driven by a handful of plain-data
@@ -169,7 +221,7 @@ constants you can edit directly. The most useful:
 | `WHY` | `src/main.jsx` | The per-workout-type "why this session" coaching notes shown in the detail sheet. Edit the copy here. |
 | `reshapePlan` / `PlanSettingsEditor` | `src/main.jsx` | Edit race / date / days after onboarding; rebuilds the plan and prunes `log`/`moves` to surviving workout IDs. |
 | `CACHE` | `sw.js` | Service-worker cache name (`try-vN`). **Bump it** when you change cached assets to force clients to re-cache. |
-| `localStorage` keys | `src/main.jsx` (`LS`/`NS`) | `try.plan` (generated plan, incl. `profile.fitnessHistory`), `try.log` (completed sessions + per-session `feel`), `try.moves` (reschedules). Legacy `triflow.*` data is auto-migrated once. |
+| `localStorage` keys | `src/main.jsx` (`storageForUser`) | `try.user.<clerkUserId>.plan` (generated plan, incl. `profile.fitnessHistory`), `.log` (completed sessions + per-session `feel`), `.moves` (reschedules), and `.wellness` (readiness records). Old anonymous keys are not auto-imported into signed-in workspaces. |
 | `react-classic` preset | `index.html` | Forces Babel's classic JSX runtime so JSX uses global React. Don't remove it. |
 | PWA config | `manifest.webmanifest` | App name, icons, `theme_color`, `display: standalone`, etc. |
 
