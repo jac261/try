@@ -5,8 +5,34 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // Deployed under https://jac261.github.io/try/ — assets must be prefixed with /try/.
 // For local dev/preview pass `--base /` so the app serves from the root.
+const appBasePath = '/try/'
+
+function redirectBaseRequests(req, res, next) {
+  const requestUrl = new URL(req.url || '/', 'http://localhost')
+  if (requestUrl.pathname === '/' || requestUrl.pathname === '/health' || requestUrl.pathname === '/try') {
+    res.statusCode = 302
+    res.setHeader('Location', appBasePath + requestUrl.search)
+    res.end()
+    return
+  }
+
+  next()
+}
+
+function tryBaseRedirectPlugin() {
+  return {
+    name: 'try-base-redirect',
+    configureServer(server) {
+      server.middlewares.use(redirectBaseRequests)
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(redirectBaseRequests)
+    },
+  }
+}
+
 export default defineConfig({
-  base: '/try/',
+  base: appBasePath,
   build: {
     outDir: 'dist',
     // Multi-page: the app + the visual style guide. The style guide imports the
@@ -20,6 +46,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    tryBaseRedirectPlugin(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
