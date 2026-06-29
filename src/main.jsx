@@ -433,7 +433,7 @@ function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMov
           </div>
         </>}
         <div style={{ height: 16 }} />
-        {w.test && w.note && <div className="testnote"><Icon name="trend" size={18} /><span>{w.note}</span></div>}
+        {w.test && w.note && <div className="testnote"><Icon name="stopwatch" size={18} /><span>{w.note}</span></div>}
         {w.test && onLogResult && <><button className="btn primary" onClick={onLogResult}><Icon name="trend" size={18} /> Log result &amp; re-target</button><div style={{ height: 10 }} /></>}
         {!w.race && <button className={'btn ' + (done ? 'done' : (w.test ? 'ghost' : 'primary'))} onClick={onToggle}>
           {done ? '✓ Completed — tap to undo' : 'Mark as complete'}</button>}
@@ -450,7 +450,7 @@ function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMov
               <button key={k} className={'feelbtn' + (feel === k ? ' on ' + k : '')} onClick={() => onFeel(w.id, k)}>{lab}</button>)}
           </div>
         </div>}
-        {w.race && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="flag" size={18} /> You've got this.</b></div>}
+        {w.race && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
       </div>
     </div>
   );
@@ -645,7 +645,7 @@ function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEdit
           <div className="bs">Tap to reschedule onto your free days →</div></div>
       </div>}
       {suggestions.length > 0 && <div className="banner tune" onClick={onTune}>
-        <div className="bi"><Icon name="trend" size={20} /></div>
+        <div className="bi"><Icon name="pace" size={20} /></div>
         <div><div className="bt">Time to tune your paces</div>
           <div className="bs">{suggestions.map(s => D[s.discipline].name + (s.direction === 'faster' ? ' feels easy' : ' feels hard')).join(' · ')} — tap to adjust →</div></div>
       </div>}
@@ -663,7 +663,7 @@ function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEdit
       <div className="section-title">Coming up</div>
       <div className="card">
         {upcoming.length ? upcoming.map(row)
-          : <div className="empty"><div className="big"><Icon name="flag" size={40} /></div>All done — race time!</div>}
+          : <div className="empty"><div className="big"><Icon name="trophy" size={40} /></div>All done — race time!</div>}
       </div>
     </>
   );
