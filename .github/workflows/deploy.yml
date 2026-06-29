@@ -41,6 +41,11 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        # enablement: turn Pages on (with the GitHub Actions source) if it isn't
+        # already — avoids the "Get Pages site failed: Not Found" error and means
+        # no manual Settings → Pages toggle is needed.
+        with:
+          enablement: true
 
       # Vite emits the production site (base /try/) into dist/.
       - name: Upload site artifact
