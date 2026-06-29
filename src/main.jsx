@@ -163,26 +163,23 @@ function Icon({ name, size }) {
 }
 
 /* ---------------- tiny SVG charts ---------------- */
+// Hand-rolled bar chart in HTML/CSS. (An SVG with preserveAspectRatio="none"
+// stretches non-uniformly to fill the width, which distorts text labels.)
 function BarChart({ data, height }) {
   height = height || 150;
   const max = Math.max(1, ...data.map(d => d.planned));
-  const bw = 100 / data.length;
   return (
-    <svg viewBox={'0 0 100 ' + (height / 2)} style={{ width: '100%', height: height, overflow: 'visible' }} preserveAspectRatio="none">
-      {data.map((d, i) => {
-        const x = i * bw + bw * 0.18, w = bw * 0.64;
-        const ph = (d.planned / max) * (height / 2 - 14);
-        const dh = (Math.min(d.done, d.planned) / max) * (height / 2 - 14);
-        const base = height / 2 - 8;
-        return (
-          <g key={i}>
-            <rect x={x} y={base - ph} width={w} height={ph} rx="1.2" fill="var(--track)" />
-            <rect x={x} y={base - dh} width={w} height={dh} rx="1.2" fill={d.color || 'var(--accent)'} />
-            <text x={x + w / 2} y={base + 6} fontSize="3.2" textAnchor="middle" fill="var(--muted)">{d.label}</text>
-          </g>
-        );
-      })}
-    </svg>
+    <div className="vchart" style={{ height }}>
+      {data.map((d, i) => (
+        <div className="vcol" key={i}>
+          <div className="vplot">
+            <div className="vtrack" style={{ height: (d.planned / max * 100) + '%' }} />
+            <div className="vdone" style={{ height: (Math.min(d.done, d.planned) / max * 100) + '%', background: d.color || 'var(--accent)' }} />
+          </div>
+          <div className="vlabel">{d.label}</div>
+        </div>
+      ))}
+    </div>
   );
 }
 
