@@ -6,24 +6,44 @@ import './plan.js';
 import './fit.js';
 import './wellness.js';
 import './styles.css';
+import { apiBaseUrl, getAuthTest } from './api.js';
+import { ClerkProvider, SignInButton, SignOutButton, useAuth, useUser } from '@clerk/react';
 import { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 
 const T = window.TF;
 const D = T.DISCIPLINES;
+const CLERK_PUBLISHABLE_KEY = String(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim();
+const AUTH_ENABLED = !!CLERK_PUBLISHABLE_KEY && !CLERK_PUBLISHABLE_KEY.startsWith('<');
+const APP_BASE_URL = new URL(import.meta.env.BASE_URL || '/', window.location.origin).toString();
+const APP_BASE_PATH = new URL(import.meta.env.BASE_URL || '/', window.location.origin).pathname;
+const SHOULD_REDIRECT_TO_BASE = APP_BASE_PATH !== '/' && !window.location.pathname.startsWith(APP_BASE_PATH);
+
+if (SHOULD_REDIRECT_TO_BASE) {
+  window.location.replace(APP_BASE_URL + window.location.search + window.location.hash);
+}
 
 /* ---------------- persistence ---------------- */
-const NS = 'try.';
-// One-time migration: copy any legacy "triflow.*" data to "try.*" so saved plans
-// survive the rename to Try. Only copies when the new key is absent.
-['plan', 'log', 'moves'].forEach(k => {
-  try { const old = localStorage.getItem('triflow.' + k); if (old != null && localStorage.getItem(NS + k) == null) localStorage.setItem(NS + k, old); } catch (e) {}
-});
-const LS = {
-  load(k, fb) { try { const v = localStorage.getItem(NS + k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
-  save(k, v) { try { localStorage.setItem(NS + k, JSON.stringify(v)); } catch (e) {} },
-  clear() { ['plan', 'log', 'moves'].forEach(k => localStorage.removeItem(NS + k)); },
-};
+function storageForUser(userId) {
+  const ns = 'try.user.' + userId + '.';
+  const wellnessKey = ns + 'wellness';
+  const loadWellness = () => { try { return JSON.parse(localStorage.getItem(wellnessKey) || '[]'); } catch (e) { return []; } };
+  const saveWellness = arr => { try { localStorage.setItem(wellnessKey, JSON.stringify(arr)); } catch (e) {} };
+
+  return {
+    load(k, fb) { try { const v = localStorage.getItem(ns + k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
+    save(k, v) { try { localStorage.setItem(ns + k, JSON.stringify(v)); } catch (e) {} },
+    clear() { ['plan', 'log', 'moves'].forEach(k => localStorage.removeItem(ns + k)); },
+    loadWellness,
+    upsertWellness(rec) {
+      const a = loadWellness().filter(r => r.date !== rec.date);
+      a.push(rec);
+      a.sort((x, y) => (x.date < y.date ? -1 : 1));
+      saveWellness(a);
+      return a;
+    },
+  };
+}
 
 /* ---------------- scheduling helpers ----------------
    Reschedules are stored as an overlay map { workoutId: newDateISO } so the
@@ -840,6 +860,59 @@ function ProgressView({ plan, log }) {
   );
 }
 
+function ApiConnectionCard() {
+  const { getToken, isLoaded } = useAuth();
+  const { user } = useUser();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  async function testApiConnection() {
+    setBusy(true);
+    setResult(null);
+
+    const response = await getAuthTest(getToken);
+
+    if (response.ok) {
+      setResult({
+        ok: true,
+        message: 'API connection authenticated.',
+        subject: response.body && response.body.subject ? response.body.subject : '',
+      });
+    } else {
+      const prefix = response.status ? response.status + ': ' : '';
+      setResult({ ok: false, message: prefix + response.message, subject: '' });
+    }
+
+    setBusy(false);
+  }
+
+  return (
+    <div className="authbox">
+      <div className="authrow">
+        <div>
+          <div className="authlabel">Account &amp; API</div>
+          <div className="authmeta">{apiBaseUrl}</div>
+        </div>
+        <SignOutButton redirectUrl={APP_BASE_URL}>
+          <button className="btn ghost sm" type="button">Sign out</button>
+        </SignOutButton>
+      </div>
+      <div className="authrow">
+        <div className="authmeta">{user?.primaryEmailAddress?.emailAddress || user?.id || 'Signed in'}</div>
+        <button className="btn ghost sm" type="button" onClick={testApiConnection} disabled={!isLoaded || busy}>
+          {busy ? 'Testing...' : 'Test API connection'}
+        </button>
+      </div>
+      {result && (
+        <div className={'authstatus ' + (result.ok ? 'ok' : 'bad')}>
+          <div>{result.message}</div>
+          {result.subject && <code>{result.subject}</code>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan }) {
   const p = plan.profile;
   return (
@@ -873,6 +946,7 @@ function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, on
         <h2 style={{ marginBottom: 10 }}>Sync & export</h2>
         <button className="btn primary" onClick={onExport}><Icon name="download" size={18} /> Export plan to calendar (.ics)</button>
         <p className="lead" style={{ margin: '10px 2px 0' }}>Downloads every session as all-day events with the full workout in the notes — import into Apple Calendar, Google Calendar or Outlook.</p>
+        <ApiConnectionCard />
       </div>
       <div className="card">
         <button className="btn ghost" onClick={onRegenerate}>↺ Start over / new plan</button>
@@ -926,22 +1000,22 @@ function BuildingPlan({ plan, onDone }) {
 }
 
 /* ---------------- root ---------------- */
-function App() {
-  const [plan, setPlan] = useState(() => LS.load('plan', null));
-  const [log, setLog] = useState(() => LS.load('log', {}));
-  const [moves, setMoves] = useState(() => LS.load('moves', {}));
+function App({ storage }) {
+  const [plan, setPlan] = useState(() => storage.load('plan', null));
+  const [log, setLog] = useState(() => storage.load('log', {}));
+  const [moves, setMoves] = useState(() => storage.load('moves', {}));
   const [view, setView] = useState('today');
   const [detail, setDetail] = useState(null);
   const [editFitness, setEditFitness] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
   const [building, setBuilding] = useState(false);
-  const [wellness, setWellness] = useState(() => T.wellness.load());
+  const [wellness, setWellness] = useState(() => storage.loadWellness());
   const [editWellness, setEditWellness] = useState(false);
-  const saveWellness = rec => { setWellness(T.wellness.upsert(rec)); setEditWellness(false); };
+  const saveWellness = rec => { setWellness(storage.upsertWellness(rec)); setEditWellness(false); };
 
-  useEffect(() => { if (plan) LS.save('plan', plan); }, [plan]);
-  useEffect(() => { LS.save('log', log); }, [log]);
-  useEffect(() => { LS.save('moves', moves); }, [moves]);
+  useEffect(() => { if (plan) storage.save('plan', plan); }, [plan, storage]);
+  useEffect(() => { storage.save('log', log); }, [log, storage]);
+  useEffect(() => { storage.save('moves', moves); }, [moves, storage]);
 
   if (!plan) return <Onboarding onCreate={p => { setPlan(T.generatePlan(p)); setView('today'); setBuilding(true); }} />;
   if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
@@ -999,7 +1073,7 @@ function App() {
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
-        onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { LS.clear(); setLog({}); setMoves({}); setPlan(null); } }}
+        onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { storage.clear(); setLog({}); setMoves({}); setPlan(null); } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} />}
 
@@ -1023,8 +1097,64 @@ function App() {
   );
 }
 
+function GateShell({ title, message, children }) {
+  return (
+    <div className="authgate">
+      <div className="authgate-inner">
+        <Icon name="logo" size={34} />
+        <h1>{title}</h1>
+        <p>{message}</p>
+        {children && <div className="authgate-actions">{children}</div>}
+      </div>
+    </div>
+  );
+}
+
+function AuthGate() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const storage = useMemo(() => user ? storageForUser(user.id) : null, [user?.id]);
+
+  if (!isLoaded) {
+    return <GateShell title="Checking your session" message="Loading your Try account..." />;
+  }
+
+  if (!isSignedIn || !user || !storage) {
+    return (
+      <GateShell title="Sign in to Try" message="Your training plan is stored in your signed-in workspace on this browser.">
+        <SignInButton
+          mode="modal"
+          forceRedirectUrl={APP_BASE_URL}
+          fallbackRedirectUrl={APP_BASE_URL}
+          signUpForceRedirectUrl={APP_BASE_URL}
+          signUpFallbackRedirectUrl={APP_BASE_URL}>
+          <button className="btn primary" type="button">Sign in</button>
+        </SignInButton>
+      </GateShell>
+    );
+  }
+
+  return <App key={user.id} storage={storage} />;
+}
+
 // Reuse one root across hot-reloads (avoids the "createRoot() on a container that
 // has already been passed to createRoot()" warning and double-mount churn in dev).
-const _container = document.getElementById('root');
-const _root = _container.__try_root || (_container.__try_root = createRoot(_container));
-_root.render(<App />);
+if (!SHOULD_REDIRECT_TO_BASE) {
+  const _container = document.getElementById('root');
+  const _root = _container.__try_root || (_container.__try_root = createRoot(_container));
+  _root.render(
+    AUTH_ENABLED ? (
+      <ClerkProvider
+        publishableKey={CLERK_PUBLISHABLE_KEY}
+        signInForceRedirectUrl={APP_BASE_URL}
+        signInFallbackRedirectUrl={APP_BASE_URL}
+        signUpForceRedirectUrl={APP_BASE_URL}
+        signUpFallbackRedirectUrl={APP_BASE_URL}
+        afterSignOutUrl={APP_BASE_URL}>
+        <AuthGate />
+      </ClerkProvider>
+    ) : (
+      <GateShell title="Clerk is not configured" message="Set VITE_CLERK_PUBLISHABLE_KEY in the frontend environment and restart Vite." />
+    )
+  );
+}
