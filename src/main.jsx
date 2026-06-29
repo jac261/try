@@ -1,7 +1,13 @@
-/* Try — React UI (loaded via Babel standalone, no build step).
-   index.html registers a "react-classic" Babel preset (runtime: classic) so JSX
-   compiles to React.createElement against the global React, not an ESM import. */
-const { useState, useEffect, useMemo } = React;
+/* Try — React UI (Vite entry point).
+   Domain modules are imported for their side effects: each attaches to the shared
+   `window.TF` namespace, so they must load before this module's body runs. */
+import './data.js';
+import './plan.js';
+import './fit.js';
+import './styles.css';
+import { useState, useEffect, useMemo } from 'react';
+import { createRoot } from 'react-dom/client';
+
 const T = window.TF;
 const D = T.DISCIPLINES;
 
@@ -274,8 +280,7 @@ function Onboarding({ onCreate }) {
     onCreate({
       name: f.name.trim() || 'Athlete', raceType: f.raceType, fitness: f.fitness,
       trainingDays: f.trainingDays, longDay: f.longDay,
-      daysPerWeek: f.daysPerWeek, raceDate: f.raceDate,
-      daysPerWeek: f.trainingDays.length,
+      daysPerWeek: f.trainingDays.length, raceDate: f.raceDate,
       fivekSec: T.parseTimeToSec(f.fivek), css100Sec: T.parseTimeToSec(f.css100),
       ftp: f.ftp ? Number(f.ftp) : null, startDate: T.iso(new Date()),
     });
@@ -922,4 +927,4 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById('root')).render(<App />);

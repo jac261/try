@@ -1,5 +1,7 @@
 /* Try — domain data: races, disciplines, zones, fitness levels, helpers */
 window.TF = window.TF || {};
+// In an ES module (strict mode) a bare `TF` isn't the global; bind it explicitly.
+const TF = window.TF;
 
 TF.RACES = {
   sprint:  { key: 'sprint',  name: 'Sprint',       swim: 0.75, bike: 20,  run: 5,    taperWeeks: 1 },

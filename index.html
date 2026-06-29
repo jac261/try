@@ -5,43 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0e1217" />
   <title>Try — Triathlon Training</title>
-  <link rel="stylesheet" href="styles.css" />
-  <!-- PWA: installable + offline -->
-  <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
-  <link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Try" />
-  <!-- React + Babel from CDN: no build step required -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Force the classic JSX runtime so JSX uses the global React.createElement
-       instead of emitting an `import "react/jsx-runtime"` (invalid in a plain script). -->
-  <script>
-    Babel.registerPreset('react-classic', {
-      presets: [[Babel.availablePresets.react, { runtime: 'classic' }]],
-    });
-  </script>
 </head>
 <body>
   <div id="root"></div>
-  <!-- domain logic (plain JS) -->
-  <script src="js/data.js"></script>
-  <script src="js/plan.js"></script>
-  <script src="js/fit.js"></script>
-  <!-- React UI (JSX, transpiled in-browser by Babel) -->
-  <script type="text/babel" data-presets="react-classic" src="js/app.jsx"></script>
-  <!-- Register the service worker for offline / installable PWA -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js').catch(function () {});
-      });
-    }
-  </script>
+  <!-- Vite entry: bundles React + the app, transpiles JSX, injects PWA manifest + SW. -->
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

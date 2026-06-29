@@ -1,6 +1,6 @@
 name: Deploy to GitHub Pages
 
-# Auto-deploy the static app whenever main is updated (or run manually).
+# Build with Vite and deploy the dist/ output whenever main is updated (or run manually).
 on:
   push:
     branches: ["main"]
@@ -27,14 +27,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      # No build step — the source files are what ships. Upload the repo root.
+      # Vite emits the production site (base /try/) into dist/.
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "."
+          path: "dist"
 
       - name: Deploy to GitHub Pages
         id: deployment

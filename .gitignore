@@ -1,6 +1,13 @@
 # macOS
 .DS_Store
 
+# Node / Vite build
+node_modules/
+dist/
+dev-dist/
+*.local
+npm-debug.log*
+
 # Exported plans / local archives
 *.ics
 *.zip

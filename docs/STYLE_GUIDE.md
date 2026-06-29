@@ -6,8 +6,8 @@ asset — app icons, social/share cards, screenshots, marketing images, or new U
 > **Living reference:** open [`style-guide.html`](style-guide.html) (or
 > [jac261.github.io/try/docs/style-guide.html](https://jac261.github.io/try/docs/style-guide.html))
 > for rendered swatches, gradients, type and components you can eyedrop directly.
-> Every token below is defined as a CSS variable in [`../styles.css`](../styles.css)
-> (`:root`) and the discipline/phase data in [`../js/data.js`](../js/data.js) — those
+> Every token below is defined as a CSS variable in [`../src/styles.css`](../src/styles.css)
+> (`:root`) and the discipline/phase data in [`../src/data.js`](../src/data.js) — those
 > files are authoritative; keep this guide in sync if they change.
 
 ---
@@ -156,7 +156,7 @@ tracking. Body is 400–600. Antialiased; no synthetic weights (`font-synthesis:
 ## 5. Logo & app mark
 
 The mark is a **triangle with a centred dot** — a minimalist "tri" (three sides =
-swim/bike/run). Defined as the `logo` icon in `ICON_PATHS` ([`../js/app.jsx`](../js/app.jsx)):
+swim/bike/run). Defined as the `logo` icon in `ICON_PATHS` ([`../src/main.jsx`](../src/main.jsx)):
 
 ```
 triangle: M12 3.2 20.4 18.6 3.6 18.6 Z   (monoline, stroke ~2)
@@ -239,5 +239,5 @@ Quick specs for common assets — all on the navy base.
 
 ---
 
-*Tokens authoritative in [`../styles.css`](../styles.css) `:root` and [`../js/data.js`](../js/data.js)
+*Tokens authoritative in [`../src/styles.css`](../src/styles.css) `:root` and [`../src/data.js`](../src/data.js)
 (`DISCIPLINES`, `PHASE_INFO`, `ZONES`). Last updated 28 June 2026.*

@@ -44,16 +44,18 @@ through it week by week and track progress.
 Everything is stored locally in the browser — **no account, no server.**
 
 ## 2. How it works
-Try is a **zero-build static web app**. There is no bundler, no `package.json`, and
-no `node_modules` — the source files *are* what ships.
+Try is a **[Vite](https://vitejs.dev/) + React single-page app**. Vite handles JSX,
+bundling, the dev server (HMR), and the production build; there's no server or backend.
 
-- **`index.html`** loads React 18 and Babel from a CDN, then loads the app scripts.
-- **JSX is transpiled in the browser** by Babel Standalone at page load. `index.html`
-  registers a `react-classic` Babel preset so JSX compiles to `React.createElement`
-  against the global `React` (rather than emitting an ESM `import`, which a plain
-  `<script>` can't use).
-- **Scripts load in order and share a `window.TF` namespace:**
-  `data.js` (domain data + helpers) → `plan.js` (plan generator) → `app.jsx` (React UI).
+- **`index.html`** is the Vite entry — a `<div id="root">` and a single
+  `<script type="module" src="/src/main.jsx">`. Vite injects the hashed bundle and the
+  PWA manifest/registration at build time.
+- **`src/main.jsx`** is the app entry. It imports the domain modules for their side
+  effects, then mounts React. The domain modules still share a single **`window.TF`**
+  namespace and load in order: `data.js` (domain data + helpers) → `plan.js` (plan
+  generator) → `fit.js` (.FIT export) → the UI. (Keeping `window.TF` made the migration
+  from the original no-build version a thin change; the modules can be converted to
+  explicit `export`/`import` later without touching their internals.)
 - **The plan generator** (`plan.js`) is pure functions: `generatePlan(profile)` returns
   weeks → workouts → segments. Given a profile it computes the phase split, weekly
   volume ramp, per-session intensity and target paces. The UI just renders that object.
@@ -66,87 +68,81 @@ no `node_modules` — the source files *are* what ships.
   paces change. Each change appends a `fitnessHistory` snapshot to the profile (which
   powers the progression view), and consistent feedback on *hard* sessions can nudge
   a discipline's paces ~2% between the formal tests.
-- **PWA:** `manifest.webmanifest` + a service worker (`sw.js`) cache the app shell and
-  CDN libs so it installs to a home screen and works offline.
+- **PWA:** [`vite-plugin-pwa`](https://vite-pwa-org.netlify.app/) generates the manifest
+  and a Workbox service worker that precaches the hashed build, so it installs to a home
+  screen and works offline. Configured in `vite.config.js`.
 
-**Tech stack:** React 18 (CDN UMD) · Babel Standalone (in-browser JSX) · hand-written
-CSS with custom properties + Plus Jakarta Sans · hand-rolled inline-SVG charts & icons ·
-`localStorage` · service-worker PWA · hosted on GitHub Pages.
+**Tech stack:** Vite 6 · React 18 · `@vitejs/plugin-react` · `vite-plugin-pwa` (Workbox) ·
+hand-written CSS with custom properties + Plus Jakarta Sans · hand-rolled inline-SVG
+charts & icons · `localStorage` · hosted on GitHub Pages (built in CI).
 
 ### Project structure
 ```
 try/
-├── index.html              # entry point: CDN React+Babel, classic-JSX preset, SW registration
-├── styles.css              # all styling — CSS variables, dark Runna-style theme
-├── js/
+├── index.html              # Vite entry: #root + module script; PWA tags injected at build
+├── package.json            # scripts (dev/build/preview) + dependencies
+├── vite.config.js          # base '/try/', React plugin, PWA (manifest + service worker)
+├── src/
+│   ├── main.jsx            # app entry: imports domain modules, mounts React; the whole UI
 │   ├── data.js             # races, disciplines, zones, fitness levels, date/pace helpers (window.TF)
 │   ├── plan.js             # periodised plan generator + per-discipline workout builders
 │   ├── fit.js              # structured-workout library + in-browser .FIT (Garmin) encoder
-│   └── app.jsx             # React UI: onboarding, Today, Calendar, Plan, Progress, Settings, icons, charts
-├── manifest.webmanifest    # PWA metadata (name, icons, theme, display)
-├── sw.js                   # service worker — offline caching
-├── icons/                  # PWA icons (PNG sizes + maskable + apple-touch + SVG favicon)
+│   └── styles.css          # all styling — CSS variables, dark Runna-style theme
+├── public/                 # copied verbatim into the build
+│   ├── icons/              # PWA icons (PNG sizes + maskable + apple-touch + SVG favicon)
+│   └── .nojekyll           # serve files as-is on Pages
 ├── .github/workflows/
-│   └── deploy.yml          # GitHub Actions: auto-deploy to Pages on push to main
-├── .nojekyll               # serve files as-is on Pages
+│   └── deploy.yml          # GitHub Actions: build with Vite, deploy dist/ to Pages
 └── README.md
 ```
+*(`dist/` and `node_modules/` are build artefacts and are git-ignored.)*
 
 ## 3. Getting started (development)
-**Prerequisites:** a modern browser and any static file server (so the app is served
-over **http**). No Node, npm, or build toolchain required.
+**Prerequisites:** [Node.js](https://nodejs.org/) 18+ and npm.
 
 ```bash
-# 1. Clone
+# 1. Clone & install
 git clone https://github.com/jac261/try.git
 cd try
+npm install
 
-# 2. Serve over http (any static server works)
-python3 -m http.server 8733       # or: npx serve
+# 2. Start the dev server (hot-reloading)
+npm run dev          # → http://localhost:5173/try/
 
-# 3. Open
-#    http://localhost:8733
+# 3. Build for production / preview the build
+npm run build        # → dist/
+npm run preview      # serve dist/ locally at the /try/ base
 ```
 
-> ⚠️ **Serve over http — don't open `index.html` with `file://`.** Babel fetches
-> `js/app.jsx` at runtime to transpile it, and browsers block that under `file://`.
+**Dev loop:** edit a file → Vite hot-reloads instantly. Logic lives in `src/plan.js`
+(plan generation), `src/data.js` (the tunable constants below) and `src/fit.js`
+(.FIT export); UI lives in `src/main.jsx`; styling in `src/styles.css`.
 
-**Dev loop:** edit a file → refresh the browser. Logic lives in `js/plan.js`
-(plan generation) and `js/data.js` (the tunable constants below); UI lives in
-`js/app.jsx`; styling in `styles.css`.
+> 💡 The dev server serves under the `/try/` base (matching production). To serve from
+> the root locally instead, run `npm run dev -- --base /`.
 
-> 🧹 **Service-worker caching during dev:** the SW serves cached assets, which can
-> mask edits. If a change doesn't appear, hard-refresh, or in DevTools →
-> Application → Service Workers tick **"Update on reload"** (or Unregister). The SW
-> is network-first for the app's own files, so a normal reload while online usually
-> picks up changes on the second load.
-
-*Optional:* regenerating the icons needs Python with `Pillow` (the only dev-time
-dependency, used once to produce `icons/`).
+*Optional:* regenerating the icons in `public/icons/` needs Python with `Pillow`.
 
 ## 4. Building
-**There is no build step.** The browser runs the source directly (JSX is transpiled
-on the fly by Babel). To ship, you deploy the files as-is.
-
-If you later want a conventional build (fast HMR, npm packages like a Strava SDK, a
-minified bundle), migrate to [Vite](https://vitejs.dev/): `npm create vite@latest`
-(React template), move `js/*` into `src/`, convert the `window.TF` globals to ES
-module imports, and drop the CDN/Babel `<script>` tags from `index.html`.
+`npm run build` runs Vite, which bundles and minifies into **`dist/`** (hashed JS/CSS,
+copied `public/` assets, and the generated PWA manifest + service worker). `base` is set
+to `/try/` in `vite.config.js` so asset URLs resolve under the GitHub Pages subpath; for
+a root deploy, change `base` to `'/'`.
 
 ## 5. Deploying
-The app is static, so any static host works. This repo deploys to **GitHub Pages**.
+This repo deploys to **GitHub Pages**, built in CI.
 
 **Automatic (GitHub Actions):** [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
-runs on every push to `main` (or manually via *Actions → Run workflow*). It uploads
-the repo root and deploys to Pages — no build, ~1 minute.
+runs on every push to `main` (or manually via *Actions → Run workflow*). It installs
+deps (`npm ci`), runs `npm run build`, and deploys the **`dist/`** artifact to Pages
+(~1–2 minutes).
 
 > **One-time setup:** in the repo, go to **Settings → Pages → Build and deployment →
 > Source** and select **"GitHub Actions"**. (If it's on "Deploy from a branch", the
 > workflow can't publish.) After that, pushes deploy automatically and appear in the
 > **Actions** tab.
 
-Relative paths in `index.html` and `manifest.webmanifest` keep everything working
-under a project subpath like `/try/`.
+The Vite `base` of `/try/` makes every asset resolve correctly under the project subpath.
 
 ## 6. Configuration & tuning knobs
 There are no runtime feature toggles; behaviour is driven by a handful of plain-data
@@ -154,26 +150,26 @@ constants you can edit directly. The most useful:
 
 | Knob | File | What it controls |
 |---|---|---|
-| `TF.RACES` | `js/data.js` | Race types and their swim/bike/run distances + `taperWeeks`. Add a race by adding an entry. |
-| `TF.FITNESS` | `js/data.js` | Per experience level: `factor` (volume ×), `intensity` (shifts quality sessions along the ladder), `recoveryEvery` (recovery week every N weeks), `recoveryDepth` (how much volume drops then), `est5k`/`estCss` (fallback paces when fields are blank). |
-| `TF.DISCIPLINES` | `js/data.js` | Per discipline: `color`, `grad` (icon gradient), `icon` (icon-set name). |
-| `TF.ZONES` | `js/data.js` | Training zones Z1–Z5 (names + RPE strings). |
-| `TEMPLATES` | `js/plan.js` | Weekly session composition for 3–7 days/week (tokens like `swim:quality`, `bike:long`). |
-| `INTENSITY_LADDER` | `js/plan.js` | Per-discipline easy→hard workout progression; the chosen rung = phase position + level `intensity`. |
-| `runLib` / `bikeLib` / `swimLib` | `js/fit.js` | Structured-step library per session type for `.FIT` export (durations, repeats, pace/power targets). Mirror a `plan.js` builder here when you add a session type. |
-| `LONG_RUN` / `LONG_BIKE` / `LONG_BRICK` | `js/plan.js` | Base long-session durations (minutes) per race type. |
-| `loadFactor()` | `js/plan.js` | Within-phase volume ramp (e.g. Base 0.82→1.0, Build 1.0→1.12, Peak 1.12→1.18, Taper drop). |
-| `computePhases()` | `js/plan.js` | Base/Build/Peak/Taper split (Peak ≈20%, Build ≈40%, Base = remainder; taper from the race). |
-| `WEEKDAY_ORDER` / `WEEKEND` | `js/plan.js` | Legacy fixed weekday layout, used when a profile has no `trainingDays`. |
-| `profile.trainingDays` / `longDay` | set in `js/app.jsx` (`DaySelector`) | Chosen training weekdays (0=Mon..6=Sun) + the long-session day. The generator schedules around these. |
-| `DEFAULT_DAYS` | `js/app.jsx` | Default training-day sets per count, used to seed the day picker. |
-| `buildTest` / `TEST_ROTATION` | `js/plan.js` | Benchmark-test protocols (5k run TT, 20-min bike FTP, swim CSS) and the discipline rotation; up to 3 are auto-scheduled across the Base/Build weeks. |
-| `INTENSITY_TYPES` | `js/app.jsx` | Which workout *types* (Tempo / Threshold / VO2 / Sweet Spot / CSS / Race Pace) let post-session feedback tune paces — easy / long / recovery sessions are excluded. |
-| `paceSuggestions` / `tuneFields` | `js/app.jsx` | The feedback rule: ≥3 same-direction "feel" ratings on a discipline's hard sessions → a ~2% pace nudge. |
-| `WHY` | `js/app.jsx` | The per-workout-type "why this session" coaching notes shown in the detail sheet. Edit the copy here. |
-| `reshapePlan` / `PlanSettingsEditor` | `js/app.jsx` | Edit race / date / days after onboarding; rebuilds the plan and prunes `log`/`moves` to surviving workout IDs. |
+| `TF.RACES` | `src/data.js` | Race types and their swim/bike/run distances + `taperWeeks`. Add a race by adding an entry. |
+| `TF.FITNESS` | `src/data.js` | Per experience level: `factor` (volume ×), `intensity` (shifts quality sessions along the ladder), `recoveryEvery` (recovery week every N weeks), `recoveryDepth` (how much volume drops then), `est5k`/`estCss` (fallback paces when fields are blank). |
+| `TF.DISCIPLINES` | `src/data.js` | Per discipline: `color`, `grad` (icon gradient), `icon` (icon-set name). |
+| `TF.ZONES` | `src/data.js` | Training zones Z1–Z5 (names + RPE strings). |
+| `TEMPLATES` | `src/plan.js` | Weekly session composition for 3–7 days/week (tokens like `swim:quality`, `bike:long`). |
+| `INTENSITY_LADDER` | `src/plan.js` | Per-discipline easy→hard workout progression; the chosen rung = phase position + level `intensity`. |
+| `runLib` / `bikeLib` / `swimLib` | `src/fit.js` | Structured-step library per session type for `.FIT` export (durations, repeats, pace/power targets). Mirror a `plan.js` builder here when you add a session type. |
+| `LONG_RUN` / `LONG_BIKE` / `LONG_BRICK` | `src/plan.js` | Base long-session durations (minutes) per race type. |
+| `loadFactor()` | `src/plan.js` | Within-phase volume ramp (e.g. Base 0.82→1.0, Build 1.0→1.12, Peak 1.12→1.18, Taper drop). |
+| `computePhases()` | `src/plan.js` | Base/Build/Peak/Taper split (Peak ≈20%, Build ≈40%, Base = remainder; taper from the race). |
+| `WEEKDAY_ORDER` / `WEEKEND` | `src/plan.js` | Legacy fixed weekday layout, used when a profile has no `trainingDays`. |
+| `profile.trainingDays` / `longDay` | set in `src/main.jsx` (`DaySelector`) | Chosen training weekdays (0=Mon..6=Sun) + the long-session day. The generator schedules around these. |
+| `DEFAULT_DAYS` | `src/main.jsx` | Default training-day sets per count, used to seed the day picker. |
+| `buildTest` / `TEST_ROTATION` | `src/plan.js` | Benchmark-test protocols (5k run TT, 20-min bike FTP, swim CSS) and the discipline rotation; up to 3 are auto-scheduled across the Base/Build weeks. |
+| `INTENSITY_TYPES` | `src/main.jsx` | Which workout *types* (Tempo / Threshold / VO2 / Sweet Spot / CSS / Race Pace) let post-session feedback tune paces — easy / long / recovery sessions are excluded. |
+| `paceSuggestions` / `tuneFields` | `src/main.jsx` | The feedback rule: ≥3 same-direction "feel" ratings on a discipline's hard sessions → a ~2% pace nudge. |
+| `WHY` | `src/main.jsx` | The per-workout-type "why this session" coaching notes shown in the detail sheet. Edit the copy here. |
+| `reshapePlan` / `PlanSettingsEditor` | `src/main.jsx` | Edit race / date / days after onboarding; rebuilds the plan and prunes `log`/`moves` to surviving workout IDs. |
 | `CACHE` | `sw.js` | Service-worker cache name (`try-vN`). **Bump it** when you change cached assets to force clients to re-cache. |
-| `localStorage` keys | `js/app.jsx` (`LS`/`NS`) | `try.plan` (generated plan, incl. `profile.fitnessHistory`), `try.log` (completed sessions + per-session `feel`), `try.moves` (reschedules). Legacy `triflow.*` data is auto-migrated once. |
+| `localStorage` keys | `src/main.jsx` (`LS`/`NS`) | `try.plan` (generated plan, incl. `profile.fitnessHistory`), `try.log` (completed sessions + per-session `feel`), `try.moves` (reschedules). Legacy `triflow.*` data is auto-migrated once. |
 | `react-classic` preset | `index.html` | Forces Babel's classic JSX runtime so JSX uses global React. Don't remove it. |
 | PWA config | `manifest.webmanifest` | App name, icons, `theme_color`, `display: standalone`, etc. |
 

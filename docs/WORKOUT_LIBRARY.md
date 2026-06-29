@@ -4,7 +4,7 @@ Try's plan is assembled from a library of structured workout types. Any single-d
 session can be exported as a Garmin/ANT **`.FIT` workout file** (FIT type 5) and loaded onto
 a watch to be followed step by step, with **personalised pace and power targets**.
 
-- **Code:** [`../js/fit.js`](../js/fit.js) — the structured-step library + a from-scratch binary FIT encoder.
+- **Code:** [`../src/fit.js`](../src/fit.js) — the structured-step library + a from-scratch binary FIT encoder.
 - **UI:** every supported session's detail sheet has a **"Send to watch (.FIT)"** button.
 - **No backend:** the file is encoded in the browser from `plan.paces` and downloaded as a Blob.
 
