@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
@@ -6,7 +7,18 @@ import { VitePWA } from 'vite-plugin-pwa'
 // For local dev/preview pass `--base /` so the app serves from the root.
 export default defineConfig({
   base: '/try/',
-  build: { outDir: 'dist' },
+  build: {
+    outDir: 'dist',
+    // Multi-page: the app + the visual style guide. The style guide imports the
+    // real src/styles.css, so it stays in sync with the app and deploys live at
+    // /try/docs/style-guide.html (the docs/*.md files stay in the repo for GitHub).
+    rollupOptions: {
+      input: {
+        main: resolve(import.meta.dirname, 'index.html'),
+        styleGuide: resolve(import.meta.dirname, 'docs/style-guide.html'),
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({
