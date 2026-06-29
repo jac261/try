@@ -4,6 +4,7 @@
 import './data.js';
 import './plan.js';
 import './fit.js';
+import './wellness.js';
 import './styles.css';
 import { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -534,7 +535,89 @@ function PlanSettingsEditor({ profile, onClose, onSave }) {
 }
 
 /* ---------------- views ---------------- */
-function TodayView({ plan, log, moves, open, onCatchUp, onTune }) {
+/* ---------------- readiness (wellness-driven) ---------------- */
+function ReadinessRing({ score, band }) {
+  const r = 26, c = 2 * Math.PI * r;
+  const col = band === 'green' ? 'var(--run)' : band === 'amber' ? 'var(--bike)' : 'var(--danger)';
+  return (
+    <svg width="74" height="74" viewBox="0 0 72 72" style={{ flex: 'none' }}>
+      <circle cx="36" cy="36" r={r} fill="none" stroke="var(--track)" strokeWidth="6" />
+      <circle cx="36" cy="36" r={r} fill="none" stroke={col} strokeWidth="6" strokeLinecap="round"
+        strokeDasharray={(score / 100 * c) + ' ' + c} transform="rotate(-90 36 36)" />
+      <text x="36" y="41" textAnchor="middle" fontSize="20" fontWeight="800" fill="var(--ink)">{score}</text>
+    </svg>
+  );
+}
+
+function ReadinessCard({ wellness, today, onEdit }) {
+  const todayISO = T.iso(new Date());
+  const rec = wellness.find(r => r.date === todayISO) || (wellness.length ? wellness[wellness.length - 1] : null);
+  if (!rec) {
+    return (
+      <div className="banner rd-empty" onClick={onEdit}>
+        <div className="bi"><Icon name="heartrate" size={20} /></div>
+        <div><div className="bt">Add your morning readiness</div>
+          <div className="bs">Log HRV, sleep &amp; resting HR for a daily go / ease / recover call →</div></div>
+      </div>
+    );
+  }
+  const base = T.wellness.baseline(wellness, todayISO);
+  const rd = T.wellness.readiness(rec, base);
+  const isHard = today.some(w => INTENSITY_TYPES[w.type]);
+  const sessTitle = (today.find(w => INTENSITY_TYPES[w.type]) || today.find(w => w.discipline !== 'rest') || {}).title;
+  const adv = T.wellness.advice(rd.band, isHard, today.length && sessTitle ? sessTitle : 'rest day');
+  const stale = rec.date !== todayISO;
+  return (
+    <div className={'card rd rd-' + rd.band}>
+      <div className="rd-top">
+        <ReadinessRing score={rd.score} band={rd.band} />
+        <div className="rd-main">
+          <div className="rd-headline">{rd.headline}</div>
+          <div className="rd-advice">{adv}</div>
+        </div>
+      </div>
+      <div className="rd-why">
+        {rd.why.map((w, i) => <span key={i} className={'rd-chip' + (w.bad ? ' bad' : '')}>{w.t}</span>)}
+      </div>
+      {(rec.ctl != null || rec.tsb != null) && <div className="rd-pmc">
+        {rec.ctl != null && <div><b>{Math.round(rec.ctl)}</b><span>Fitness</span></div>}
+        {rec.atl != null && <div><b>{Math.round(rec.atl)}</b><span>Fatigue</span></div>}
+        {rec.tsb != null && <div><b>{T.wellness.signed(rec.tsb)}</b><span>Form</span></div>}
+      </div>}
+      <div className="rd-foot">
+        <span>{stale ? 'From ' + T.fmtDate(rec.date, { month: 'short', day: 'numeric' }) : 'This morning'}</span>
+        <a className="reset" onClick={onEdit}>Update →</a>
+      </div>
+    </div>
+  );
+}
+
+function WellnessEditor({ onClose, onSave }) {
+  const [f, setF] = useState({ hrv: '', sleepH: '', rhr: '', tsb: '' });
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+  const num = v => (v === '' || v == null ? null : Number(v));
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="sheet" onClick={e => e.stopPropagation()}>
+        <div className="grab" />
+        <div className="hero"><div className="dot" style={{ background: D.run.grad }}><Icon name="heartrate" size={26} /></div>
+          <div><h2>This morning's readiness</h2><div className="s">From your watch or intervals.icu</div></div></div>
+        <label className="field"><span className="lab">HRV <span className="hint">ms · overnight</span></span>
+          <input type="number" inputMode="numeric" value={f.hrv} onChange={e => set('hrv', e.target.value)} placeholder="e.g. 56" /></label>
+        <label className="field"><span className="lab">Sleep <span className="hint">hours</span></span>
+          <input type="number" inputMode="decimal" step="0.1" value={f.sleepH} onChange={e => set('sleepH', e.target.value)} placeholder="e.g. 7.5" /></label>
+        <label className="field"><span className="lab">Resting HR <span className="hint">bpm</span></span>
+          <input type="number" inputMode="numeric" value={f.rhr} onChange={e => set('rhr', e.target.value)} placeholder="e.g. 51" /></label>
+        <label className="field"><span className="lab">Form / TSB <span className="hint">optional · from intervals.icu</span></span>
+          <input type="number" inputMode="numeric" value={f.tsb} onChange={e => set('tsb', e.target.value)} placeholder="e.g. 12" /></label>
+        <button className="btn primary" onClick={() => onSave({ date: T.iso(new Date()), hrv: num(f.hrv), sleepH: num(f.sleepH), rhr: num(f.rhr), tsb: num(f.tsb) })}>Save readiness</button>
+        <div className="fithint">Auto-sync from intervals.icu arrives with the backend. For now, pop in this morning's numbers.</div>
+      </div>
+    </div>
+  );
+}
+
+function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEditWellness }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
@@ -549,6 +632,8 @@ function TodayView({ plan, log, moves, open, onCatchUp, onTune }) {
 
   return (
     <>
+      <div className="section-title">Today's readiness</div>
+      <ReadinessCard wellness={wellness} today={today} onEdit={onEditWellness} />
       {missed.length > 0 && <div className="banner" onClick={onCatchUp}>
         <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">{missed.length} session{missed.length > 1 ? 's' : ''} missed this week</div>
@@ -850,6 +935,9 @@ function App() {
   const [editFitness, setEditFitness] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [wellness, setWellness] = useState(() => T.wellness.load());
+  const [editWellness, setEditWellness] = useState(false);
+  const saveWellness = rec => { setWellness(T.wellness.upsert(rec)); setEditWellness(false); };
 
   useEffect(() => { if (plan) LS.save('plan', plan); }, [plan]);
   useEffect(() => { LS.save('log', log); }, [log]);
@@ -904,7 +992,7 @@ function App() {
         <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
       </div>
 
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} />}
       {view === 'plan' && <PlanView plan={plan} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} />}
@@ -917,6 +1005,7 @@ function App() {
 
       {editFitness && <FitnessEditor profile={plan.profile} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
+      {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} />}
 
       {detail && <DetailSheet w={detail} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
@@ -934,4 +1023,8 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+// Reuse one root across hot-reloads (avoids the "createRoot() on a container that
+// has already been passed to createRoot()" warning and double-mount churn in dev).
+const _container = document.getElementById('root');
+const _root = _container.__try_root || (_container.__try_root = createRoot(_container));
+_root.render(<App />);
