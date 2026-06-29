@@ -243,6 +243,32 @@ body {
 .chart-legend i { display: inline-block; width: 11px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 .chart-legend .dim { color: var(--faint); }
 
+/* 🐛 "Release ze Würm" easter egg */
+.wurm-btn { opacity: .85; }
+.wurm-scrim { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(120% 90% at 50% 32%, rgba(32,42,26,.72), rgba(8,10,12,.93)); backdrop-filter: blur(2px); animation: wurm-fade .3s ease; cursor: pointer; }
+.wurm-text { font-size: 32px; font-weight: 800; font-style: italic; letter-spacing: -.5px; color: #cdf06f; text-shadow: 0 3px 16px rgba(0,0,0,.6); animation: wurm-pop .55s .5s both; }
+.wurm-stage { position: relative; width: 300px; height: 290px; overflow: hidden; }
+.wurm-figure { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); animation: wurm-rise 1.15s cubic-bezier(.32, 1.35, .5, 1) both; }
+.wurm-body { transform-origin: 50% 100%; animation: wurm-wiggle 2.6s 1.25s ease-in-out infinite; }
+.wurm-mound { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 3; }
+.wurm-clod { position: absolute; left: 50%; bottom: 42px; width: 9px; height: 9px; border-radius: 50% 50% 50% 40%; background: #6b4a30; opacity: 0; animation: wurm-clod .85s ease-out both; }
+.wurm-hint { color: var(--muted); font-size: 12.5px; font-weight: 600; margin-top: 12px; animation: wurm-fade .5s 1.5s both; }
+@keyframes wurm-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes wurm-rise {
+  0% { transform: translateX(-50%) translateY(210px) rotate(-7deg); }
+  55% { transform: translateX(-50%) translateY(-16px) rotate(4deg); }
+  74% { transform: translateX(-50%) translateY(7px) rotate(-2deg); }
+  100% { transform: translateX(-50%) translateY(0) rotate(0); }
+}
+@keyframes wurm-wiggle { 0%, 100% { transform: rotate(-3.5deg); } 50% { transform: rotate(3.5deg); } }
+@keyframes wurm-pop { 0% { opacity: 0; transform: scale(.5) rotate(-5deg); } 70% { transform: scale(1.14) rotate(3deg); } 100% { opacity: 1; transform: scale(1) rotate(-2deg); } }
+@keyframes wurm-clod { 0% { transform: translate(0, 0) scale(.5); opacity: 0; } 18% { opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .wurm-figure { animation: wurm-fade .3s both; }
+  .wurm-body, .wurm-clod { animation: none; }
+}
+
 /* weekly-volume bar chart (HTML so labels stay crisp) */
 .vchart { display: flex; align-items: stretch; gap: 5px; }
 .vcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
