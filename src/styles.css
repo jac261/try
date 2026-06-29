@@ -238,6 +238,11 @@ body {
 .rd-eased svg { flex: none; color: var(--run); }
 .tag.eased { background: rgba(52, 211, 153, .16); color: var(--run); }
 
+/* trend chart legend */
+.chart-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 11px; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.chart-legend i { display: inline-block; width: 11px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.chart-legend .dim { color: var(--faint); }
+
 /* weekly-volume bar chart (HTML so labels stay crisp) */
 .vchart { display: flex; align-items: stretch; gap: 5px; }
 .vcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
