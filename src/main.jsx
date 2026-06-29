@@ -364,7 +364,7 @@ function WorkoutRow({ w, done, onClick, eff, moved }) {
     <div className={'wk' + (done ? ' done' : '')} onClick={onClick}>
       <div className="dot" style={{ background: disc.grad }}><Icon name={disc.icon} size={22} /></div>
       <div className="meta">
-        <div className="t">{w.title} {w.test ? <span className="tag test">Test</span> : (w.key && !w.race && <span className="tag key">Key</span>)}{w.second && <span className="tag second">2nd</span>}{moved && <span className="tag moved">Moved</span>}</div>
+        <div className="t">{w.title} {w.test ? <span className="tag test">Test</span> : (w.key && !w.race && <span className="tag key">Key</span>)}{w.second && <span className="tag second">2nd</span>}{w.eased && <span className="tag eased">Eased</span>}{moved && <span className="tag moved">Moved</span>}</div>
         <div className="s">{w.type}{w.distance ? ' · ' + w.distance + ' ' + w.unit : ''} · {T.fmtDuration(w.durationMin || 0)}</div>
       </div>
       <div className="right">{T.fmtDate(eff || w.date, { weekday: 'short' })}</div>
@@ -390,7 +390,7 @@ const WHY = {
   'Open Water': 'Rehearse race-day swimming. Practise sighting, drafting and holding a straight line without walls to push off.',
 };
 
-function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel }) {
+function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore }) {
   const canFit = T.FIT && T.FIT.supports(w);
   const disc = D[w.discipline];
   const why = !w.race && !w.test ? WHY[w.type] : null;
@@ -405,6 +405,7 @@ function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMov
           <div className="dot" style={{ background: disc.grad }}><Icon name={disc.icon} size={26} /></div>
           <div><h2>{w.title}</h2><div className="s">{T.fmtDate(shown, { weekday: 'long', month: 'long', day: 'numeric' })} · {w.phase} phase</div></div>
         </div>
+        {w.eased && <div className="testnote"><Icon name="heartrate" size={18} /><span>Eased from your planned {w.easedFrom} session for recovery. {onRestore && <a className="reset" onClick={onRestore}>Restore the hard session</a>}</span></div>}
         {!w.race && <div className="statline">
           <div className="s"><b>{T.fmtDuration(w.durationMin || 0)}</b><span>Duration</span></div>
           {w.distance && <div className="s"><b>{w.distance}</b><span>{w.unit}</span></div>}
@@ -549,7 +550,7 @@ function ReadinessRing({ score, band }) {
   );
 }
 
-function ReadinessCard({ wellness, today, onEdit }) {
+function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
   const todayISO = T.iso(new Date());
   const rec = wellness.find(r => r.date === todayISO) || (wellness.length ? wellness[wellness.length - 1] : null);
   if (!rec) {
@@ -563,9 +564,10 @@ function ReadinessCard({ wellness, today, onEdit }) {
   }
   const base = T.wellness.baseline(wellness, todayISO);
   const rd = T.wellness.readiness(rec, base);
-  const isHard = today.some(w => INTENSITY_TYPES[w.type]);
-  const sessTitle = (today.find(w => INTENSITY_TYPES[w.type]) || today.find(w => w.discipline !== 'rest') || {}).title;
-  const adv = T.wellness.advice(rd.band, isHard, today.length && sessTitle ? sessTitle : 'rest day');
+  const eased = today.find(w => w.eased);
+  const hard = today.find(w => INTENSITY_TYPES[w.type]);
+  const sessTitle = (hard || eased || today.find(w => w.discipline !== 'rest') || {}).title;
+  const adv = T.wellness.advice(rd.band, !!hard, today.length && sessTitle ? sessTitle : 'rest day');
   const stale = rec.date !== todayISO;
   return (
     <div className={'card rd rd-' + rd.band}>
@@ -576,6 +578,9 @@ function ReadinessCard({ wellness, today, onEdit }) {
           <div className="rd-advice">{adv}</div>
         </div>
       </div>
+      {eased
+        ? <div className="rd-eased"><Icon name="rest" size={15} /> Today eased to {eased.title} for recovery · <a className="reset" onClick={onRestore}>undo</a></div>
+        : (!stale && rd.band !== 'green' && hard && <button className="btn ghost sm rd-action" onClick={onEase}>Ease today's {hard.title} → easy aerobic</button>)}
       <div className="rd-why">
         {rd.why.map((w, i) => <span key={i} className={'rd-chip' + (w.bad ? ' bad' : '')}>{w.t}</span>)}
       </div>
@@ -617,7 +622,7 @@ function WellnessEditor({ onClose, onSave }) {
   );
 }
 
-function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEditWellness }) {
+function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEditWellness, easedOf, onEaseToday, onRestoreToday }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
@@ -628,12 +633,12 @@ function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEdit
   const weekStart = weekRange(todayISO)[0];
   const missed = sessions.filter(w => { const d = effDate(w, moves); return d < todayISO && d >= weekStart && !log[w.id]; });
   const suggestions = paceSuggestions(plan, log);
-  const row = w => <WorkoutRow key={w.id} w={w} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} />;
+  const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} />;
 
   return (
     <>
       <div className="section-title">Today's readiness</div>
-      <ReadinessCard wellness={wellness} today={today} onEdit={onEditWellness} />
+      <ReadinessCard wellness={wellness} today={today.map(easedOf)} onEdit={onEditWellness} onEase={onEaseToday} onRestore={onRestoreToday} />
       {missed.length > 0 && <div className="banner" onClick={onCatchUp}>
         <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">{missed.length} session{missed.length > 1 ? 's' : ''} missed this week</div>
@@ -664,7 +669,7 @@ function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEdit
   );
 }
 
-function CalendarView({ plan, log, moves, open }) {
+function CalendarView({ plan, log, moves, open, easedOf }) {
   const todayISO = T.iso(new Date());
   const firstFuture = plan.weeks.findIndex(w => w.workouts.some(x => x.date >= todayISO));
   const [openWeek, setOpenWeek] = useState(firstFuture < 0 ? 0 : firstFuture);
@@ -687,7 +692,7 @@ function CalendarView({ plan, log, moves, open }) {
             </div>
             <div className="weekbar"><span style={{ width: (sessions.length ? doneCount / sessions.length * 100 : 0) + '%', background: 'var(--accent)' }} /></div>
             {isOpen && <div style={{ marginTop: 8 }}>
-              {ordered.map(w => <WorkoutRow key={w.id} w={w} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} />)}
+              {ordered.map(w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} />)}
             </div>}
           </div>
         );
@@ -938,10 +943,12 @@ function App() {
   const [wellness, setWellness] = useState(() => T.wellness.load());
   const [editWellness, setEditWellness] = useState(false);
   const saveWellness = rec => { setWellness(T.wellness.upsert(rec)); setEditWellness(false); };
+  const [adjust, setAdjust] = useState(() => LS.load('adjust', {}));
 
   useEffect(() => { if (plan) LS.save('plan', plan); }, [plan]);
   useEffect(() => { LS.save('log', log); }, [log]);
   useEffect(() => { LS.save('moves', moves); }, [moves]);
+  useEffect(() => { LS.save('adjust', adjust); }, [adjust]);
 
   if (!plan) return <Onboarding onCreate={p => { setPlan(T.generatePlan(p)); setView('today'); setBuilding(true); }} />;
   if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
@@ -963,6 +970,12 @@ function App() {
   const updateFitness = fields => { retarget(fields); setEditFitness(false); };
   const applyTune = () => { const s = paceSuggestions(plan, log); if (s.length) retarget(tuneFields(plan.profile, s)); };
   const setFeel = (id, feel) => setLog(l => ({ ...l, [id]: Object.assign({}, l[id], { done: true, at: (l[id] && l[id].at) || new Date().toISOString(), feel: feel }) }));
+  // Readiness-driven adjustments overlay: eased session ids → easy aerobic version.
+  const easedOf = w => (w && adjust[w.id] ? T.easeWorkout(w, plan) : w);
+  const todaysHard = () => { const t = T.iso(new Date()); return plan.weeks.flatMap(wk => wk.workouts).filter(w => effDate(w, moves) === t && INTENSITY_TYPES[w.type] && !w.race); };
+  const easeToday = () => { const hard = todaysHard(); if (!hard.length) return; setAdjust(a => { const n = { ...a }; hard.forEach(w => n[w.id] = { kind: 'ease', at: new Date().toISOString() }); return n; }); };
+  const restoreToday = () => { const t = T.iso(new Date()); setAdjust(a => { const n = { ...a }; plan.weeks.flatMap(wk => wk.workouts).forEach(w => { if (effDate(w, moves) === t) delete n[w.id]; }); return n; }); };
+  const unEase = id => setAdjust(a => { const n = { ...a }; delete n[id]; return n; });
   // Rebuild the plan after a race/schedule change. This reshapes the structure, so we
   // prune log & moves to the workout IDs that still exist (fitness/history carry over).
   const reshapePlan = fields => {
@@ -992,8 +1005,8 @@ function App() {
         <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
       </div>
 
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} />}
-      {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} />}
+      {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} />}
       {view === 'plan' && <PlanView plan={plan} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} />}
       {view === 'settings' && <SettingsView plan={plan}
@@ -1007,10 +1020,10 @@ function App() {
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} />}
 
-      {detail && <DetailSheet w={detail} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)}
+      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
-        onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)}
+        onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}
         onLogResult={() => { setDetail(null); setEditFitness(true); }} />}
 
       <div className="nav">

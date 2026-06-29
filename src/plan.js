@@ -277,6 +277,21 @@
     return { title: 'Session', segments: [], distance: null, unit: '' };
   }
 
+  // Readiness-driven downgrade: turn a hard session into easy aerobic of the same
+  // discipline at reduced volume. Keeps the workout id/date so logs & moves still apply.
+  T.easeWorkout = function (w, plan) {
+    const disc = w.discipline;
+    if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
+    const easyType = disc === 'swim' ? 'Technique' : (disc === 'bike' ? 'Endurance' : 'Easy');
+    const dur = Math.max(25, T.round5(w.durationMin * 0.65));
+    const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase);
+    return Object.assign({}, w, {
+      type: easyType, title: built.title, durationMin: dur,
+      distance: built.distance, unit: built.unit, segments: built.segments,
+      eased: true, easedFrom: w.type, key: false,
+    });
+  };
+
   /* ---- phase plan across the whole block ---- */
   function computePhases(totalWeeks, taperWeeks) {
     const taper = Math.min(taperWeeks, Math.max(1, totalWeeks - 3));
