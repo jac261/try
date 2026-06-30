@@ -1014,9 +1014,8 @@ function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, on
         <div style={{ height: 10 }} />
         <button className="btn ghost" style={{ color: 'var(--danger)' }} onClick={onReset}>Clear all progress</button>
       </div>
-      <button className="btn ghost wurm-btn" onClick={clickWurm}>
-        {wc === 0 ? '🐛  Release ze Würm' : '🐛  ze Würm stirs…  ' + wc + '/10'}</button>
-      <div className="center muted" style={{ fontSize: 12 }}>Try · built with React</div>
+      {/* Secret: quietly tap this footer 10× to release ze Würm. No label, no hint. */}
+      <div className="center muted wurm-trigger" style={{ fontSize: 12 }} onClick={clickWurm}>Try · built with React</div>
     </>
   );
 }

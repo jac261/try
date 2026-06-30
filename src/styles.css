@@ -244,7 +244,7 @@ body {
 .chart-legend .dim { color: var(--faint); }
 
 /* 🐛 "Release ze Würm" easter egg */
-.wurm-btn { opacity: .85; }
+.wurm-trigger { -webkit-user-select: none; user-select: none; }
 .wurm-scrim { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: radial-gradient(120% 90% at 50% 32%, rgba(32,42,26,.72), rgba(8,10,12,.93)); backdrop-filter: blur(2px); animation: wurm-fade .3s ease; cursor: pointer; }
 .wurm-text { font-size: 32px; font-weight: 800; font-style: italic; letter-spacing: -.5px; color: #cdf06f; text-shadow: 0 3px 16px rgba(0,0,0,.6); animation: wurm-pop .55s .5s both; }
