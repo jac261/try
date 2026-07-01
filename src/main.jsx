@@ -1,15 +1,12 @@
 /* Try — React UI (Vite entry point).
-   Domain modules are imported for their side effects: each attaches to the shared
-   `window.TF` namespace, so they must load before this module's body runs. */
-import './data.js';
-import './plan.js';
-import './fit.js';
-import './wellness.js';
+   The domain layer lives in @/lib as plain ES modules; `T` is its namespace
+   (T.iso, T.RACES, T.generatePlan, T.wellness, …) — the replacement for the old
+   `window.TF` global, with load order now handled by the module graph. */
 import './styles.css';
 import { useState, useEffect, useMemo, Component } from 'react';
 import { createRoot } from 'react-dom/client';
+import * as T from '@/lib';
 
-const T = window.TF;
 const D = T.DISCIPLINES;
 
 /* ---------------- persistence ---------------- */

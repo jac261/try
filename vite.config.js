@@ -7,6 +7,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 // For local dev/preview pass `--base /` so the app serves from the root.
 export default defineConfig({
   base: '/try/',
+  // `@` → src/, so modules import as `@/lib/date` instead of `../../lib/date`.
+  resolve: {
+    alias: { '@': resolve(import.meta.dirname, 'src') },
+  },
   build: {
     outDir: 'dist',
     // Multi-page: the app + the visual style guide. The style guide imports the
