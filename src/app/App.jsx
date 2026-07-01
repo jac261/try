@@ -1,15 +1,9 @@
-/* Try — React UI (Vite entry point).
-   The domain layer lives in @/lib as plain ES modules; `T` is its namespace
-   (T.iso, T.RACES, T.generatePlan, T.wellness, …) — the replacement for the old
-   `window.TF` global, with load order now handled by the module graph. */
-import './styles.css';
-import { useState, useEffect, useMemo, Component } from 'react';
-import { createRoot } from 'react-dom/client';
+import { useState, useEffect } from 'react';
 import * as T from '@/lib';
 import { effDate, catchUpMoves } from '@/lib/schedule.js';
 import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
 import { downloadICS } from '@/lib/ics.js';
-import { LS, NS } from '@/app/storage.js';
+import { LS } from '@/app/storage.js';
 import { Icon } from '@/components/Icon.jsx';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
@@ -24,8 +18,7 @@ import { PlanView } from '@/features/plan/PlanView.jsx';
 import { ProgressView } from '@/features/progress/ProgressView.jsx';
 import { WurmReveal } from '@/features/easter-egg/WurmReveal.jsx';
 
-/* ---------------- root ---------------- */
-function App() {
+export function App() {
   const [plan, setPlan] = useState(() => LS.load('plan', null));
   const [log, setLog] = useState(() => LS.load('log', {}));
   const [moves, setMoves] = useState(() => LS.load('moves', {}));
@@ -132,39 +125,3 @@ function App() {
     </div>
   );
 }
-
-// Catches any render-time throw — most likely a plan saved by an older build whose
-// shape no longer matches the code. Everything lives in one localStorage blob, so a
-// crash would otherwise white-screen and re-crash on reload; this offers a clean out.
-class ErrorBoundary extends Component {
-  constructor(props) { super(props); this.state = { err: null, nonce: 0 }; }
-  static getDerivedStateFromError(err) { return { err: err }; }
-  componentDidCatch(err) { try { console.error('Try crashed:', err); } catch (e) {} }
-  reset() {
-    try { LS.clear(); localStorage.removeItem(NS + 'adjust'); } catch (e) {}
-    // Clear the error and bump the key so App remounts and re-reads (now-empty)
-    // storage. reload() gives a fully clean slate when available; the remount is
-    // the fallback for environments where reload is a no-op.
-    this.setState(s => ({ err: null, nonce: s.nonce + 1 }));
-    try { location.reload(); } catch (e) {}
-  }
-  render() {
-    if (!this.state.err) return <div key={this.state.nonce} style={{ display: 'contents' }}>{this.props.children}</div>;
-    return (
-      <div className="app">
-        <div className="topbar"><h1><Icon name="logo" size={26} /> Try</h1></div>
-        <div className="card">
-          <h2>Something went wrong</h2>
-          <p className="lead">Your saved plan couldn't be loaded — this can happen after an update. Starting a new plan clears the old data and fixes it. Your fitness numbers are quick to re-enter.</p>
-          <button className="btn primary" onClick={() => this.reset()}>Start a fresh plan</button>
-        </div>
-      </div>
-    );
-  }
-}
-
-// Reuse one root across hot-reloads (avoids the "createRoot() on a container that
-// has already been passed to createRoot()" warning and double-mount churn in dev).
-const _container = document.getElementById('root');
-const _root = _container.__try_root || (_container.__try_root = createRoot(_container));
-_root.render(<ErrorBoundary><App /></ErrorBoundary>);
