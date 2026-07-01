@@ -6,7 +6,7 @@ import './plan.js';
 import './fit.js';
 import './wellness.js';
 import './styles.css';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Component } from 'react';
 import { createRoot } from 'react-dom/client';
 
 const T = window.TF;
@@ -24,6 +24,15 @@ const LS = {
   save(k, v) { try { localStorage.setItem(NS + k, JSON.stringify(v)); } catch (e) {} },
   clear() { ['plan', 'log', 'moves'].forEach(k => localStorage.removeItem(NS + k)); },
 };
+
+/* a11y: make a non-<button> element keyboard-operable — focusable and driven by
+   Enter/Space, with a button role. Spread onto clickable <div>s: {...tap(fn)}. */
+function tap(handler) {
+  return {
+    role: 'button', tabIndex: 0, onClick: handler,
+    onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(e); } },
+  };
+}
 
 /* ---------------- scheduling helpers ----------------
    Reschedules are stored as an overlay map { workoutId: newDateISO } so the
@@ -285,14 +294,14 @@ function DaySelector({ days, longDay, onChange }) {
     <>
       <div className="days">
         {[0, 1, 2, 3, 4, 5, 6].map(d =>
-          <div key={d} className={'d' + (days.indexOf(d) >= 0 ? ' on' : '')} onClick={() => toggle(d)}>{DAY_LETTERS[d]}</div>)}
+          <div key={d} className={'d' + (days.indexOf(d) >= 0 ? ' on' : '')} {...tap(() => toggle(d))}>{DAY_LETTERS[d]}</div>)}
       </div>
       <div className="hint" style={{ marginTop: 8 }}>{days.length} training days · the rest are rest days</div>
       <label className="field" style={{ marginTop: 16, marginBottom: 0 }}><span className="lab">Long session day <span className="hint">your big ride / run</span></span></label>
       <div className="days" style={{ marginTop: 8 }}>
         {[0, 1, 2, 3, 4, 5, 6].map(d => {
           const sel = days.indexOf(d) >= 0;
-          return <div key={d} className={'d' + (longDay === d ? ' on' : '')} onClick={() => sel && onChange(days, d)}
+          return <div key={d} className={'d' + (longDay === d ? ' on' : '')} {...(sel ? tap(() => onChange(days, d)) : {})}
             style={{ opacity: sel ? 1 : .3, cursor: sel ? 'pointer' : 'default' }}>{DAY_LETTERS[d]}</div>;
         })}
       </div>
@@ -331,7 +340,7 @@ function Onboarding({ onCreate }) {
           <label className="field"><span className="lab">Which race are you training for?</span></label>
           <div className="choice">
             {Object.values(T.RACES).map(r => (
-              <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} onClick={() => set('raceType', r.key)}>
+              <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} {...tap(() => set('raceType', r.key))}>
                 {r.name}<small>{r.swim}k swim · {r.bike}k bike · {r.run}k run</small></div>
             ))}
           </div>
@@ -343,14 +352,14 @@ function Onboarding({ onCreate }) {
           <h2>Schedule & experience</h2>
           <p className="lead">This shapes your volume, intensity and ramp rate.</p>
           <label className="field"><span className="lab">Race date</span>
-            <input type="date" value={f.raceDate} onChange={e => set('raceDate', e.target.value)} /></label>
+            <input type="date" value={f.raceDate} min={T.iso(T.addDays(new Date(), 7))} onChange={e => set('raceDate', e.target.value)} /></label>
           <label className="field" style={{ marginBottom: 8 }}><span className="lab">Which days will you train?</span></label>
           <DaySelector days={f.trainingDays} longDay={f.longDay} onChange={(d, l) => setF(s => ({ ...s, trainingDays: d, longDay: l }))} />
           <div style={{ height: 18 }} />
           <label className="field"><span className="lab">Experience level</span></label>
           <div className="choice">
             {Object.values(T.FITNESS).map(l => (
-              <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} onClick={() => set('fitness', l.key)}>{l.name}<small>{l.blurb}</small></div>
+              <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} {...tap(() => set('fitness', l.key))}>{l.name}<small>{l.blurb}</small></div>
             ))}
           </div>
           <div style={{ height: 12 }} />
@@ -386,7 +395,7 @@ function WorkoutRow({ w, done, onClick, eff, moved }) {
   );
   const disc = D[w.discipline];
   return (
-    <div className={'wk' + (done ? ' done' : '')} onClick={onClick}>
+    <div className={'wk' + (done ? ' done' : '')} {...tap(onClick)}>
       <div className="dot" style={{ background: disc.grad }}><Icon name={disc.icon} size={22} /></div>
       <div className="meta">
         <div className="t">{w.title} {w.test ? <span className="tag test">Test</span> : (w.key && !w.race && <span className="tag key">Key</span>)}{w.second && <span className="tag second">2nd</span>}{w.eased && <span className="tag eased">Eased</span>}{moved && <span className="tag moved">Moved</span>}</div>
@@ -430,7 +439,7 @@ function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMov
           <div className="dot" style={{ background: disc.grad }}><Icon name={disc.icon} size={26} /></div>
           <div><h2>{w.title}</h2><div className="s">{T.fmtDate(shown, { weekday: 'long', month: 'long', day: 'numeric' })} · {w.phase} phase</div></div>
         </div>
-        {w.eased && <div className="testnote"><Icon name="heartrate" size={18} /><span>Eased from your planned {w.easedFrom} session for recovery. {onRestore && <a className="reset" onClick={onRestore}>Restore the hard session</a>}</span></div>}
+        {w.eased && <div className="testnote"><Icon name="heartrate" size={18} /><span>Eased from your planned {w.easedFrom} session for recovery. {onRestore && <a className="reset" {...tap(onRestore)}>Restore the hard session</a>}</span></div>}
         {!w.race && <div className="statline">
           <div className="s"><b>{T.fmtDuration(w.durationMin || 0)}</b><span>Duration</span></div>
           {w.distance && <div className="s"><b>{w.distance}</b><span>{w.unit}</span></div>}
@@ -447,11 +456,11 @@ function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMov
         ))}
         {!w.race && onMove && <>
           <div className="section-title" style={{ margin: '18px 0 8px' }}>Reschedule
-            {moved && <a className="reset" onClick={() => onResetMove(w.id)}> ↺ reset</a>}</div>
+            {moved && <a className="reset" {...tap(() => onResetMove(w.id))}> ↺ reset</a>}</div>
           <div className="days">
             {days.map((d, i) => {
               const lab = ['M', 'T', 'W', 'T', 'F', 'S', 'S'][i];
-              return <div key={d} className={'d' + (d === shown ? ' on' : '')} onClick={() => onMove(w.id, d)}>
+              return <div key={d} className={'d' + (d === shown ? ' on' : '')} {...tap(() => onMove(w.id, d))}>
                 <div style={{ fontSize: 10, fontWeight: 600, opacity: .7 }}>{lab}</div>
                 {Number(d.slice(8))}</div>;
             })}
@@ -500,7 +509,7 @@ function FitnessEditor({ profile, onClose, onSave }) {
         <label className="field"><span className="lab">Experience level</span></label>
         <div className="choice">
           {Object.values(T.FITNESS).map(l => (
-            <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} onClick={() => set('fitness', l.key)}>{l.name}<small>{l.blurb}</small></div>
+            <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} {...tap(() => set('fitness', l.key))}>{l.name}<small>{l.blurb}</small></div>
           ))}
         </div>
         <div style={{ height: 16 }} />
@@ -545,7 +554,7 @@ function PlanSettingsEditor({ profile, onClose, onSave }) {
         <label className="field"><span className="lab">Race</span></label>
         <div className="choice">
           {Object.values(T.RACES).map(r => (
-            <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} onClick={() => set('raceType', r.key)}>{r.name}<small>{r.swim}k · {r.bike}k · {r.run}k</small></div>
+            <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} {...tap(() => set('raceType', r.key))}>{r.name}<small>{r.swim}k · {r.bike}k · {r.run}k</small></div>
           ))}
         </div>
         <div style={{ height: 16 }} />
@@ -580,7 +589,7 @@ function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
   const rec = wellness.find(r => r.date === todayISO) || (wellness.length ? wellness[wellness.length - 1] : null);
   if (!rec) {
     return (
-      <div className="banner rd-empty" onClick={onEdit}>
+      <div className="banner rd-empty" {...tap(onEdit)}>
         <div className="bi"><Icon name="heartrate" size={20} /></div>
         <div><div className="bt">Add your morning readiness</div>
           <div className="bs">Log HRV, sleep &amp; resting HR for a daily go / ease / recover call →</div></div>
@@ -604,7 +613,7 @@ function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
         </div>
       </div>
       {eased
-        ? <div className="rd-eased"><Icon name="rest" size={15} /> Today eased to {eased.title} for recovery · <a className="reset" onClick={onRestore}>undo</a></div>
+        ? <div className="rd-eased"><Icon name="rest" size={15} /> Today eased to {eased.title} for recovery · <a className="reset" {...tap(onRestore)}>undo</a></div>
         : (!stale && rd.band !== 'green' && hard && <button className="btn ghost sm rd-action" onClick={onEase}>Ease today's {hard.title} → easy aerobic</button>)}
       <div className="rd-why">
         {rd.why.map((w, i) => <span key={i} className={'rd-chip' + (w.bad ? ' bad' : '')}>{w.t}</span>)}
@@ -616,7 +625,7 @@ function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
       </div>}
       <div className="rd-foot">
         <span>{stale ? 'From ' + T.fmtDate(rec.date, { month: 'short', day: 'numeric' }) : 'This morning'}</span>
-        <a className="reset" onClick={onEdit}>Update →</a>
+        <a className="reset" {...tap(onEdit)}>Update →</a>
       </div>
     </div>
   );
@@ -664,12 +673,12 @@ function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEdit
     <>
       <div className="section-title">Today's readiness</div>
       <ReadinessCard wellness={wellness} today={today.map(easedOf)} onEdit={onEditWellness} onEase={onEaseToday} onRestore={onRestoreToday} />
-      {missed.length > 0 && <div className="banner" onClick={onCatchUp}>
+      {missed.length > 0 && <div className="banner" {...tap(onCatchUp)}>
         <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">{missed.length} session{missed.length > 1 ? 's' : ''} missed this week</div>
           <div className="bs">Tap to reschedule onto your free days →</div></div>
       </div>}
-      {suggestions.length > 0 && <div className="banner tune" onClick={onTune}>
+      {suggestions.length > 0 && <div className="banner tune" {...tap(onTune)}>
         <div className="bi"><Icon name="pace" size={20} /></div>
         <div><div className="bt">Time to tune your paces</div>
           <div className="bs">{suggestions.map(s => D[s.discipline].name + (s.direction === 'faster' ? ' feels easy' : ' feels hard')).join(' · ')} — tap to adjust →</div></div>
@@ -710,7 +719,7 @@ function CalendarView({ plan, log, moves, open, easedOf }) {
         const ordered = week.workouts.slice().sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1);
         return (
           <div className="card" key={week.index} style={{ padding: '14px 16px' }}>
-            <div className="weekhdr" onClick={() => setOpenWeek(isOpen ? -1 : week.index)} style={{ cursor: 'pointer' }}>
+            <div className="weekhdr" {...tap(() => setOpenWeek(isOpen ? -1 : week.index))} aria-expanded={isOpen} style={{ cursor: 'pointer' }}>
               <div><div className="ttl">Week {week.index + 1} {week.isRecovery && <span className="tag recovery">Recovery</span>}</div>
                 <div className="muted" style={{ fontSize: 12 }}>{T.fmtDate(week.start, { month: 'short', day: 'numeric' })} · {sessions.length} sessions · {T.fmtDuration(week.totalMin)}</div></div>
               <div className="ph" style={{ background: pi.color }}>{week.phase}</div>
@@ -1170,8 +1179,38 @@ function App() {
   );
 }
 
+// Catches any render-time throw — most likely a plan saved by an older build whose
+// shape no longer matches the code. Everything lives in one localStorage blob, so a
+// crash would otherwise white-screen and re-crash on reload; this offers a clean out.
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { err: null, nonce: 0 }; }
+  static getDerivedStateFromError(err) { return { err: err }; }
+  componentDidCatch(err) { try { console.error('Try crashed:', err); } catch (e) {} }
+  reset() {
+    try { LS.clear(); localStorage.removeItem(NS + 'adjust'); } catch (e) {}
+    // Clear the error and bump the key so App remounts and re-reads (now-empty)
+    // storage. reload() gives a fully clean slate when available; the remount is
+    // the fallback for environments where reload is a no-op.
+    this.setState(s => ({ err: null, nonce: s.nonce + 1 }));
+    try { location.reload(); } catch (e) {}
+  }
+  render() {
+    if (!this.state.err) return <div key={this.state.nonce} style={{ display: 'contents' }}>{this.props.children}</div>;
+    return (
+      <div className="app">
+        <div className="topbar"><h1><Icon name="logo" size={26} /> Try</h1></div>
+        <div className="card">
+          <h2>Something went wrong</h2>
+          <p className="lead">Your saved plan couldn't be loaded — this can happen after an update. Starting a new plan clears the old data and fixes it. Your fitness numbers are quick to re-enter.</p>
+          <button className="btn primary" onClick={() => this.reset()}>Start a fresh plan</button>
+        </div>
+      </div>
+    );
+  }
+}
+
 // Reuse one root across hot-reloads (avoids the "createRoot() on a container that
 // has already been passed to createRoot()" warning and double-mount churn in dev).
 const _container = document.getElementById('root');
 const _root = _container.__try_root || (_container.__try_root = createRoot(_container));
-_root.render(<App />);
+_root.render(<ErrorBoundary><App /></ErrorBoundary>);

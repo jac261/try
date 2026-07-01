@@ -48,31 +48,39 @@ TF.PHASE_INFO = {
   Taper: { color: '#c084fc', blurb: 'Rest, recover & arrive fresh' },
 };
 
-/* ---- date helpers ---- */
+/* ---- date helpers ----
+   Everything works in LOCAL time. The trap: `new Date("2026-09-20")` parses a
+   date-only string as UTC midnight, which then reads back as the *previous* day
+   for anyone west of UTC. toDate() normalises date-only strings to local midnight
+   so a "YYYY-MM-DD" and a Date object always mean the same calendar day. */
+TF.toDate = function (d) {
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return new Date(d + 'T00:00:00');
+  return new Date(d);
+};
 TF.startOfWeekMonday = function (d) {
-  const x = new Date(d);
+  const x = TF.toDate(d);
   x.setHours(0, 0, 0, 0);
   const day = (x.getDay() + 6) % 7; // 0 = Monday
   x.setDate(x.getDate() - day);
   return x;
 };
 TF.addDays = function (d, n) {
-  const x = new Date(d);
+  const x = TF.toDate(d);
   x.setDate(x.getDate() + n);
   return x;
 };
 TF.iso = function (d) {
-  const x = new Date(d);
+  const x = TF.toDate(d);
   return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
 };
 TF.weeksBetween = function (a, b) {
-  return (new Date(b) - new Date(a)) / (7 * 24 * 3600 * 1000);
+  return (TF.toDate(b) - TF.toDate(a)) / (7 * 24 * 3600 * 1000);
 };
 TF.daysBetween = function (a, b) {
-  return Math.round((new Date(b) - new Date(a)) / (24 * 3600 * 1000));
+  return Math.round((TF.toDate(b) - TF.toDate(a)) / (24 * 3600 * 1000));
 };
 TF.fmtDate = function (iso, opts) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, opts || { weekday: 'short', month: 'short', day: 'numeric' });
+  return TF.toDate(iso).toLocaleDateString(undefined, opts || { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
 /* ---- number / pace helpers ---- */

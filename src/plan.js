@@ -299,7 +299,10 @@
     let peak = Math.max(1, Math.round(remaining * 0.2));
     let build = Math.max(1, Math.round(remaining * 0.4));
     let base = remaining - peak - build;
-    while (base < 1) { if (build > 1) build--; else if (peak > 1) peak--; base = remaining - peak - build; }
+    // Shrink Build then Peak until Base has at least one week. The guard stops a
+    // runaway loop if the duration constants ever change so neither can shrink.
+    let guard = 0;
+    while (base < 1 && guard++ < 100) { if (build > 1) build--; else if (peak > 1) peak--; else break; base = remaining - peak - build; }
     const phases = [];
     for (let i = 0; i < base; i++) phases.push('Base');
     for (let i = 0; i < build; i++) phases.push('Build');
@@ -324,7 +327,11 @@
     const pc = computePaces(profile);
 
     const weekStart0 = T.startOfWeekMonday(profile.startDate || new Date());
-    let totalWeeks = Math.round(T.weeksBetween(weekStart0, profile.raceDate));
+    // Whole weeks from the start Monday THROUGH the race's own week, so race day
+    // always lands inside the plan. (Math.round(weeksBetween) truncated a race
+    // that fell more than half a week past the last Monday — e.g. the default
+    // 84-days-out date on a mid-week start — leaving race day unmarked.)
+    let totalWeeks = Math.ceil((T.daysBetween(weekStart0, profile.raceDate) + 1) / 7);
     totalWeeks = T.clamp(totalWeeks, 4, 40);
 
     const phases = computePhases(totalWeeks, race.taperWeeks);
@@ -398,7 +405,6 @@
       }
 
       const workouts = [];
-      let slot = 0;
       for (let d = 0; d < 7; d++) {
         const date = T.iso(T.addDays(weekStart0, w * 7 + d));
         const s = dayMap[d];
@@ -406,7 +412,6 @@
           workouts.push({ id: w + '-' + d, week: w, phase: phase, date: date, discipline: 'rest', type: 'Rest', title: 'Rest', durationMin: 0, segments: [], distance: null });
           continue;
         }
-        const isLast = w === totalWeeks - 1;
         const type = typeFor(s.disc, s.role, phase, isRecovery, fitness.intensity);
         const dur = T.round5(baseDuration(s.disc, s.role, race.key) * load);
         const built = buildWorkout(s.disc, type, dur, pc, phase);
@@ -416,7 +421,6 @@
           durationMin: dur, distance: built.distance, unit: built.unit,
           segments: built.segments, key: s.role === 'long' || s.role === 'brick',
         });
-        slot++;
       }
 
       // mark race day (replace that day's workout)
