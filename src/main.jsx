@@ -6,126 +6,14 @@ import './styles.css';
 import { useState, useEffect, useMemo, Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as T from '@/lib';
+import { LS, NS } from '@/app/storage.js';
+import { tap } from '@/utils/a11y.js';
+import { effDate, weekRange, catchUpMoves } from '@/lib/schedule.js';
+import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
+import { downloadICS } from '@/lib/ics.js';
 
 const D = T.DISCIPLINES;
 
-/* ---------------- persistence ---------------- */
-const NS = 'try.';
-// One-time migration: copy any legacy "triflow.*" data to "try.*" so saved plans
-// survive the rename to Try. Only copies when the new key is absent.
-['plan', 'log', 'moves'].forEach(k => {
-  try { const old = localStorage.getItem('triflow.' + k); if (old != null && localStorage.getItem(NS + k) == null) localStorage.setItem(NS + k, old); } catch (e) {}
-});
-const LS = {
-  load(k, fb) { try { const v = localStorage.getItem(NS + k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
-  save(k, v) { try { localStorage.setItem(NS + k, JSON.stringify(v)); } catch (e) {} },
-  clear() { ['plan', 'log', 'moves'].forEach(k => localStorage.removeItem(NS + k)); },
-};
-
-/* a11y: make a non-<button> element keyboard-operable — focusable and driven by
-   Enter/Space, with a button role. Spread onto clickable <div>s: {...tap(fn)}. */
-function tap(handler) {
-  return {
-    role: 'button', tabIndex: 0, onClick: handler,
-    onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(e); } },
-  };
-}
-
-/* ---------------- scheduling helpers ----------------
-   Reschedules are stored as an overlay map { workoutId: newDateISO } so the
-   generated plan stays immutable. effDate() resolves a workout's shown date. */
-function effDate(w, moves) { return (moves && moves[w.id]) || w.date; }
-function weekRange(dateISO) {
-  const mon = T.startOfWeekMonday(dateISO);
-  return Array.from({ length: 7 }, (_, i) => T.iso(T.addDays(mon, i)));
-}
-
-// Auto-spread this week's missed (past, incomplete) sessions onto the emptiest
-// upcoming days in the same week — the "adaptive catch-up" action.
-function catchUpMoves(plan, log, moves) {
-  const todayISO = T.iso(new Date());
-  const week = weekRange(todayISO);
-  const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
-  const missed = all.filter(w => { const d = effDate(w, moves); return d < todayISO && d >= week[0] && !log[w.id]; });
-  const next = Object.assign({}, moves);
-  const occ = mv => { const m = {}; all.forEach(w => { const d = effDate(w, mv); m[d] = (m[d] || 0) + 1; }); return m; };
-  missed.forEach(w => {
-    const o = occ(next);
-    const cands = week.filter(d => d >= todayISO).sort((a, b) => (o[a] || 0) - (o[b] || 0));
-    next[w.id] = cands[0] || week[6];
-  });
-  return { next: next, count: missed.length };
-}
-
-// ---- adaptive pace tuning from post-session feedback ----
-// Reviews how recent sessions (since the last baseline change) have felt, per
-// discipline, and suggests a gentle pace nudge when a discipline trends one way.
-// Workout types that genuinely tax the target paces. Easy / Long / Technique /
-// Endurance (and recovery-week sessions, which downgrade to those) are *meant* to
-// feel easy, so they don't signal that targets are too soft.
-const INTENSITY_TYPES = { 'Tempo': 1, 'Threshold': 1, 'VO2 Intervals': 1, 'Sweet Spot': 1, 'CSS Intervals': 1, 'Race Pace': 1 };
-function paceSuggestions(plan, log) {
-  const since = plan.updatedAt || plan.createdAt || '0';
-  const all = plan.weeks.flatMap(w => w.workouts).filter(w => INTENSITY_TYPES[w.type] && !w.test && !w.race);
-  const byDisc = { run: [], bike: [], swim: [] };
-  all.forEach(w => {
-    const l = log[w.id];
-    if (l && l.feel && l.at && l.at > since && byDisc[w.discipline]) byDisc[w.discipline].push(l.feel);
-  });
-  const out = [];
-  ['run', 'bike', 'swim'].forEach(d => {
-    if (d === 'bike' && !plan.profile.ftp) return;   // bike runs on RPE without an FTP — nothing to nudge
-    const fs = byDisc[d];
-    if (fs.length < 3) return;
-    const easy = fs.filter(x => x === 'easy').length;
-    const hard = fs.filter(x => x === 'hard').length;
-    if (easy - hard >= 2) out.push({ discipline: d, direction: 'faster' });
-    else if (hard - easy >= 2) out.push({ discipline: d, direction: 'easier' });
-  });
-  return out;
-}
-
-// Translate suggestions into adjusted baseline fields (~2% nudge each).
-function tuneFields(profile, suggestions) {
-  const lvl = T.FITNESS[profile.fitness] || T.FITNESS.intermediate;
-  const fields = {};
-  suggestions.forEach(s => {
-    const t = s.direction === 'faster' ? 0.98 : 1.02;   // run/swim: less time = faster
-    const w = s.direction === 'faster' ? 1.02 : 0.98;   // bike: more watts = faster
-    if (s.discipline === 'run') fields.fivekSec = Math.round((profile.fivekSec || lvl.est5k) * t);
-    if (s.discipline === 'swim') fields.css100Sec = Math.round((profile.css100Sec || lvl.estCss) * t);
-    if (s.discipline === 'bike' && profile.ftp) fields.ftp = Math.round(profile.ftp * w);
-  });
-  return fields;
-}
-
-// ---- calendar (.ics) export ----
-function icsEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n'); }
-function buildICS(plan, moves) {
-  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Try//Triathlon//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
-  const stamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-  plan.weeks.forEach(week => week.workouts.forEach(w => {
-    if (w.discipline === 'rest') return;
-    const d = effDate(w, moves);
-    const start = d.replace(/-/g, '');
-    const end = T.iso(T.addDays(d, 1)).replace(/-/g, '');
-    const sum = w.title + (w.durationMin ? ' (' + T.fmtDuration(w.durationMin) + ')' : '');
-    const desc = w.segments.map(s => s.label + (s.detail ? ' — ' + s.detail : '') + (s.min ? ' [' + s.min + ' min]' : '')).join('\n');
-    L.push('BEGIN:VEVENT', 'UID:try-' + w.id + '@try.app', 'DTSTAMP:' + stamp,
-      'DTSTART;VALUE=DATE:' + start, 'DTEND;VALUE=DATE:' + end,
-      'SUMMARY:' + icsEsc(sum), 'DESCRIPTION:' + icsEsc(desc), 'END:VEVENT');
-  }));
-  L.push('END:VCALENDAR');
-  return L.join('\r\n');
-}
-function downloadICS(plan, moves) {
-  const blob = new Blob([buildICS(plan, moves)], { type: 'text/calendar' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'try-' + plan.race + '-plan.ics';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 
 /* ---------------- minimalist line icons ----------------
    Monoline (stroke = currentColor) so they inherit text colour. */
