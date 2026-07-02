@@ -9,7 +9,7 @@
 import {
   getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan,
   putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
-  getWellness, putWellness,
+  getWellness, putWellness, syncWellness,
   toClientState, logToApi,
 } from '@/lib/api.js';
 
@@ -61,5 +61,15 @@ export function makeSync(getToken) {
       return res.ok && Array.isArray(res.body) ? res.body : null;
     },
     saveWellness: rec => fire(putWellness(getToken, rec), 'wellness ' + (rec && rec.date)),
+
+    // Prefer the intervals.icu proxy: POST /api/wellness/sync pulls the athlete's
+    // last ~60 days server-side and returns the refreshed list. 404 (no integration)
+    // falls back to the plain GET, so manual-entry users see no difference.
+    refreshWellness: async () => {
+      const res = await syncWellness(getToken);
+      if (res.ok && Array.isArray(res.body)) return res.body;
+      const fallback = await getWellness(getToken);
+      return fallback.ok && Array.isArray(fallback.body) ? fallback.body : null;
+    },
   };
 }

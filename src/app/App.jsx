@@ -61,22 +61,31 @@ export function App({ storage, getToken }) {
       } // result === null → offline/error: keep the cache already loaded
       setHydrated(true);
     });
-    // Wellness syncs separately (keyed by date, independent of the plan). Merge
-    // server + local (server wins per date), migrate any local-only days up.
-    sync.loadWellness().then(serverRecs => {
+    // Wellness syncs separately (keyed by date, independent of the plan). The
+    // refresh pulls from intervals.icu first when connected (plain GET otherwise),
+    // then we merge server + local (server wins per date) and migrate any
+    // local-only days up.
+    sync.refreshWellness().then(serverRecs => {
       if (cancelled || !serverRecs) return; // null → offline/error, keep local cache
-      const local = storage.loadWellness();
-      const serverDates = new Set(serverRecs.map(r => r.date));
-      local.forEach(r => { if (!serverDates.has(r.date)) sync.saveWellness(r); });
-      const byDate = {};
-      local.forEach(r => { byDate[r.date] = r; });
-      serverRecs.forEach(r => { byDate[r.date] = r; });
-      const merged = Object.values(byDate).sort((a, b) => (a.date < b.date ? -1 : 1));
-      merged.forEach(r => storage.upsertWellness(r)); // refresh the offline cache
-      setWellness(merged);
+      applyServerWellness(serverRecs);
     });
     return () => { cancelled = true; };
   }, [sync]);
+
+  // Fold a server wellness list into local state + the offline cache (server wins
+  // per date; local-only days are pushed up). Also called when the Settings page
+  // connects intervals.icu, so the readiness card updates without a reload.
+  const applyServerWellness = serverRecs => {
+    const local = storage.loadWellness();
+    const serverDates = new Set(serverRecs.map(r => r.date));
+    local.forEach(r => { if (!serverDates.has(r.date)) sync.saveWellness(r); });
+    const byDate = {};
+    local.forEach(r => { byDate[r.date] = r; });
+    serverRecs.forEach(r => { byDate[r.date] = r; });
+    const merged = Object.values(byDate).sort((a, b) => (a.date < b.date ? -1 : 1));
+    merged.forEach(r => storage.upsertWellness(r)); // refresh the offline cache
+    setWellness(merged);
+  };
 
   if (!hydrated) return (
     <div className="app">
@@ -169,7 +178,8 @@ export function App({ storage, getToken }) {
         onEditPlan={() => setEditPlan(true)}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { storage.clear(); setLog({}); setMoves({}); setPlan(null); } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
-        onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)} />}
+        onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)}
+        onWellnessSynced={applyServerWellness} />}
 
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
 

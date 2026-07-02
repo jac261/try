@@ -104,3 +104,24 @@ describe('request layer', () => {
     expect(JSON.parse(opts.body)).toEqual({ date: '2026-07-02', hrv: 55, sleepH: 7 });
   });
 });
+
+describe('integrations (intervals.icu)', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  const getToken = async () => 'tok';
+
+  it('connect PUTs the credentials and syncWellness POSTs', async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ connected: true, athleteId: 'i1' }) }));
+    const { connectIntervalsIntegration, syncWellness } = await import('./api.js');
+    const r = await connectIntervalsIntegration(getToken, 'i1', 'key');
+    expect(r.ok).toBe(true);
+    let [url, opts] = global.fetch.mock.calls[0];
+    expect(url).toContain('/api/integrations/intervals-icu');
+    expect(opts.method).toBe('PUT');
+    expect(JSON.parse(opts.body)).toEqual({ athleteId: 'i1', apiKey: 'key' });
+
+    await syncWellness(getToken);
+    [url, opts] = global.fetch.mock.calls[1];
+    expect(url).toContain('/api/wellness/sync');
+    expect(opts.method).toBe('POST');
+  });
+});

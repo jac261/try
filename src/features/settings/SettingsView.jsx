@@ -1,10 +1,94 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth, useUser, SignOutButton } from '@clerk/react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
-import { getAuthTest, apiBaseUrl } from '@/lib/api.js';
+import {
+  getAuthTest, apiBaseUrl,
+  getIntervalsIntegration, connectIntervalsIntegration, disconnectIntervalsIntegration, syncWellness,
+} from '@/lib/api.js';
 import { APP_BASE_URL } from '@/config/env.js';
+
+/* Connect the athlete's intervals.icu account. The key goes straight to the
+   backend (write-only there); once connected, readiness fills itself from the
+   watch data instead of manual entry. onWellnessSynced hands the freshly synced
+   records up so the Today readiness card updates without a reload. */
+function IntervalsIcuCard({ onWellnessSynced }) {
+  const { getToken, isLoaded } = useAuth();
+  const [status, setStatus] = useState(null);   // null = loading; {connected, athleteId, lastSyncedAtUtc}
+  const [athleteId, setAthleteId] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [unavailable, setUnavailable] = useState(false);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    let cancelled = false;
+    getIntervalsIntegration(getToken).then(res => {
+      if (cancelled) return;
+      if (res.ok && res.body) setStatus(res.body);
+      else { setStatus({ connected: false }); if (res.status === 404 || res.status === null) setUnavailable(true); }
+    });
+    return () => { cancelled = true; };
+  }, [isLoaded, getToken]);
+
+  async function connect() {
+    setBusy(true); setError(null);
+    const res = await connectIntervalsIntegration(getToken, athleteId.trim(), apiKey.trim());
+    if (res.ok && res.body) {
+      setStatus(res.body); setApiKey('');
+      const synced = await syncWellness(getToken);
+      if (synced.ok && Array.isArray(synced.body)) {
+        onWellnessSynced && onWellnessSynced(synced.body);
+        setStatus(s => ({ ...s, lastSyncedAtUtc: new Date().toISOString() }));
+      }
+    } else {
+      setError(res.message || 'Could not connect to intervals.icu.');
+    }
+    setBusy(false);
+  }
+
+  async function disconnect() {
+    setBusy(true); setError(null);
+    await disconnectIntervalsIntegration(getToken);
+    setStatus({ connected: false });
+    setBusy(false);
+  }
+
+  if (unavailable) return null; // backend predates the integration — hide quietly
+  if (!status) return <div className="authbox"><div className="authmeta">Checking intervals.icu…</div></div>;
+
+  if (status.connected) {
+    return (
+      <div className="authbox">
+        <div className="authrow">
+          <div>
+            <div className="authlabel">intervals.icu</div>
+            <div className="authmeta">Athlete {status.athleteId}{status.lastSyncedAtUtc ? ' · synced ' + T.fmtDate(status.lastSyncedAtUtc.slice(0, 10), { month: 'short', day: 'numeric' }) : ' · not synced yet'}</div>
+          </div>
+          <button className="btn ghost sm" type="button" onClick={disconnect} disabled={busy}>Disconnect</button>
+        </div>
+        <div className="authmeta">Readiness pulls your HRV, sleep, resting HR &amp; Form automatically on each visit.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="authbox">
+      <div className="authlabel">Connect intervals.icu</div>
+      <div className="authmeta">Readiness fills itself from your watch data — no more manual entry. Your API key is stored server-side and never shown again (intervals.icu → Settings → Developer).</div>
+      <label className="field" style={{ marginBottom: 0 }}><span className="lab">Athlete ID</span>
+        <input value={athleteId} placeholder="i123456" onChange={e => setAthleteId(e.target.value)} /></label>
+      <label className="field" style={{ marginBottom: 0 }}><span className="lab">API key</span>
+        <input type="password" value={apiKey} placeholder="API key" onChange={e => setApiKey(e.target.value)} /></label>
+      <button className="btn primary" type="button" onClick={connect} disabled={!isLoaded || busy || !athleteId.trim() || !apiKey.trim()}>
+        {busy ? 'Connecting…' : 'Connect & sync'}
+      </button>
+      {error && <div className="authstatus bad"><div>{error}</div></div>}
+    </div>
+  );
+}
 
 // Account row + a one-tap check that the signed-in JWT reaches the backend.
 function ApiConnectionCard() {
@@ -53,7 +137,7 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm }) {
+export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
@@ -88,6 +172,10 @@ export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitn
         <h2 style={{ marginBottom: 10 }}>Sync & export</h2>
         <button className="btn primary" onClick={onExport}><Icon name="download" size={18} /> Export plan to calendar (.ics)</button>
         <p className="lead" style={{ margin: '10px 2px 0' }}>Downloads every session as all-day events with the full workout in the notes — import into Apple Calendar, Google Calendar or Outlook.</p>
+      </div>
+      <div className="card">
+        <h2 style={{ marginBottom: 10 }}>Connections</h2>
+        <IntervalsIcuCard onWellnessSynced={onWellnessSynced} />
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Account</h2>
