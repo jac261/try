@@ -148,6 +148,24 @@ export function deleteActivityFile(getToken, id) {
   return request('/api/activity-files/' + encodeURIComponent(id), { getToken, method: 'DELETE' });
 }
 
+/* ---------------- wellness / readiness ----------------
+   Daily wellness records keyed by date ("YYYY-MM-DD"), intervals.icu-shaped:
+   { date, hrv, rhr, sleepH, sleepScore, ctl, atl, tsb }. The readiness engine
+   (lib/wellness.js) consumes these the same whether the backend stores manual
+   entries or proxies them from intervals.icu. See docs/WELLNESS_ENDPOINT.md. */
+
+export function getWellness(getToken) {
+  return request('/api/wellness', { getToken });
+}
+
+export function putWellness(getToken, rec) {
+  return request('/api/wellness/' + encodeURIComponent(rec.date), { getToken, method: 'PUT', body: rec });
+}
+
+export function deleteWellness(getToken, date) {
+  return request('/api/wellness/' + encodeURIComponent(date), { getToken, method: 'DELETE' });
+}
+
 /* ---------------- shape mapping (server ⇄ client) ---------------- */
 
 // PlanResponse → the frontend's { plan, log, moves, refToId }. The server returns

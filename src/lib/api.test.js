@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { toClientState, logToApi, getMe, getCurrentPlan, createPlan } from './api.js';
+import { toClientState, logToApi, getMe, getCurrentPlan, createPlan, getWellness, putWellness } from './api.js';
 
 describe('toClientState', () => {
   const resp = {
@@ -85,5 +85,22 @@ describe('request layer', () => {
     const r = await getMe(null);
     expect(r.ok).toBe(false);
     expect(r.message).toMatch(/not ready/i);
+  });
+
+  it('getWellness reads the wellness list', async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify([{ date: '2026-07-01', hrv: 60 }]) }));
+    const r = await getWellness(getToken);
+    expect(r.ok).toBe(true);
+    expect(r.body[0].date).toBe('2026-07-01');
+    expect(global.fetch.mock.calls[0][0]).toContain('/api/wellness');
+  });
+
+  it('putWellness upserts a record at its date', async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, text: async () => '{}' }));
+    await putWellness(getToken, { date: '2026-07-02', hrv: 55, sleepH: 7 });
+    const [url, opts] = global.fetch.mock.calls[0];
+    expect(url).toContain('/api/wellness/2026-07-02');
+    expect(opts.method).toBe('PUT');
+    expect(JSON.parse(opts.body)).toEqual({ date: '2026-07-02', hrv: 55, sleepH: 7 });
   });
 });

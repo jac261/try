@@ -9,6 +9,7 @@
 import {
   getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan,
   putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
+  getWellness, putWellness,
   toClientState, logToApi,
 } from '@/lib/api.js';
 
@@ -52,5 +53,13 @@ export function makeSync(getToken) {
     removeLog: workoutId => fire(deleteWorkoutLog(getToken, workoutId), 'unlog ' + workoutId),
     saveMove: (workoutId, date) => fire(putWorkoutMove(getToken, workoutId, { movedDate: date, reason: null }), 'move ' + workoutId),
     removeMove: workoutId => fire(deleteWorkoutMove(getToken, workoutId), 'unmove ' + workoutId),
+
+    // Wellness records are keyed by date, not workout — no GUID mapping needed.
+    // Returns the server's records array, or null on offline/error (keep the cache).
+    loadWellness: async () => {
+      const res = await getWellness(getToken);
+      return res.ok && Array.isArray(res.body) ? res.body : null;
+    },
+    saveWellness: rec => fire(putWellness(getToken, rec), 'wellness ' + (rec && rec.date)),
   };
 }

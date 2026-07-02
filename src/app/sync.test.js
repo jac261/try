@@ -8,6 +8,8 @@ vi.mock('@/lib/api.js', () => ({
   deleteWorkoutLog: vi.fn(),
   putWorkoutMove: vi.fn(),
   deleteWorkoutMove: vi.fn(),
+  getWellness: vi.fn(),
+  putWellness: vi.fn(),
   toClientState: vi.fn(),
   logToApi: e => ({ completed: !!(e && e.done), completedAtUtc: e && e.at, feel: (e && e.feel) || null, notes: null }),
 }));
@@ -74,5 +76,22 @@ describe('makeSync push helpers (keyed by server workout GUID)', () => {
     await s.removeMove('guid-0-0');
     expect(api.deleteWorkoutLog).toHaveBeenCalledWith(getToken, 'guid-0-0');
     expect(api.deleteWorkoutMove).toHaveBeenCalledWith(getToken, 'guid-0-0');
+  });
+});
+
+describe('makeSync wellness', () => {
+  it('loadWellness returns the server records array', async () => {
+    api.getWellness.mockResolvedValue({ ok: true, body: [{ date: '2026-07-01', hrv: 60 }] });
+    const recs = await makeSync(getToken).loadWellness();
+    expect(recs).toEqual([{ date: '2026-07-01', hrv: 60 }]);
+  });
+  it('loadWellness returns null on an offline/error response (keep the cache)', async () => {
+    api.getWellness.mockResolvedValue({ ok: false, status: 500 });
+    expect(await makeSync(getToken).loadWellness()).toBe(null);
+  });
+  it('saveWellness upserts a record', async () => {
+    api.putWellness.mockResolvedValue({ ok: true });
+    await makeSync(getToken).saveWellness({ date: '2026-07-02', hrv: 55 });
+    expect(api.putWellness).toHaveBeenCalledWith(getToken, { date: '2026-07-02', hrv: 55 });
   });
 });
