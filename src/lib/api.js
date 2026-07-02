@@ -150,15 +150,19 @@ export function deleteActivityFile(getToken, id) {
 
 /* ---------------- shape mapping (server ⇄ client) ---------------- */
 
-// PlanResponse → the frontend's { plan, log, moves }. The server returns the full
-// workout graph (segments, flags) plus each overlay, keyed by clientWorkoutRef,
-// so we rehydrate our exact in-memory shape without regenerating from the profile.
+// PlanResponse → the frontend's { plan, log, moves, refToId }. The server returns
+// the full workout graph (segments, flags) plus each overlay, keyed by
+// clientWorkoutRef, so we rehydrate our exact in-memory shape without regenerating
+// from the profile. `refToId` maps our client ref ("0-0") → the server workout
+// GUID, which the log/move endpoints (api/workouts/{guid}/…) require.
 export function toClientState(resp) {
   if (!resp) return null;
   const log = {};
   const moves = {};
+  const refToId = {};
 
   const mapWorkout = (wo) => {
+    refToId[wo.clientWorkoutRef] = wo.id;
     if (wo.log) log[wo.clientWorkoutRef] = { done: !!wo.log.completed, at: wo.log.completedAtUtc || null, feel: wo.log.feel || undefined };
     if (wo.move) moves[wo.clientWorkoutRef] = wo.move.movedDate;
     return {
@@ -190,7 +194,7 @@ export function toClientState(resp) {
   (resp.logs || []).forEach(l => { if (!log[l.clientWorkoutRef]) log[l.clientWorkoutRef] = { done: !!l.completed, at: l.completedAtUtc || null, feel: l.feel || undefined }; });
   (resp.moves || []).forEach(m => { if (!moves[m.clientWorkoutRef]) moves[m.clientWorkoutRef] = m.movedDate; });
 
-  return { plan, log, moves };
+  return { plan, log, moves, refToId };
 }
 
 // Our log entry { done, at, feel } → the API's log body.
