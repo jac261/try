@@ -1,15 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useUser } from '@clerk/react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { DaySelector } from '@/components/DaySelector.jsx';
 
+// Best display name from the signed-in Clerk profile, or '' if none is set.
+function clerkDisplayName(user) {
+  if (!user) return '';
+  return (user.firstName || user.fullName || user.username || '').trim();
+}
+
 export function Onboarding({ onCreate }) {
+  const { user } = useUser();
   const [step, setStep] = useState(0);
-  const [f, setF] = useState({
-    name: '', raceType: 'olympic', fitness: 'intermediate', trainingDays: [0, 1, 3, 5, 6], longDay: 5,
+  // Pre-fill the name from the Clerk login (the app only renders this when signed in).
+  const [f, setF] = useState(() => ({
+    name: clerkDisplayName(user), raceType: 'olympic', fitness: 'intermediate', trainingDays: [0, 1, 3, 5, 6], longDay: 5,
     raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '', css100: '', ftp: '',
-  });
+  }));
+  // If Clerk loads the profile a beat later, fill the name once — never over typed input.
+  useEffect(() => {
+    const name = clerkDisplayName(user);
+    if (name) setF(s => (s.name ? s : { ...s, name }));
+  }, [user]);
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
 
   function finish() {

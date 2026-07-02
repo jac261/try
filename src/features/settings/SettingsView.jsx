@@ -1,7 +1,57 @@
 import { useState } from 'react';
+import { useAuth, useUser, SignOutButton } from '@clerk/react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
+import { getAuthTest, apiBaseUrl } from '@/lib/api.js';
+import { APP_BASE_URL } from '@/config/env.js';
+
+// Account row + a one-tap check that the signed-in JWT reaches the backend.
+function ApiConnectionCard() {
+  const { getToken, isLoaded } = useAuth();
+  const { user } = useUser();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  async function testApiConnection() {
+    setBusy(true);
+    setResult(null);
+    const response = await getAuthTest(getToken);
+    if (response.ok) {
+      setResult({ ok: true, message: 'API connection authenticated.', subject: (response.body && response.body.subject) || '' });
+    } else {
+      const prefix = response.status ? response.status + ': ' : '';
+      setResult({ ok: false, message: prefix + response.message, subject: '' });
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="authbox">
+      <div className="authrow">
+        <div>
+          <div className="authlabel">Account &amp; API</div>
+          <div className="authmeta">{apiBaseUrl}</div>
+        </div>
+        <SignOutButton redirectUrl={APP_BASE_URL}>
+          <button className="btn ghost sm" type="button">Sign out</button>
+        </SignOutButton>
+      </div>
+      <div className="authrow">
+        <div className="authmeta">{user?.primaryEmailAddress?.emailAddress || user?.id || 'Signed in'}</div>
+        <button className="btn ghost sm" type="button" onClick={testApiConnection} disabled={!isLoaded || busy}>
+          {busy ? 'Testing…' : 'Test API connection'}
+        </button>
+      </div>
+      {result && (
+        <div className={'authstatus ' + (result.ok ? 'ok' : 'bad')}>
+          <div>{result.message}</div>
+          {result.subject && <code>{result.subject}</code>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm }) {
   const [wc, setWc] = useState(0);
@@ -38,6 +88,10 @@ export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitn
         <h2 style={{ marginBottom: 10 }}>Sync & export</h2>
         <button className="btn primary" onClick={onExport}><Icon name="download" size={18} /> Export plan to calendar (.ics)</button>
         <p className="lead" style={{ margin: '10px 2px 0' }}>Downloads every session as all-day events with the full workout in the notes — import into Apple Calendar, Google Calendar or Outlook.</p>
+      </div>
+      <div className="card">
+        <h2 style={{ marginBottom: 10 }}>Account</h2>
+        <ApiConnectionCard />
       </div>
       <div className="card">
         <button className="btn ghost" onClick={onRegenerate}>↺ Start over / new plan</button>
