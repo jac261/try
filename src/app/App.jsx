@@ -36,7 +36,7 @@ export function App({ storage, getToken }) {
   const [wurm, setWurm] = useState(false);
   const [wellness, setWellness] = useState(() => storage.loadWellness());
   const [editWellness, setEditWellness] = useState(false);
-  const saveWellness = rec => { setWellness(storage.upsertWellness(rec)); setEditWellness(false); };
+  const saveWellness = rec => { setWellness(storage.upsertWellness(rec)); sync.saveWellness(rec); setEditWellness(false); };
   const [adjust, setAdjust] = useState(() => storage.load('adjust', {}));
 
   useEffect(() => { if (plan) storage.save('plan', plan); }, [plan, storage]);
@@ -60,6 +60,20 @@ export function App({ storage, getToken }) {
         setPlan(result.plan); setLog(result.log); setMoves(result.moves); setRefToId(result.refToId || {});
       } // result === null → offline/error: keep the cache already loaded
       setHydrated(true);
+    });
+    // Wellness syncs separately (keyed by date, independent of the plan). Merge
+    // server + local (server wins per date), migrate any local-only days up.
+    sync.loadWellness().then(serverRecs => {
+      if (cancelled || !serverRecs) return; // null → offline/error, keep local cache
+      const local = storage.loadWellness();
+      const serverDates = new Set(serverRecs.map(r => r.date));
+      local.forEach(r => { if (!serverDates.has(r.date)) sync.saveWellness(r); });
+      const byDate = {};
+      local.forEach(r => { byDate[r.date] = r; });
+      serverRecs.forEach(r => { byDate[r.date] = r; });
+      const merged = Object.values(byDate).sort((a, b) => (a.date < b.date ? -1 : 1));
+      merged.forEach(r => storage.upsertWellness(r)); // refresh the offline cache
+      setWellness(merged);
     });
     return () => { cancelled = true; };
   }, [sync]);
