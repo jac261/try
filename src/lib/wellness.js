@@ -8,7 +8,6 @@
  * No data ships in the repo — records live only in the browser (try.wellness),
  * entered manually today or auto-synced once there's a backend proxy.
  */
-window.TF = window.TF || {};
 const KEY = 'try.wellness';
 
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; } };

@@ -1,9 +1,14 @@
 # Try — target architecture (proposed)
 
 _A bulletproof-react–inspired reorganisation, adapted for Try's lean, no-heavy-deps
-reality. **This is a plan to review — no code has moved yet.** It maps every current
-symbol to a new home and sequences the move so the app keeps working (and stays
-deployed) at every step._
+reality. It maps every current symbol to a new home and sequences the move so the
+app keeps working (and stays deployed) at every step._
+
+> **Status: implemented** on branch `refactor/lib-extraction` (Steps 1–7). The
+> 1,213-line `main.jsx` is gone; the tree below is live. Enforcement uses a
+> lightweight `scripts/check-boundaries.mjs` (`npm run lint:boundaries`) plus a
+> Vitest slice over `lib/date`, `lib/units`, `lib/plan`, `lib/wellness`
+> (`npm test`) — see the note under "What we adopt vs skip".
 
 ## Why
 
@@ -124,9 +129,11 @@ utils / lib  →  components  →  features  →  app
   (Shared need → promote it to `components/` or `lib/`.)
 - `app/` wires features together and owns cross-cutting state.
 
-Enforce with an ESLint `no-restricted-imports` / `import/no-restricted-paths` rule so
-the boundary can't erode, plus a `@/` path alias in `vite.config.js` and `jsconfig.json`
-so imports read `@/lib/date` instead of `../../../lib/date`.
+Enforced by `scripts/check-boundaries.mjs` (run via `npm run lint:boundaries`), a
+zero-dependency import-graph checker that fails on any illegal upward or
+feature→feature import. A `@/` path alias in `vite.config.js` + `jsconfig.json` lets
+imports read `@/lib/date` instead of `../../../lib/date`. (The checker can be swapped
+for an ESLint `import/no-restricted-paths` rule later if we want editor integration.)
 
 ## What we adopt vs skip from bulletproof-react
 
@@ -157,8 +164,10 @@ working shim (re-exporting from new locations) until the very end.
    verifying each tab in the preview as it lands.
 6. **App shell.** `App` → `app/App.jsx`, `ErrorBoundary` → `app/ErrorBoundary.jsx`,
    entry → `app/main.jsx`; update `index.html`'s script src. Retire the old `main.jsx`.
-7. **Lint boundaries + a first test slice.** Turn on the import-boundary rule; add unit
-   tests for `lib/plan`, `lib/date`, `lib/wellness`.
+7. **Boundary check + a first test slice.** `scripts/check-boundaries.mjs` enforces the
+   dependency rule; a Vitest slice covers `lib/date`, `lib/units`, `lib/plan`,
+   `lib/wellness` (incl. the timezone and race-day regressions). `npm run check`
+   runs boundaries → tests → build.
 
 ## Invariants — do NOT break during the reorg
 

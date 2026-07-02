@@ -11,6 +11,11 @@ export default defineConfig({
   resolve: {
     alias: { '@': resolve(import.meta.dirname, 'src') },
   },
+  // Vitest: unit tests for the pure lib/ modules run in a plain Node env.
+  test: {
+    include: ['src/**/*.test.{js,jsx}'],
+    environment: 'node',
+  },
   build: {
     outDir: 'dist',
     // Multi-page: the app + the visual style guide. The style guide imports the
