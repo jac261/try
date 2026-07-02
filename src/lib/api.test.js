@@ -9,7 +9,7 @@ describe('toClientState', () => {
       index: 0, phase: 'Base', isRecovery: false, start: '2026-07-06', totalMin: 60,
       workouts: [
         {
-          clientWorkoutRef: '0-0', week: 0, phase: 'Base', date: '2026-07-06',
+          id: 'guid-0-0', clientWorkoutRef: '0-0', week: 0, phase: 'Base', date: '2026-07-06',
           discipline: 'run', role: 'quality', type: 'Tempo', title: 'Tempo Run',
           durationMin: 50, distance: 8.5, unit: 'km', key: false, race: false, test: false, second: false,
           segments: [{ label: 'Warm-up', min: 12, detail: 'easy' }],
@@ -17,7 +17,7 @@ describe('toClientState', () => {
           move: { movedDate: '2026-07-07' },
         },
         {
-          clientWorkoutRef: '0-1', week: 0, phase: 'Base', date: '2026-07-07',
+          id: 'guid-0-1', clientWorkoutRef: '0-1', week: 0, phase: 'Base', date: '2026-07-07',
           discipline: 'rest', type: 'Rest', title: 'Rest', durationMin: 0,
           key: false, race: false, test: false, second: false, segments: [],
         },
@@ -26,8 +26,8 @@ describe('toClientState', () => {
     logs: [], moves: [],
   };
 
-  it('rehydrates plan/log/moves from a PlanResponse', () => {
-    const { plan, log, moves } = toClientState(resp);
+  it('rehydrates plan/log/moves/refToId from a PlanResponse', () => {
+    const { plan, log, moves, refToId } = toClientState(resp);
     expect(plan.race).toBe('olympic');
     expect(plan.totalWeeks).toBe(2);
     expect(plan.weeks[0].workouts[0].id).toBe('0-0');
@@ -35,6 +35,8 @@ describe('toClientState', () => {
     expect(log['0-0']).toEqual({ done: true, at: '2026-07-06T10:00:00Z', feel: 'hard' });
     expect(moves['0-0']).toBe('2026-07-07');
     expect(log['0-1']).toBeUndefined();
+    // client ref → server workout GUID (needed by the log/move endpoints)
+    expect(refToId).toEqual({ '0-0': 'guid-0-0', '0-1': 'guid-0-1' });
   });
 
   it('returns null for a null response', () => {

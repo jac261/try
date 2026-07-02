@@ -25,6 +25,9 @@ export function App({ storage, getToken }) {
   const sync = useMemo(() => makeSync(getToken), [getToken]);
   const [hydrated, setHydrated] = useState(false);
   const didHydrate = useRef(false);
+  // client workout ref ("0-0") → server workout GUID; the log/move endpoints key on
+  // the GUID. Populated from every plan response (hydrate / create / replace).
+  const [refToId, setRefToId] = useState({});
   const [view, setView] = useState('today');
   const [detail, setDetail] = useState(null);
   const [editFitness, setEditFitness] = useState(false);
@@ -52,9 +55,9 @@ export function App({ storage, getToken }) {
       if (result === 'none') {
         // Signed in but no server plan: migrate a pre-backend local plan up, else
         // fall through to onboarding.
-        if (plan) sync.savePlan(plan); else setPlan(null);
+        if (plan) sync.savePlan(plan).then(map => { if (map) setRefToId(map); }); else setPlan(null);
       } else if (result) {
-        setPlan(result.plan); setLog(result.log); setMoves(result.moves);
+        setPlan(result.plan); setLog(result.log); setMoves(result.moves); setRefToId(result.refToId || {});
       } // result === null → offline/error: keep the cache already loaded
       setHydrated(true);
     });
@@ -67,20 +70,23 @@ export function App({ storage, getToken }) {
       <div className="card"><p className="lead">Loading your plan…</p></div>
     </div>
   );
-  if (!plan) return <Onboarding onCreate={p => { const np = T.generatePlan(p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np); }} />;
+  if (!plan) return <Onboarding onCreate={p => { const np = T.generatePlan(p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np).then(map => { if (map) setRefToId(map); }); }} />;
   if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
 
+  // Resolve our client ref → server workout GUID for the log/move endpoints; skip
+  // the push (local-only) if the plan hasn't synced a GUID for it yet.
+  const gid = id => refToId[id];
   const toggle = id => {
-    if (log[id]) { setLog(l => { const n = { ...l }; delete n[id]; return n; }); sync.removeLog(id); }
-    else { const entry = { done: true, at: new Date().toISOString() }; setLog(l => ({ ...l, [id]: entry })); sync.saveLog(id, entry); }
+    if (log[id]) { setLog(l => { const n = { ...l }; delete n[id]; return n; }); if (gid(id)) sync.removeLog(gid(id)); }
+    else { const entry = { done: true, at: new Date().toISOString() }; setLog(l => ({ ...l, [id]: entry })); if (gid(id)) sync.saveLog(gid(id), entry); }
   };
   const moveWorkout = (id, date) => {
     setMoves(m => { const n = { ...m }; if (date === null) delete n[id]; else n[id] = date; return n; });
-    if (date === null) sync.removeMove(id); else sync.saveMove(id, date);
+    if (gid(id)) { if (date === null) sync.removeMove(gid(id)); else sync.saveMove(gid(id), date); }
   };
   const catchUp = () => {
     const next = catchUpMoves(plan, log, moves).next;
-    Object.keys(next).forEach(id => { if (next[id] !== moves[id]) sync.saveMove(id, next[id]); });
+    Object.keys(next).forEach(id => { if (next[id] !== moves[id] && gid(id)) sync.saveMove(gid(id), next[id]); });
     setMoves(next);
   };
   // Re-target the plan from updated fitness. Same level/days/race → identical
@@ -93,14 +99,14 @@ export function App({ storage, getToken }) {
     np.createdAt = plan.createdAt;
     np.updatedAt = new Date().toISOString();
     setPlan(np);
-    sync.replacePlan(np);
+    sync.replacePlan(np).then(map => { if (map) setRefToId(map); });
   };
   const updateFitness = fields => { retarget(fields); setEditFitness(false); };
   const applyTune = () => { const s = paceSuggestions(plan, log); if (s.length) retarget(tuneFields(plan.profile, s)); };
   const setFeel = (id, feel) => {
     const entry = Object.assign({}, log[id], { done: true, at: (log[id] && log[id].at) || new Date().toISOString(), feel: feel });
     setLog(l => ({ ...l, [id]: entry }));
-    sync.saveLog(id, entry);
+    if (gid(id)) sync.saveLog(gid(id), entry);
   };
   // Readiness-driven adjustments overlay: eased session ids → easy aerobic version.
   const easedOf = w => (w && adjust[w.id] ? T.easeWorkout(w, plan) : w);
@@ -122,7 +128,7 @@ export function App({ storage, getToken }) {
     setEditPlan(false);
     // PUT replaces the plan graph; the server prunes logs/moves for workouts that
     // no longer exist, mirroring the local prune above.
-    sync.replacePlan(np);
+    sync.replacePlan(np).then(map => { if (map) setRefToId(map); });
   };
   const race = T.RACES[plan.race];
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
