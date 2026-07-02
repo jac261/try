@@ -21,7 +21,7 @@ export function GateShell({ title, message, children }) {
 
 // Gates the app behind a Clerk session and hands App a per-user storage instance.
 export function AuthGate() {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
   const { user } = useUser();
   const storage = useMemo(() => (user ? storageForUser(user.id) : null), [user?.id]);
 
@@ -43,5 +43,5 @@ export function AuthGate() {
     );
   }
   // key={user.id} → App remounts (fresh per-user state) when the account changes.
-  return <App key={user.id} storage={storage} />;
+  return <App key={user.id} storage={storage} getToken={getToken} />;
 }
