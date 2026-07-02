@@ -9,6 +9,7 @@ vi.mock('@/lib/api.js', () => ({
   putWorkoutMove: vi.fn(),
   deleteWorkoutMove: vi.fn(),
   getWellness: vi.fn(),
+  syncWellness: vi.fn(),
   putWellness: vi.fn(),
   toClientState: vi.fn(),
   logToApi: e => ({ completed: !!(e && e.done), completedAtUtc: e && e.at, feel: (e && e.feel) || null, notes: null }),
@@ -93,5 +94,25 @@ describe('makeSync wellness', () => {
     api.putWellness.mockResolvedValue({ ok: true });
     await makeSync(getToken).saveWellness({ date: '2026-07-02', hrv: 55 });
     expect(api.putWellness).toHaveBeenCalledWith(getToken, { date: '2026-07-02', hrv: 55 });
+  });
+});
+
+describe('makeSync.refreshWellness', () => {
+  it('returns the proxy-synced list when the integration is connected', async () => {
+    api.syncWellness.mockResolvedValue({ ok: true, body: [{ date: '2026-07-01', hrv: 60 }] });
+    const recs = await makeSync(getToken).refreshWellness();
+    expect(recs).toEqual([{ date: '2026-07-01', hrv: 60 }]);
+    expect(api.getWellness).not.toHaveBeenCalled();
+  });
+  it('falls back to the plain GET when sync 404s (not connected)', async () => {
+    api.syncWellness.mockResolvedValue({ ok: false, status: 404 });
+    api.getWellness.mockResolvedValue({ ok: true, body: [{ date: '2026-07-02', hrv: 55 }] });
+    const recs = await makeSync(getToken).refreshWellness();
+    expect(recs).toEqual([{ date: '2026-07-02', hrv: 55 }]);
+  });
+  it('returns null when both are unreachable (keep the cache)', async () => {
+    api.syncWellness.mockResolvedValue({ ok: false, status: null });
+    api.getWellness.mockResolvedValue({ ok: false, status: null });
+    expect(await makeSync(getToken).refreshWellness()).toBe(null);
   });
 });

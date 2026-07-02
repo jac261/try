@@ -166,6 +166,29 @@ export function deleteWellness(getToken, date) {
   return request('/api/wellness/' + encodeURIComponent(date), { getToken, method: 'DELETE' });
 }
 
+// Pull the last ~60 days from intervals.icu into the server's wellness store and
+// return the refreshed list (same shape as getWellness). 404 → not connected.
+export function syncWellness(getToken) {
+  return request('/api/wellness/sync', { getToken, method: 'POST' });
+}
+
+/* ---------------- integrations (intervals.icu) ----------------
+   The server holds the athlete's intervals.icu credentials (the public client
+   can't) and proxies the wellness feed. The key is write-only — status responses
+   only carry { connected, athleteId, lastSyncedAtUtc }. */
+
+export function getIntervalsIntegration(getToken) {
+  return request('/api/integrations/intervals-icu', { getToken });
+}
+
+export function connectIntervalsIntegration(getToken, athleteId, apiKey) {
+  return request('/api/integrations/intervals-icu', { getToken, method: 'PUT', body: { athleteId, apiKey } });
+}
+
+export function disconnectIntervalsIntegration(getToken) {
+  return request('/api/integrations/intervals-icu', { getToken, method: 'DELETE' });
+}
+
 /* ---------------- shape mapping (server ⇄ client) ---------------- */
 
 // PlanResponse → the frontend's { plan, log, moves, refToId }. The server returns
