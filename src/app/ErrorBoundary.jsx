@@ -1,5 +1,5 @@
 import { Component } from 'react';
-import { LS, NS } from '@/app/storage.js';
+import { clearAll } from '@/app/storage.js';
 import { Icon } from '@/components/Icon.jsx';
 
 export class ErrorBoundary extends Component {
@@ -7,7 +7,7 @@ export class ErrorBoundary extends Component {
   static getDerivedStateFromError(err) { return { err: err }; }
   componentDidCatch(err) { try { console.error('Try crashed:', err); } catch (e) {} }
   reset() {
-    try { LS.clear(); localStorage.removeItem(NS + 'adjust'); } catch (e) {}
+    try { clearAll(); } catch (e) {}
     // Clear the error and bump the key so App remounts and re-reads (now-empty)
     // storage. reload() gives a fully clean slate when available; the remount is
     // the fallback for environments where reload is a no-op.

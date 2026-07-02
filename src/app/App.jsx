@@ -3,7 +3,6 @@ import * as T from '@/lib';
 import { effDate, catchUpMoves } from '@/lib/schedule.js';
 import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
 import { downloadICS } from '@/lib/ics.js';
-import { LS } from '@/app/storage.js';
 import { Icon } from '@/components/Icon.jsx';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
@@ -18,25 +17,25 @@ import { PlanView } from '@/features/plan/PlanView.jsx';
 import { ProgressView } from '@/features/progress/ProgressView.jsx';
 import { WurmReveal } from '@/features/easter-egg/WurmReveal.jsx';
 
-export function App() {
-  const [plan, setPlan] = useState(() => LS.load('plan', null));
-  const [log, setLog] = useState(() => LS.load('log', {}));
-  const [moves, setMoves] = useState(() => LS.load('moves', {}));
+export function App({ storage }) {
+  const [plan, setPlan] = useState(() => storage.load('plan', null));
+  const [log, setLog] = useState(() => storage.load('log', {}));
+  const [moves, setMoves] = useState(() => storage.load('moves', {}));
   const [view, setView] = useState('today');
   const [detail, setDetail] = useState(null);
   const [editFitness, setEditFitness] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
   const [building, setBuilding] = useState(false);
   const [wurm, setWurm] = useState(false);
-  const [wellness, setWellness] = useState(() => T.wellness.load());
+  const [wellness, setWellness] = useState(() => storage.loadWellness());
   const [editWellness, setEditWellness] = useState(false);
-  const saveWellness = rec => { setWellness(T.wellness.upsert(rec)); setEditWellness(false); };
-  const [adjust, setAdjust] = useState(() => LS.load('adjust', {}));
+  const saveWellness = rec => { setWellness(storage.upsertWellness(rec)); setEditWellness(false); };
+  const [adjust, setAdjust] = useState(() => storage.load('adjust', {}));
 
-  useEffect(() => { if (plan) LS.save('plan', plan); }, [plan]);
-  useEffect(() => { LS.save('log', log); }, [log]);
-  useEffect(() => { LS.save('moves', moves); }, [moves]);
-  useEffect(() => { LS.save('adjust', adjust); }, [adjust]);
+  useEffect(() => { if (plan) storage.save('plan', plan); }, [plan, storage]);
+  useEffect(() => { storage.save('log', log); }, [log, storage]);
+  useEffect(() => { storage.save('moves', moves); }, [moves, storage]);
+  useEffect(() => { storage.save('adjust', adjust); }, [adjust, storage]);
 
   if (!plan) return <Onboarding onCreate={p => { setPlan(T.generatePlan(p)); setView('today'); setBuilding(true); }} />;
   if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
@@ -100,7 +99,7 @@ export function App() {
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
-        onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { LS.clear(); setLog({}); setMoves({}); setPlan(null); } }}
+        onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { storage.clear(); setLog({}); setMoves({}); setPlan(null); } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)} />}
 
