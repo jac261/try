@@ -86,15 +86,21 @@ export function TrendChart({ series, height, band, zones }) {
     <svg viewBox={'0 0 ' + W + ' ' + H} style={{ width: '100%', height: 'auto', display: 'block' }}>
       {zoneRects.map((z, i) => {
         const top = Y(z.hi), h = Math.max(1, Y(z.lo) - Y(z.hi));
+        const alpha = (z.alpha != null ? z.alpha : 0.14) + (z.active ? 0.08 : 0);
         return (
           <g key={'z' + i}>
-            <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={z.color} opacity={z.alpha != null ? z.alpha : 0.14} />
-            {/* the legend lives inside the band: its name, right-aligned, sized to fit */}
-            {z.label && h >= 8 && (
-              <text x={W - pad - 4} y={top + h / 2 + (h >= 12 ? 2.6 : 2.2)} textAnchor="end"
-                fontSize={h >= 12 ? 7 : 5.8} fontWeight="700" letterSpacing="0.6"
-                fill={z.color} opacity="0.85">{z.label.toUpperCase()}</text>
-            )}
+            <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={z.color} opacity={alpha} />
+            {/* only the zone the data currently occupies carries its name — the
+                rest stay as quiet colour context. Rendered even when the band is a
+                thin sliver (y clamped inside the chart): it's the label that matters. */}
+            {z.label && z.active && (() => {
+              const fs = h >= 12 ? 7 : 5.8;
+              const ty = Math.min(Math.max(top + h / 2 + fs * 0.38, fs + 1.5), H - 3);
+              return (
+                <text x={W - pad - 4} y={ty} textAnchor="end" fontSize={fs} fontWeight="700"
+                  letterSpacing="0.6" fill={z.color} opacity="0.9">{z.label.toUpperCase()}</text>
+              );
+            })()}
           </g>
         );
       })}

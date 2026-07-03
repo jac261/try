@@ -33,24 +33,21 @@ export function WellnessTrends({ wellness }) {
     <>
       <div className="section-title">Fitness &amp; Form <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>last {w.length} days</span></div>
       <div className="card">
-        <div className="rd-pmc" style={{ marginTop: 0, marginBottom: 14 }}>
-          <div><b>{Math.round(last.ctl)}</b><span>Fitness{ctlD != null ? ' ' + T.wellness.signed(ctlD) : ''}</span></div>
-          <div><b>{Math.round(last.atl)}</b><span>Fatigue</span></div>
-          <div><b>{tsb != null ? T.wellness.signed(tsb) : '—'}</b><span>Form{zone ? ' · ' + zone.label.toLowerCase() : ''}</span></div>
+        {/* the stat strip is the legend: each number wears its line's colour; the
+            form line's current zone is named in the chart itself */}
+        <div className="load-stats" style={{ marginBottom: 10 }}>
+          <span><b style={{ color: 'var(--blue)' }}>{Math.round(last.ctl)}</b> Fitness (CTL){ctlD != null ? ' ' + T.wellness.signed(ctlD) : ''}</span>
+          <span><b style={{ color: 'var(--danger)' }}>{Math.round(last.atl)}</b> Fatigue (ATL)</span>
+          <span><b style={{ color: 'var(--brick)' }}>{tsb != null ? T.wellness.signed(tsb) : '—'}</b> Form (TSB)</span>
           {(() => { const ramp = T.wellness.rampRate(wellness); return ramp != null
-            ? <div title="Fitness (CTL) change over the last 7 days — sustained ramps above ~5/week raise injury risk"><b>{T.wellness.signed(ramp)}</b><span>Ramp /wk</span></div>
+            ? <span title="Fitness (CTL) change over the last 7 days — sustained ramps above ~5/week raise injury risk"><b>{T.wellness.signed(ramp)}</b> Ramp /wk</span>
             : null; })()}
         </div>
-        {ctl.length >= 2 && <TrendChart height={116} zones={T.wellness.FORM_ZONES} series={[
+        {ctl.length >= 2 && <TrendChart height={116} zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))} series={[
           { values: ctl, color: 'var(--blue)', fill: true, width: 2.4 },
           { values: atl, color: 'var(--danger)', width: 1.8 },
           { values: tsbSeries, color: 'var(--brick)', width: 2 },
         ]} />}
-        <div className="chart-legend">
-          <span><i style={{ background: 'var(--blue)' }} />Fitness (CTL)</span>
-          <span><i style={{ background: 'var(--danger)' }} />Fatigue (ATL)</span>
-          <span><i style={{ background: 'var(--brick)' }} />Form (TSB)</span>
-        </div>
       </div>
 
       <div className="section-title">Recovery</div>

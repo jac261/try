@@ -3,6 +3,13 @@
    the offline / last-loaded cache with the API as the source of truth. */
 const NS = 'try.';
 
+// One-time sweep of dead keys from earlier eras: the pre-auth releases stored
+// state un-namespaced ("try.plan"), and the original app used "triflow.*".
+// Both are superseded by the per-user keys (and the backend as source of truth).
+['plan', 'log', 'moves', 'adjust', 'wellness'].forEach(k => {
+  try { localStorage.removeItem(NS + k); localStorage.removeItem('triflow.' + k); } catch (e) {}
+});
+
 export function storageForUser(userId) {
   const ns = NS + 'user.' + userId + '.';
   const wellnessKey = ns + 'wellness';

@@ -51,7 +51,13 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
         ? <div className="rd-eased"><Icon name="rest" size={15} /> Today eased to {eased.title} for recovery · <a className="reset" {...tap(onRestore)}>undo</a></div>
         : (!stale && rd.band !== 'green' && hard && <button className="btn ghost sm rd-action" onClick={onEase}>Ease today's {hard.title} → easy aerobic</button>)}
       <div className="rd-why">
-        {rd.why.map((w, i) => <span key={i} className={'rd-chip' + (w.bad ? ' bad' : '')}>{w.t}</span>)}
+        {(() => {
+          // Only the signals that actually moved the score; a chip that says
+          // "everything is normal" three different ways is noise.
+          const movers = rd.why.filter(w => Math.abs(w.points || 0) >= 1);
+          if (!movers.length) return <span className="rd-chip">All signals around your baseline</span>;
+          return movers.map((w, i) => <span key={i} className={'rd-chip' + (w.bad ? ' bad' : '')}>{w.t}</span>);
+        })()}
       </div>
       {(() => {
         // Readiness over the recent days, each scored against its own rolling
@@ -72,22 +78,11 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
           </div>
         );
       })()}
-      {(rec.ctl != null || rec.tsb != null) && (() => {
-        const ramp = T.wellness.rampRate(wellness);
-        return (
-          <div className="rd-pmc">
-            {rec.ctl != null && <div><b>{Math.round(rec.ctl)}</b><span>Fitness</span></div>}
-            {rec.atl != null && <div><b>{Math.round(rec.atl)}</b><span>Fatigue</span></div>}
-            {rec.tsb != null && <div><b>{T.wellness.signed(rec.tsb)}</b><span>Form</span></div>}
-            {ramp != null && <div title="Fitness (CTL) change over the last 7 days — sustained ramps above ~5/week raise injury risk"><b>{T.wellness.signed(ramp)}</b><span>Ramp /wk</span></div>}
-          </div>
-        );
-      })()}
       {(() => {
         // Compact Fitness & Form trend from the synced intervals.icu training-load
-        // history (full-size version lives on the Progress tab). Form (TSB) moves
-        // through the coloured training zones (transition/fresh/grey/optimal/high
-        // risk) shaded behind the lines.
+        // history (full-size version lives on the Progress tab). The stat strip IS
+        // the legend — each number wears its line's colour — and only the zone the
+        // form line currently occupies carries its name in the chart.
         const load = wellness.filter(r => r.ctl != null && r.atl != null).slice(-60);
         if (load.length < 3) return null;
         return (
@@ -96,16 +91,29 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
               <span>Fitness &amp; Form</span>
               <span>{load.length} days</span>
             </div>
-            <TrendChart height={86} zones={T.wellness.FORM_ZONES} series={[
-              { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
-              { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
-              { values: load.map(r => (r.tsb != null ? r.tsb : r.ctl - r.atl)), color: 'var(--brick)', width: 1.8 },
-            ]} />
-            <div className="chart-legend">
-              <span><i style={{ background: 'var(--blue)' }} />Fitness</span>
-              <span><i style={{ background: 'var(--danger)' }} />Fatigue</span>
-              <span><i style={{ background: 'var(--brick)' }} />Form</span>
-            </div>
+            {(() => {
+              const lastLoad = load[load.length - 1];
+              const tsbNow = lastLoad.tsb != null ? lastLoad.tsb : lastLoad.ctl - lastLoad.atl;
+              const zone = T.wellness.formZone(tsbNow);
+              const ramp = T.wellness.rampRate(wellness);
+              return (
+                <>
+                  <div className="load-stats">
+                    <span><b style={{ color: 'var(--blue)' }}>{Math.round(lastLoad.ctl)}</b> Fitness</span>
+                    <span><b style={{ color: 'var(--danger)' }}>{Math.round(lastLoad.atl)}</b> Fatigue</span>
+                    <span><b style={{ color: 'var(--brick)' }}>{T.wellness.signed(tsbNow)}</b> Form</span>
+                    {ramp != null && <span title="Fitness (CTL) change over the last 7 days — sustained ramps above ~5/week raise injury risk"><b>{T.wellness.signed(ramp)}</b> Ramp /wk</span>}
+                  </div>
+                  <TrendChart height={86}
+                    zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
+                    series={[
+                      { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
+                      { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
+                      { values: load.map(r => (r.tsb != null ? r.tsb : r.ctl - r.atl)), color: 'var(--brick)', width: 1.8 },
+                    ]} />
+                </>
+              );
+            })()}
           </div>
         );
       })()}

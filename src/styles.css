@@ -364,3 +364,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* readiness trend (mini chart on the Today readiness card) */
 .rd-trend { margin-top: 14px; }
 .rd-trend-head { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin-bottom: 6px; }
+
+/* colour-keyed load stats: the numbers ARE the legend (colours match the lines) */
+.load-stats { display: flex; gap: 16px; flex-wrap: wrap; align-items: baseline; margin: 2px 0 8px; font-size: 11px; color: var(--muted); font-weight: 600; }
+.load-stats b { font-size: 16px; font-weight: 800; letter-spacing: -.3px; margin-right: 2px; font-variant-numeric: tabular-nums; }
