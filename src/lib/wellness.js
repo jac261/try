@@ -20,6 +20,8 @@
  * is an output (4/11 x ~70.7), not an input. Within a factor the penalty ramps
  * over a describable range (neutral -> worst), so there are no cliff edges either.
  */
+import { iso, addDays } from './date.js';
+
 const KEY = 'try.wellness';
 
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; } };
@@ -165,16 +167,32 @@ function readiness(rec, base) {
 
 // The classic Form (TSB) training zones (Friel/PMC convention), used as the
 // coloured background bands the form line moves through on the load charts.
+// Each zone carries its own colour + opacity, tuned for the dark theme so
+// adjacent bands read as distinct strata: the grey middle recedes, the outer
+// zones pop, and high risk is unmissable.
 const FORM_ZONES = [
-  { key: 'transition', label: 'Transition', lo: 25, hi: Infinity, color: 'var(--bike)', blurb: 'so fresh you may be detraining' },
-  { key: 'fresh', label: 'Fresh', lo: 5, hi: 25, color: 'var(--blue)', blurb: 'race-ready' },
-  { key: 'grey', label: 'Grey zone', lo: -10, hi: 5, color: 'var(--muted)', blurb: 'neither building nor peaking' },
-  { key: 'optimal', label: 'Optimal', lo: -30, hi: -10, color: 'var(--run)', blurb: 'productive training load' },
-  { key: 'highRisk', label: 'High risk', lo: -Infinity, hi: -30, color: 'var(--danger)', blurb: 'overreaching — injury/illness territory' },
+  { key: 'transition', label: 'Transition', lo: 25, hi: Infinity, color: '#fbbf24', alpha: 0.22, blurb: 'so fresh you may be detraining' },
+  { key: 'fresh', label: 'Fresh', lo: 5, hi: 25, color: '#38bdf8', alpha: 0.20, blurb: 'race-ready' },
+  { key: 'grey', label: 'Grey zone', lo: -10, hi: 5, color: '#94a3b8', alpha: 0.10, blurb: 'neither building nor peaking' },
+  { key: 'optimal', label: 'Optimal', lo: -30, hi: -10, color: '#34d399', alpha: 0.20, blurb: 'productive training load' },
+  { key: 'highRisk', label: 'High risk', lo: -Infinity, hi: -30, color: '#f87171', alpha: 0.32, blurb: 'overreaching — injury/illness territory' },
 ];
 function formZone(tsb) {
   if (tsb == null) return null;
   return FORM_ZONES.find(z => tsb >= z.lo && tsb < z.hi) || FORM_ZONES[0];
+}
+
+// Weekly ramp rate: how much Fitness (CTL) changed over the trailing 7 days —
+// computed from the synced series (so it also works for manual entries).
+// Sustained ramps above ~5-8/week are the classic overuse-injury flag.
+function rampRate(records) {
+  const withCtl = (records || []).filter(r => r.ctl != null);
+  if (withCtl.length < 2) return null;
+  const last = withCtl[withCtl.length - 1];
+  const target = iso(addDays(last.date, -7));
+  const prior = [...withCtl].reverse().find(r => r.date <= target);
+  if (!prior) return null;
+  return Math.round((last.ctl - prior.ctl) * 10) / 10;
 }
 
 // Readiness trend: score each of the last `days` records against the rolling
@@ -242,4 +260,4 @@ const MODEL = {
   })),
 };
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, FORM_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };
+export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, FORM_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };

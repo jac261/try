@@ -72,11 +72,17 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
           </div>
         );
       })()}
-      {(rec.ctl != null || rec.tsb != null) && <div className="rd-pmc">
-        {rec.ctl != null && <div><b>{Math.round(rec.ctl)}</b><span>Fitness</span></div>}
-        {rec.atl != null && <div><b>{Math.round(rec.atl)}</b><span>Fatigue</span></div>}
-        {rec.tsb != null && <div><b>{T.wellness.signed(rec.tsb)}</b><span>Form</span></div>}
-      </div>}
+      {(rec.ctl != null || rec.tsb != null) && (() => {
+        const ramp = T.wellness.rampRate(wellness);
+        return (
+          <div className="rd-pmc">
+            {rec.ctl != null && <div><b>{Math.round(rec.ctl)}</b><span>Fitness</span></div>}
+            {rec.atl != null && <div><b>{Math.round(rec.atl)}</b><span>Fatigue</span></div>}
+            {rec.tsb != null && <div><b>{T.wellness.signed(rec.tsb)}</b><span>Form</span></div>}
+            {ramp != null && <div title="Fitness (CTL) change over the last 7 days — sustained ramps above ~5/week raise injury risk"><b>{T.wellness.signed(ramp)}</b><span>Ramp /wk</span></div>}
+          </div>
+        );
+      })()}
       {(() => {
         // Compact Fitness & Form trend from the synced intervals.icu training-load
         // history (full-size version lives on the Progress tab). Form (TSB) moves
@@ -90,7 +96,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
               <span>Fitness &amp; Form</span>
               <span>{load.length} days</span>
             </div>
-            <TrendChart height={72} zones={T.wellness.FORM_ZONES} series={[
+            <TrendChart height={86} zones={T.wellness.FORM_ZONES} series={[
               { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
               { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
               { values: load.map(r => (r.tsb != null ? r.tsb : r.ctl - r.atl)), color: 'var(--brick)', width: 1.8 },
@@ -99,9 +105,6 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
               <span><i style={{ background: 'var(--blue)' }} />Fitness</span>
               <span><i style={{ background: 'var(--danger)' }} />Fatigue</span>
               <span><i style={{ background: 'var(--brick)' }} />Form</span>
-            </div>
-            <div className="chart-legend zone-legend">
-              {T.wellness.FORM_ZONES.map(z => <span key={z.key} title={z.blurb}><i style={{ background: z.color }} />{z.label}</span>)}
             </div>
           </div>
         );

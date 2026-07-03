@@ -37,6 +37,9 @@ export function WellnessTrends({ wellness }) {
           <div><b>{Math.round(last.ctl)}</b><span>Fitness{ctlD != null ? ' ' + T.wellness.signed(ctlD) : ''}</span></div>
           <div><b>{Math.round(last.atl)}</b><span>Fatigue</span></div>
           <div><b>{tsb != null ? T.wellness.signed(tsb) : '—'}</b><span>Form{zone ? ' · ' + zone.label.toLowerCase() : ''}</span></div>
+          {(() => { const ramp = T.wellness.rampRate(wellness); return ramp != null
+            ? <div title="Fitness (CTL) change over the last 7 days — sustained ramps above ~5/week raise injury risk"><b>{T.wellness.signed(ramp)}</b><span>Ramp /wk</span></div>
+            : null; })()}
         </div>
         {ctl.length >= 2 && <TrendChart height={116} zones={T.wellness.FORM_ZONES} series={[
           { values: ctl, color: 'var(--blue)', fill: true, width: 2.4 },
@@ -47,9 +50,6 @@ export function WellnessTrends({ wellness }) {
           <span><i style={{ background: 'var(--blue)' }} />Fitness (CTL)</span>
           <span><i style={{ background: 'var(--danger)' }} />Fatigue (ATL)</span>
           <span><i style={{ background: 'var(--brick)' }} />Form (TSB)</span>
-        </div>
-        <div className="chart-legend zone-legend">
-          {T.wellness.FORM_ZONES.map(z => <span key={z.key} title={z.blurb}><i style={{ background: z.color }} />{z.label}</span>)}
         </div>
       </div>
 

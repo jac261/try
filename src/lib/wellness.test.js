@@ -158,6 +158,36 @@ describe('wellness.formZone (TSB training zones)', () => {
     for (let i = 1; i < z.length; i++) expect(z[i].hi).toBe(z[i - 1].lo); // contiguous
     expect(z[0].hi).toBe(Infinity);
     expect(z[z.length - 1].lo).toBe(-Infinity);
-    z.forEach(x => { expect(x.color).toMatch(/^var\(/); expect(x.blurb.length).toBeGreaterThan(0); });
+    z.forEach(x => { expect(x.color).toMatch(/^#[0-9a-f]{6}$/i); expect(x.blurb.length).toBeGreaterThan(0); });
+  });
+});
+
+describe('wellness.rampRate (weekly CTL change)', () => {
+  const mk = (date, ctl) => ({ date, ctl });
+
+  it('measures fitness change over the trailing 7 days', () => {
+    const recs = [];
+    for (let d = 1; d <= 14; d++) recs.push(mk('2026-07-' + String(d).padStart(2, '0'), 40 + d * 0.5));
+    // last = 07-14 (ctl 47), 7 days earlier = 07-07 (ctl 43.5) → +3.5
+    expect(wellness.rampRate(recs)).toBe(3.5);
+  });
+
+  it('uses the nearest record at-or-before the 7-day mark when days are missing', () => {
+    const recs = [mk('2026-07-01', 40), mk('2026-07-05', 42), mk('2026-07-14', 47)];
+    // target 07-07 → nearest at-or-before is 07-05 (42) → +5
+    expect(wellness.rampRate(recs)).toBe(5);
+  });
+
+  it('returns null without enough history', () => {
+    expect(wellness.rampRate([mk('2026-07-14', 47)])).toBe(null);
+    expect(wellness.rampRate([])).toBe(null);
+    expect(wellness.rampRate([{ date: '2026-07-01' }, { date: '2026-07-14' }])).toBe(null); // no ctl
+  });
+
+  it('zones carry per-zone alpha for distinct banding', () => {
+    wellness.FORM_ZONES.forEach(z => expect(z.alpha).toBeGreaterThan(0));
+    const highRisk = wellness.FORM_ZONES.find(z => z.key === 'highRisk');
+    const grey = wellness.FORM_ZONES.find(z => z.key === 'grey');
+    expect(highRisk.alpha).toBeGreaterThan(grey.alpha * 2); // high risk pops, grey recedes
   });
 });

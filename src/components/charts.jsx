@@ -84,9 +84,20 @@ export function TrendChart({ series, height, band, zones }) {
     .filter(z => z.hi > z.lo);
   return (
     <svg viewBox={'0 0 ' + W + ' ' + H} style={{ width: '100%', height: 'auto', display: 'block' }}>
-      {zoneRects.map((z, i) => (
-        <rect key={'z' + i} x={pad} y={Y(z.hi)} width={W - 2 * pad} height={Math.max(1, Y(z.lo) - Y(z.hi))} fill={z.color} opacity="0.14" />
-      ))}
+      {zoneRects.map((z, i) => {
+        const top = Y(z.hi), h = Math.max(1, Y(z.lo) - Y(z.hi));
+        return (
+          <g key={'z' + i}>
+            <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={z.color} opacity={z.alpha != null ? z.alpha : 0.14} />
+            {/* the legend lives inside the band: its name, right-aligned, sized to fit */}
+            {z.label && h >= 8 && (
+              <text x={W - pad - 4} y={top + h / 2 + (h >= 12 ? 2.6 : 2.2)} textAnchor="end"
+                fontSize={h >= 12 ? 7 : 5.8} fontWeight="700" letterSpacing="0.6"
+                fill={z.color} opacity="0.85">{z.label.toUpperCase()}</text>
+            )}
+          </g>
+        );
+      })}
       {band && <rect x={pad} y={Y(band.hi)} width={W - 2 * pad} height={Math.max(1, Y(band.lo) - Y(band.hi))} fill="var(--blue-soft)" rx="2" />}
       {series.map((s, i) => (
         <g key={i}>
