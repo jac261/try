@@ -77,6 +77,25 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
         {rec.atl != null && <div><b>{Math.round(rec.atl)}</b><span>Fatigue</span></div>}
         {rec.tsb != null && <div><b>{T.wellness.signed(rec.tsb)}</b><span>Form</span></div>}
       </div>}
+      {(() => {
+        // Compact Fitness & Form trend from the synced intervals.icu training-load
+        // history (full-size version lives on the Progress tab): Fitness (CTL)
+        // filled, Fatigue (ATL) thin — the gap between them is Form.
+        const load = wellness.filter(r => r.ctl != null && r.atl != null).slice(-60);
+        if (load.length < 3) return null;
+        return (
+          <div className="rd-trend">
+            <div className="rd-trend-head">
+              <span>Fitness &amp; Form</span>
+              <span>fitness − fatigue = form · {load.length} days</span>
+            </div>
+            <TrendChart height={54} series={[
+              { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
+              { values: load.map(r => r.atl), color: 'var(--muted)', width: 1.6 },
+            ]} />
+          </div>
+        );
+      })()}
       <div className="rd-foot">
         <span>{stale ? 'From ' + T.fmtDate(rec.date, { month: 'short', day: 'numeric' }) : 'This morning'}</span>
         <a className="reset" {...tap(onEdit)}>Update →</a>
