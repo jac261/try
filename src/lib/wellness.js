@@ -162,6 +162,20 @@ function readiness(rec, base) {
   return { score, band, headline: BANDS.find(b => b.key === band).headline, why };
 }
 
+// Readiness trend: score each of the last `days` records against the rolling
+// baseline as it stood on THAT day (no hindsight), skipping records that carry
+// no readiness metrics (an empty day would misleadingly score 100).
+function history(records, days = 14) {
+  const scored = (records || [])
+    .filter(r => r.hrv != null || r.sleepH != null || r.rhr != null || r.tsb != null)
+    .slice(-days)
+    .map(r => {
+      const rd = readiness(r, baseline(records, r.date));
+      return { date: r.date, score: rd.score, band: rd.band };
+    });
+  return scored;
+}
+
 // Bump when the scoring model changes shape — calibration observations carry it
 // so a future fit can separate data gathered under different engines.
 const ENGINE_VERSION = 2;
@@ -213,4 +227,4 @@ const MODEL = {
   })),
 };
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, fmtH, signed, MODEL, ENGINE_VERSION };
+export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, fmtH, signed, MODEL, ENGINE_VERSION };

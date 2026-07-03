@@ -360,3 +360,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .factor-band b.good { color: #6ee7b7; }
 .factor-band b.bad { color: #f6b27a; }
 .factor-band b.muted { color: var(--faint); }
+
+/* readiness trend (mini chart on the Today readiness card) */
+.rd-trend { margin-top: 14px; }
+.rd-trend-head { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin-bottom: 6px; }

@@ -106,3 +106,33 @@ describe('wellness readiness — interpolation & model', () => {
     expect(twoWorst.band).toBe('amber'); // exactly on the amber/red edge
   });
 });
+
+describe('wellness.history (readiness trend)', () => {
+  const recs = [
+    ...Array.from({ length: 21 }, (_, i) => ({
+      date: '2026-06-' + String(i + 9).padStart(2, '0'), hrv: 58 + (i % 5), rhr: 50, sleepH: 7.5,
+    })),
+    { date: '2026-06-30', hrv: 60, sleepH: 8, rhr: 50, tsb: 5 },
+    { date: '2026-07-01', sleepScore: 70 },                       // no readiness metrics → skipped
+    { date: '2026-07-02', hrv: 39, sleepH: 4.5, rhr: 58, tsb: -25 },
+  ];
+
+  it('scores each day against its own rolling baseline, ascending by date', () => {
+    const h = wellness.history(recs, 14);
+    expect(h.length).toBe(14);
+    expect(h[h.length - 1].date).toBe('2026-07-02');
+    expect(h[h.length - 2].date).toBe('2026-06-30'); // metric-less day skipped
+    const good = h.find(x => x.date === '2026-06-30');
+    const bad = h.find(x => x.date === '2026-07-02');
+    expect(good.band).toBe('green');
+    expect(bad.band).toBe('red');
+    expect(bad.score).toBeLessThan(good.score);
+    // ascending order throughout
+    expect([...h].map(x => x.date)).toEqual([...h].map(x => x.date).sort());
+  });
+
+  it('caps at the requested number of days', () => {
+    expect(wellness.history(recs, 5).length).toBe(5);
+    expect(wellness.history([], 14)).toEqual([]);
+  });
+});

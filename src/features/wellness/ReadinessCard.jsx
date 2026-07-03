@@ -2,10 +2,13 @@ import * as T from '@/lib';
 import { INTENSITY_TYPES } from '@/lib/tuning.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
+import { TrendChart } from '@/components/charts.jsx';
+
+const BAND_COLOR = { green: 'var(--run)', amber: 'var(--bike)', red: 'var(--danger)' };
 
 function ReadinessRing({ score, band }) {
   const r = 26, c = 2 * Math.PI * r;
-  const col = band === 'green' ? 'var(--run)' : band === 'amber' ? 'var(--bike)' : 'var(--danger)';
+  const col = BAND_COLOR[band];
   return (
     <svg width="74" height="74" viewBox="0 0 72 72" style={{ flex: 'none' }}>
       <circle cx="36" cy="36" r={r} fill="none" stroke="var(--track)" strokeWidth="6" />
@@ -50,6 +53,25 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
       <div className="rd-why">
         {rd.why.map((w, i) => <span key={i} className={'rd-chip' + (w.bad ? ' bad' : '')}>{w.t}</span>)}
       </div>
+      {(() => {
+        // Readiness over the recent days, each scored against its own rolling
+        // baseline; the shaded band is the amber zone (55-75), so where the line
+        // sits tells you green/amber/red at a glance.
+        const hist = T.wellness.history(wellness, 14);
+        if (hist.length < 3) return null;
+        const amber = T.wellness.MODEL.bands.find(b => b.key === 'amber').min;
+        const green = T.wellness.MODEL.bands.find(b => b.key === 'green').min;
+        return (
+          <div className="rd-trend">
+            <div className="rd-trend-head">
+              <span>Readiness trend</span>
+              <span>{T.fmtDate(hist[0].date, { month: 'short', day: 'numeric' })} – {T.fmtDate(hist[hist.length - 1].date, { month: 'short', day: 'numeric' })}</span>
+            </div>
+            <TrendChart height={62} band={{ lo: amber, hi: green }}
+              series={[{ values: hist.map(h => h.score), color: BAND_COLOR[rd.band], fill: true }]} />
+          </div>
+        );
+      })()}
       {(rec.ctl != null || rec.tsb != null) && <div className="rd-pmc">
         {rec.ctl != null && <div><b>{Math.round(rec.ctl)}</b><span>Fitness</span></div>}
         {rec.atl != null && <div><b>{Math.round(rec.atl)}</b><span>Fatigue</span></div>}
