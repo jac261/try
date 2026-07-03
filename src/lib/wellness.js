@@ -162,6 +162,33 @@ function readiness(rec, base) {
   return { score, band, headline: BANDS.find(b => b.key === band).headline, why };
 }
 
+// Bump when the scoring model changes shape — calibration observations carry it
+// so a future fit can separate data gathered under different engines.
+const ENGINE_VERSION = 2;
+
+// Immutable capture of "readiness as it stood" for calibration: the raw inputs
+// (not just the score) so future models can be fitted from the same observations,
+// plus the score/band this engine showed the athlete at the time.
+function snapshot(rec, base) {
+  if (!rec) return { v: ENGINE_VERSION, score: null, band: null, inputs: null };
+  const r = readiness(rec, base);
+  const round1 = x => (x == null ? null : Math.round(x * 10) / 10);
+  return {
+    v: ENGINE_VERSION,
+    score: r.score,
+    band: r.band,
+    inputs: {
+      hrv: rec.hrv ?? null,
+      hrvMean: round1(base.hrvMean) || null,
+      hrvSd: round1(base.hrvSd) || null,
+      rhr: rec.rhr ?? null,
+      rhrMean: round1(base.rhrMean) || null,
+      sleepH: rec.sleepH ?? null,
+      tsb: rec.tsb ?? null,
+    },
+  };
+}
+
 // Session-aware recommendation: how readiness should shape today's workout.
 function advice(band, isHard, sessionTitle) {
   const s = sessionTitle || 'session';
@@ -186,4 +213,4 @@ const MODEL = {
   })),
 };
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, fmtH, signed, MODEL };
+export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, fmtH, signed, MODEL, ENGINE_VERSION };

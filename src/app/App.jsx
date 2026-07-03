@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as T from '@/lib';
 import { makeSync } from '@/app/sync.js';
+import { buildObservation, toNote, downloadCalibration } from '@/app/calibration.js';
 import { effDate, catchUpMoves } from '@/lib/schedule.js';
 import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
 import { downloadICS } from '@/lib/ics.js';
@@ -100,9 +101,30 @@ export function App({ storage, getToken, user }) {
   // Resolve our client ref → server workout GUID for the log/move endpoints; skip
   // the push (local-only) if the plan hasn't synced a GUID for it yet.
   const gid = id => refToId[id];
+  // Calibration capture: when a session is completed (and again when its feel is
+  // rated), snapshot the readiness inputs for that day next to the outcome —
+  // stored locally (append-only) and embedded in the synced log's notes field.
+  const observe = (id, feel, at) => {
+    const w = plan.weeks.flatMap(wk => wk.workouts).find(x => x.id === id);
+    if (!w || w.discipline === 'rest') return null;
+    const obs = buildObservation({
+      workout: w, date: effDate(w, moves), feel, eased: !!adjust[id], wellnessRecs: wellness, at,
+    });
+    storage.upsertCalibration(obs);
+    return toNote(obs);
+  };
   const toggle = id => {
-    if (log[id]) { setLog(l => { const n = { ...l }; delete n[id]; return n; }); if (gid(id)) sync.removeLog(gid(id)); }
-    else { const entry = { done: true, at: new Date().toISOString() }; setLog(l => ({ ...l, [id]: entry })); if (gid(id)) sync.saveLog(gid(id), entry); }
+    if (log[id]) {
+      const w = plan.weeks.flatMap(wk => wk.workouts).find(x => x.id === id);
+      setLog(l => { const n = { ...l }; delete n[id]; return n; });
+      if (w) storage.removeCalibration(id, effDate(w, moves));
+      if (gid(id)) sync.removeLog(gid(id));
+    } else {
+      const at = new Date().toISOString();
+      const entry = { done: true, at, notes: observe(id, null, at) };
+      setLog(l => ({ ...l, [id]: entry }));
+      if (gid(id)) sync.saveLog(gid(id), entry);
+    }
   };
   const moveWorkout = (id, date) => {
     setMoves(m => { const n = { ...m }; if (date === null) delete n[id]; else n[id] = date; return n; });
@@ -128,7 +150,8 @@ export function App({ storage, getToken, user }) {
   const updateFitness = fields => { retarget(fields); setEditFitness(false); };
   const applyTune = () => { const s = paceSuggestions(plan, log); if (s.length) retarget(tuneFields(plan.profile, s)); };
   const setFeel = (id, feel) => {
-    const entry = Object.assign({}, log[id], { done: true, at: (log[id] && log[id].at) || new Date().toISOString(), feel: feel });
+    const at = (log[id] && log[id].at) || new Date().toISOString();
+    const entry = Object.assign({}, log[id], { done: true, at, feel, notes: observe(id, feel, at) });
     setLog(l => ({ ...l, [id]: entry }));
     if (gid(id)) sync.saveLog(gid(id), entry);
   };
@@ -190,7 +213,8 @@ export function App({ storage, getToken, user }) {
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { storage.clear(); setLog({}); setMoves({}); setPlan(null); } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)}
-        onWellnessSynced={applyServerWellness} onReadinessInfo={() => setView('readinessInfo')} />}
+        onWellnessSynced={applyServerWellness} onReadinessInfo={() => setView('readinessInfo')}
+        onExportCalibration={() => downloadCalibration(storage)} calibrationCount={storage.loadCalibration().length} />}
       {view === 'readinessInfo' && <ReadinessInfo onBack={() => setView('settings')} />}
 
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}

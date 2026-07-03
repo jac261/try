@@ -8,10 +8,15 @@ export function storageForUser(userId) {
   const wellnessKey = ns + 'wellness';
   const loadWellness = () => { try { return JSON.parse(localStorage.getItem(wellnessKey) || '[]'); } catch (e) { return []; } };
   const saveWellness = arr => { try { localStorage.setItem(wellnessKey, JSON.stringify(arr)); } catch (e) {} };
+  const calKey = ns + 'calibration';
+  const loadCalibration = () => { try { return JSON.parse(localStorage.getItem(calKey) || '[]'); } catch (e) { return []; } };
+  const saveCalibration = arr => { try { localStorage.setItem(calKey, JSON.stringify(arr)); } catch (e) {} };
 
   return {
     load(k, fb) { try { const v = localStorage.getItem(ns + k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
     save(k, v) { try { localStorage.setItem(ns + k, JSON.stringify(v)); } catch (e) {} },
+    // Note: calibration deliberately survives clear() — it's an append-only
+    // dataset spanning plans, not state tied to the current one.
     clear() { ['plan', 'log', 'moves', 'adjust'].forEach(k => localStorage.removeItem(ns + k)); },
     loadWellness,
     upsertWellness(rec) {
@@ -19,6 +24,21 @@ export function storageForUser(userId) {
       a.push(rec);
       a.sort((x, y) => (x.date < y.date ? -1 : 1));
       saveWellness(a);
+      return a;
+    },
+    loadCalibration,
+    // One observation per workout+date: re-ticking or rating feel replaces the
+    // earlier capture for that session. Capped so it can't grow unbounded.
+    upsertCalibration(obs) {
+      const keyOf = o => (o.workout && o.workout.id) + '@' + o.date;
+      const a = loadCalibration().filter(o => keyOf(o) !== keyOf(obs));
+      a.push(obs);
+      saveCalibration(a.slice(-1000));
+      return a;
+    },
+    removeCalibration(workoutId, date) {
+      const a = loadCalibration().filter(o => !((o.workout && o.workout.id) === workoutId && o.date === date));
+      saveCalibration(a);
       return a;
     },
   };
