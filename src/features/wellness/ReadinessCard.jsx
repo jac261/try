@@ -92,12 +92,12 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
             </div>
             <TrendChart height={72} zones={T.wellness.FORM_ZONES} series={[
               { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
-              { values: load.map(r => r.atl), color: 'var(--muted)', width: 1.6 },
+              { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
               { values: load.map(r => (r.tsb != null ? r.tsb : r.ctl - r.atl)), color: 'var(--brick)', width: 1.8 },
             ]} />
             <div className="chart-legend">
               <span><i style={{ background: 'var(--blue)' }} />Fitness</span>
-              <span><i style={{ background: 'var(--muted)' }} />Fatigue</span>
+              <span><i style={{ background: 'var(--danger)' }} />Fatigue</span>
               <span><i style={{ background: 'var(--brick)' }} />Form</span>
             </div>
             <div className="chart-legend zone-legend">

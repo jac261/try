@@ -40,12 +40,12 @@ export function WellnessTrends({ wellness }) {
         </div>
         {ctl.length >= 2 && <TrendChart height={116} zones={T.wellness.FORM_ZONES} series={[
           { values: ctl, color: 'var(--blue)', fill: true, width: 2.4 },
-          { values: atl, color: 'var(--muted)', width: 1.8 },
+          { values: atl, color: 'var(--danger)', width: 1.8 },
           { values: tsbSeries, color: 'var(--brick)', width: 2 },
         ]} />}
         <div className="chart-legend">
           <span><i style={{ background: 'var(--blue)' }} />Fitness (CTL)</span>
-          <span><i style={{ background: 'var(--muted)' }} />Fatigue (ATL)</span>
+          <span><i style={{ background: 'var(--danger)' }} />Fatigue (ATL)</span>
           <span><i style={{ background: 'var(--brick)' }} />Form (TSB)</span>
         </div>
         <div className="chart-legend zone-legend">
