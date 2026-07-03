@@ -136,3 +136,28 @@ describe('wellness.history (readiness trend)', () => {
     expect(wellness.history([], 14)).toEqual([]);
   });
 });
+
+describe('wellness.formZone (TSB training zones)', () => {
+  const zoneAt = t => wellness.formZone(t) && wellness.formZone(t).key;
+
+  it('maps TSB to the classic PMC zones with correct boundaries', () => {
+    expect(zoneAt(30)).toBe('transition');   // > +25
+    expect(zoneAt(25)).toBe('transition');   // boundary belongs upward
+    expect(zoneAt(10)).toBe('fresh');
+    expect(zoneAt(0)).toBe('grey');
+    expect(zoneAt(-10)).toBe('grey');        // boundary belongs upward
+    expect(zoneAt(-20)).toBe('optimal');
+    expect(zoneAt(-30)).toBe('optimal');
+    expect(zoneAt(-35)).toBe('highRisk');
+    expect(wellness.formZone(null)).toBe(null);
+  });
+
+  it('zones tile the whole TSB axis in order with labels and colors', () => {
+    const z = wellness.FORM_ZONES;
+    expect(z.map(x => x.label)).toEqual(['Transition', 'Fresh', 'Grey zone', 'Optimal', 'High risk']);
+    for (let i = 1; i < z.length; i++) expect(z[i].hi).toBe(z[i - 1].lo); // contiguous
+    expect(z[0].hi).toBe(Infinity);
+    expect(z[z.length - 1].lo).toBe(-Infinity);
+    z.forEach(x => { expect(x.color).toMatch(/^var\(/); expect(x.blurb.length).toBeGreaterThan(0); });
+  });
+});

@@ -110,10 +110,11 @@ const FACTORS = [
     neutral: 0, worst: -25, curve: 1, bonusAt: 12,
     driver: (rec, _base, p) => {
       const t = signed(rec.tsb);
+      const zone = formZone(rec.tsb);
       if (p <= -10) return { bad: 1, t: `Form ${t} — carrying fatigue` };
       if (p <= -3) return { bad: 1, t: `Form ${t} — some fatigue` };
-      if (p >= 1) return { bad: 0, t: `Form ${t} — fresh` };
-      return { bad: 0, t: `Form ${t}` };
+      // Neutral-or-better: name the training zone so the chip matches the chart.
+      return { bad: 0, t: `Form ${t}` + (zone && zone.key !== 'grey' ? ` — ${zone.label.toLowerCase()}` : '') };
     },
     what: 'Form (TSB = Fitness − Fatigue) is your training-load balance — chronic context, not today’s acute state, so it’s a secondary signal. Balanced is neutral; −25 or deeper is the worst case; +12 or fresher earns the freshness bonus.',
     samples: [['+12 or fresher', 12], ['Balanced (0)', 0], ['−10 (some fatigue)', -10], ['−25 or deeper', -25]],
@@ -160,6 +161,20 @@ function readiness(rec, base) {
   score = Math.max(0, Math.min(100, Math.round(score)));
   const band = bandFor(score);
   return { score, band, headline: BANDS.find(b => b.key === band).headline, why };
+}
+
+// The classic Form (TSB) training zones (Friel/PMC convention), used as the
+// coloured background bands the form line moves through on the load charts.
+const FORM_ZONES = [
+  { key: 'transition', label: 'Transition', lo: 25, hi: Infinity, color: 'var(--bike)', blurb: 'so fresh you may be detraining' },
+  { key: 'fresh', label: 'Fresh', lo: 5, hi: 25, color: 'var(--blue)', blurb: 'race-ready' },
+  { key: 'grey', label: 'Grey zone', lo: -10, hi: 5, color: 'var(--muted)', blurb: 'neither building nor peaking' },
+  { key: 'optimal', label: 'Optimal', lo: -30, hi: -10, color: 'var(--run)', blurb: 'productive training load' },
+  { key: 'highRisk', label: 'High risk', lo: -Infinity, hi: -30, color: 'var(--danger)', blurb: 'overreaching — injury/illness territory' },
+];
+function formZone(tsb) {
+  if (tsb == null) return null;
+  return FORM_ZONES.find(z => tsb >= z.lo && tsb < z.hi) || FORM_ZONES[0];
 }
 
 // Readiness trend: score each of the last `days` records against the rolling
@@ -227,4 +242,4 @@ const MODEL = {
   })),
 };
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, fmtH, signed, MODEL, ENGINE_VERSION };
+export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, FORM_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };

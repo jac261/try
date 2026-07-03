@@ -79,20 +79,30 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
       </div>}
       {(() => {
         // Compact Fitness & Form trend from the synced intervals.icu training-load
-        // history (full-size version lives on the Progress tab): Fitness (CTL)
-        // filled, Fatigue (ATL) thin — the gap between them is Form.
+        // history (full-size version lives on the Progress tab). Form (TSB) moves
+        // through the coloured training zones (transition/fresh/grey/optimal/high
+        // risk) shaded behind the lines.
         const load = wellness.filter(r => r.ctl != null && r.atl != null).slice(-60);
         if (load.length < 3) return null;
         return (
           <div className="rd-trend">
             <div className="rd-trend-head">
               <span>Fitness &amp; Form</span>
-              <span>fitness − fatigue = form · {load.length} days</span>
+              <span>{load.length} days</span>
             </div>
-            <TrendChart height={54} series={[
+            <TrendChart height={72} zones={T.wellness.FORM_ZONES} series={[
               { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
               { values: load.map(r => r.atl), color: 'var(--muted)', width: 1.6 },
+              { values: load.map(r => (r.tsb != null ? r.tsb : r.ctl - r.atl)), color: 'var(--brick)', width: 1.8 },
             ]} />
+            <div className="chart-legend">
+              <span><i style={{ background: 'var(--blue)' }} />Fitness</span>
+              <span><i style={{ background: 'var(--muted)' }} />Fatigue</span>
+              <span><i style={{ background: 'var(--brick)' }} />Form</span>
+            </div>
+            <div className="chart-legend zone-legend">
+              {T.wellness.FORM_ZONES.map(z => <span key={z.key} title={z.blurb}><i style={{ background: z.color }} />{z.label}</span>)}
+            </div>
           </div>
         );
       })()}

@@ -66,8 +66,11 @@ export function Sparkline({ values, betterDown, color }) {
 // history[i] holds the value that was active *before* history[i].date, so the value
 // that became active at dates[i] is values[i] (current for the final point).
 // Multi-series line/area chart (uniform-scaled SVG, no text → crisp at any width).
-// series: [{ values:[], color, fill?, width? }]. Optional shaded `band` {lo, hi}.
-export function TrendChart({ series, height, band }) {
+// series: [{ values:[], color, fill?, width? }]. Optional shaded `band` {lo, hi}
+// and coloured background `zones` [{lo, hi, color}] (e.g. the Form training
+// zones) — zones are clamped to the data range so open-ended ones (±Infinity)
+// render as far as the data reaches without distorting the scale.
+export function TrendChart({ series, height, band, zones }) {
   const H = height || 100, W = 320, pad = 8;
   const vals = series.flatMap(s => s.values).filter(v => v != null).concat(band ? [band.lo, band.hi] : []);
   const min = Math.min(...vals), max = Math.max(...vals), range = (max - min) || 1;
@@ -76,8 +79,14 @@ export function TrendChart({ series, height, band }) {
   const Y = v => H - pad - ((v - min) / range) * (H - 2 * pad);
   const line = vs => vs.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
   const area = vs => line(vs) + ' L' + X(vs.length - 1).toFixed(1) + ' ' + (H - pad) + ' L' + X(0).toFixed(1) + ' ' + (H - pad) + ' Z';
+  const zoneRects = (zones || [])
+    .map(z => ({ ...z, lo: Math.max(z.lo, min), hi: Math.min(z.hi, max) }))
+    .filter(z => z.hi > z.lo);
   return (
     <svg viewBox={'0 0 ' + W + ' ' + H} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      {zoneRects.map((z, i) => (
+        <rect key={'z' + i} x={pad} y={Y(z.hi)} width={W - 2 * pad} height={Math.max(1, Y(z.lo) - Y(z.hi))} fill={z.color} opacity="0.14" />
+      ))}
       {band && <rect x={pad} y={Y(band.hi)} width={W - 2 * pad} height={Math.max(1, Y(band.lo) - Y(band.hi))} fill="var(--blue-soft)" rx="2" />}
       {series.map((s, i) => (
         <g key={i}>
