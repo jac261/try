@@ -7,8 +7,11 @@ asset — app icons, social/share cards, screenshots, marketing images, or new U
 > [jac261.github.io/try/docs/style-guide.html](https://jac261.github.io/try/docs/style-guide.html))
 > for rendered swatches, gradients, type and components you can eyedrop directly.
 > Every token below is defined as a CSS variable in [`../src/styles.css`](../src/styles.css)
-> (`:root`) and the discipline/phase data in [`../src/data.js`](../src/data.js) — those
-> files are authoritative; keep this guide in sync if they change.
+> (`:root`); discipline/phase data lives in [`../src/lib/disciplines.js`](../src/lib/disciplines.js)
+> and [`../src/lib/domain.js`](../src/lib/domain.js), the readiness bands & Form zones in
+> [`../src/lib/wellness.js`](../src/lib/wellness.js), and the icon set in
+> [`../src/components/Icon.jsx`](../src/components/Icon.jsx) — those files are
+> authoritative; keep this guide in sync if they change.
 
 ---
 
@@ -83,10 +86,42 @@ Used for week/phase badges and progress accents. They deliberately reuse discipl
 ### Semantic / state
 | Purpose | Colour | Notes |
 |---|---|---|
-| Danger / error / Peak | `--danger` `#f87171` | Destructive actions, Peak phase |
+| Danger / error / Peak / **Fatigue line** | `--danger` `#f87171` | Destructive actions, Peak phase, the ATL chart line, high-risk zone |
 | Feel: "Easy" | run green `#34d399` | post-session feedback |
 | Feel: "Just right" | blue `#5b8cff` (text `#9ab8ff`) | |
 | Feel: "Hard" | bike amber `#fb923c` | |
+
+### Readiness bands
+The daily readiness score (0–100) reuses the traffic-light hues — the ring, the
+card's left border (`rd-green/amber/red`), and the readiness-trend line all wear
+the current band's colour.
+
+| Band | Score | Colour |
+|---|---|---|
+| 🟢 Ready to roll | ≥ 75 | run green `#34d399` (`--run`) |
+| 🟠 Ease into it | 55–74 | bike amber `#fb923c` (`--bike`) |
+| 🔴 Recover today | < 55 | `--danger` `#f87171` |
+
+### Form (TSB) training zones
+The load charts shade the classic PMC zones as translucent horizontal strata —
+**each zone has its own colour AND opacity** (the grey middle recedes, high risk
+pops). Only the zone the form line currently occupies is labelled in-chart and
+brightened (+0.08 alpha). Defined in `wellness.FORM_ZONES`.
+
+| Zone | TSB | Colour · alpha |
+|---|---|---|
+| Transition | > +25 | `#fbbf24` · 0.22 |
+| Fresh | +5 … +25 | `#38bdf8` · 0.20 |
+| Grey zone | −10 … +5 | `#94a3b8` · 0.10 |
+| Optimal | −30 … −10 | `#34d399` · 0.20 |
+| High risk | < −30 | `#f87171` · 0.32 |
+
+### Load-chart lines
+| Series | Colour |
+|---|---|
+| Fitness (CTL) | `--blue` `#5b8cff`, filled area |
+| Fatigue (ATL) | `--danger` `#f87171` |
+| Form (TSB) | brick purple `#c084fc` |
 
 ### Tag / badge tints
 Pill badges pair a translucent tint with a saturated text colour.
@@ -156,7 +191,7 @@ tracking. Body is 400–600. Antialiased; no synthetic weights (`font-synthesis:
 ## 5. Logo & app mark
 
 The mark is a **triangle with a centred dot** — a minimalist "tri" (three sides =
-swim/bike/run). Defined as the `logo` icon in `ICON_PATHS` ([`../src/main.jsx`](../src/main.jsx)):
+swim/bike/run). Defined as the `logo` icon in `ICON_PATHS` ([`../src/components/Icon.jsx`](../src/components/Icon.jsx)):
 
 ```
 triangle: M12 3.2 20.4 18.6 3.6 18.6 Z   (monoline, stroke ~2)
@@ -174,11 +209,12 @@ dot:      circle cx=12 cy=13.4 r=1.6      (filled)
 A custom **monoline** SVG set, drawn on a **24×24 viewBox**, `fill: none`,
 `stroke: currentColor`, **round caps & joins**, default **stroke-width 2**.
 
-- **Discipline icons** (swim/bike/run) are heavier, filled-silhouette style — bold
-  stroke widths: **swim 2.7, bike 2.5, run 3** (`ICON_BOLD`), with filled heads.
+- The set is drawn for a **uniform stroke-width of 2** — no per-icon weight overrides.
 - Icons inherit text colour via `currentColor` — white on coloured tiles, `--muted` in nav, etc.
-- Full set (names): `logo, swim, bike, run, brick, rest, strength, today, calendar, plan, progress, you, bolt, flag, flame, download, trend`.
-- A few content emoji remain by design (🔥 streak, ⚡ banner, 🏁/🛌 empty states) — don't add more.
+- Full set (names, in [`Icon.jsx`](../src/components/Icon.jsx)): `logo, swim, bike, run,
+  brick, rest, strength, today, calendar, plan, progress, you, bolt, flag, flame,
+  download, trend, watch, transition, stopwatch, route, heartrate, pace, trophy, settings`.
+- No emoji in the UI — every glyph is a monoline icon.
 
 ---
 
@@ -199,7 +235,29 @@ white icon, inset hairline. Sizes in-app: 46px (rows), 54px (sheet hero), 60px (
 
 **Progress bars** — `--track` background, fill is `--accent` (white) or a phase/discipline colour; `4px` radius, `6–7px` tall.
 
-**Bottom nav** — 5 monoline icons; active = `--accent` (white), inactive = `--muted`; 11px/700 labels.
+**Bottom nav** — 4 training tabs (Today / Calendar / Plan / Progress); active = `--accent`
+(white), inactive = `--muted`; 11px/700 labels. Profile & settings live behind the
+**avatar**, not the nav.
+
+**Avatar (profile entry)** — 34px circle, top-left of the topbar; the Clerk photo with a
+`1.5px rgba(255,255,255,.18)` hairline, or a gradient fallback
+(`135° #4a74dc → #6d54c8`) with the athlete's initial in white 800.
+
+**Readiness card** — a `--card` with a 3px left border in the current band colour
+(`rd-green/amber/red`), the score ring (band-coloured stroke on `--track`), and driver
+chips (`--chip` pills; "bad" drivers tinted `rgba(251,146,60,.14)` with `#f6b27a` text).
+
+**Charts** — uniform-scaled SVG only (`viewBox` + `width:100%; height:auto`); **never**
+`preserveAspectRatio="none"` with text (it distorts). Zone strata behind the data, the
+active zone labelled in-band (7px/800 uppercase, right-aligned, the zone's colour).
+Numbers + legend merge into a **colour-keyed stat strip** above the chart: each value
+(16px/800) wears its line's colour, with a `--muted` 11px label. Bar charts with text
+labels are HTML/CSS (`.vchart`), not SVG.
+
+**Auth & account surfaces** — the sign-in gate is a full-viewport centred card on the
+header's radial glow (`.authgate`). Account/integration rows use `.authbox` (inset
+`--chip` panel, 14px radius); status feedback uses `.authstatus` tints — ok:
+`#6ee7b7` on `rgba(52,211,153,.12)`, bad: `#fca5a5` on `rgba(248,113,113,.12)`.
 
 ---
 
@@ -239,5 +297,7 @@ Quick specs for common assets — all on the navy base.
 
 ---
 
-*Tokens authoritative in [`../src/styles.css`](../src/styles.css) `:root` and [`../src/data.js`](../src/data.js)
-(`DISCIPLINES`, `PHASE_INFO`, `ZONES`). Last updated 28 June 2026.*
+*Tokens authoritative in [`../src/styles.css`](../src/styles.css) `:root`,
+[`../src/lib/disciplines.js`](../src/lib/disciplines.js) / [`../src/lib/domain.js`](../src/lib/domain.js)
+(`DISCIPLINES`, `PHASE_INFO`, `ZONES`), and [`../src/lib/wellness.js`](../src/lib/wellness.js)
+(`FORM_ZONES`, readiness bands). Last updated 3 July 2026.*

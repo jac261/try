@@ -66,8 +66,11 @@ export function Sparkline({ values, betterDown, color }) {
 // history[i] holds the value that was active *before* history[i].date, so the value
 // that became active at dates[i] is values[i] (current for the final point).
 // Multi-series line/area chart (uniform-scaled SVG, no text → crisp at any width).
-// series: [{ values:[], color, fill?, width? }]. Optional shaded `band` {lo, hi}.
-export function TrendChart({ series, height, band }) {
+// series: [{ values:[], color, fill?, width? }]. Optional shaded `band` {lo, hi}
+// and coloured background `zones` [{lo, hi, color}] (e.g. the Form training
+// zones) — zones are clamped to the data range so open-ended ones (±Infinity)
+// render as far as the data reaches without distorting the scale.
+export function TrendChart({ series, height, band, zones }) {
   const H = height || 100, W = 320, pad = 8;
   const vals = series.flatMap(s => s.values).filter(v => v != null).concat(band ? [band.lo, band.hi] : []);
   const min = Math.min(...vals), max = Math.max(...vals), range = (max - min) || 1;
@@ -76,8 +79,31 @@ export function TrendChart({ series, height, band }) {
   const Y = v => H - pad - ((v - min) / range) * (H - 2 * pad);
   const line = vs => vs.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
   const area = vs => line(vs) + ' L' + X(vs.length - 1).toFixed(1) + ' ' + (H - pad) + ' L' + X(0).toFixed(1) + ' ' + (H - pad) + ' Z';
+  const zoneRects = (zones || [])
+    .map(z => ({ ...z, lo: Math.max(z.lo, min), hi: Math.min(z.hi, max) }))
+    .filter(z => z.hi > z.lo);
   return (
     <svg viewBox={'0 0 ' + W + ' ' + H} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      {zoneRects.map((z, i) => {
+        const top = Y(z.hi), h = Math.max(1, Y(z.lo) - Y(z.hi));
+        const alpha = (z.alpha != null ? z.alpha : 0.14) + (z.active ? 0.08 : 0);
+        return (
+          <g key={'z' + i}>
+            <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={z.color} opacity={alpha} />
+            {/* only the zone the data currently occupies carries its name — the
+                rest stay as quiet colour context. Rendered even when the band is a
+                thin sliver (y clamped inside the chart): it's the label that matters. */}
+            {z.label && z.active && (() => {
+              const fs = h >= 12 ? 7 : 5.8;
+              const ty = Math.min(Math.max(top + h / 2 + fs * 0.38, fs + 1.5), H - 3);
+              return (
+                <text x={W - pad - 4} y={ty} textAnchor="end" fontSize={fs} fontWeight="700"
+                  letterSpacing="0.6" fill={z.color} opacity="0.9">{z.label.toUpperCase()}</text>
+              );
+            })()}
+          </g>
+        );
+      })}
       {band && <rect x={pad} y={Y(band.hi)} width={W - 2 * pad} height={Math.max(1, Y(band.lo) - Y(band.hi))} fill="var(--blue-soft)" rx="2" />}
       {series.map((s, i) => (
         <g key={i}>

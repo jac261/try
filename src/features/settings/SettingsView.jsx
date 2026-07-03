@@ -137,13 +137,13 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced }) {
+export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced, onReadinessInfo, onExportCalibration, calibrationCount }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
   return (
     <>
-      <div className="section-title">Settings</div>
+      <div className="section-title">Profile</div>
       <div className="card">
         <h2>{p.name}</h2>
         <p className="lead">Training for the {T.RACES[p.raceType].name} on {T.fmtDate(T.iso(p.raceDate), { month: 'long', day: 'numeric', year: 'numeric' })}</p>
@@ -176,6 +176,13 @@ export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitn
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Connections</h2>
         <IntervalsIcuCard onWellnessSynced={onWellnessSynced} />
+      </div>
+      <div className="card">
+        <h2 style={{ marginBottom: 10 }}>Support</h2>
+        <button className="btn ghost" onClick={onReadinessInfo}><Icon name="heartrate" size={18} /> How your readiness score works</button>
+        <div style={{ height: 10 }} />
+        <button className="btn ghost" onClick={onExportCalibration}><Icon name="download" size={18} /> Export readiness calibration data</button>
+        <p className="lead" style={{ margin: '10px 2px 0' }}>Every completed session quietly records how ready you scored vs how it felt — {calibrationCount || 0} observation{calibrationCount === 1 ? '' : 's'} so far on this device. With enough history the scoring weights can be fitted to you instead of set by policy.</p>
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Account</h2>

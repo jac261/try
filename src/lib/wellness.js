@@ -3,11 +3,25 @@
  * Pure scoring engine + a localStorage store of daily wellness records:
  *   { date, hrv, rhr, sleepH, sleepScore, ctl, atl, tsb }
  * CTL = Fitness, ATL = Fatigue, TSB = Form (CTL - ATL). The fields mirror
- * intervals.icu so a future backend sync can populate the same store.
+ * intervals.icu so the backend sync populates the same store.
  *
- * No data ships in the repo — records live only in the browser (try.wellness),
- * entered manually today or auto-synced once there's a backend proxy.
+ * READINESS MODEL — the point values are DERIVED, not hand-picked
+ * (full rationale: docs/READINESS_MODEL.md). The score starts at 100 and each
+ * factor with data adjusts it. Instead of choosing "−26" for a crashed HRV, the
+ * model derives every magnitude from three stated decisions:
+ *   1. The band cut-offs (green >=75, amber >=55) — the meaningful outputs.
+ *   2. A policy that fixes the total penalty budget: it takes TWO compromised
+ *      signals to reach "recover today", so the two most important factors, both
+ *      at their worst, land exactly on the red line (a 45-point drop). No single
+ *      signal alone can trigger red.
+ *   3. Each factor's IMPORTANCE as an ordinal tier (HRV 4, sleep 3, resting HR 2,
+ *      form 2) — one ranking judgement.
+ * A factor's max penalty is then (importance / total) x budget — so HRV's "26"
+ * is an output (4/11 x ~70.7), not an input. Within a factor the penalty ramps
+ * over a describable range (neutral -> worst), so there are no cliff edges either.
  */
+import { iso, addDays } from './date.js';
+
 const KEY = 'try.wellness';
 
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; } };
@@ -21,6 +35,7 @@ const latest = () => { const a = load(); return a.length ? a[a.length - 1] : nul
 
 const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
 const sd = a => { if (a.length < 2) return 0; const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) * (x - m)))); };
+const clamp01 = x => Math.max(0, Math.min(1, x));
 
 // Rolling baseline from the records before `date` (HRV & resting-HR norms).
 function baseline(records, beforeDate) {
@@ -33,40 +48,192 @@ function baseline(records, beforeDate) {
 const fmtH = h => { const m = Math.round(h * 60); return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; };
 const signed = v => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v));
 
-// Readiness score (0–100) + band + the drivers behind it. Each factor only
+const BANDS = [
+  { key: 'green', min: 75, headline: 'Ready to roll', blurb: 'Recovered and good to train as planned.' },
+  { key: 'amber', min: 55, headline: 'Ease into it', blurb: 'A bit down — keep hard efforts controlled or swap for easy aerobic.' },
+  { key: 'red', min: 0, headline: 'Recover today', blurb: 'Signals point to recovery — take it very easy, or rest.' },
+];
+function bandFor(score) { return (BANDS.find(b => score >= b.min) || BANDS[BANDS.length - 1]).key; }
+
+/* ---- the factor table ----
+   Each factor states only meaningful, arguable quantities:
+   `importance` — ordinal tier used to split the budget (max penalty is derived).
+   `value(rec, base)` — the model input (or null if the data's missing).
+   `neutral`/`worst` — the input range over which the penalty ramps 0 -> max;
+   `worst` sits on the "bad" side of `neutral`, so one formula covers every
+   direction. `curve` bends that ramp (sleep is convex — debt compounds).
+   `bonusAt` — input at/beyond which a factor that can be *better* than normal
+   (HRV, form) earns its small bonus. `driver`/`what`/`samples` are the human
+   explanation the support page renders. */
+const FACTORS = [
+  {
+    key: 'hrv', label: 'HRV', importance: 4,
+    value: (rec, base) => (rec.hrv != null && base.hrvMean) ? (rec.hrv - base.hrvMean) / (base.hrvSd || 4) : null,
+    neutral: -0.5, worst: -2.5, curve: 1, bonusAt: 0.7,
+    driver: (rec, base, p) => {
+      const bm = Math.round(base.hrvMean);
+      if (p <= -12) return { bad: 1, t: `HRV ${rec.hrv} — well below your ${bm} baseline` };
+      if (p <= -3) return { bad: 1, t: `HRV ${rec.hrv} — below your ${bm} baseline` };
+      if (p >= 1) return { bad: 0, t: `HRV ${rec.hrv} — above your ${bm} baseline` };
+      return { bad: 0, t: `HRV ${rec.hrv} — around your ${bm} baseline` };
+    },
+    what: 'Morning heart-rate variability, scored as standard deviations from your own rolling 21-day average — so it self-calibrates to you. Penalty ramps from 0 at baseline to the full weight at 2.5 sd below.',
+    samples: [['0.7+ sd above', 0.7], ['At your baseline', 0], ['1 sd below', -1], ['1.5 sd below', -1.5], ['2.5+ sd below', -2.5]],
+  },
+  {
+    key: 'sleep', label: 'Sleep', importance: 3,
+    value: (rec) => (rec.sleepH != null ? rec.sleepH : null),
+    neutral: 7, worst: 4, curve: 1.7,
+    driver: (rec, _base, p) => {
+      const s = rec.sleepH;
+      if (p <= -8) return { bad: 1, t: `Only ${fmtH(s)} sleep` };
+      if (p <= -3) return { bad: 1, t: `${fmtH(s)} sleep — a bit short` };
+      if (p <= -1) return { bad: 0, t: `${fmtH(s)} sleep` };
+      return { bad: 0, t: `${fmtH(s)} sleep — solid` };
+    },
+    what: '7h is treated as meeting an adult’s need (no penalty); 4h is the worst case (full weight). The ramp is convex, so sleep debt bites harder the deeper it goes — the hour lost from 6→5 costs more than 7→6.',
+    samples: [['7h or more', 7], ['6h', 6], ['5h', 5], ['4h or less', 4]],
+  },
+  {
+    key: 'rhr', label: 'Resting HR', importance: 2,
+    value: (rec, base) => (rec.rhr != null && base.rhrMean) ? rec.rhr - base.rhrMean : null,
+    neutral: 2, worst: 8, curve: 1,
+    driver: (rec, _base, p) => {
+      if (p <= -10) return { bad: 1, t: `Resting HR ${rec.rhr} — well above baseline` };
+      if (p <= -1) return { bad: 1, t: `Resting HR ${rec.rhr} — slightly raised` };
+      return null;
+    },
+    what: 'Beats per minute above your baseline resting HR — a classic sign of incomplete recovery, stress, or a bug coming on. Within 2 bpm is normal variation (no penalty); 8+ bpm above is the worst case. No bonus for a low reading.',
+    samples: [['Within 2 bpm', 2], ['4 bpm above', 4], ['8+ bpm above', 8]],
+  },
+  {
+    key: 'form', label: 'Form', importance: 2,
+    value: (rec) => (rec.tsb != null ? rec.tsb : null),
+    neutral: 0, worst: -25, curve: 1, bonusAt: 12,
+    driver: (rec, _base, p) => {
+      const t = signed(rec.tsb);
+      const zone = formZone(rec.tsb);
+      if (p <= -10) return { bad: 1, t: `Form ${t} — carrying fatigue` };
+      if (p <= -3) return { bad: 1, t: `Form ${t} — some fatigue` };
+      // Neutral-or-better: name the training zone so the chip matches the chart.
+      return { bad: 0, t: `Form ${t}` + (zone && zone.key !== 'grey' ? ` — ${zone.label.toLowerCase()}` : '') };
+    },
+    what: 'Form (TSB = Fitness − Fatigue) is your training-load balance — chronic context, not today’s acute state, so it’s a secondary signal. Balanced is neutral; −25 or deeper is the worst case; +12 or fresher earns the freshness bonus.',
+    samples: [['+12 or fresher', 12], ['Balanced (0)', 0], ['−10 (some fatigue)', -10], ['−25 or deeper', -25]],
+  },
+];
+
+/* ---- derive the magnitudes from the policy (see header) ---- */
+// Rule: the two most important factors at their worst land on the red line.
+const RED_DROP = 100 - BANDS.find(b => b.key === 'amber').min; // 45
+const TOTAL_IMPORTANCE = FACTORS.reduce((s, f) => s + f.importance, 0);
+const TOP_TWO_IMPORTANCE = FACTORS.map(f => f.importance).sort((a, b) => b - a).slice(0, 2).reduce((a, b) => a + b, 0);
+const BUDGET = RED_DROP * TOTAL_IMPORTANCE / TOP_TWO_IMPORTANCE; // total points removed by an all-worst day
+const BONUS_FRACTION = 0.15; // being better than normal recovers at most ~15% of a factor's weight
+FACTORS.forEach(f => {
+  f.max = Math.round(f.importance / TOTAL_IMPORTANCE * BUDGET);
+  f.bonus = f.bonusAt != null ? Math.max(1, Math.round(f.max * BONUS_FRACTION)) : 0;
+});
+
+// Signed points a factor contributes for input x: a bonus (positive) when it's
+// on the good side of baseline, otherwise a penalty (negative) scaled by how far
+// into the neutral->worst range it sits. The two never overlap.
+function pointsFor(f, x) {
+  if (f.bonusAt != null && ((x - 0) * Math.sign(f.bonusAt)) > 0) {
+    return Math.round(f.bonus * clamp01((x - 0) / (f.bonusAt - 0)));
+  }
+  const badness = Math.pow(clamp01((x - f.neutral) / (f.worst - f.neutral)), f.curve || 1);
+  return -Math.round(badness * f.max);
+}
+
+// Readiness score (0-100) + band + the drivers behind it. Each factor only
 // contributes when its data is present, so partial inputs still produce a read.
 function readiness(rec, base) {
   if (!rec) return null;
-  let score = 100; const why = [];
-  if (rec.hrv != null && base.hrvMean) {
-    const z = (rec.hrv - base.hrvMean) / (base.hrvSd || 4), bm = Math.round(base.hrvMean);
-    if (z < -1.5) { score -= 26; why.push({ bad: 1, t: `HRV ${rec.hrv} — well below your ${bm} baseline` }); }
-    else if (z < -0.7) { score -= 12; why.push({ bad: 1, t: `HRV ${rec.hrv} — a little below your ${bm} baseline` }); }
-    else if (z > 0.7) { score += 4; why.push({ bad: 0, t: `HRV ${rec.hrv} — above your ${bm} baseline` }); }
-    else why.push({ bad: 0, t: `HRV ${rec.hrv} — around your ${bm} baseline` });
-  }
-  if (rec.sleepH != null) {
-    const s = rec.sleepH;
-    if (s < 5) { score -= 22; why.push({ bad: 1, t: `Only ${fmtH(s)} sleep` }); }
-    else if (s < 6) { score -= 11; why.push({ bad: 1, t: `${fmtH(s)} sleep — a bit short` }); }
-    else if (s < 7) { score -= 3; why.push({ bad: 0, t: `${fmtH(s)} sleep` }); }
-    else why.push({ bad: 0, t: `${fmtH(s)} sleep — solid` });
-  }
-  if (rec.rhr != null && base.rhrMean) {
-    const d = rec.rhr - base.rhrMean;
-    if (d >= 7) { score -= 15; why.push({ bad: 1, t: `Resting HR ${rec.rhr} — ${Math.round(d)} above baseline` }); }
-    else if (d >= 4) { score -= 8; why.push({ bad: 1, t: `Resting HR ${rec.rhr} — slightly raised` }); }
-  }
-  if (rec.tsb != null) {
-    if (rec.tsb < -20) { score -= 14; why.push({ bad: 1, t: `Form ${signed(rec.tsb)} — carrying fatigue` }); }
-    else if (rec.tsb < -10) { score -= 7; why.push({ bad: 1, t: `Form ${signed(rec.tsb)} — some fatigue` }); }
-    else if (rec.tsb > 12) { score += 4; why.push({ bad: 0, t: `Form ${signed(rec.tsb)} — fresh` }); }
-    else why.push({ bad: 0, t: `Form ${signed(rec.tsb)}` });
+  let score = 100;
+  const why = [];
+  for (const f of FACTORS) {
+    const x = f.value(rec, base);
+    if (x == null) continue;
+    const points = pointsFor(f, x);
+    score += points;
+    const line = f.driver(rec, base, points);
+    if (line) why.push({ ...line, key: f.key, points });
   }
   score = Math.max(0, Math.min(100, Math.round(score)));
-  const band = score >= 75 ? 'green' : score >= 55 ? 'amber' : 'red';
-  const headline = band === 'green' ? 'Ready to roll' : band === 'amber' ? 'Ease into it' : 'Recover today';
-  return { score, band, headline, why };
+  const band = bandFor(score);
+  return { score, band, headline: BANDS.find(b => b.key === band).headline, why };
+}
+
+// The classic Form (TSB) training zones (Friel/PMC convention), used as the
+// coloured background bands the form line moves through on the load charts.
+// Each zone carries its own colour + opacity, tuned for the dark theme so
+// adjacent bands read as distinct strata: the grey middle recedes, the outer
+// zones pop, and high risk is unmissable.
+const FORM_ZONES = [
+  { key: 'transition', label: 'Transition', lo: 25, hi: Infinity, color: '#fbbf24', alpha: 0.22, blurb: 'so fresh you may be detraining' },
+  { key: 'fresh', label: 'Fresh', lo: 5, hi: 25, color: '#38bdf8', alpha: 0.20, blurb: 'race-ready' },
+  { key: 'grey', label: 'Grey zone', lo: -10, hi: 5, color: '#94a3b8', alpha: 0.10, blurb: 'neither building nor peaking' },
+  { key: 'optimal', label: 'Optimal', lo: -30, hi: -10, color: '#34d399', alpha: 0.20, blurb: 'productive training load' },
+  { key: 'highRisk', label: 'High risk', lo: -Infinity, hi: -30, color: '#f87171', alpha: 0.32, blurb: 'overreaching — injury/illness territory' },
+];
+function formZone(tsb) {
+  if (tsb == null) return null;
+  return FORM_ZONES.find(z => tsb >= z.lo && tsb < z.hi) || FORM_ZONES[0];
+}
+
+// Weekly ramp rate: how much Fitness (CTL) changed over the trailing 7 days —
+// computed from the synced series (so it also works for manual entries).
+// Sustained ramps above ~5-8/week are the classic overuse-injury flag.
+function rampRate(records) {
+  const withCtl = (records || []).filter(r => r.ctl != null);
+  if (withCtl.length < 2) return null;
+  const last = withCtl[withCtl.length - 1];
+  const target = iso(addDays(last.date, -7));
+  const prior = [...withCtl].reverse().find(r => r.date <= target);
+  if (!prior) return null;
+  return Math.round((last.ctl - prior.ctl) * 10) / 10;
+}
+
+// Readiness trend: score each of the last `days` records against the rolling
+// baseline as it stood on THAT day (no hindsight), skipping records that carry
+// no readiness metrics (an empty day would misleadingly score 100).
+function history(records, days = 14) {
+  const scored = (records || [])
+    .filter(r => r.hrv != null || r.sleepH != null || r.rhr != null || r.tsb != null)
+    .slice(-days)
+    .map(r => {
+      const rd = readiness(r, baseline(records, r.date));
+      return { date: r.date, score: rd.score, band: rd.band };
+    });
+  return scored;
+}
+
+// Bump when the scoring model changes shape — calibration observations carry it
+// so a future fit can separate data gathered under different engines.
+const ENGINE_VERSION = 2;
+
+// Immutable capture of "readiness as it stood" for calibration: the raw inputs
+// (not just the score) so future models can be fitted from the same observations,
+// plus the score/band this engine showed the athlete at the time.
+function snapshot(rec, base) {
+  if (!rec) return { v: ENGINE_VERSION, score: null, band: null, inputs: null };
+  const r = readiness(rec, base);
+  const round1 = x => (x == null ? null : Math.round(x * 10) / 10);
+  return {
+    v: ENGINE_VERSION,
+    score: r.score,
+    band: r.band,
+    inputs: {
+      hrv: rec.hrv ?? null,
+      hrvMean: round1(base.hrvMean) || null,
+      hrvSd: round1(base.hrvSd) || null,
+      rhr: rec.rhr ?? null,
+      rhrMean: round1(base.rhrMean) || null,
+      sleepH: rec.sleepH ?? null,
+      tsb: rec.tsb ?? null,
+    },
+  };
 }
 
 // Session-aware recommendation: how readiness should shape today's workout.
@@ -77,4 +244,20 @@ function advice(band, isHard, sessionTitle) {
   return isHard ? `Recovery first — swap today's ${s} for easy aerobic or rest.` : `Take it very easy today, or rest.`;
 }
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, fmtH, signed };
+const fmtEffect = p => (p > 0 ? '+' + p : p === 0 ? '0' : '−' + Math.abs(p));
+
+// Render-ready description for the in-app "How readiness works" page: the policy,
+// the bands, and each factor's derived weight + explanation + a table of effects
+// computed straight from the model (so the copy can never drift from the engine).
+const MODEL = {
+  start: 100,
+  bands: BANDS,
+  budget: Math.round(BUDGET),
+  policy: 'The point values aren’t hand-picked. Each factor’s importance (HRV and sleep primary, resting HR and form secondary) sets its share of a total budget, and that budget is fixed by one rule: it takes two compromised signals to reach "recover today" — the two most important, both at their worst, land exactly on the red line. Every number below is computed from that.',
+  factors: FACTORS.map(f => ({
+    key: f.key, label: f.label, weight: f.max, what: f.what,
+    bands: f.samples.map(([label, x]) => [label, fmtEffect(pointsFor(f, x))]),
+  })),
+};
+
+export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, FORM_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };

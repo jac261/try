@@ -43,5 +43,5 @@ export function AuthGate() {
     );
   }
   // key={user.id} → App remounts (fresh per-user state) when the account changes.
-  return <App key={user.id} storage={storage} getToken={getToken} />;
+  return <App key={user.id} storage={storage} getToken={getToken} user={user} />;
 }
