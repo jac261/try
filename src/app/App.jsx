@@ -12,13 +12,14 @@ import { FitnessEditor } from '@/features/settings/FitnessEditor.jsx';
 import { PlanSettingsEditor } from '@/features/settings/PlanSettingsEditor.jsx';
 import { SettingsView } from '@/features/settings/SettingsView.jsx';
 import { WellnessEditor } from '@/features/wellness/WellnessEditor.jsx';
+import { ReadinessInfo } from '@/features/wellness/ReadinessInfo.jsx';
 import { TodayView } from '@/features/today/TodayView.jsx';
 import { CalendarView } from '@/features/calendar/CalendarView.jsx';
 import { PlanView } from '@/features/plan/PlanView.jsx';
 import { ProgressView } from '@/features/progress/ProgressView.jsx';
 import { WurmReveal } from '@/features/easter-egg/WurmReveal.jsx';
 
-export function App({ storage, getToken }) {
+export function App({ storage, getToken, user }) {
   const [plan, setPlan] = useState(() => storage.load('plan', null));
   const [log, setLog] = useState(() => storage.load('log', {}));
   const [moves, setMoves] = useState(() => storage.load('moves', {}));
@@ -156,15 +157,25 @@ export function App({ storage, getToken }) {
   const race = T.RACES[plan.race];
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
 
+  // Settings/profile now lives behind the avatar (top-left), Runna-style — off the
+  // bottom nav, which stays focused on training.
   const tabs = [
     ['today', 'today', 'Today'], ['calendar', 'calendar', 'Calendar'],
-    ['plan', 'plan', 'Plan'], ['progress', 'progress', 'Progress'], ['settings', 'you', 'You'],
+    ['plan', 'plan', 'Plan'], ['progress', 'progress', 'Progress'],
   ];
+  const avatarUrl = user && user.imageUrl;
+  const initial = ((plan.profile.name || 'A').trim()[0] || 'A').toUpperCase();
 
   return (
     <div className="app">
       <div className="topbar">
-        <h1><Icon name="logo" size={26} /> Try</h1>
+        <div className="topbar-top">
+          <button className="avatar-btn" type="button" title="Profile &amp; settings"
+            aria-label="Profile and settings" onClick={() => setView('settings')}>
+            {avatarUrl ? <img className="avatar" src={avatarUrl} alt="" /> : <span className="avatar avatar-fallback">{initial}</span>}
+          </button>
+          <h1><Icon name="logo" size={26} /> Try</h1>
+        </div>
         <div className="sub">Hi {plan.profile.name} — let's get to the finish line</div>
         <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
       </div>
@@ -179,7 +190,8 @@ export function App({ storage, getToken }) {
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { storage.clear(); setLog({}); setMoves({}); setPlan(null); } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)}
-        onWellnessSynced={applyServerWellness} />}
+        onWellnessSynced={applyServerWellness} onReadinessInfo={() => setView('readinessInfo')} />}
+      {view === 'readinessInfo' && <ReadinessInfo onBack={() => setView('settings')} />}
 
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
 

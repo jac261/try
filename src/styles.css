@@ -334,3 +334,29 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .authstatus.ok { color: #6ee7b7; background: rgba(52, 211, 153, .12); border: 1px solid rgba(52, 211, 153, .28); }
 .authstatus.bad { color: #fca5a5; background: rgba(248, 113, 113, .12); border: 1px solid rgba(248, 113, 113, .28); }
 .authstatus code { color: inherit; overflow-wrap: anywhere; }
+
+/* ---------- profile avatar (Runna-style top-left entry to settings) ---------- */
+.topbar-top { display: flex; align-items: center; gap: 11px; }
+.avatar-btn { padding: 0; background: none; border: none; cursor: pointer; border-radius: 50%; line-height: 0; flex: none; }
+.avatar-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(255,255,255,.18); display: block; }
+.avatar-fallback { display: grid; place-items: center; background: linear-gradient(135deg, #4a74dc, #6d54c8); color: #fff; font-size: 15px; font-weight: 800; }
+
+/* ---------- readiness explainer (Support → How your readiness works) ---------- */
+.band-legend { display: grid; gap: 8px; margin-top: 6px; }
+.band-row { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.band-row .band-range { margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 600; }
+.band-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.band-row.green .band-dot { background: var(--run); }
+.band-row.amber .band-dot { background: var(--bike); }
+.band-row.red .band-dot { background: var(--danger); }
+.factor-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.factor-head h3 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -.3px; }
+.factor-weight { font-size: 11.5px; font-weight: 700; color: var(--muted); background: var(--chip); border-radius: 8px; padding: 3px 8px; white-space: nowrap; }
+.factor-bands { display: grid; gap: 6px; margin-top: 12px; }
+.factor-band { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12.5px; background: var(--chip); border-radius: 9px; padding: 8px 11px; }
+.factor-band span { color: #cfd6e2; }
+.factor-band b { font-variant-numeric: tabular-nums; font-weight: 800; }
+.factor-band b.good { color: #6ee7b7; }
+.factor-band b.bad { color: #f6b27a; }
+.factor-band b.muted { color: var(--faint); }
