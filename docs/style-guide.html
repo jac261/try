@@ -83,7 +83,7 @@
   <div class="grid" id="bands"></div>
 
   <h2>Form (TSB) training zones</h2>
-  <p class="note" style="margin:0 0 10px">Translucent strata behind the load charts — per-zone colour <em>and</em> alpha; only the occupied zone is labelled &amp; brightened.</p>
+  <p class="note" style="margin:0 0 10px">Translucent strata behind the load charts — colour-psychology hues with a subtle vertical gradient that intensifies toward the extreme; only the occupied zone is labelled &amp; brightened.</p>
   <div id="zones" style="border:1px solid var(--line);border-radius:14px;overflow:hidden"></div>
   <div class="grid" id="zoneswatches" style="margin-top:12px"></div>
 
@@ -232,18 +232,21 @@ document.getElementById('bands').innerHTML = [
 ].join('');
 
 const ZONES = [
-  ['TRANSITION','#fbbf24',.22,'> +25 \u00b7 detraining fresh'],
-  ['FRESH','#38bdf8',.20,'+5 \u2026 +25 \u00b7 race-ready'],
-  ['GREY ZONE','#94a3b8',.10,'\u221210 \u2026 +5'],
-  ['OPTIMAL','#34d399',.20,'\u221230 \u2026 \u221210 \u00b7 productive load'],
-  ['HIGH RISK','#f87171',.32,'< \u221230 \u00b7 overreaching'],
+  ['TRANSITION','#facc15',.20,'up','> +25 \u00b7 caution: detraining drift'],
+  ['FRESH','#2dd4bf',.20,'up','+5 \u2026 +25 \u00b7 crisp, race-ready'],
+  ['GREY ZONE','#94a3b8',.10,'flat','\u221210 \u2026 +5 \u00b7 neutral'],
+  ['OPTIMAL','#34d399',.20,'down','\u221230 \u2026 \u221210 \u00b7 growth, productive'],
+  ['HIGH RISK','#ef4444',.34,'down','< \u221230 \u00b7 alarm: overreaching'],
 ];
-document.getElementById('zones').innerHTML = ZONES.map(([nm,c,a])=>{
+document.getElementById('zones').innerHTML = ZONES.map(([nm,c,a,dir])=>{
   const rgb = [c.slice(1,3),c.slice(3,5),c.slice(5,7)].map(h=>parseInt(h,16)).join(',');
-  return `<div style="height:34px;display:flex;align-items:center;justify-content:flex-end;padding:0 12px;background:rgba(${rgb},${a})">
+  const bg = dir === 'flat' ? `rgba(${rgb},${a})`
+    : dir === 'up' ? `linear-gradient(to bottom, rgba(${rgb},${(a*1.45).toFixed(3)}), rgba(${rgb},${(a*0.5).toFixed(3)}))`
+    : `linear-gradient(to bottom, rgba(${rgb},${(a*0.5).toFixed(3)}), rgba(${rgb},${(a*1.45).toFixed(3)}))`;
+  return `<div style="height:34px;display:flex;align-items:center;justify-content:flex-end;padding:0 12px;background:${bg}">
     <span style="font-size:10px;font-weight:700;letter-spacing:.6px;color:${c};opacity:.9">${nm}</span></div>`;
 }).join('');
-document.getElementById('zoneswatches').innerHTML = ZONES.map(([nm,c,a,role])=>
+document.getElementById('zoneswatches').innerHTML = ZONES.map(([nm,c,a,dir,role])=>
   swatch(nm.charAt(0)+nm.slice(1).toLowerCase(), c, role + ' \u00b7 \u03b1 ' + a)).join('');
 
 document.getElementById('lines').innerHTML = [

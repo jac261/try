@@ -167,15 +167,18 @@ function readiness(rec, base) {
 
 // The classic Form (TSB) training zones (Friel/PMC convention), used as the
 // coloured background bands the form line moves through on the load charts.
-// Each zone carries its own colour + opacity, tuned for the dark theme so
-// adjacent bands read as distinct strata: the grey middle recedes, the outer
-// zones pop, and high risk is unmissable.
+// Colours chosen for what the word MEANS: golden caution-yellow for the
+// detraining drift of transition, mint teal for fresh (crisp, race-ready),
+// a receding neutral grey, growth green for optimal, alarm red for high risk.
+// Each band is a subtle vertical gradient whose intensity grows TOWARD the
+// extreme (`grad`: 'up' | 'down' | 'flat') — further from balanced, more
+// saturated — with per-zone alpha tuned for the dark theme.
 const FORM_ZONES = [
-  { key: 'transition', label: 'Transition', lo: 25, hi: Infinity, color: '#fbbf24', alpha: 0.22, blurb: 'so fresh you may be detraining' },
-  { key: 'fresh', label: 'Fresh', lo: 5, hi: 25, color: '#38bdf8', alpha: 0.20, blurb: 'race-ready' },
-  { key: 'grey', label: 'Grey zone', lo: -10, hi: 5, color: '#94a3b8', alpha: 0.10, blurb: 'neither building nor peaking' },
-  { key: 'optimal', label: 'Optimal', lo: -30, hi: -10, color: '#34d399', alpha: 0.20, blurb: 'productive training load' },
-  { key: 'highRisk', label: 'High risk', lo: -Infinity, hi: -30, color: '#f87171', alpha: 0.32, blurb: 'overreaching — injury/illness territory' },
+  { key: 'transition', label: 'Transition', lo: 25, hi: Infinity, color: '#facc15', alpha: 0.20, grad: 'up', blurb: 'so fresh you may be detraining' },
+  { key: 'fresh', label: 'Fresh', lo: 5, hi: 25, color: '#2dd4bf', alpha: 0.20, grad: 'up', blurb: 'race-ready' },
+  { key: 'grey', label: 'Grey zone', lo: -10, hi: 5, color: '#94a3b8', alpha: 0.10, grad: 'flat', blurb: 'neither building nor peaking' },
+  { key: 'optimal', label: 'Optimal', lo: -30, hi: -10, color: '#34d399', alpha: 0.20, grad: 'down', blurb: 'productive training load' },
+  { key: 'highRisk', label: 'High risk', lo: -Infinity, hi: -30, color: '#ef4444', alpha: 0.34, grad: 'down', blurb: 'overreaching — injury/illness territory' },
 ];
 function formZone(tsb) {
   if (tsb == null) return null;

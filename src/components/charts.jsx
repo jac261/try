@@ -1,4 +1,6 @@
 /* ---------------- tiny SVG charts ---------------- */
+import { useId } from 'react';
+
 // Hand-rolled bar chart in HTML/CSS. (An SVG with preserveAspectRatio="none"
 // stretches non-uniformly to fill the width, which distorts text labels.)
 export function BarChart({ data, height }) {
@@ -71,6 +73,7 @@ export function Sparkline({ values, betterDown, color }) {
 // zones) — zones are clamped to the data range so open-ended ones (±Infinity)
 // render as far as the data reaches without distorting the scale.
 export function TrendChart({ series, height, band, zones }) {
+  const uid = useId();
   const H = height || 100, W = 320, pad = 8;
   const vals = series.flatMap(s => s.values).filter(v => v != null).concat(band ? [band.lo, band.hi] : []);
   const min = Math.min(...vals), max = Math.max(...vals), range = (max - min) || 1;
@@ -82,14 +85,28 @@ export function TrendChart({ series, height, band, zones }) {
   const zoneRects = (zones || [])
     .map(z => ({ ...z, lo: Math.max(z.lo, min), hi: Math.min(z.hi, max) }))
     .filter(z => z.hi > z.lo);
+  // Zone alpha (+ the active-zone brightening) feeds either a flat fill or a
+  // subtle vertical gradient whose intensity grows toward the zone's extreme
+  // (`grad: 'up' | 'down'`) — further from balanced, more saturated.
+  const zoneAlpha = z => (z.alpha != null ? z.alpha : 0.14) + (z.active ? 0.08 : 0);
   return (
     <svg viewBox={'0 0 ' + W + ' ' + H} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      <defs>
+        {zoneRects.map((z, i) => (z.grad === 'up' || z.grad === 'down') ? (
+          <linearGradient key={'g' + i} id={uid + 'z' + i} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={z.color} stopOpacity={zoneAlpha(z) * (z.grad === 'up' ? 1.45 : 0.5)} />
+            <stop offset="1" stopColor={z.color} stopOpacity={zoneAlpha(z) * (z.grad === 'up' ? 0.5 : 1.45)} />
+          </linearGradient>
+        ) : null)}
+      </defs>
       {zoneRects.map((z, i) => {
         const top = Y(z.hi), h = Math.max(1, Y(z.lo) - Y(z.hi));
-        const alpha = (z.alpha != null ? z.alpha : 0.14) + (z.active ? 0.08 : 0);
+        const graded = z.grad === 'up' || z.grad === 'down';
         return (
           <g key={'z' + i}>
-            <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={z.color} opacity={alpha} />
+            {graded
+              ? <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={'url(#' + uid + 'z' + i + ')'} />
+              : <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={z.color} opacity={zoneAlpha(z)} />}
             {/* only the zone the data currently occupies carries its name — the
                 rest stay as quiet colour context. Rendered even when the band is a
                 thin sliver (y clamped inside the chart): it's the label that matters. */}
