@@ -56,17 +56,16 @@ describe('wellness formatting', () => {
 describe('wellness readiness — interpolation & model', () => {
   const base = { hrvMean: 60, hrvSd: 8, rhrMean: 50 };
 
-  it('interpolates within a band instead of a flat tier (no cliff edges)', () => {
-    // Sleep anchors: 7h→0, 6h→−3. 6.4h is 40% of the way from 6→7 → ~−1.8 → −2.
-    // Isolate the sleep factor by leaving the others at neutral values.
+  it('ramps smoothly within a band instead of a flat tier (no cliff edges)', () => {
+    // Sleep penalty is a convex curve from 7h (0) to 4h (full weight). Isolate it
+    // by leaving the other factors at neutral values.
     const at = h => wellness.readiness({ hrv: 60, sleepH: h, tsb: 0 }, base).score;
-    expect(at(7.0)).toBe(100);      // met need
+    expect(at(7.0)).toBe(100);      // met need, no penalty
     expect(at(6.0)).toBe(97);       // −3
-    expect(at(6.4)).toBe(98);       // −2, between the tiers (would be −3 flat before)
-    expect(at(6.8)).toBe(99);       // −1
-    expect(at(5.0)).toBe(89);       // −11
+    expect(at(6.4)).toBe(99);       // −1, between the tiers (would be a flat −3 before)
+    expect(at(5.0)).toBe(90);       // −10
     // monotonic: less sleep never scores higher
-    expect(at(6.4)).toBeLessThan(at(6.8));
+    expect(at(6.4)).toBeLessThan(at(7.0));
     expect(at(5.5)).toBeLessThan(at(6.0));
   });
 
@@ -80,17 +79,30 @@ describe('wellness readiness — interpolation & model', () => {
   it('drivers carry the points they cost', () => {
     const r = wellness.readiness({ hrv: 60, sleepH: 5, tsb: 0 }, base);
     const sleep = r.why.find(w => w.key === 'sleep');
-    expect(sleep.points).toBe(-11);
+    expect(sleep.points).toBe(-10);
   });
 
-  it('exposes a render-ready MODEL for the support page', () => {
+  it('exposes a render-ready MODEL with derived weights for the support page', () => {
     const m = wellness.MODEL;
     expect(m.start).toBe(100);
     expect(m.bands.map(b => b.key)).toEqual(['green', 'amber', 'red']);
     expect(m.factors.map(f => f.key)).toEqual(['hrv', 'sleep', 'rhr', 'form']);
+    // weights are derived from importance 4/3/2/2 and the band-anchored budget,
+    // not hand-set: HRV 26, sleep 19, resting HR 13, form 13.
+    expect(m.factors.map(f => f.weight)).toEqual([26, 19, 13, 13]);
+    expect(m.policy).toMatch(/two compromised signals/i);
     const sleep = m.factors.find(f => f.key === 'sleep');
-    expect(sleep.weight).toBe(22);
-    expect(Array.isArray(sleep.bands)).toBe(true);
     expect(sleep.what).toMatch(/7h/);
+    expect(sleep.bands).toEqual([['7h or more', '0'], ['6h', '−3'], ['5h', '−10'], ['4h or less', '−19']]);
+  });
+
+  it('derives magnitudes so it takes two compromised signals to reach red', () => {
+    // The policy that fixes the budget: HRV alone at its worst stays amber; HRV +
+    // sleep both at worst land on the red line (55). These are outputs, not knobs.
+    const hrvOnlyWorst = wellness.readiness({ hrv: base.hrvMean - base.hrvSd * 2.6 }, base);
+    expect(hrvOnlyWorst.band).toBe('amber');
+    const twoWorst = wellness.readiness({ hrv: base.hrvMean - base.hrvSd * 2.6, sleepH: 4 }, base);
+    expect(twoWorst.score).toBe(55);
+    expect(twoWorst.band).toBe('amber'); // exactly on the amber/red edge
   });
 });

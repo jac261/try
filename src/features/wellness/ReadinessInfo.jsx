@@ -31,6 +31,10 @@ export function ReadinessInfo({ onBack }) {
           ))}
         </div>
       </div>
+      <div className="card">
+        <div className="factor-head"><h3>Why these numbers</h3></div>
+        <p className="lead" style={{ marginTop: 6 }}>{m.policy}</p>
+      </div>
 
       {m.factors.map(f => (
         <div className="card" key={f.key}>

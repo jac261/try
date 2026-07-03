@@ -5,19 +5,20 @@
  * CTL = Fitness, ATL = Fatigue, TSB = Form (CTL - ATL). The fields mirror
  * intervals.icu so the backend sync populates the same store.
  *
- * READINESS MODEL (see docs/READINESS_MODEL.md for the full rationale)
- * Every morning starts at 100. Each factor you have data for subtracts points
- * as you deviate from a healthy norm — the further out, the bigger the penalty —
- * and a couple can add a small bonus. The penalty for a factor is a piecewise-
- * linear curve between documented anchor points (so there are no cliff edges:
- * 6.4h of sleep lands *between* the 6h and 7h penalties, not on a flat tier).
- * A factor's WEIGHT is the most it can ever subtract; the weights rank how much
- * a morning number should trust each signal:
- *   HRV 26  — most direct read on autonomic recovery, z-scored to your own norm
- *   Sleep 22 — the primary recovery input
- *   Resting HR 15 — corroborates HRV, but noisier/laggier, so lower + penalty-only
- *   Form/TSB 14 — chronic training-load context, not today's acute state
- * Bands: >=75 green "Ready to roll", 55-74 amber "Ease into it", <55 red "Recover today".
+ * READINESS MODEL — the point values are DERIVED, not hand-picked
+ * (full rationale: docs/READINESS_MODEL.md). The score starts at 100 and each
+ * factor with data adjusts it. Instead of choosing "−26" for a crashed HRV, the
+ * model derives every magnitude from three stated decisions:
+ *   1. The band cut-offs (green >=75, amber >=55) — the meaningful outputs.
+ *   2. A policy that fixes the total penalty budget: it takes TWO compromised
+ *      signals to reach "recover today", so the two most important factors, both
+ *      at their worst, land exactly on the red line (a 45-point drop). No single
+ *      signal alone can trigger red.
+ *   3. Each factor's IMPORTANCE as an ordinal tier (HRV 4, sleep 3, resting HR 2,
+ *      form 2) — one ranking judgement.
+ * A factor's max penalty is then (importance / total) x budget — so HRV's "26"
+ * is an output (4/11 x ~70.7), not an input. Within a factor the penalty ramps
+ * over a describable range (neutral -> worst), so there are no cliff edges either.
  */
 const KEY = 'try.wellness';
 
@@ -32,6 +33,7 @@ const latest = () => { const a = load(); return a.length ? a[a.length - 1] : nul
 
 const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
 const sd = a => { if (a.length < 2) return 0; const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) * (x - m)))); };
+const clamp01 = x => Math.max(0, Math.min(1, x));
 
 // Rolling baseline from the records before `date` (HRV & resting-HR norms).
 function baseline(records, beforeDate) {
@@ -44,34 +46,28 @@ function baseline(records, beforeDate) {
 const fmtH = h => { const m = Math.round(h * 60); return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; };
 const signed = v => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v));
 
-// Piecewise-linear interpolation over [x, penalty] anchors sorted by x ascending.
-// Clamps to the end penalties outside the anchor range.
-function interp(anchors, x) {
-  if (x <= anchors[0][0]) return anchors[0][1];
-  const end = anchors[anchors.length - 1];
-  if (x >= end[0]) return end[1];
-  for (let i = 1; i < anchors.length; i++) {
-    const [x0, p0] = anchors[i - 1];
-    const [x1, p1] = anchors[i];
-    if (x <= x1) return p0 + (p1 - p0) * ((x - x0) / (x1 - x0));
-  }
-  return end[1];
-}
+const BANDS = [
+  { key: 'green', min: 75, headline: 'Ready to roll', blurb: 'Recovered and good to train as planned.' },
+  { key: 'amber', min: 55, headline: 'Ease into it', blurb: 'A bit down — keep hard efforts controlled or swap for easy aerobic.' },
+  { key: 'red', min: 0, headline: 'Recover today', blurb: 'Signals point to recovery — take it very easy, or rest.' },
+];
+function bandFor(score) { return (BANDS.find(b => score >= b.min) || BANDS[BANDS.length - 1]).key; }
 
-/* ---- the factor table: input → penalty curve → driver text ----
-   `value(rec, base)` returns the model input (or null if the data's missing).
-   `anchors` map that input to a penalty (0 = no effect, negative = deduction,
-   positive = bonus). `driver` produces the plain-English line for the card,
-   or null to stay quiet (e.g. a normal resting HR isn't worth mentioning).
-   `weight`, `what` and `bands` are the human explanation the support page renders. */
+/* ---- the factor table ----
+   Each factor states only meaningful, arguable quantities:
+   `importance` — ordinal tier used to split the budget (max penalty is derived).
+   `value(rec, base)` — the model input (or null if the data's missing).
+   `neutral`/`worst` — the input range over which the penalty ramps 0 -> max;
+   `worst` sits on the "bad" side of `neutral`, so one formula covers every
+   direction. `curve` bends that ramp (sleep is convex — debt compounds).
+   `bonusAt` — input at/beyond which a factor that can be *better* than normal
+   (HRV, form) earns its small bonus. `driver`/`what`/`samples` are the human
+   explanation the support page renders. */
 const FACTORS = [
   {
-    key: 'hrv',
-    label: 'HRV',
-    weight: 26,
-    // z-score: standard deviations from your own 21-day HRV norm.
+    key: 'hrv', label: 'HRV', importance: 4,
     value: (rec, base) => (rec.hrv != null && base.hrvMean) ? (rec.hrv - base.hrvMean) / (base.hrvSd || 4) : null,
-    anchors: [[-2.6, -26], [-1.5, -18], [-0.7, -11], [0, 0], [0.7, 4]],
+    neutral: -0.5, worst: -2.5, curve: 1, bonusAt: 0.7,
     driver: (rec, base, p) => {
       const bm = Math.round(base.hrvMean);
       if (p <= -12) return { bad: 1, t: `HRV ${rec.hrv} — well below your ${bm} baseline` };
@@ -79,21 +75,13 @@ const FACTORS = [
       if (p >= 1) return { bad: 0, t: `HRV ${rec.hrv} — above your ${bm} baseline` };
       return { bad: 0, t: `HRV ${rec.hrv} — around your ${bm} baseline` };
     },
-    what: 'Morning heart-rate variability, scored as how many standard deviations it sits from your own rolling 21-day average — so it self-calibrates to you, not a population norm.',
-    bands: [
-      ['Above your baseline', '+4'],
-      ['Around your baseline', '0'],
-      ['~1 sd below', '−11'],
-      ['~1.5 sd below', '−18'],
-      ['2.5+ sd below', '−26'],
-    ],
+    what: 'Morning heart-rate variability, scored as standard deviations from your own rolling 21-day average — so it self-calibrates to you. Penalty ramps from 0 at baseline to the full weight at 2.5 sd below.',
+    samples: [['0.7+ sd above', 0.7], ['At your baseline', 0], ['1 sd below', -1], ['1.5 sd below', -1.5], ['2.5+ sd below', -2.5]],
   },
   {
-    key: 'sleep',
-    label: 'Sleep',
-    weight: 22,
+    key: 'sleep', label: 'Sleep', importance: 3,
     value: (rec) => (rec.sleepH != null ? rec.sleepH : null),
-    anchors: [[4, -22], [5, -11], [6, -3], [7, 0]],
+    neutral: 7, worst: 4, curve: 1.7,
     driver: (rec, _base, p) => {
       const s = rec.sleepH;
       if (p <= -8) return { bad: 1, t: `Only ${fmtH(s)} sleep` };
@@ -101,65 +89,58 @@ const FACTORS = [
       if (p <= -1) return { bad: 0, t: `${fmtH(s)} sleep` };
       return { bad: 0, t: `${fmtH(s)} sleep — solid` };
     },
-    what: 'Hours slept. 7h is treated as meeting an adult’s need; the penalty deepens faster than linearly below that, because sleep debt compounds — losing the hour from 6→5 costs more than 7→6.',
-    bands: [
-      ['7h or more', '0'],
-      ['6h', '−3'],
-      ['5h', '−11'],
-      ['4h or less', '−22'],
-    ],
+    what: '7h is treated as meeting an adult’s need (no penalty); 4h is the worst case (full weight). The ramp is convex, so sleep debt bites harder the deeper it goes — the hour lost from 6→5 costs more than 7→6.',
+    samples: [['7h or more', 7], ['6h', 6], ['5h', 5], ['4h or less', 4]],
   },
   {
-    key: 'rhr',
-    label: 'Resting HR',
-    weight: 15,
-    // bpm above your baseline; below your norm is just normal, not extra-ready.
+    key: 'rhr', label: 'Resting HR', importance: 2,
     value: (rec, base) => (rec.rhr != null && base.rhrMean) ? rec.rhr - base.rhrMean : null,
-    anchors: [[2, 0], [4, -8], [7, -15], [12, -15]],
+    neutral: 2, worst: 8, curve: 1,
     driver: (rec, _base, p) => {
-      if (p <= -12) return { bad: 1, t: `Resting HR ${rec.rhr} — well above baseline` };
+      if (p <= -10) return { bad: 1, t: `Resting HR ${rec.rhr} — well above baseline` };
       if (p <= -1) return { bad: 1, t: `Resting HR ${rec.rhr} — slightly raised` };
-      return null; // normal resting HR isn't worth a line
+      return null;
     },
-    what: 'Beats per minute above your baseline resting HR. A raised morning resting HR is a classic sign of incomplete recovery, stress, or a bug coming on. Within 4 bpm of normal is neutral; there is no bonus for a low reading.',
-    bands: [
-      ['Within 4 bpm of baseline', '0'],
-      ['4 bpm above', '−8'],
-      ['7+ bpm above', '−15'],
-    ],
+    what: 'Beats per minute above your baseline resting HR — a classic sign of incomplete recovery, stress, or a bug coming on. Within 2 bpm is normal variation (no penalty); 8+ bpm above is the worst case. No bonus for a low reading.',
+    samples: [['Within 2 bpm', 2], ['4 bpm above', 4], ['8+ bpm above', 8]],
   },
   {
-    key: 'form',
-    label: 'Form',
-    weight: 14,
+    key: 'form', label: 'Form', importance: 2,
     value: (rec) => (rec.tsb != null ? rec.tsb : null),
-    anchors: [[-25, -14], [-20, -14], [-10, -7], [0, 0], [12, 4], [30, 4]],
+    neutral: 0, worst: -25, curve: 1, bonusAt: 12,
     driver: (rec, _base, p) => {
       const t = signed(rec.tsb);
-      if (p <= -12) return { bad: 1, t: `Form ${t} — carrying fatigue` };
+      if (p <= -10) return { bad: 1, t: `Form ${t} — carrying fatigue` };
       if (p <= -3) return { bad: 1, t: `Form ${t} — some fatigue` };
       if (p >= 1) return { bad: 0, t: `Form ${t} — fresh` };
       return { bad: 0, t: `Form ${t}` };
     },
-    what: 'Form (TSB = Fitness − Fatigue) is your training-load balance. Deeply negative means accumulated fatigue (often deliberate mid-block, but still a drag on readiness); positive means fresh, as in a taper. It carries the least weight because it is chronic context, not today’s acute state.',
-    bands: [
-      ['+12 or fresher', '+4'],
-      ['Around balanced', '0'],
-      ['−10 (some fatigue)', '−7'],
-      ['−20 or deeper', '−14'],
-    ],
+    what: 'Form (TSB = Fitness − Fatigue) is your training-load balance — chronic context, not today’s acute state, so it’s a secondary signal. Balanced is neutral; −25 or deeper is the worst case; +12 or fresher earns the freshness bonus.',
+    samples: [['+12 or fresher', 12], ['Balanced (0)', 0], ['−10 (some fatigue)', -10], ['−25 or deeper', -25]],
   },
 ];
 
-// Band cutoffs + copy — exported for the support page and the readiness card.
-const BANDS = [
-  { key: 'green', min: 75, headline: 'Ready to roll', blurb: 'Recovered and good to train as planned.' },
-  { key: 'amber', min: 55, headline: 'Ease into it', blurb: 'A bit down — keep hard efforts controlled or swap for easy aerobic.' },
-  { key: 'red', min: 0, headline: 'Recover today', blurb: 'Signals point to recovery — take it very easy, or rest.' },
-];
+/* ---- derive the magnitudes from the policy (see header) ---- */
+// Rule: the two most important factors at their worst land on the red line.
+const RED_DROP = 100 - BANDS.find(b => b.key === 'amber').min; // 45
+const TOTAL_IMPORTANCE = FACTORS.reduce((s, f) => s + f.importance, 0);
+const TOP_TWO_IMPORTANCE = FACTORS.map(f => f.importance).sort((a, b) => b - a).slice(0, 2).reduce((a, b) => a + b, 0);
+const BUDGET = RED_DROP * TOTAL_IMPORTANCE / TOP_TWO_IMPORTANCE; // total points removed by an all-worst day
+const BONUS_FRACTION = 0.15; // being better than normal recovers at most ~15% of a factor's weight
+FACTORS.forEach(f => {
+  f.max = Math.round(f.importance / TOTAL_IMPORTANCE * BUDGET);
+  f.bonus = f.bonusAt != null ? Math.max(1, Math.round(f.max * BONUS_FRACTION)) : 0;
+});
 
-function bandFor(score) {
-  return (BANDS.find(b => score >= b.min) || BANDS[BANDS.length - 1]).key;
+// Signed points a factor contributes for input x: a bonus (positive) when it's
+// on the good side of baseline, otherwise a penalty (negative) scaled by how far
+// into the neutral->worst range it sits. The two never overlap.
+function pointsFor(f, x) {
+  if (f.bonusAt != null && ((x - 0) * Math.sign(f.bonusAt)) > 0) {
+    return Math.round(f.bonus * clamp01((x - 0) / (f.bonusAt - 0)));
+  }
+  const badness = Math.pow(clamp01((x - f.neutral) / (f.worst - f.neutral)), f.curve || 1);
+  return -Math.round(badness * f.max);
 }
 
 // Readiness score (0-100) + band + the drivers behind it. Each factor only
@@ -171,15 +152,14 @@ function readiness(rec, base) {
   for (const f of FACTORS) {
     const x = f.value(rec, base);
     if (x == null) continue;
-    const points = Math.round(interp(f.anchors, x));
+    const points = pointsFor(f, x);
     score += points;
     const line = f.driver(rec, base, points);
     if (line) why.push({ ...line, key: f.key, points });
   }
   score = Math.max(0, Math.min(100, Math.round(score)));
   const band = bandFor(score);
-  const meta = BANDS.find(b => b.key === band);
-  return { score, band, headline: meta.headline, why };
+  return { score, band, headline: BANDS.find(b => b.key === band).headline, why };
 }
 
 // Session-aware recommendation: how readiness should shape today's workout.
@@ -190,11 +170,20 @@ function advice(band, isHard, sessionTitle) {
   return isHard ? `Recovery first — swap today's ${s} for easy aerobic or rest.` : `Take it very easy today, or rest.`;
 }
 
-// Render-ready description of the model for the in-app "How readiness works" page.
+const fmtEffect = p => (p > 0 ? '+' + p : p === 0 ? '0' : '−' + Math.abs(p));
+
+// Render-ready description for the in-app "How readiness works" page: the policy,
+// the bands, and each factor's derived weight + explanation + a table of effects
+// computed straight from the model (so the copy can never drift from the engine).
 const MODEL = {
   start: 100,
   bands: BANDS,
-  factors: FACTORS.map(f => ({ key: f.key, label: f.label, weight: f.weight, what: f.what, bands: f.bands })),
+  budget: Math.round(BUDGET),
+  policy: 'The point values aren’t hand-picked. Each factor’s importance (HRV and sleep primary, resting HR and form secondary) sets its share of a total budget, and that budget is fixed by one rule: it takes two compromised signals to reach "recover today" — the two most important, both at their worst, land exactly on the red line. Every number below is computed from that.',
+  factors: FACTORS.map(f => ({
+    key: f.key, label: f.label, weight: f.max, what: f.what,
+    bands: f.samples.map(([label, x]) => [label, fmtEffect(pointsFor(f, x))]),
+  })),
 };
 
 export const wellness = { load, save, upsert, latest, baseline, readiness, advice, fmtH, signed, MODEL };

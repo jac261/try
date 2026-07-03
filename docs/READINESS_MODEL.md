@@ -6,9 +6,9 @@ the profile page ("How your readiness works")._
 
 ## The shape of it
 
-Every morning **starts at 100**. Each signal you have data for **subtracts points**
-as you drift from a healthy norm — the further out, the bigger the penalty — and a
-couple can add a small bonus. The result is clamped to 0–100 and banded:
+Every morning **starts at 100**. Each signal you have data for **adjusts it** — a
+penalty as you drift from a healthy norm (bigger the further out), or a small bonus for
+being better than normal. The result is clamped to 0–100 and banded:
 
 | Score | Band | Meaning |
 |---|---|---|
@@ -16,98 +16,107 @@ couple can add a small bonus. The result is clamped to 0–100 and banded:
 | **55–74** | 🟠 Ease into it | a bit down — keep hard efforts controlled |
 | **< 55** | 🔴 Recover today | signals point to rest / very easy |
 
-Two principles run through the whole thing:
+Two principles run through it:
 
 1. **Everything is relative to _you_.** HRV and resting HR are scored against your own
-   **rolling 21-day baseline** (mean, and for HRV the standard deviation), recomputed
-   daily. "Good" and "bad" track your normal, not a population average, so the model
-   self-calibrates as your fitness shifts across a training block.
+   **rolling 21-day baseline**, recomputed daily — so "good" and "bad" track your normal,
+   and the model self-calibrates as your fitness shifts across a block.
 2. **Missing data never punishes you.** A factor only contributes when its value is
-   present, so a day with only sleep logged can still score 100. The trade-off — a
-   sparse day can look rosier than reality — is exactly why the intervals.icu sync
+   present, so a sparse day can score 100. That's exactly why the intervals.icu sync
    matters: full data, honest score.
 
-## Why these weights
+## The point values are derived, not hand-picked
 
-A factor's **weight** is the most it can ever subtract. The weights rank how much a
-morning number should trust each signal:
+The obvious objection to any scoring model is: _why −26 and not −25?_ Here the magnitudes
+aren't chosen — they're **computed from three stated decisions**, so "−26" is an output.
 
-| Factor | Weight | Why it ranks there |
+**1. The band cut-offs** (green ≥ 75, amber ≥ 55) — the only things with real meaning
+(train / ease / recover).
+
+**2. One policy that fixes the total budget:** _it takes two compromised signals to
+declare "recover today"._ So the **two most important factors, both at their worst, land
+exactly on the red line** — a 45-point drop (100 − 55). No single signal alone reaches
+red. That one rule pins how many points are "on the table" in total.
+
+**3. Importance as an ordinal tier** — the only ranking judgement:
+
+| Factor | Importance | Why |
 |---|---|---|
-| **HRV** | 26 | The most direct read on autonomic (nervous-system) recovery, and z-scored to your own norm so it self-calibrates. Gets the heaviest single vote. |
-| **Sleep** | 22 | The primary _input_ to recovery — near-equal to HRV. |
-| **Resting HR** | 15 | Corroborates HRV, but noisier and laggier, so lower — and penalty-only (a low reading is normal, not "extra ready"). |
-| **Form (TSB)** | 14 | Chronic training-load _context_, not today's acute physiological state — the lightest vote, and the only one besides HRV that can add a small freshness bonus. |
+| **HRV** | 4 | Most direct read on autonomic recovery, self-calibrating. |
+| **Sleep** | 3 | The primary recovery _input_. |
+| **Resting HR** | 2 | Corroborates HRV, but noisier/laggier — and penalty-only. |
+| **Form (TSB)** | 2 | Chronic training-load _context_, not today's acute state. |
 
-## No cliff edges — the penalty is a smooth curve
+Each factor's **max penalty** is then `(its importance ÷ total) × budget`. With the
+"two-signal red" rule, the budget works out to ~71 points, and the weights fall out:
 
-Each factor maps its input to a penalty by **piecewise-linear interpolation** between
-documented anchor points, so there are no arbitrary tier boundaries: **6.4h of sleep
-lands _between_ the 6h and 7h penalties (≈ −2), not on a flat −3.** The anchors are the
-"why this number" for every factor.
+| Factor | Derivation | **Max penalty** |
+|---|---|---|
+| HRV | 4/11 × 71 | **26** |
+| Sleep | 3/11 × 71 | **19** |
+| Resting HR | 2/11 × 71 | **13** |
+| Form | 2/11 × 71 | **13** |
 
-### HRV — weight 26 · input: standard deviations from your 21-day HRV mean
-| HRV vs baseline | Penalty |
+So **"−26" means "HRV is 4/11 of the importance, and the budget is set so no lone signal
+triggers red"** — not a number I liked the look of. Change the importance tiers or the
+policy and every weight recomputes. The only remaining judgements are the tiers (4/3/2/2)
+and the one behavioural rule — a handful of arguable decisions instead of ~20 magic
+numbers. _(The genuinely rigorous next step is to fit even those to data — correlating
+each morning's readiness against how that day's session felt via the `feel` log. Not
+enough history yet, but the hooks are there.)_
+
+## Within a factor: a smooth ramp over a describable range
+
+Each factor states a **neutral** point (0 penalty) and a **worst** point (full penalty),
+and the penalty ramps between them — so there are no cliff edges. Both endpoints are
+meaningful quantities you can argue about, unlike a bare "−11".
+
+### HRV — max 26 · neutral: baseline · worst: 2.5 sd below
+| HRV vs baseline | Effect |
 |---|---|
 | ≥ 0.7 sd above | **+4** (bonus) |
 | at baseline | 0 |
-| ~1 sd below (−0.7) | −11 |
-| ~1.5 sd below | −18 |
-| 2.6+ sd below | −26 |
+| 1 sd below | −7 |
+| 1.5 sd below | −13 |
+| 2.5+ sd below | −26 |
 
-_A z-score below −1 means your HRV is meaningfully suppressed vs your own normal — the
-single best proxy for "your nervous system hasn't bounced back."_
-
-### Sleep — weight 22 · input: hours slept
-| Sleep | Penalty |
+### Sleep — max 19 · neutral: 7h · worst: 4h (convex — debt compounds)
+| Sleep | Effect |
 |---|---|
-| ≥ 7h (adult need met) | 0 |
+| 7h or more | 0 |
 | 6h | −3 |
-| 5h | −11 |
-| ≤ 4h | −22 |
+| 5h | −10 |
+| 4h or less | −19 |
 
-_7h is treated as meeting an adult's need. The penalty deepens **faster than linearly**
-below that (−3 → −11 → −22) because sleep debt compounds: the hour lost from 6→5 costs
-more than 7→6. **So 6.4h ≈ −2** — you're inside "slightly under," you've met most of
-your need, and the design intent is: don't nag someone for being half an hour short,
-but don't call it perfect either._
+_The ramp is convex, so the hour lost from 6→5 costs more than 7→6. **6.4h ≈ −1**:
+you've met most of your need, so a token nudge, not a flat penalty._
 
-### Resting HR — weight 15 · input: bpm above your baseline
-| Resting HR | Penalty |
+### Resting HR — max 13 · neutral: +2 bpm · worst: +8 bpm
+| Resting HR | Effect |
 |---|---|
-| within 4 bpm of baseline | 0 |
-| +4 bpm | −8 |
-| +7 bpm or more | −15 |
+| within 2 bpm of baseline | 0 |
+| +4 bpm | −4 |
+| +8 bpm or more | −13 |
 
-_A raised morning resting HR is a classic sign of incomplete recovery, stress, or a bug
-coming on. Within 4 bpm is normal daily variation → neutral. No bonus for a low reading._
-
-### Form (TSB = Fitness − Fatigue) — weight 14 · input: TSB value
-| Form | Penalty |
+### Form (TSB) — max 13 · neutral: 0 · worst: −25
+| Form | Effect |
 |---|---|
 | +12 or fresher | **+4** (bonus) |
-| balanced (0) | 0 |
-| −10 (some fatigue) | −7 |
-| −20 or deeper | −14 |
-
-_Deeply negative Form means accumulated fatigue — often deliberate mid-build, but still
-a readiness drag; positive means fresh, as in a taper._
+| balanced | 0 |
+| −10 | −5 |
+| −25 or deeper | −13 |
 
 ## A worked example
 
-A morning of **HRV 39** (vs a ~60 baseline, ~2.6 sd below → **−26**), **sleep 6.4h**
-(**−2**), **resting HR 55** (vs ~51, +4 → **−8**), **Form +36** (fresher than +12 →
-**+4**):
+A morning of **HRV 39** (~2.6 sd below a ~60 baseline → **−26**), **sleep 6.4h**
+(**−1**), **resting HR ~+4** above baseline (**−4**), **Form fresh** (+12 or better →
+**+2**):
 
-> 100 − 26 − 2 − 8 + 4 = **68 → 🟠 Ease into it**
+> 100 − 26 − 1 − 4 + 2 = **71 → 🟠 Ease into it**
 
-which is why the card offered the one-tap "ease today" downgrade.
+## Caveat
 
-## Honest caveats
-
-These thresholds and weights are a **considered heuristic calibrated against real
-data**, not derived from peer-reviewed cut-offs — the widely-accepted anchors (7h sleep,
-HRV-relative-to-baseline, elevated resting HR) are standard, but the exact point values
-are a judgement call. They live as a single data table at the top of `wellness.js`, so
-they're easy to read, challenge, and retune. If the score ever feels too twitchy or too
-lenient in practice, that table is the one place to adjust.
+The importance tiers and the "two-signal red" policy are still design judgements — but
+they are a small, stated, arguable set, and they live as a few named constants at the top
+of `wellness.js`, not as scattered magic numbers. Change them in one place and the whole
+model re-derives.
