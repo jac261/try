@@ -134,7 +134,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
                   <div className="load-stats">
                     <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk</span>
                   </div>
-                  <TrendChart height={64} domain={{ min: -5, max: 9.5 }}
+                  <TrendChart height={78} domain={{ min: -5, max: 9.5 }}
                     zones={T.wellness.RAMP_ZONES.map(z => ({ ...z, active: !!rZone && z.key === rZone.key }))}
                     series={[{ values: ramps.map(r => r.ramp), color: 'var(--blue)', width: 1.8 }]} />
                 </div>

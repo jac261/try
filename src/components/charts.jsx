@@ -126,9 +126,13 @@ export function TrendChart({ series, height, band, zones, domain, axis }) {
               ? <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={'url(#' + uid + 'z' + i + ')'} />
               : <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={z.color} opacity={zoneAlpha(z)} />}
             {Number.isFinite(loFinite) && loFinite > min && loFinite < max && (
-              <text x={pad + 3} y={Y(loFinite) - 1.8} fontSize="5.5" fontWeight="700"
-                fill="#8b95a7" opacity="0.85" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                {(loFinite > 0 ? '+' : loFinite < 0 ? '−' : '') + Math.abs(loFinite)}</text>
+              <g>
+                <line x1={pad} x2={W - pad} y1={Y(loFinite)} y2={Y(loFinite)}
+                  stroke="#8b95a7" strokeWidth="0.5" opacity="0.18" />
+                <text x={pad + 3} y={Y(loFinite) + 2} fontSize="5.5" fontWeight="700"
+                  fill="#8b95a7" opacity="0.9" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {(loFinite > 0 ? '+' : loFinite < 0 ? '−' : '') + Math.abs(loFinite)}</text>
+              </g>
             )}
             {/* only the zone the data currently occupies carries its name — the
                 rest stay as quiet colour context. Rendered even when the band is a
@@ -147,7 +151,7 @@ export function TrendChart({ series, height, band, zones, domain, axis }) {
       {ticks.map(t => (
         <g key={'t' + t}>
           <line x1={pad} x2={W - pad} y1={Y(t)} y2={Y(t)} stroke="#8b95a7" strokeWidth="0.5" opacity="0.14" />
-          <text x={pad + 3} y={Y(t) - 1.8} fontSize="5.5" fontWeight="700" fill="#8b95a7"
+          <text x={pad + 3} y={Y(t) + 2} fontSize="5.5" fontWeight="700" fill="#8b95a7"
             opacity="0.85" style={{ fontVariantNumeric: 'tabular-nums' }}>{t}</text>
         </g>
       ))}
