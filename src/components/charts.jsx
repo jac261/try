@@ -129,7 +129,7 @@ export function TrendChart({ series, height, band, zones, domain, axis }) {
               <g>
                 <line x1={pad} x2={W - pad} y1={Y(loFinite)} y2={Y(loFinite)}
                   stroke="#8b95a7" strokeWidth="0.5" opacity="0.18" />
-                <text x={pad + 3} y={Y(loFinite) + 2} fontSize="5.5" fontWeight="700"
+                <text x={pad + 14} y={Y(loFinite) + 2} textAnchor="end" fontSize="5.5" fontWeight="700"
                   fill="#8b95a7" opacity="0.9" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {(loFinite > 0 ? '+' : loFinite < 0 ? '−' : '') + Math.abs(loFinite)}</text>
               </g>
@@ -151,8 +151,8 @@ export function TrendChart({ series, height, band, zones, domain, axis }) {
       {ticks.map(t => (
         <g key={'t' + t}>
           <line x1={pad} x2={W - pad} y1={Y(t)} y2={Y(t)} stroke="#8b95a7" strokeWidth="0.5" opacity="0.14" />
-          <text x={pad + 3} y={Y(t) + 2} fontSize="5.5" fontWeight="700" fill="#8b95a7"
-            opacity="0.85" style={{ fontVariantNumeric: 'tabular-nums' }}>{t}</text>
+          <text x={pad + 14} y={Y(t) + 2} textAnchor="end" fontSize="5.5" fontWeight="700"
+            fill="#8b95a7" opacity="0.85" style={{ fontVariantNumeric: 'tabular-nums' }}>{t}</text>
         </g>
       ))}
       {band && <rect x={pad} y={Y(band.hi)} width={W - 2 * pad} height={Math.max(1, Y(band.lo) - Y(band.hi))} fill="var(--blue-soft)" rx="2" />}
