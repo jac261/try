@@ -9,3 +9,4 @@ export * from './disciplines.js';
 export * from './plan.js';
 export * from './fit.js';
 export * from './wellness.js';
+export * from './adapt.js';

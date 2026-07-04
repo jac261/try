@@ -60,6 +60,9 @@ export function App({ storage, getToken, user }) {
         if (plan) sync.savePlan(plan).then(map => { if (map) setRefToId(map); }); else setPlan(null);
       } else if (result) {
         setPlan(result.plan); setLog(result.log); setMoves(result.moves); setRefToId(result.refToId || {});
+        // Adjustments sync only once the backend supports them; an empty result
+        // means "unknown", so the local overlay is kept rather than wiped.
+        if (result.adjust && Object.keys(result.adjust).length) setAdjust(result.adjust);
       } // result === null → offline/error: keep the cache already loaded
       setHydrated(true);
     });
@@ -158,9 +161,22 @@ export function App({ storage, getToken, user }) {
   // Readiness-driven adjustments overlay: eased session ids → easy aerobic version.
   const easedOf = w => (w && adjust[w.id] ? T.easeWorkout(w, plan) : w);
   const todaysHard = () => { const t = T.iso(new Date()); return plan.weeks.flatMap(wk => wk.workouts).filter(w => effDate(w, moves) === t && INTENSITY_TYPES[w.type] && !w.race); };
-  const easeToday = () => { const hard = todaysHard(); if (!hard.length) return; setAdjust(a => { const n = { ...a }; hard.forEach(w => n[w.id] = { kind: 'ease', at: new Date().toISOString() }); return n; }); };
-  const restoreToday = () => { const t = T.iso(new Date()); setAdjust(a => { const n = { ...a }; plan.weeks.flatMap(wk => wk.workouts).forEach(w => { if (effDate(w, moves) === t) delete n[w.id]; }); return n; }); };
-  const unEase = id => setAdjust(a => { const n = { ...a }; delete n[id]; return n; });
+  const easeToday = () => {
+    const hard = todaysHard(); if (!hard.length) return;
+    const at = new Date().toISOString();
+    setAdjust(a => { const n = { ...a }; hard.forEach(w => n[w.id] = { kind: 'ease', at }); return n; });
+    hard.forEach(w => { if (gid(w.id)) sync.saveAdjustment(gid(w.id), { kind: 'ease', easedFrom: w.type, at }); });
+  };
+  const restoreToday = () => {
+    const t = T.iso(new Date());
+    const todaysIds = plan.weeks.flatMap(wk => wk.workouts).filter(w => effDate(w, moves) === t).map(w => w.id);
+    setAdjust(a => { const n = { ...a }; todaysIds.forEach(id => delete n[id]); return n; });
+    todaysIds.forEach(id => { if (adjust[id] && gid(id)) sync.removeAdjustment(gid(id)); });
+  };
+  const unEase = id => {
+    setAdjust(a => { const n = { ...a }; delete n[id]; return n; });
+    if (gid(id)) sync.removeAdjustment(gid(id));
+  };
   // Rebuild the plan after a race/schedule change. This reshapes the structure, so we
   // prune log & moves to the workout IDs that still exist (fitness/history carry over).
   const reshapePlan = fields => {

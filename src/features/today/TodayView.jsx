@@ -23,7 +23,8 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
   return (
     <>
       <div className="section-title">Today's readiness</div>
-      <ReadinessCard wellness={wellness} today={today.map(easedOf)} onEdit={onEditWellness} onEase={onEaseToday} onRestore={onRestoreToday} />
+      <ReadinessCard wellness={wellness} today={today.map(w => ({ ...easedOf(w), done: !!log[w.id] }))}
+        onEdit={onEditWellness} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} />
       {missed.length > 0 && <div className="banner" {...tap(onCatchUp)}>
         <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">{missed.length} session{missed.length > 1 ? 's' : ''} missed this week</div>

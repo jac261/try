@@ -8,6 +8,8 @@ vi.mock('@/lib/api.js', () => ({
   deleteWorkoutLog: vi.fn(),
   putWorkoutMove: vi.fn(),
   deleteWorkoutMove: vi.fn(),
+  putWorkoutAdjustment: vi.fn(),
+  deleteWorkoutAdjustment: vi.fn(),
   getWellness: vi.fn(),
   syncWellness: vi.fn(),
   putWellness: vi.fn(),
@@ -114,5 +116,18 @@ describe('makeSync.refreshWellness', () => {
     api.syncWellness.mockResolvedValue({ ok: false, status: null });
     api.getWellness.mockResolvedValue({ ok: false, status: null });
     expect(await makeSync(getToken).refreshWellness()).toBe(null);
+  });
+});
+
+describe('makeSync adjustments (adaptive engine, dormant until backend ships)', () => {
+  it('saveAdjustment PUTs the eased state keyed by workout GUID', async () => {
+    api.putWorkoutAdjustment.mockResolvedValue({ ok: true });
+    await makeSync(getToken).saveAdjustment('guid-0-1', { kind: 'ease', easedFrom: 'Threshold', at: '2026-07-04T08:00:00Z' });
+    expect(api.putWorkoutAdjustment).toHaveBeenCalledWith(getToken, 'guid-0-1', { kind: 'ease', easedFrom: 'Threshold', at: '2026-07-04T08:00:00Z' });
+  });
+  it('removeAdjustment DELETEs it', async () => {
+    api.deleteWorkoutAdjustment.mockResolvedValue({ ok: true });
+    await makeSync(getToken).removeAdjustment('guid-0-1');
+    expect(api.deleteWorkoutAdjustment).toHaveBeenCalledWith(getToken, 'guid-0-1');
   });
 });

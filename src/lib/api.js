@@ -123,6 +123,16 @@ export function deleteWorkoutMove(getToken, workoutRef) {
   return request('/api/workouts/' + encodeURIComponent(workoutRef) + '/move', { getToken, method: 'DELETE' });
 }
 
+// Accepted day-adaptations (the eased-session overlay) sync like logs/moves —
+// contract in docs/ADAPTIVE_ENGINE.md. Dormant until the backend ships them.
+export function putWorkoutAdjustment(getToken, workoutId, adj) {
+  return request('/api/workouts/' + encodeURIComponent(workoutId) + '/adjustment', { getToken, method: 'PUT', body: adj });
+}
+
+export function deleteWorkoutAdjustment(getToken, workoutId) {
+  return request('/api/workouts/' + encodeURIComponent(workoutId) + '/adjustment', { getToken, method: 'DELETE' });
+}
+
 /* ---------------- activity files (.FIT) ---------------- */
 
 export function listActivityFiles(getToken) {
@@ -200,12 +210,14 @@ export function toClientState(resp) {
   if (!resp) return null;
   const log = {};
   const moves = {};
+  const adjust = {};
   const refToId = {};
 
   const mapWorkout = (wo) => {
     refToId[wo.clientWorkoutRef] = wo.id;
     if (wo.log) log[wo.clientWorkoutRef] = { done: !!wo.log.completed, at: wo.log.completedAtUtc || null, feel: wo.log.feel || undefined };
     if (wo.move) moves[wo.clientWorkoutRef] = wo.move.movedDate;
+    if (wo.adjustment) adjust[wo.clientWorkoutRef] = { kind: wo.adjustment.kind || 'ease', at: wo.adjustment.at || null };
     return {
       id: wo.clientWorkoutRef,
       week: wo.week, phase: wo.phase, date: wo.date,
@@ -235,7 +247,7 @@ export function toClientState(resp) {
   (resp.logs || []).forEach(l => { if (!log[l.clientWorkoutRef]) log[l.clientWorkoutRef] = { done: !!l.completed, at: l.completedAtUtc || null, feel: l.feel || undefined }; });
   (resp.moves || []).forEach(m => { if (!moves[m.clientWorkoutRef]) moves[m.clientWorkoutRef] = m.movedDate; });
 
-  return { plan, log, moves, refToId };
+  return { plan, log, moves, adjust, refToId };
 }
 
 // Our log entry { done, at, feel } → the API's log body.

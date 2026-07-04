@@ -19,7 +19,7 @@ function ReadinessRing({ score, band }) {
   );
 }
 
-export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
+export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOpen }) {
   const todayISO = T.iso(new Date());
   const rec = wellness.find(r => r.date === todayISO) || (wellness.length ? wellness[wellness.length - 1] : null);
   if (!rec) {
@@ -47,9 +47,28 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
           <div className="rd-advice">{adv}</div>
         </div>
       </div>
-      {eased
-        ? <div className="rd-eased"><Icon name="rest" size={15} /> Today eased to {eased.title} for recovery · <a className="reset" {...tap(onRestore)}>undo</a></div>
-        : (!stale && rd.band !== 'green' && hard && <button className="btn ghost sm rd-action" onClick={onEase}>Ease today's {hard.title} → easy aerobic</button>)}
+      {(() => {
+        // The adaptive engine (Phase 1): at most one reasoned proposal for today,
+        // from this morning's band — rules & thresholds in docs/ADAPTIVE_ENGINE.md.
+        // Stale wellness data never drives a change (yesterday's read isn't advice).
+        const proposal = stale ? null : T.proposeToday({ band: rd.band, score: rd.score, todays: today });
+        if (proposal) {
+          const accept = proposal.action === 'easeToday' ? onEase
+            : proposal.action === 'restoreToday' ? onRestore
+            : () => onOpen && onOpen(proposal.workout);
+          return (
+            <div className="rd-proposal">
+              <div className="ph"><Icon name={proposal.kind === 'restore' ? 'bolt' : proposal.kind === 'move-test' ? 'calendar' : 'rest'} size={16} /> {proposal.headline}</div>
+              <div className="pw">{proposal.why}</div>
+              <button className="btn ghost sm rd-action" onClick={accept}>
+                {proposal.kind === 'move-test' ? 'Open & reschedule' : proposal.kind === 'restore' ? 'Restore the session' : 'Accept the swap'}
+              </button>
+            </div>
+          );
+        }
+        if (eased) return <div className="rd-eased"><Icon name="rest" size={15} /> Today eased to {eased.title} for recovery · <a className="reset" {...tap(onRestore)}>undo</a></div>;
+        return null;
+      })()}
       <div className="rd-why">
         {(() => {
           // Only the signals that actually moved the score; a chip that says

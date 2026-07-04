@@ -368,3 +368,8 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* colour-keyed load stats: the numbers ARE the legend (colours match the lines) */
 .load-stats { display: flex; gap: 16px; flex-wrap: wrap; align-items: baseline; margin: 2px 0 8px; font-size: 11px; color: var(--muted); font-weight: 600; }
 .load-stats b { font-size: 16px; font-weight: 800; letter-spacing: -.3px; margin-right: 2px; font-variant-numeric: tabular-nums; }
+
+/* adaptive-engine proposal (readiness card) */
+.rd-proposal { margin-top: 13px; background: var(--chip); border-radius: 13px; padding: 12px 13px; }
+.rd-proposal .ph { font-size: 13.5px; font-weight: 800; letter-spacing: -.2px; display: flex; align-items: center; gap: 7px; }
+.rd-proposal .pw { color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 5px; }
