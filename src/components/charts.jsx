@@ -160,8 +160,7 @@ export function TrendChart({ series, height, band, zones, domain, axis }) {
         const ty = Math.min(Math.max(top + h / 2 + fs * 0.38, fs + 1.5), H - 3);
         return (
           <text key={'zl' + i} x={W - pad - 4} y={ty} textAnchor="end" fontSize={fs}
-            fontWeight="700" letterSpacing="0.6" fill={z.color}
-            stroke="var(--card)" strokeWidth="2" style={{ paintOrder: 'stroke' }}>
+            fontWeight="700" letterSpacing="0.6" fill={z.color}>
             {z.label.toUpperCase()}</text>
         );
       })}
