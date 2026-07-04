@@ -38,7 +38,7 @@ export function WellnessTrends({ wellness }) {
           <span><b style={{ color: 'var(--blue)' }}>{Math.round(last.ctl)}</b> Fitness (CTL){ctlD != null ? ' ' + T.wellness.signed(ctlD) : ''}</span>
           <span><b style={{ color: 'var(--danger)' }}>{Math.round(last.atl)}</b> Fatigue (ATL)</span>
         </div>
-        {ctl.length >= 2 && <TrendChart height={96} axis series={[
+        {ctl.length >= 2 && <TrendChart height={120} axis series={[
           { values: ctl, color: 'var(--blue)', fill: true, width: 2.4 },
           { values: atl, color: 'var(--danger)', width: 1.8 },
         ]} />}
@@ -53,7 +53,7 @@ export function WellnessTrends({ wellness }) {
         <div className="load-stats" style={{ marginBottom: 10 }}>
           <span><b style={{ color: 'var(--brick)' }}>{tsb != null ? T.wellness.signed(tsb) : '—'}</b> Form (TSB)</span>
         </div>
-        {tsbSeries.length >= 2 && <TrendChart height={128} domain={{ min: -35, max: 32 }}
+        {tsbSeries.length >= 2 && <TrendChart height={120} domain={{ min: -35, max: 32 }}
           zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
           series={[{ values: tsbSeries, color: 'var(--brick)', width: 2.2 }]} />}
       </div>
@@ -72,7 +72,7 @@ export function WellnessTrends({ wellness }) {
               <div className="load-stats" style={{ marginBottom: 10 }}>
                 <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk</span>
               </div>
-              <TrendChart height={112} domain={{ min: -5, max: 9.5 }}
+              <TrendChart height={120} domain={{ min: -5, max: 9.5 }}
                 zones={T.wellness.RAMP_ZONES.map(z => ({ ...z, active: !!rZone && z.key === rZone.key }))}
                 series={[{ values: ramps.map(r => r.ramp), color: 'var(--blue)', width: 2 }]} />
             </div>
@@ -87,7 +87,7 @@ export function WellnessTrends({ wellness }) {
           <div><b>{rhrAvg != null ? Math.round(rhrAvg) : '—'}</b><span>Rest HR avg</span></div>
           <div><b>{sleepAvg != null ? T.wellness.fmtH(sleepAvg) : '—'}</b><span>Sleep avg</span></div>
         </div>
-        {hrv.length >= 2 && <TrendChart height={96}
+        {hrv.length >= 2 && <TrendChart height={120}
           band={base.hrvMean ? { lo: base.hrvMean - base.hrvSd, hi: base.hrvMean + base.hrvSd } : null}
           series={[{ values: hrv, color: 'var(--run)', width: 2.4 }]} />}
         <div className="chart-legend"><span><i style={{ background: 'var(--run)' }} />HRV</span><span className="dim">shaded = your baseline range</span></div>

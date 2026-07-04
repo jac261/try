@@ -73,7 +73,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
               <span>Readiness trend</span>
               <span>{T.fmtDate(hist[0].date, { month: 'short', day: 'numeric' })} – {T.fmtDate(hist[hist.length - 1].date, { month: 'short', day: 'numeric' })}</span>
             </div>
-            <TrendChart height={62} band={{ lo: amber, hi: green }}
+            <TrendChart height={84} band={{ lo: amber, hi: green }}
               series={[{ values: hist.map(h => h.score), color: BAND_COLOR[rd.band], fill: true }]} />
           </div>
         );
@@ -102,7 +102,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
                 <span><b style={{ color: 'var(--blue)' }}>{Math.round(lastLoad.ctl)}</b> Fitness</span>
                 <span><b style={{ color: 'var(--danger)' }}>{Math.round(lastLoad.atl)}</b> Fatigue</span>
               </div>
-              <TrendChart height={56} axis series={[
+              <TrendChart height={84} axis series={[
                 { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
                 { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
               ]} />
@@ -115,7 +115,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
               <div className="load-stats">
                 <span><b style={{ color: 'var(--brick)' }}>{T.wellness.signed(tsbNow)}</b> Form</span>
               </div>
-              <TrendChart height={96} domain={{ min: -35, max: 32 }}
+              <TrendChart height={84} domain={{ min: -35, max: 32 }}
                 zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
                 series={[{ values: tsbSeries, color: 'var(--brick)', width: 2 }]} />
             </div>
@@ -134,7 +134,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
                   <div className="load-stats">
                     <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk</span>
                   </div>
-                  <TrendChart height={78} domain={{ min: -5, max: 9.5 }}
+                  <TrendChart height={84} domain={{ min: -5, max: 9.5 }}
                     zones={T.wellness.RAMP_ZONES.map(z => ({ ...z, active: !!rZone && z.key === rZone.key }))}
                     series={[{ values: ramps.map(r => r.ramp), color: 'var(--blue)', width: 1.8 }]} />
                 </div>
