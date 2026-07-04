@@ -38,10 +38,24 @@ export function WellnessTrends({ wellness }) {
           <span><b style={{ color: 'var(--blue)' }}>{Math.round(last.ctl)}</b> Fitness (CTL){ctlD != null ? ' ' + T.wellness.signed(ctlD) : ''}</span>
           <span><b style={{ color: 'var(--danger)' }}>{Math.round(last.atl)}</b> Fatigue (ATL)</span>
         </div>
-        {ctl.length >= 2 && <TrendChart height={96} series={[
+        {ctl.length >= 2 && <TrendChart height={96} axis series={[
           { values: ctl, color: 'var(--blue)', fill: true, width: 2.4 },
           { values: atl, color: 'var(--danger)', width: 1.8 },
         ]} />}
+      </div>
+
+
+      <div className="section-title">Form <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness − fatigue, on its own scale</span></div>
+      <div className="card">
+        {/* Form gets its OWN axis: the training zones only mean anything against a
+            TSB scale. The domain always frames all five zones in true proportion,
+            with the numeric boundaries marked on the axis. */}
+        <div className="load-stats" style={{ marginBottom: 10 }}>
+          <span><b style={{ color: 'var(--brick)' }}>{tsb != null ? T.wellness.signed(tsb) : '—'}</b> Form (TSB)</span>
+        </div>
+        {tsbSeries.length >= 2 && <TrendChart height={128} domain={{ min: -35, max: 32 }}
+          zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
+          series={[{ values: tsbSeries, color: 'var(--brick)', width: 2.2 }]} />}
       </div>
 
       {(() => {
@@ -65,19 +79,6 @@ export function WellnessTrends({ wellness }) {
           </>
         );
       })()}
-
-      <div className="section-title">Form <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness − fatigue, on its own scale</span></div>
-      <div className="card">
-        {/* Form gets its OWN axis: the training zones only mean anything against a
-            TSB scale. The domain always frames all five zones in true proportion,
-            with the numeric boundaries marked on the axis. */}
-        <div className="load-stats" style={{ marginBottom: 10 }}>
-          <span><b style={{ color: 'var(--brick)' }}>{tsb != null ? T.wellness.signed(tsb) : '—'}</b> Form (TSB)</span>
-        </div>
-        {tsbSeries.length >= 2 && <TrendChart height={128} domain={{ min: -35, max: 32 }}
-          zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
-          series={[{ values: tsbSeries, color: 'var(--brick)', width: 2.2 }]} />}
-      </div>
 
       <div className="section-title">Recovery</div>
       <div className="card">

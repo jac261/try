@@ -72,7 +72,7 @@ export function Sparkline({ values, betterDown, color }) {
 // and coloured background `zones` [{lo, hi, color}] (e.g. the Form training
 // zones) — zones are clamped to the data range so open-ended ones (±Infinity)
 // render as far as the data reaches without distorting the scale.
-export function TrendChart({ series, height, band, zones, domain }) {
+export function TrendChart({ series, height, band, zones, domain, axis }) {
   const uid = useId();
   const H = height || 100, W = 320, pad = 8;
   // `domain` extends the y-range beyond the data (union, never crop) — e.g. the
@@ -89,6 +89,17 @@ export function TrendChart({ series, height, band, zones, domain }) {
   const zoneRects = (zones || [])
     .map(z => ({ ...z, lo: Math.max(z.lo, min), hi: Math.min(z.hi, max) }))
     .filter(z => z.hi > z.lo);
+  // Optional numeric y-axis for charts without zones (whose boundaries already
+  // act as the scale): a few "nice"-stepped gridlines with small figures.
+  const ticks = (() => {
+    if (!axis) return [];
+    const rough = range / 3;
+    const pow = Math.pow(10, Math.floor(Math.log10(rough || 1)));
+    const step = [1, 2, 2.5, 5, 10].map(m => m * pow).find(s => s >= rough) || 10 * pow;
+    const out = [];
+    for (let t = Math.ceil(min / step) * step; t <= max + 1e-9; t += step) out.push(Math.round(t * 100) / 100);
+    return out;
+  })();
   // Zone alpha (+ the active-zone brightening) feeds either a flat fill or a
   // subtle vertical gradient whose intensity grows toward the zone's extreme
   // (`grad: 'up' | 'down'`) — further from balanced, more saturated.
@@ -133,6 +144,13 @@ export function TrendChart({ series, height, band, zones, domain }) {
           </g>
         );
       })}
+      {ticks.map(t => (
+        <g key={'t' + t}>
+          <line x1={pad} x2={W - pad} y1={Y(t)} y2={Y(t)} stroke="#8b95a7" strokeWidth="0.5" opacity="0.14" />
+          <text x={pad + 3} y={Y(t) - 1.8} fontSize="5.5" fontWeight="700" fill="#8b95a7"
+            opacity="0.85" style={{ fontVariantNumeric: 'tabular-nums' }}>{t}</text>
+        </g>
+      ))}
       {band && <rect x={pad} y={Y(band.hi)} width={W - 2 * pad} height={Math.max(1, Y(band.lo) - Y(band.hi))} fill="var(--blue-soft)" rx="2" />}
       {series.map((s, i) => (
         <g key={i}>

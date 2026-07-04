@@ -175,7 +175,7 @@ function readiness(rec, base) {
 // saturated — with per-zone alpha tuned for the dark theme.
 const FORM_ZONES = [
   { key: 'transition', label: 'Transition', lo: 25, hi: Infinity, color: '#facc15', alpha: 0.20, grad: 'up', blurb: 'so fresh you may be detraining' },
-  { key: 'fresh', label: 'Fresh', lo: 5, hi: 25, color: '#2dd4bf', alpha: 0.20, grad: 'up', blurb: 'race-ready' },
+  { key: 'fresh', label: 'Fresh', lo: 5, hi: 25, color: '#22d3ee', alpha: 0.20, grad: 'up', blurb: 'race-ready' },
   { key: 'grey', label: 'Grey zone', lo: -10, hi: 5, color: '#94a3b8', alpha: 0.10, grad: 'flat', blurb: 'neither building nor peaking' },
   { key: 'optimal', label: 'Optimal', lo: -30, hi: -10, color: '#34d399', alpha: 0.20, grad: 'down', blurb: 'productive training load' },
   { key: 'highRisk', label: 'High risk', lo: -Infinity, hi: -30, color: '#ef4444', alpha: 0.34, grad: 'down', blurb: 'overreaching — injury/illness territory' },

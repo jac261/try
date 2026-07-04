@@ -105,8 +105,8 @@ the current band's colour.
 ### Form (TSB) training zones
 The load charts shade the classic PMC zones as translucent horizontal strata.
 **Colours are chosen for what the word means** (colour psychology): caution
-yellow for the detraining drift of Transition, mint teal for Fresh (crisp,
-race-ready), receding neutral grey, growth green for Optimal, alarm red for
+yellow for the detraining drift of Transition, crisp cyan for Fresh (clean
+water, race-ready), receding neutral grey, growth green for Optimal, alarm red for
 High risk. Each band is a **subtle vertical gradient whose intensity grows
 toward the extreme** — further from balanced, more saturated (grey stays flat).
 Only the zone the form line currently occupies is labelled in-chart and
@@ -115,7 +115,7 @@ brightened (+0.08 alpha). Defined in `wellness.FORM_ZONES`.
 | Zone | TSB | Colour · alpha | Gradient |
 |---|---|---|---|
 | Transition | > +25 | `#facc15` · 0.20 | stronger upward |
-| Fresh | +5 … +25 | `#2dd4bf` · 0.20 | stronger upward |
+| Fresh | +5 … +25 | `#22d3ee` · 0.20 | stronger upward |
 | Grey zone | −10 … +5 | `#94a3b8` · 0.10 | flat |
 | Optimal | −30 … −10 | `#34d399` · 0.20 | stronger downward |
 | High risk | < −30 | `#ef4444` · 0.34 | stronger downward |
