@@ -72,10 +72,14 @@ export function Sparkline({ values, betterDown, color }) {
 // and coloured background `zones` [{lo, hi, color}] (e.g. the Form training
 // zones) — zones are clamped to the data range so open-ended ones (±Infinity)
 // render as far as the data reaches without distorting the scale.
-export function TrendChart({ series, height, band, zones }) {
+export function TrendChart({ series, height, band, zones, domain }) {
   const uid = useId();
   const H = height || 100, W = 320, pad = 8;
-  const vals = series.flatMap(s => s.values).filter(v => v != null).concat(band ? [band.lo, band.hi] : []);
+  // `domain` extends the y-range beyond the data (union, never crop) — e.g. the
+  // Form chart always frames every training zone in true proportion.
+  const vals = series.flatMap(s => s.values).filter(v => v != null)
+    .concat(band ? [band.lo, band.hi] : [])
+    .concat(domain ? [domain.min, domain.max] : []);
   const min = Math.min(...vals), max = Math.max(...vals), range = (max - min) || 1;
   const maxN = Math.max(...series.map(s => s.values.length));
   const X = i => (maxN <= 1 ? W / 2 : pad + (i / (maxN - 1)) * (W - 2 * pad));
@@ -102,11 +106,19 @@ export function TrendChart({ series, height, band, zones }) {
       {zoneRects.map((z, i) => {
         const top = Y(z.hi), h = Math.max(1, Y(z.lo) - Y(z.hi));
         const graded = z.grad === 'up' || z.grad === 'down';
+        // the zone's numeric floor, marked on the left axis (skip clamped ±Infinity
+        // edges — only true boundaries between zones get a number)
+        const loFinite = (zones.find(o => o.key === z.key) || {}).lo;
         return (
           <g key={'z' + i}>
             {graded
               ? <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={'url(#' + uid + 'z' + i + ')'} />
               : <rect x={pad} y={top} width={W - 2 * pad} height={h} fill={z.color} opacity={zoneAlpha(z)} />}
+            {Number.isFinite(loFinite) && loFinite > min && loFinite < max && (
+              <text x={pad + 3} y={Y(loFinite) - 1.8} fontSize="5.5" fontWeight="700"
+                fill="#8b95a7" opacity="0.85" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {(loFinite > 0 ? '+' : loFinite < 0 ? '−' : '') + Math.abs(loFinite)}</text>
+            )}
             {/* only the zone the data currently occupies carries its name — the
                 rest stay as quiet colour context. Rendered even when the band is a
                 thin sliver (y clamped inside the chart): it's the label that matters. */}

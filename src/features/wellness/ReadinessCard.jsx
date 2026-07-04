@@ -79,42 +79,48 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
         );
       })()}
       {(() => {
-        // Compact Fitness & Form trend from the synced intervals.icu training-load
-        // history (full-size version lives on the Progress tab). The stat strip IS
-        // the legend — each number wears its line's colour — and only the zone the
-        // form line currently occupies carries its name in the chart.
+        // Compact training-load trends from the synced intervals.icu history
+        // (full-size versions live on the Progress tab). Two charts, two scales:
+        // Fitness & Fatigue share an axis; Form gets its OWN — the training zones
+        // only mean anything against a TSB scale, and the domain always frames all
+        // five zones in true proportion, with the boundary numbers on the axis.
         const load = wellness.filter(r => r.ctl != null && r.atl != null).slice(-60);
         if (load.length < 3) return null;
+        const tsbSeries = load.map(r => (r.tsb != null ? r.tsb : r.ctl - r.atl));
+        const lastLoad = load[load.length - 1];
+        const tsbNow = tsbSeries[tsbSeries.length - 1];
+        const zone = T.wellness.formZone(tsbNow);
+        const ramp = T.wellness.rampRate(wellness);
         return (
-          <div className="rd-trend">
-            <div className="rd-trend-head">
-              <span>Fitness &amp; Form</span>
-              <span>{load.length} days</span>
+          <>
+            <div className="rd-trend">
+              <div className="rd-trend-head">
+                <span>Fitness &amp; Fatigue</span>
+                <span>{load.length} days</span>
+              </div>
+              <div className="load-stats">
+                <span><b style={{ color: 'var(--blue)' }}>{Math.round(lastLoad.ctl)}</b> Fitness</span>
+                <span><b style={{ color: 'var(--danger)' }}>{Math.round(lastLoad.atl)}</b> Fatigue</span>
+                {ramp != null && <span title="Fitness (CTL) change over the last 7 days — sustained ramps above ~5/week raise injury risk"><b>{T.wellness.signed(ramp)}</b> Ramp /wk</span>}
+              </div>
+              <TrendChart height={56} series={[
+                { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
+                { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
+              ]} />
             </div>
-            {(() => {
-              const lastLoad = load[load.length - 1];
-              const tsbNow = lastLoad.tsb != null ? lastLoad.tsb : lastLoad.ctl - lastLoad.atl;
-              const zone = T.wellness.formZone(tsbNow);
-              const ramp = T.wellness.rampRate(wellness);
-              return (
-                <>
-                  <div className="load-stats">
-                    <span><b style={{ color: 'var(--blue)' }}>{Math.round(lastLoad.ctl)}</b> Fitness</span>
-                    <span><b style={{ color: 'var(--danger)' }}>{Math.round(lastLoad.atl)}</b> Fatigue</span>
-                    <span><b style={{ color: 'var(--brick)' }}>{T.wellness.signed(tsbNow)}</b> Form</span>
-                    {ramp != null && <span title="Fitness (CTL) change over the last 7 days — sustained ramps above ~5/week raise injury risk"><b>{T.wellness.signed(ramp)}</b> Ramp /wk</span>}
-                  </div>
-                  <TrendChart height={86}
-                    zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
-                    series={[
-                      { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
-                      { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
-                      { values: load.map(r => (r.tsb != null ? r.tsb : r.ctl - r.atl)), color: 'var(--brick)', width: 1.8 },
-                    ]} />
-                </>
-              );
-            })()}
-          </div>
+            <div className="rd-trend">
+              <div className="rd-trend-head">
+                <span>Form</span>
+                <span>fitness − fatigue</span>
+              </div>
+              <div className="load-stats">
+                <span><b style={{ color: 'var(--brick)' }}>{T.wellness.signed(tsbNow)}</b> Form</span>
+              </div>
+              <TrendChart height={96} domain={{ min: -35, max: 32 }}
+                zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
+                series={[{ values: tsbSeries, color: 'var(--brick)', width: 2 }]} />
+            </div>
+          </>
         );
       })()}
       <div className="rd-foot">
