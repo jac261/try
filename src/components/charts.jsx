@@ -134,17 +134,6 @@ export function TrendChart({ series, height, band, zones, domain, axis }) {
                   {(loFinite > 0 ? '+' : loFinite < 0 ? '−' : '') + Math.abs(loFinite)}</text>
               </g>
             )}
-            {/* only the zone the data currently occupies carries its name — the
-                rest stay as quiet colour context. Rendered even when the band is a
-                thin sliver (y clamped inside the chart): it's the label that matters. */}
-            {z.label && z.active && (() => {
-              const fs = h >= 12 ? 7 : 5.8;
-              const ty = Math.min(Math.max(top + h / 2 + fs * 0.38, fs + 1.5), H - 3);
-              return (
-                <text x={W - pad - 4} y={ty} textAnchor="end" fontSize={fs} fontWeight="700"
-                  letterSpacing="0.6" fill={z.color} opacity="0.9">{z.label.toUpperCase()}</text>
-              );
-            })()}
           </g>
         );
       })}
@@ -163,6 +152,19 @@ export function TrendChart({ series, height, band, zones, domain, axis }) {
           <circle cx={X(s.values.length - 1)} cy={Y(s.values[s.values.length - 1])} r="3" fill={s.color} />
         </g>
       ))}
+      {/* the occupied zone's name renders ABOVE the data lines, with a card-colour
+          halo (paint-order stroke) so a line crossing it can't strike it through */}
+      {zoneRects.filter(z => z.label && z.active).map((z, i) => {
+        const top = Y(z.hi), h = Math.max(1, Y(z.lo) - Y(z.hi));
+        const fs = h >= 12 ? 7 : 5.8;
+        const ty = Math.min(Math.max(top + h / 2 + fs * 0.38, fs + 1.5), H - 3);
+        return (
+          <text key={'zl' + i} x={W - pad - 4} y={ty} textAnchor="end" fontSize={fs}
+            fontWeight="700" letterSpacing="0.6" fill={z.color}
+            stroke="var(--card)" strokeWidth="2" style={{ paintOrder: 'stroke' }}>
+            {z.label.toUpperCase()}</text>
+        );
+      })}
     </svg>
   );
 }
