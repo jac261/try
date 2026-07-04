@@ -120,6 +120,19 @@ brightened (+0.08 alpha). Defined in `wellness.FORM_ZONES`.
 | Optimal | −30 … −10 | `#34d399` · 0.20 | stronger downward |
 | High risk | < −30 | `#ef4444` · 0.34 | stronger downward |
 
+### Ramp-rate zones
+Same conventions as the Form zones (meaning-bearing colours, gradients toward the
+extreme, active-zone label, boundary numbers on the axis), anchored on the coaching
+guidance that ~5/week is the sustainable build ceiling. Defined in `wellness.RAMP_ZONES`.
+
+| Zone | Ramp /wk | Colour · alpha |
+|---|---|---|
+| Risky | > +8 | `#ef4444` · 0.30 |
+| Aggressive | +5 … +8 | `#facc15` · 0.20 |
+| Building | 0 … +5 | `#34d399` · 0.18 |
+| Steady | −3 … 0 | `#94a3b8` · 0.10 |
+| Detraining | < −3 | `#38bdf8` · 0.18 |
+
 ### Load-chart lines
 | Series | Colour |
 |---|---|

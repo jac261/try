@@ -188,14 +188,47 @@ function formZone(tsb) {
 // Weekly ramp rate: how much Fitness (CTL) changed over the trailing 7 days —
 // computed from the synced series (so it also works for manual entries).
 // Sustained ramps above ~5-8/week are the classic overuse-injury flag.
+function rampAt(withCtl, index) {
+  const rec = withCtl[index];
+  const target = iso(addDays(rec.date, -7));
+  const prior = [...withCtl.slice(0, index)].reverse().find(r => r.date <= target);
+  if (!prior) return null;
+  return Math.round((rec.ctl - prior.ctl) * 10) / 10;
+}
+
 function rampRate(records) {
   const withCtl = (records || []).filter(r => r.ctl != null);
   if (withCtl.length < 2) return null;
-  const last = withCtl[withCtl.length - 1];
-  const target = iso(addDays(last.date, -7));
-  const prior = [...withCtl].reverse().find(r => r.date <= target);
-  if (!prior) return null;
-  return Math.round((last.ctl - prior.ctl) * 10) / 10;
+  return rampAt(withCtl, withCtl.length - 1);
+}
+
+// The ramp trend: weekly ramp computed for each of the last `days` records that
+// have fitness data AND a full week of history behind them (the leading edge of
+// a fresh dataset can't have a ramp, so it's omitted rather than guessed).
+function rampHistory(records, days = 60) {
+  const withCtl = (records || []).filter(r => r.ctl != null);
+  const out = [];
+  for (let i = 0; i < withCtl.length; i++) {
+    const ramp = rampAt(withCtl, i);
+    if (ramp != null) out.push({ date: withCtl[i].date, ramp });
+  }
+  return out.slice(-days);
+}
+
+// Ramp-rate zones: how fast is it sustainable to build? Anchored on the common
+// coaching guidance that ~5/week is the sustainable ceiling and sustained ramps
+// above ~8/week are injury/illness territory. Colours by meaning, gradients
+// intensifying toward the extreme, same conventions as FORM_ZONES.
+const RAMP_ZONES = [
+  { key: 'risky', label: 'Risky', lo: 8, hi: Infinity, color: '#ef4444', alpha: 0.30, grad: 'up', blurb: 'sustained ramps here invite injury/illness' },
+  { key: 'aggressive', label: 'Aggressive', lo: 5, hi: 8, color: '#facc15', alpha: 0.20, grad: 'up', blurb: 'short blocks only' },
+  { key: 'building', label: 'Building', lo: 0, hi: 5, color: '#34d399', alpha: 0.18, grad: 'up', blurb: 'productive, sustainable' },
+  { key: 'steady', label: 'Steady', lo: -3, hi: 0, color: '#94a3b8', alpha: 0.10, grad: 'flat', blurb: 'holding fitness' },
+  { key: 'detraining', label: 'Detraining', lo: -Infinity, hi: -3, color: '#38bdf8', alpha: 0.18, grad: 'down', blurb: 'losing fitness — exactly right in a taper' },
+];
+function rampZone(ramp) {
+  if (ramp == null) return null;
+  return RAMP_ZONES.find(z => ramp >= z.lo && ramp < z.hi) || RAMP_ZONES[0];
 }
 
 // Readiness trend: score each of the last `days` records against the rolling
@@ -263,4 +296,4 @@ const MODEL = {
   })),
 };
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, FORM_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };
+export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, rampHistory, rampZone, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };

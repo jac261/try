@@ -191,3 +191,41 @@ describe('wellness.rampRate (weekly CTL change)', () => {
     expect(highRisk.alpha).toBeGreaterThan(grey.alpha * 2); // high risk pops, grey recedes
   });
 });
+
+describe('wellness.rampHistory & rampZone', () => {
+  const mk = (date, ctl) => ({ date, ctl });
+  const recs = [];
+  for (let d = 1; d <= 21; d++) recs.push(mk('2026-07-' + String(d).padStart(2, '0'), 40 + d * 0.5));
+
+  it('computes a per-day weekly ramp, omitting the leading edge without history', () => {
+    const h = wellness.rampHistory(recs);
+    // days 1-7 have no record ≥7 days back → first ramp lands on day 8
+    expect(h[0].date).toBe('2026-07-08');
+    expect(h[0].ramp).toBe(3.5);                       // 0.5/day × 7
+    expect(h[h.length - 1].date).toBe('2026-07-21');
+    expect(h[h.length - 1].ramp).toBe(3.5);
+    expect(h.every(x => x.ramp === 3.5)).toBe(true);   // constant build
+  });
+
+  it('caps at the requested days and matches rampRate at the tail', () => {
+    expect(wellness.rampHistory(recs, 5).length).toBe(5);
+    const h = wellness.rampHistory(recs);
+    expect(h[h.length - 1].ramp).toBe(wellness.rampRate(recs));
+  });
+
+  it('maps ramp values to the coaching zones with correct boundaries', () => {
+    const at = v => wellness.rampZone(v) && wellness.rampZone(v).key;
+    expect(at(10)).toBe('risky');
+    expect(at(8)).toBe('risky');        // boundary belongs upward
+    expect(at(6)).toBe('aggressive');
+    expect(at(3)).toBe('building');
+    expect(at(0)).toBe('building');
+    expect(at(-1)).toBe('steady');
+    expect(at(-3)).toBe('steady');
+    expect(at(-6)).toBe('detraining');
+    expect(wellness.rampZone(null)).toBe(null);
+    // zones tile the axis contiguously
+    const z = wellness.RAMP_ZONES;
+    for (let i = 1; i < z.length; i++) expect(z[i].hi).toBe(z[i - 1].lo);
+  });
+});

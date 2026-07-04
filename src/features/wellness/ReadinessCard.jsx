@@ -101,13 +101,33 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore }) {
               <div className="load-stats">
                 <span><b style={{ color: 'var(--blue)' }}>{Math.round(lastLoad.ctl)}</b> Fitness</span>
                 <span><b style={{ color: 'var(--danger)' }}>{Math.round(lastLoad.atl)}</b> Fatigue</span>
-                {ramp != null && <span title="Fitness (CTL) change over the last 7 days — sustained ramps above ~5/week raise injury risk"><b>{T.wellness.signed(ramp)}</b> Ramp /wk</span>}
               </div>
               <TrendChart height={56} series={[
                 { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
                 { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
               ]} />
             </div>
+            {(() => {
+              // Ramp rate on its own axis too: how fast fitness is being built,
+              // against the sustainable-ceiling zones (+5) and injury territory (+8).
+              const ramps = T.wellness.rampHistory(wellness, 60);
+              if (ramps.length < 3 || ramp == null) return null;
+              const rZone = T.wellness.rampZone(ramp);
+              return (
+                <div className="rd-trend">
+                  <div className="rd-trend-head">
+                    <span>Ramp rate</span>
+                    <span>fitness gained per week</span>
+                  </div>
+                  <div className="load-stats">
+                    <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk</span>
+                  </div>
+                  <TrendChart height={64} domain={{ min: -5, max: 9.5 }}
+                    zones={T.wellness.RAMP_ZONES.map(z => ({ ...z, active: !!rZone && z.key === rZone.key }))}
+                    series={[{ values: ramps.map(r => r.ramp), color: 'var(--blue)', width: 1.8 }]} />
+                </div>
+              );
+            })()}
             <div className="rd-trend">
               <div className="rd-trend-head">
                 <span>Form</span>

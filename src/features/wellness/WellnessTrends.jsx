@@ -37,15 +37,34 @@ export function WellnessTrends({ wellness }) {
         <div className="load-stats" style={{ marginBottom: 10 }}>
           <span><b style={{ color: 'var(--blue)' }}>{Math.round(last.ctl)}</b> Fitness (CTL){ctlD != null ? ' ' + T.wellness.signed(ctlD) : ''}</span>
           <span><b style={{ color: 'var(--danger)' }}>{Math.round(last.atl)}</b> Fatigue (ATL)</span>
-          {(() => { const ramp = T.wellness.rampRate(wellness); return ramp != null
-            ? <span title="Fitness (CTL) change over the last 7 days — sustained ramps above ~5/week raise injury risk"><b>{T.wellness.signed(ramp)}</b> Ramp /wk</span>
-            : null; })()}
         </div>
         {ctl.length >= 2 && <TrendChart height={96} series={[
           { values: ctl, color: 'var(--blue)', fill: true, width: 2.4 },
           { values: atl, color: 'var(--danger)', width: 1.8 },
         ]} />}
       </div>
+
+      {(() => {
+        // Ramp rate on its own axis: how fast fitness is being built, against the
+        // sustainable-ceiling zones (+5 aggressive, +8 risky, negatives = taper).
+        const ramps = T.wellness.rampHistory(wellness, 60);
+        const ramp = T.wellness.rampRate(wellness);
+        if (ramps.length < 3 || ramp == null) return null;
+        const rZone = T.wellness.rampZone(ramp);
+        return (
+          <>
+            <div className="section-title">Ramp rate <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness gained per week</span></div>
+            <div className="card">
+              <div className="load-stats" style={{ marginBottom: 10 }}>
+                <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk</span>
+              </div>
+              <TrendChart height={104} domain={{ min: -5, max: 9.5 }}
+                zones={T.wellness.RAMP_ZONES.map(z => ({ ...z, active: !!rZone && z.key === rZone.key }))}
+                series={[{ values: ramps.map(r => r.ramp), color: 'var(--blue)', width: 2 }]} />
+            </div>
+          </>
+        );
+      })()}
 
       <div className="section-title">Form <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness − fatigue, on its own scale</span></div>
       <div className="card">
