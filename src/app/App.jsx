@@ -40,6 +40,7 @@ export function App({ storage, getToken, user }) {
   const [editWellness, setEditWellness] = useState(false);
   const saveWellness = rec => { setWellness(storage.upsertWellness(rec)); sync.saveWellness(rec); setEditWellness(false); };
   const [adjust, setAdjust] = useState(() => storage.load('adjust', {}));
+  const [activities, setActivities] = useState(null); // recent watch activities (null until loaded / not connected)
 
   useEffect(() => { if (plan) storage.save('plan', plan); }, [plan, storage]);
   useEffect(() => { storage.save('log', log); }, [log, storage]);
@@ -82,6 +83,8 @@ export function App({ storage, getToken, user }) {
         sync.backfillWellness().then(deep => { if (!cancelled && deep) applyServerWellness(deep); });
       }
     });
+    // Recent watch activities → the "spotted on your watch" one-tap logging.
+    sync.loadActivities().then(a => { if (!cancelled && a) setActivities(a); });
     return () => { cancelled = true; };
   }, [sync]);
 
@@ -199,6 +202,19 @@ export function App({ storage, getToken, user }) {
   // in the same adjust overlay (and sync), so calendar, sheet and undo just work.
   const engineInputs = { wellness, plan, log, moves, adjust, todayISO: T.iso(new Date()) };
   const weekly = T.proposeRace(engineInputs) || T.proposeWeek(engineInputs);
+  // Completed sessions spotted on the watch → one-tap logging (with the
+  // athlete's recorded RPE as the feel, and a calibration observation each).
+  const spotted = T.matchActivities({ activities, plan, log, moves, todayISO: T.iso(new Date()) });
+  const logSpotted = () => {
+    const at = new Date().toISOString();
+    const entries = {};
+    spotted.forEach(m => {
+      const entry = { done: true, at, feel: m.feel, notes: observe(m.workout.id, m.feel || null, at) };
+      entries[m.workout.id] = entry;
+      if (gid(m.workout.id)) sync.saveLog(gid(m.workout.id), entry);
+    });
+    setLog(l => ({ ...l, ...entries }));
+  };
   const applyWeekly = p => {
     if (!p) return;
     if (p.action === 'catchUp') return catchUp();
@@ -264,7 +280,7 @@ export function App({ storage, getToken, user }) {
         <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
       </div>
 
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} />}
       {view === 'plan' && <PlanView plan={plan} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={wellness} />}

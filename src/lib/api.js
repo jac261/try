@@ -202,6 +202,14 @@ export function disconnectIntervalsIntegration(getToken) {
   return request('/api/integrations/intervals-icu', { getToken, method: 'DELETE' });
 }
 
+// Recent activities through the server-side passthrough (compact shape:
+// { id, date, type, name, movingTimeSec, distance, trainingLoad, rpe, feel }).
+// 404 → not connected, or a backend that predates the endpoint.
+export function getIntervalsActivities(getToken, days) {
+  const query = days ? '?days=' + encodeURIComponent(days) : '';
+  return request('/api/integrations/intervals-icu/activities' + query, { getToken });
+}
+
 /* ---------------- shape mapping (server ⇄ client) ---------------- */
 
 // PlanResponse → the frontend's { plan, log, moves, refToId }. The server returns

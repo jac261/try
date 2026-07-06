@@ -10,7 +10,7 @@ import {
   getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan,
   putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
   putWorkoutAdjustment, deleteWorkoutAdjustment,
-  getWellness, putWellness, syncWellness,
+  getWellness, putWellness, syncWellness, getIntervalsActivities,
   toClientState, logToApi,
 } from '@/lib/api.js';
 
@@ -69,6 +69,13 @@ export function makeSync(getToken) {
     // any failure (offline / not connected / older backend without the window).
     backfillWellness: async (days = 365) => {
       const res = await syncWellness(getToken, days);
+      return res.ok && Array.isArray(res.body) ? res.body : null;
+    },
+
+    // Recent watch activities for completed-session matching; null when not
+    // connected, offline, or the backend predates the passthrough.
+    loadActivities: async (days = 10) => {
+      const res = await getIntervalsActivities(getToken, days);
       return res.ok && Array.isArray(res.body) ? res.body : null;
     },
 

@@ -12,6 +12,7 @@ vi.mock('@/lib/api.js', () => ({
   deleteWorkoutAdjustment: vi.fn(),
   getWellness: vi.fn(),
   syncWellness: vi.fn(),
+  getIntervalsActivities: vi.fn(),
   putWellness: vi.fn(),
   toClientState: vi.fn(),
   logToApi: e => ({ completed: !!(e && e.done), completedAtUtc: e && e.at, feel: (e && e.feel) || null, notes: null }),
@@ -109,6 +110,19 @@ describe('makeSync.backfillWellness', () => {
   it('returns null on failure (offline / not connected)', async () => {
     api.syncWellness.mockResolvedValue({ ok: false, status: 404 });
     expect(await makeSync(getToken).backfillWellness()).toBe(null);
+  });
+});
+
+describe('makeSync.loadActivities', () => {
+  it('returns the passthrough list with the default window', async () => {
+    api.getIntervalsActivities.mockResolvedValue({ ok: true, body: [{ id: 'a1', date: '2026-07-06', type: 'Run' }] });
+    const acts = await makeSync(getToken).loadActivities();
+    expect(api.getIntervalsActivities).toHaveBeenCalledWith(getToken, 10);
+    expect(acts).toEqual([{ id: 'a1', date: '2026-07-06', type: 'Run' }]);
+  });
+  it('returns null when not connected or on an older backend (404)', async () => {
+    api.getIntervalsActivities.mockResolvedValue({ ok: false, status: 404 });
+    expect(await makeSync(getToken).loadActivities()).toBe(null);
   });
 });
 
