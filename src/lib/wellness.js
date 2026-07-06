@@ -20,7 +20,7 @@
  * is an output (4/11 x ~70.7), not an input. Within a factor the penalty ramps
  * over a describable range (neutral -> worst), so there are no cliff edges either.
  */
-import { iso, addDays } from './date.js';
+import { iso, addDays, startOfWeekMonday } from './date.js';
 
 const KEY = 'try.wellness';
 
@@ -231,6 +231,20 @@ function rampZone(ramp) {
   return RAMP_ZONES.find(z => ramp >= z.lo && ramp < z.hi) || RAMP_ZONES[0];
 }
 
+// One ramp reading per calendar week (for the histogram): fitness gained over
+// the 7 days up to that week's last record — the same definition as rampAt, so
+// the current partial week reads as "rate right now", not a misleading stub.
+function weeklyRamps(records, weeks = 8) {
+  const withCtl = (records || []).filter(r => r.ctl != null);
+  const lastIdxByWeek = new Map();
+  withCtl.forEach((r, i) => lastIdxByWeek.set(iso(startOfWeekMonday(r.date)), i));
+  return [...lastIdxByWeek.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([week, i]) => ({ week, ramp: rampAt(withCtl, i) }))
+    .filter(e => e.ramp != null)
+    .slice(-weeks);
+}
+
 // Readiness trend: score each of the last `days` records against the rolling
 // baseline as it stood on THAT day (no hindsight), skipping records that carry
 // no readiness metrics (an empty day would misleadingly score 100).
@@ -296,4 +310,4 @@ const MODEL = {
   })),
 };
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, rampHistory, rampZone, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };
+export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, rampHistory, rampZone, weeklyRamps, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };

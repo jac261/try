@@ -1,8 +1,17 @@
+import { useState } from 'react';
 import * as T from '@/lib';
 import { INTENSITY_TYPES } from '@/lib/tuning.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { TrendChart } from '@/components/charts.jsx';
+
+// The training-load charts are analysis, not a morning glance — collapsed by
+// default behind a one-line summary. A stored choice wins; with no choice yet
+// they unfold themselves only when a zone needs attention (management by
+// exception, same philosophy as the engine: quiet when everything is fine).
+const LOAD_PREF = 'try.showLoad';
+const loadPref = () => { try { return localStorage.getItem(LOAD_PREF); } catch (e) { return null; } };
+const saveLoadPref = v => { try { localStorage.setItem(LOAD_PREF, v ? '1' : '0'); } catch (e) { /* private mode */ } };
 
 const BAND_COLOR = { green: 'var(--run)', amber: 'var(--bike)', red: 'var(--danger)' };
 
@@ -20,6 +29,7 @@ function ReadinessRing({ score, band }) {
 }
 
 export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOpen }) {
+  const [loadChoice, setLoadChoice] = useState(loadPref);
   const todayISO = T.iso(new Date());
   const rec = wellness.find(r => r.date === todayISO) || (wellness.length ? wellness[wellness.length - 1] : null);
   if (!rec) {
@@ -98,11 +108,9 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
         );
       })()}
       {(() => {
-        // Compact training-load trends from the synced intervals.icu history
-        // (full-size versions live on the Progress tab). Two charts, two scales:
-        // Fitness & Fatigue share an axis; Form gets its OWN — the training zones
-        // only mean anything against a TSB scale, and the domain always frames all
-        // five zones in true proportion, with the boundary numbers on the axis.
+        // Training load lives behind a one-line summary (full-size analysis on
+        // the Progress tab). The summary itself carries the status: each number
+        // wears a dot in its zone's colour, so collapsed still answers "am I OK?".
         const load = wellness.filter(r => r.ctl != null && r.atl != null).slice(-60);
         if (load.length < 3) return null;
         const tsbSeries = load.map(r => (r.tsb != null ? r.tsb : r.ctl - r.atl));
@@ -110,8 +118,24 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
         const tsbNow = tsbSeries[tsbSeries.length - 1];
         const zone = T.wellness.formZone(tsbNow);
         const ramp = T.wellness.rampRate(wellness);
+        const rZone = T.wellness.rampZone(ramp);
+        const alarm = (rZone && (rZone.key === 'aggressive' || rZone.key === 'risky'))
+          || (zone && zone.key === 'highRisk');
+        const open = loadChoice != null ? loadChoice === '1' : alarm;
+        const toggle = () => { saveLoadPref(!open); setLoadChoice(open ? '0' : '1'); };
         return (
           <>
+            <div className="rd-load-toggle" {...tap(toggle)} role="button"
+              aria-expanded={open} aria-label="Toggle training load charts">
+              <span className="rlt-title">Training load</span>
+              <span className="rlt-stats">
+                <span><i style={{ background: 'var(--blue)' }} />{Math.round(lastLoad.ctl)} fit</span>
+                <span><i style={{ background: zone ? zone.color : 'var(--muted)' }} />{T.wellness.signed(tsbNow)} form</span>
+                {ramp != null && <span><i style={{ background: rZone ? rZone.color : 'var(--muted)' }} />{T.wellness.signed(ramp)}/wk</span>}
+              </span>
+              <span className="rlt-chev">{open ? '▾' : '▸'}</span>
+            </div>
+            {open && <>
             <div className="rd-trend">
               <div className="rd-trend-head">
                 <span>Fitness &amp; Fatigue</span>
@@ -139,11 +163,12 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
                 series={[{ values: tsbSeries, color: 'var(--brick)', width: 2 }]} />
             </div>
             {(() => {
-              // Ramp rate last: how fast fitness is being built, against the
-              // sustainable-ceiling zones (+5) and injury territory (+8).
-              const ramps = T.wellness.rampHistory(wellness, 60);
-              if (ramps.length < 3 || ramp == null) return null;
-              const rZone = T.wellness.rampZone(ramp);
+              // Ramp rate as a histogram: one bar per week, coloured by its zone
+              // (a weekly rate is discrete — bars say that; a line implies a
+              // continuity that isn't there). Dashed lines mark the +5
+              // sustainable ceiling and +8 injury territory.
+              const weekly = T.wellness.weeklyRamps(wellness, 8);
+              if (weekly.length < 2 || ramp == null) return null;
               return (
                 <div className="rd-trend">
                   <div className="rd-trend-head">
@@ -151,14 +176,19 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
                     <span>fitness gained per week</span>
                   </div>
                   <div className="load-stats">
-                    <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk</span>
+                    <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk · {rZone ? rZone.label : ''}</span>
                   </div>
-                  <TrendChart height={84} domain={{ min: -5, max: 9.5 }}
-                    zones={T.wellness.RAMP_ZONES.map(z => ({ ...z, active: !!rZone && z.key === rZone.key }))}
-                    series={[{ values: ramps.map(r => r.ramp), color: 'var(--blue)', width: 1.8 }]} />
+                  <TrendChart height={84} domain={{ min: -3, max: 9 }}
+                    bars={weekly.map((e, i) => ({
+                      v: e.ramp,
+                      color: (T.wellness.rampZone(e.ramp) || {}).color,
+                      label: i === weekly.length - 1 ? 'now' : T.fmtDate(e.week, { day: 'numeric', month: 'numeric' }),
+                    }))}
+                    refLines={[{ v: 5, color: '#facc15' }, { v: 8, color: '#ef4444' }]} />
                 </div>
               );
             })()}
+            </>}
           </>
         );
       })()}

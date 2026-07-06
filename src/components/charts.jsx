@@ -72,16 +72,19 @@ export function Sparkline({ values, betterDown, color }) {
 // and coloured background `zones` [{lo, hi, color}] (e.g. the Form training
 // zones) — zones are clamped to the data range so open-ended ones (±Infinity)
 // render as far as the data reaches without distorting the scale.
-export function TrendChart({ series, height, band, zones, domain, axis }) {
+export function TrendChart({ series, height, band, zones, domain, axis, bars, refLines }) {
   const uid = useId();
+  series = series || [];
   const H = height || 100, W = 320, pad = 8;
   // `domain` extends the y-range beyond the data (union, never crop) — e.g. the
   // Form chart always frames every training zone in true proportion.
   const vals = series.flatMap(s => s.values).filter(v => v != null)
+    .concat(bars ? bars.map(b => b.v).concat([0]) : [])
+    .concat(refLines ? refLines.map(l => l.v) : [])
     .concat(band ? [band.lo, band.hi] : [])
     .concat(domain ? [domain.min, domain.max] : []);
   const min = Math.min(...vals), max = Math.max(...vals), range = (max - min) || 1;
-  const maxN = Math.max(...series.map(s => s.values.length));
+  const maxN = Math.max(1, ...series.map(s => s.values.length));
   const X = i => (maxN <= 1 ? W / 2 : pad + (i / (maxN - 1)) * (W - 2 * pad));
   const Y = v => H - pad - ((v - min) / range) * (H - 2 * pad);
   const line = vs => vs.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
@@ -145,6 +148,41 @@ export function TrendChart({ series, height, band, zones, domain, axis }) {
         </g>
       ))}
       {band && <rect x={pad} y={Y(band.hi)} width={W - 2 * pad} height={Math.max(1, Y(band.lo) - Y(band.hi))} fill="var(--blue-soft)" rx="2" />}
+      {/* histogram mode: one bar per reading, growing from the zero baseline —
+          for discrete rates (e.g. weekly ramp) where a line implies false
+          continuity. Each bar wears its own colour (usually its zone's). */}
+      {bars && (() => {
+        const slot = (W - 2 * pad - 16) / bars.length;
+        const bw = Math.min(26, slot * 0.62);
+        return (
+          <g>
+            <line x1={pad} x2={W - pad} y1={Y(0)} y2={Y(0)} stroke="#8b95a7" strokeWidth="0.6" opacity="0.35" />
+            {bars.map((b, i) => {
+              const x = pad + 16 + i * slot + (slot - bw) / 2;
+              const y0 = Y(0), y1 = Y(b.v);
+              return (
+                <g key={'b' + i}>
+                  <rect x={x} y={Math.min(y0, y1)} width={bw} height={Math.max(1.5, Math.abs(y0 - y1))}
+                    fill={b.color} opacity="0.85" rx="1.5" />
+                  {b.label && <text x={x + bw / 2} y={H - 1.5} textAnchor="middle" fontSize="5.5"
+                    fill="#8b95a7" opacity="0.8">{b.label}</text>}
+                </g>
+              );
+            })}
+          </g>
+        );
+      })()}
+      {/* dashed threshold lines with small figures — a lighter-weight scale than
+          full zone bands when the bars already carry the zone colours */}
+      {(refLines || []).map((l, i) => (
+        <g key={'r' + i}>
+          <line x1={pad + 16} x2={W - pad} y1={Y(l.v)} y2={Y(l.v)} stroke={l.color || '#8b95a7'}
+            strokeWidth="0.7" strokeDasharray="3 3" opacity="0.5" />
+          <text x={pad + 14} y={Y(l.v) + 2} textAnchor="end" fontSize="5.5" fontWeight="700"
+            fill={l.color || '#8b95a7'} opacity="0.9" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {(l.v > 0 ? '+' : l.v < 0 ? '−' : '') + Math.abs(l.v)}</text>
+        </g>
+      ))}
       {series.map((s, i) => (
         <g key={i}>
           {s.fill && <path d={area(s.values)} fill={s.color} opacity="0.13" />}

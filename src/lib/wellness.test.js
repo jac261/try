@@ -213,6 +213,16 @@ describe('wellness.rampHistory & rampZone', () => {
     expect(h[h.length - 1].ramp).toBe(wellness.rampRate(recs));
   });
 
+  it('weeklyRamps: one reading per calendar week (trailing-7-day definition), leading week omitted', () => {
+    const weekly = wellness.weeklyRamps(recs, 8);
+    // recs span Wed 07-01 .. Tue 07-21 → 4 calendar weeks, but the first week's
+    // last record (07-05) has no 7-day history behind it → 3 readings remain
+    expect(weekly.length).toBe(3);
+    weekly.forEach(e => expect(e.ramp).toBe(3.5));      // constant 0.5/day build
+    expect(weekly[weekly.length - 1].week).toBe('2026-07-20');
+    expect(wellness.weeklyRamps(recs, 2).length).toBe(2); // caps at the requested weeks
+  });
+
   it('maps ramp values to the coaching zones with correct boundaries', () => {
     const at = v => wellness.rampZone(v) && wellness.rampZone(v).key;
     expect(at(10)).toBe('risky');

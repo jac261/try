@@ -59,22 +59,27 @@ export function WellnessTrends({ wellness }) {
       </div>
 
       {(() => {
-        // Ramp rate on its own axis: how fast fitness is being built, against the
-        // sustainable-ceiling zones (+5 aggressive, +8 risky, negatives = taper).
-        const ramps = T.wellness.rampHistory(wellness, 60);
+        // Ramp rate as a weekly histogram: a rate per week is discrete, so bars —
+        // each coloured by its zone — with dashed lines at the +5 sustainable
+        // ceiling and +8 injury territory (lighter than five background bands).
+        const weekly = T.wellness.weeklyRamps(wellness, 10);
         const ramp = T.wellness.rampRate(wellness);
-        if (ramps.length < 3 || ramp == null) return null;
+        if (weekly.length < 2 || ramp == null) return null;
         const rZone = T.wellness.rampZone(ramp);
         return (
           <>
             <div className="section-title">Ramp rate <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness gained per week</span></div>
             <div className="card">
               <div className="load-stats" style={{ marginBottom: 10 }}>
-                <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk</span>
+                <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk · {rZone ? rZone.label : ''}</span>
               </div>
-              <TrendChart height={120} domain={{ min: -5, max: 9.5 }}
-                zones={T.wellness.RAMP_ZONES.map(z => ({ ...z, active: !!rZone && z.key === rZone.key }))}
-                series={[{ values: ramps.map(r => r.ramp), color: 'var(--blue)', width: 2 }]} />
+              <TrendChart height={120} domain={{ min: -3, max: 9 }}
+                bars={weekly.map((e, i) => ({
+                  v: e.ramp,
+                  color: (T.wellness.rampZone(e.ramp) || {}).color,
+                  label: i === weekly.length - 1 ? 'now' : T.fmtDate(e.week, { day: 'numeric', month: 'numeric' }),
+                }))}
+                refLines={[{ v: 5, color: '#facc15' }, { v: 8, color: '#ef4444' }]} />
             </div>
           </>
         );
