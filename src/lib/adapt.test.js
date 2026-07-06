@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { proposeToday, proposeWeek, RAMP_RULES } from './adapt.js';
+import { proposeToday, proposeWeek, RAMP_RULES, FORM_RULES } from './adapt.js';
 import { iso, addDays } from './date.js';
 
 const hard = { id: '0-1', title: 'Threshold Run', type: 'Threshold', discipline: 'run', durationMin: 50 };
@@ -62,12 +62,15 @@ describe('adaptive engine — Phase 1 (readiness-driven days)', () => {
 const TODAY = '2026-07-09';
 
 // Daily wellness records with CTL climbing at `slope` per day for `days` days
-// ending TODAY — every 7-day ramp reading is exactly 7 × slope.
-const recsAt = (slope, days = 25, endOffset = 0) => {
+// ending TODAY — every 7-day ramp reading is exactly 7 × slope. Optional `tsb`
+// (number, or fn(i) for shaped runs) drives the Phase 3 form rules.
+const recsAt = (slope, days = 25, endOffset = 0, tsb) => {
   let ctl = 50;
   return Array.from({ length: days }, (_, i) => {
     ctl += slope;
-    return { date: iso(addDays(TODAY, i - days + 1 + endOffset)), ctl: Math.round(ctl * 10) / 10 };
+    const rec = { date: iso(addDays(TODAY, i - days + 1 + endOffset)), ctl: Math.round(ctl * 10) / 10 };
+    if (tsb !== undefined) rec.tsb = typeof tsb === 'function' ? tsb(i, days) : tsb;
+    return rec;
   });
 };
 
@@ -95,7 +98,7 @@ describe('adaptive engine — Phase 2 (ramp guardrail)', () => {
     expect(p.factor).toBe(RAMP_RULES.trimAggressive);
     expect(p.week).toBe(1);
     expect(p.targets).toEqual(['1-0', '1-1', '1-2', '1-3']);
-    expect(p.ease).toBe(null);
+    expect(p.ease).toEqual([]);
     expect(p.why).toMatch(/Two straight weeks/);
   });
 
@@ -103,7 +106,7 @@ describe('adaptive engine — Phase 2 (ramp guardrail)', () => {
     const p = proposeWeek({ ...base, wellness: recsAt(1.3) }); // ramp ≈ +9.1/wk
     expect(p.kind).toBe('trim-week');
     expect(p.factor).toBe(RAMP_RULES.trimRisky);
-    expect(p.ease).toBe('1-1'); // the Threshold ride
+    expect(p.ease).toEqual(['1-1']); // the Threshold ride
     expect(p.targets).not.toContain('1-1');
     expect(p.why).toMatch(/injury and illness/i);
   });
@@ -141,5 +144,55 @@ describe('adaptive engine — Phase 2 (ramp guardrail)', () => {
     expect(proposeWeek({ ...base, plan: buildPlan({ phase0: 'Taper' }), wellness: recsAt(-0.3) })).toBe(null);
     const logged = { '0-0': { done: true }, '0-1': { done: true }, '0-2': { done: true } };
     expect(proposeWeek({ ...base, log: logged, wellness: recsAt(-0.3) })).toBe(null);
+  });
+});
+
+describe('adaptive engine — Phase 3 (form-aware blocks)', () => {
+  const cleanWeek = { '0-0': { done: true }, '0-1': { done: true }, '0-2': { done: true } };
+
+  it('F1: form in high risk for 3+ days → convert next week to recovery (60%, quality eased)', () => {
+    const p = proposeWeek({ ...base, wellness: recsAt(0.5, 25, 0, i => (i >= 21 ? -33 : -20)) });
+    expect(p.kind).toBe('trim-week');
+    expect(p.factor).toBe(FORM_RULES.recoveryFactor);
+    expect(p.ease).toEqual(['1-1']);          // the quality session goes easy, not just shorter
+    expect(p.targets).toEqual(['1-0', '1-2', '1-3']);
+    expect(p.headline).toMatch(/recovery week/i);
+  });
+
+  it('F1 outranks R2: deep fatigue + risky ramp → the recovery week wins', () => {
+    const p = proposeWeek({ ...base, wellness: recsAt(1.3, 25, 0, -33) });
+    expect(p.factor).toBe(FORM_RULES.recoveryFactor);
+    expect(p.headline).toMatch(/recovery week/i);
+  });
+
+  it('F3: transition form mid-build with adjusted sessions → propose restoring them', () => {
+    const p = proposeWeek({ ...base, adjust: { '1-1': { kind: 'trim', factor: 0.8 } }, wellness: recsAt(0.5, 25, 0, 28) });
+    expect(p.kind).toBe('restore-week');
+    expect(p.action).toBe('restoreWeek');
+    expect(p.targets).toEqual(['1-1']);
+    expect(p.why).toMatch(/leaking/);
+  });
+
+  it('F3: transition form with nothing to restore but missed sessions → catch-up, leak framing', () => {
+    const p = proposeWeek({ ...base, wellness: recsAt(0.5, 25, 0, 28) }); // week 0's past days unlogged
+    expect(p.kind).toBe('catch-up');
+    expect(p.headline).toMatch(/leaking/i);
+  });
+
+  it('F2: a full grey week in Build with nothing missed → boost next week 10%', () => {
+    const p = proposeWeek({ ...base, log: cleanWeek, wellness: recsAt(0.5, 25, 0, -8) });
+    expect(p.kind).toBe('boost-week');
+    expect(p.action).toBe('boostWeek');
+    expect(p.factor).toBe(FORM_RULES.boostFactor);
+    expect(p.targets).toEqual(['1-0', '1-1', '1-2', '1-3']);
+  });
+
+  it('F2 needs a clean week: grey form with missed sessions is an execution problem, not a planning one', () => {
+    expect(proposeWeek({ ...base, wellness: recsAt(0.5, 25, 0, -8) })).toBe(null);
+  });
+
+  it('form rules stay quiet without TSB data or in healthy zones', () => {
+    expect(proposeWeek({ ...base, log: cleanWeek, wellness: recsAt(0.5) })).toBe(null);          // no tsb
+    expect(proposeWeek({ ...base, log: cleanWeek, wellness: recsAt(0.5, 25, 0, -15) })).toBe(null); // optimal
   });
 });

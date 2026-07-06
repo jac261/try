@@ -223,6 +223,19 @@ describe('wellness.rampHistory & rampZone', () => {
     expect(wellness.weeklyRamps(recs, 2).length).toBe(2); // caps at the requested weeks
   });
 
+  it('coachLine: one sentence from form + ramp, most urgent first', () => {
+    const c = wellness.coachLine;
+    expect(c(-35, 3)).toMatch(/Recovery is the training/);      // high risk trumps everything
+    expect(c(-20, 9)).toMatch(/pull back/i);                    // risky ramp
+    expect(c(-20, 6)).toMatch(/hot build/i);                    // aggressive
+    expect(c(30, 1)).toMatch(/too fresh/i);                     // transition
+    expect(c(-20, 3)).toMatch(/Hold this rhythm/);              // building + optimal
+    expect(c(0, 3)).toMatch(/room to push/i);                   // building + grey
+    expect(c(10, -1)).toMatch(/Fresh and holding/);             // steady + fresh
+    expect(c(-20, -4)).toMatch(/drifting down/i);               // detraining
+    expect(c(null, null)).toBe(null);
+  });
+
   it('maps ramp values to the coaching zones with correct boundaries', () => {
     const at = v => wellness.rampZone(v) && wellness.rampZone(v).key;
     expect(at(10)).toBe('risky');

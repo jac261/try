@@ -231,6 +231,28 @@ function rampZone(ramp) {
   return RAMP_ZONES.find(z => ramp >= z.lo && ramp < z.hi) || RAMP_ZONES[0];
 }
 
+// The coach line: one plain-English sentence synthesising form + ramp, spoken
+// when the engine has nothing to propose. Most-urgent-first, mirroring the
+// engine's own priorities; null when there isn't enough data to say anything.
+function coachLine(tsb, ramp) {
+  const f = formZone(tsb), r = rampZone(ramp);
+  if (!f && !r) return null;
+  if (f && f.key === 'highRisk') return 'Deep fatigue territory. Recovery is the training right now.';
+  if (r && r.key === 'risky') return 'Fitness is climbing faster than your body can absorb. Time to pull back.';
+  if (r && r.key === 'aggressive') return 'A hot build. Big gains, but keep a close eye on recovery.';
+  if (f && f.key === 'transition') return 'Very fresh, maybe too fresh. Fitness leaks without regular load.';
+  if (r && r.key === 'building') {
+    if (f && f.key === 'optimal') return 'Building well at a sustainable pace. Hold this rhythm.';
+    return 'Fitness is edging up. There is room to push a little.';
+  }
+  if (r && r.key === 'steady') {
+    if (f && f.key === 'fresh') return 'Fresh and holding fitness. A good place to be before racing.';
+    return 'Holding fitness. Ticking over nicely.';
+  }
+  if (r && r.key === 'detraining') return 'Fitness is drifting down. Fine if this is a planned break or taper.';
+  return null;
+}
+
 // One ramp reading per calendar week (for the histogram): fitness gained over
 // the 7 days up to that week's last record — the same definition as rampAt, so
 // the current partial week reads as "rate right now", not a misleading stub.
@@ -310,4 +332,4 @@ const MODEL = {
   })),
 };
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, rampHistory, rampZone, weeklyRamps, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };
+export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, rampHistory, rampZone, weeklyRamps, coachLine, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };

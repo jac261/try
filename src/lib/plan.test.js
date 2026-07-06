@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan, easeWorkout, trimWorkout } from './plan.js';
+import { generatePlan, easeWorkout, trimWorkout, boostWorkout } from './plan.js';
 import { iso, addDays } from './date.js';
 
 const profile = (raceDate, startDate) => ({
@@ -77,5 +77,27 @@ describe('trimWorkout (ramp guardrail)', () => {
   it('leaves non-swim/bike/run sessions untouched', () => {
     const strength = p.weeks.flatMap(w => w.workouts).find(w => w.discipline === 'strength');
     if (strength) expect(trimWorkout(strength, p, 0.8)).toBe(strength);
+  });
+});
+
+describe('boostWorkout (build nudge)', () => {
+  const p = generatePlan(profile('2026-09-23', '2026-07-01'));
+  const run = p.weeks.flatMap(w => w.workouts).find(w => w.discipline === 'run' && w.durationMin >= 40);
+
+  it('grows volume but keeps the session type', () => {
+    const b = boostWorkout(run, p, 1.1);
+    expect(b.boosted).toBe(true);
+    expect(b.boostedFrom).toBe(run.durationMin);
+    expect(b.durationMin).toBeGreaterThan(run.durationMin);
+    expect(b.type).toBe(run.type);
+  });
+
+  it('never shrinks: a factor that rounds back down returns the session unchanged', () => {
+    expect(boostWorkout(run, p, 1.0)).toBe(run);
+  });
+
+  it('leaves non-swim/bike/run sessions untouched', () => {
+    const strength = p.weeks.flatMap(w => w.workouts).find(w => w.discipline === 'strength');
+    if (strength) expect(boostWorkout(strength, p, 1.1)).toBe(strength);
   });
 });

@@ -135,6 +135,13 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
               </span>
               <span className="rlt-chev">{open ? '▾' : '▸'}</span>
             </div>
+            {!open && (() => {
+              // The coach line: the engine's voice when it has nothing to
+              // propose — one sentence synthesising form + ramp, so the folded
+              // card still reads like a coach, not a dashboard.
+              const line = T.wellness.coachLine(tsbNow, ramp);
+              return line ? <div className="rd-coach">{line}</div> : null;
+            })()}
             {open && <>
             <div className="rd-trend">
               <div className="rd-trend-head">

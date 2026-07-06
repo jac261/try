@@ -25,11 +25,19 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
       <div className="section-title">Today's readiness</div>
       <ReadinessCard wellness={wellness} today={today.map(w => ({ ...easedOf(w), done: !!log[w.id] }))}
         onEdit={onEditWellness} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} />
-      {weekly && <div className={weekly.kind === 'trim-week' ? 'banner ramp' : 'banner'} {...tap(() => onWeekly(weekly))}>
-        <div className="bi"><Icon name={weekly.kind === 'trim-week' ? 'trend' : 'bolt'} size={20} /></div>
-        <div><div className="bt">{weekly.headline}</div>
-          <div className="bs">{weekly.why} Tap to apply →</div></div>
-      </div>}
+      {weekly && (() => {
+        // banner skin per proposal kind: trims wear the amber ramp variant,
+        // the build nudge wears the green tune variant, restores stay blue
+        const skin = { 'trim-week': ['banner ramp', 'trend'], 'boost-week': ['banner tune', 'flame'], 'restore-week': ['banner', 'bolt'], 'catch-up': ['banner', 'bolt'] };
+        const [cls, icon] = skin[weekly.kind] || ['banner', 'bolt'];
+        return (
+          <div className={cls} {...tap(() => onWeekly(weekly))}>
+            <div className="bi"><Icon name={icon} size={20} /></div>
+            <div><div className="bt">{weekly.headline}</div>
+              <div className="bs">{weekly.why} Tap to apply →</div></div>
+          </div>
+        );
+      })()}
       {missed.length > 0 && (!weekly || weekly.kind !== 'catch-up') && <div className="banner" {...tap(onCatchUp)}>
         <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">{missed.length} session{missed.length > 1 ? 's' : ''} missed this week</div>

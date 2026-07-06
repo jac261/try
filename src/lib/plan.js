@@ -310,6 +310,21 @@ export const trimWorkout = function (w, plan, factor) {
   });
 };
 
+// The opposite nudge (Phase 3, rule F2): grow a session's volume when the load
+// isn't sufficient to drive adaptation. Same rebuild mechanics as trimWorkout.
+export const boostWorkout = function (w, plan, factor) {
+  const disc = w.discipline;
+  if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
+  const dur = round5(w.durationMin * factor);
+  if (dur <= w.durationMin) return w;
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase);
+  return Object.assign({}, w, {
+    title: built.title, durationMin: dur,
+    distance: built.distance, unit: built.unit, segments: built.segments,
+    boosted: true, boostedFrom: w.durationMin,
+  });
+};
+
 /* ---- phase plan across the whole block ---- */
 function computePhases(totalWeeks, taperWeeks) {
   const taper = Math.min(taperWeeks, Math.max(1, totalWeeks - 3));

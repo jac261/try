@@ -158,12 +158,15 @@ export function App({ storage, getToken, user }) {
     setLog(l => ({ ...l, [id]: entry }));
     if (gid(id)) sync.saveLog(gid(id), entry);
   };
-  // Engine-adjustments overlay: session ids → their eased (readiness) or trimmed
-  // (ramp guardrail) version. The name predates the trim kind; it applies both.
+  // Engine-adjustments overlay: session ids → their eased (readiness), trimmed
+  // (ramp guardrail) or boosted (build nudge) version. The name predates the
+  // extra kinds; it applies them all.
   const easedOf = w => {
     const a = w && adjust[w.id];
     if (!a) return w;
-    return a.kind === 'trim' ? T.trimWorkout(w, plan, a.factor || 0.8) : T.easeWorkout(w, plan);
+    if (a.kind === 'trim') return T.trimWorkout(w, plan, a.factor || 0.8);
+    if (a.kind === 'boost') return T.boostWorkout(w, plan, a.factor || 1.1);
+    return T.easeWorkout(w, plan);
   };
   const todaysHard = () => { const t = T.iso(new Date()); return plan.weeks.flatMap(wk => wk.workouts).filter(w => effDate(w, moves) === t && INTENSITY_TYPES[w.type] && !w.race); };
   const easeToday = () => {
@@ -189,19 +192,25 @@ export function App({ storage, getToken, user }) {
   const applyWeekly = p => {
     if (!p) return;
     if (p.action === 'catchUp') return catchUp();
+    if (p.action === 'restoreWeek') {
+      setAdjust(a => { const n = { ...a }; p.targets.forEach(id => delete n[id]); return n; });
+      p.targets.forEach(id => { if (adjust[id] && gid(id)) sync.removeAdjustment(gid(id)); });
+      return;
+    }
     const at = new Date().toISOString();
     const all = plan.weeks.flatMap(wk => wk.workouts);
+    const kind = p.action === 'boostWeek' ? 'boost' : 'trim';
     setAdjust(a => {
       const n = { ...a };
-      p.targets.forEach(id => { n[id] = { kind: 'trim', factor: p.factor, at }; });
-      if (p.ease) n[p.ease] = { kind: 'ease', at };
+      p.targets.forEach(id => { n[id] = { kind, factor: p.factor, at }; });
+      (p.ease || []).forEach(id => { n[id] = { kind: 'ease', at }; });
       return n;
     });
-    p.targets.forEach(id => { if (gid(id)) sync.saveAdjustment(gid(id), { kind: 'trim', factor: p.factor, at }); });
-    if (p.ease && gid(p.ease)) {
-      const w = all.find(x => x.id === p.ease);
-      sync.saveAdjustment(gid(p.ease), { kind: 'ease', easedFrom: w && w.type, at });
-    }
+    p.targets.forEach(id => { if (gid(id)) sync.saveAdjustment(gid(id), { kind, factor: p.factor, at }); });
+    (p.ease || []).forEach(id => {
+      const w = all.find(x => x.id === id);
+      if (gid(id)) sync.saveAdjustment(gid(id), { kind: 'ease', easedFrom: w && w.type, at });
+    });
   };
   // Rebuild the plan after a race/schedule change. This reshapes the structure, so we
   // prune log & moves to the workout IDs that still exist (fitness/history carry over).

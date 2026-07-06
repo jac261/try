@@ -65,15 +65,22 @@ race weeks are never trimmed: their relief is already scheduled. Accepted trims
 land in the same synced adjustment overlay as eased sessions (`kind: "trim"`),
 so undo, calendar and cross-device sync all behave identically.
 
-## Phase 3 — form-aware blocks
+## Phase 3 — form-aware blocks *(this release)*
 
-Block-level. Signal: the Form chart (TSB zones per `FORM_ZONES`).
+Block-level. Signal: the Form chart (TSB zones per `FORM_ZONES`). Named
+thresholds: `FORM_RULES` in `src/lib/adapt.js`.
 
 | # | Condition | Proposal |
 |---|---|---|
-| F1 | Form in **High risk** (< −30) for **3+ consecutive days** | Pull the next recovery week forward to start now |
-| F2 | Form stuck in **Grey zone** across a full Build week (never below −10) | Load isn't sufficient to drive adaptation → nudge next week's volume **+10%** |
-| F3 | Form in **Transition** (> +25) mid-Base/Build | Fitness is leaking → propose restoring full sessions / flag missed volume |
+| F1 | Form in **High risk** (< −30) for **3+ consecutive days** | Convert next week to a recovery week: volume to **60%**, every quality session taken easy ("pull the recovery week forward", through the same adjustment overlay) |
+| F2 | Form stuck in the **Grey zone** for a full week (7 readings, never below −10) during Base/Build, with nothing missed | Load isn't sufficient to drive adaptation → **boost** next week's volume +10% (`boostWorkout`, `kind: "boost"`) |
+| F3 | Form in **Transition** (> +25) mid-Base/Build | Fitness is leaking → restore any engine-adjusted upcoming sessions; with nothing to restore, surface the missed volume (catch-up) |
+
+The weekly banner shows ONE structural proposal, most urgent first:
+**F1 > R2 > R1 > F3 > F2 > R3**. F2 requires a clean week (no missed sessions) —
+grey form caused by skipped training needs the catch-up, not a bigger plan.
+The same guardrails as Phase 2 apply: fresh data only, recovery/taper/race
+weeks untouched, no re-proposing an adjusted week.
 
 ## Phase 4 — race-day form targeting
 
@@ -89,7 +96,7 @@ propose lengthening/shortening the taper by whole days until it lands.
 
 Accepted day-adaptations become synced state, exactly like logs and moves:
 
-- `PUT /api/workouts/{workoutId}/adjustment` — body `{ kind: "ease" | "trim", easedFrom?: "<original type>", factor?: <number, trim only>, at: "<ISO timestamp>" }`, upsert, one active adjustment per workout per user.
+- `PUT /api/workouts/{workoutId}/adjustment` — body `{ kind: "ease" | "trim" | "boost", easedFrom?: "<original type>", factor?: <number, trim/boost only>, at: "<ISO timestamp>" }`, upsert, one active adjustment per workout per user.
 - `DELETE /api/workouts/{workoutId}/adjustment` — restore (hard delete; an adjustment is a decision, not a record — 204 / repeat 404).
 - Returned inside `PlanResponse` per workout (like `log`/`move`), so hydrate rebuilds the eased state on any device.
 
