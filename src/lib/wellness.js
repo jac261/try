@@ -253,6 +253,14 @@ function coachLine(tsb, ramp) {
   return null;
 }
 
+// True when synced fitness history exists but only reaches back a few weeks —
+// the trigger for the one-time automatic deep backfill (records ascending).
+function shallowHistory(records, todayISO) {
+  const withCtl = (records || []).filter(r => r.ctl != null);
+  if (!withCtl.length) return false;
+  return withCtl[0].date > iso(addDays(todayISO || iso(new Date()), -120));
+}
+
 // One ramp reading per calendar week (for the histogram): fitness gained over
 // the 7 days up to that week's last record — the same definition as rampAt, so
 // the current partial week reads as "rate right now", not a misleading stub.
@@ -332,4 +340,4 @@ const MODEL = {
   })),
 };
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, rampHistory, rampZone, weeklyRamps, coachLine, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };
+export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, rampHistory, rampZone, weeklyRamps, coachLine, shallowHistory, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };

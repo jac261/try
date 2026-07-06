@@ -223,6 +223,15 @@ describe('wellness.rampHistory & rampZone', () => {
     expect(wellness.weeklyRamps(recs, 2).length).toBe(2); // caps at the requested weeks
   });
 
+  it('shallowHistory: fires only when fitness data exists but reaches back < 120 days', () => {
+    const today = '2026-07-06';
+    const rec = (date) => ({ date, ctl: 50 });
+    expect(wellness.shallowHistory([rec('2026-06-01'), rec(today)], today)).toBe(true);   // ~5 weeks
+    expect(wellness.shallowHistory([rec('2025-07-01'), rec(today)], today)).toBe(false);  // a year deep
+    expect(wellness.shallowHistory([], today)).toBe(false);                               // nothing to deepen
+    expect(wellness.shallowHistory([{ date: today, hrv: 60 }], today)).toBe(false);       // manual entry, no ctl
+  });
+
   it('coachLine: one sentence from form + ramp, most urgent first', () => {
     const c = wellness.coachLine;
     expect(c(-35, 3)).toMatch(/Recovery is the training/);      // high risk trumps everything

@@ -99,6 +99,19 @@ describe('makeSync wellness', () => {
   });
 });
 
+describe('makeSync.backfillWellness', () => {
+  it('requests the deep window and returns the list', async () => {
+    api.syncWellness.mockResolvedValue({ ok: true, body: [{ date: '2025-07-06', ctl: 40 }] });
+    const recs = await makeSync(getToken).backfillWellness();
+    expect(api.syncWellness).toHaveBeenCalledWith(getToken, 365);
+    expect(recs).toEqual([{ date: '2025-07-06', ctl: 40 }]);
+  });
+  it('returns null on failure (offline / not connected)', async () => {
+    api.syncWellness.mockResolvedValue({ ok: false, status: 404 });
+    expect(await makeSync(getToken).backfillWellness()).toBe(null);
+  });
+});
+
 describe('makeSync.refreshWellness', () => {
   it('returns the proxy-synced list when the integration is connected', async () => {
     api.syncWellness.mockResolvedValue({ ok: true, body: [{ date: '2026-07-01', hrv: 60 }] });

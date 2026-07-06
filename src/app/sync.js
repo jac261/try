@@ -65,6 +65,13 @@ export function makeSync(getToken) {
     },
     saveWellness: rec => fire(putWellness(getToken, rec), 'wellness ' + (rec && rec.date)),
 
+    // One-time deep pull (a year) for the automatic history backfill; null on
+    // any failure (offline / not connected / older backend without the window).
+    backfillWellness: async (days = 365) => {
+      const res = await syncWellness(getToken, days);
+      return res.ok && Array.isArray(res.body) ? res.body : null;
+    },
+
     // Prefer the intervals.icu proxy: POST /api/wellness/sync pulls the athlete's
     // last ~60 days server-side and returns the refreshed list. 404 (no integration)
     // falls back to the plain GET, so manual-entry users see no difference.

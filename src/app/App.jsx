@@ -73,6 +73,14 @@ export function App({ storage, getToken, user }) {
     sync.refreshWellness().then(serverRecs => {
       if (cancelled || !serverRecs) return; // null → offline/error, keep local cache
       applyServerWellness(serverRecs);
+      // Self-healing history: connected but the fitness record only reaches
+      // back a few weeks → quietly deepen it to a year, once. The flag stops a
+      // retry loop against a backend that ignores the days window; users who
+      // connect fresh get the deep pull at connect time instead.
+      if (T.wellness.shallowHistory(serverRecs, T.iso(new Date())) && !storage.load('backfilled', false)) {
+        storage.save('backfilled', true);
+        sync.backfillWellness().then(deep => { if (!cancelled && deep) applyServerWellness(deep); });
+      }
     });
     return () => { cancelled = true; };
   }, [sync]);
