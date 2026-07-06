@@ -5,9 +5,11 @@ import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { TrendChart } from '@/components/charts.jsx';
 
-// The training-load charts are analysis, not a morning glance — collapsed by
-// default behind a one-line summary. A stored choice wins; with no choice yet
-// they unfold themselves only when a zone needs attention (management by
+// Everything analytical lives behind one "Details" fold: driver chips, the
+// readiness trend and the training-load charts. The default card is for the
+// athlete who just wants the answer (ring + advice + coach line); the fold is
+// for the one who wants the evidence. A stored choice wins; with no choice yet
+// the fold opens itself only when a zone needs attention (management by
 // exception, same philosophy as the engine: quiet when everything is fine).
 const LOAD_PREF = 'try.showLoad';
 const loadPref = () => { try { return localStorage.getItem(LOAD_PREF); } catch (e) { return null; } };
@@ -23,7 +25,10 @@ function ReadinessRing({ score, band }) {
       <circle cx="36" cy="36" r={r} fill="none" stroke="var(--track)" strokeWidth="6" />
       <circle cx="36" cy="36" r={r} fill="none" stroke={col} strokeWidth="6" strokeLinecap="round"
         strokeDasharray={(score / 100 * c) + ' ' + c} transform="rotate(-90 36 36)" />
-      <text x="36" y="41" textAnchor="middle" fontSize="20" fontWeight="800" fill="var(--ink)">{score}</text>
+      {/* dominantBaseline centres vertically at any digit count; 100 gets a
+          slightly smaller size so three digits sit comfortably in the ring */}
+      <text x="36" y="36" textAnchor="middle" dominantBaseline="central"
+        fontSize={score >= 100 ? 17 : 20} fontWeight="800" fill="var(--ink)">{score}</text>
     </svg>
   );
 }
@@ -48,6 +53,25 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
   const sessTitle = (hard || eased || today.find(w => w.discipline !== 'rest') || {}).title;
   const adv = T.wellness.advice(rd.band, !!hard, today.length && sessTitle ? sessTitle : 'rest day');
   const stale = rec.date !== todayISO;
+
+  // Training-load signals feed the coach line, the summary numbers and the
+  // auto-expand rule, so they're computed up front (all null-safe on thin data).
+  const load = wellness.filter(r => r.ctl != null && r.atl != null).slice(-60);
+  const hasLoad = load.length >= 3;
+  const tsbSeries = load.map(r => (r.tsb != null ? r.tsb : r.ctl - r.atl));
+  const lastLoad = hasLoad ? load[load.length - 1] : null;
+  const tsbNow = hasLoad ? tsbSeries[tsbSeries.length - 1] : null;
+  const zone = T.wellness.formZone(tsbNow);
+  const ramp = hasLoad ? T.wellness.rampRate(wellness) : null;
+  const rZone = T.wellness.rampZone(ramp);
+  const coach = hasLoad ? T.wellness.coachLine(tsbNow, ramp) : null;
+  const hist = T.wellness.history(wellness, 14);
+
+  const alarm = (rZone && (rZone.key === 'aggressive' || rZone.key === 'risky'))
+    || (zone && zone.key === 'highRisk');
+  const open = loadChoice != null ? loadChoice === '1' : alarm;
+  const toggle = () => { saveLoadPref(!open); setLoadChoice(open ? '0' : '1'); };
+
   return (
     <div className={'card rd rd-' + rd.band}>
       <div className="rd-top">
@@ -79,126 +103,99 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
         if (eased) return <div className="rd-eased"><Icon name="rest" size={15} /> Today eased to {eased.title} for recovery · <a className="reset" {...tap(onRestore)}>undo</a></div>;
         return null;
       })()}
-      <div className="rd-why">
-        {(() => {
-          // Only the signals that actually moved the score; a chip that says
-          // "everything is normal" three different ways is noise.
-          const movers = rd.why.filter(w => Math.abs(w.points || 0) >= 1);
-          if (!movers.length) return <span className="rd-chip">All signals around your baseline</span>;
-          return movers.map((w, i) => <span key={i} className={'rd-chip' + (w.bad ? ' bad' : '')}>{w.t}</span>);
-        })()}
+      {coach && <div className="rd-coach">{coach}</div>}
+      <div className="rd-load-toggle" {...tap(toggle)} role="button"
+        aria-expanded={open} aria-label="Toggle readiness and training-load details">
+        <span className="rlt-title">Details</span>
+        {hasLoad && <span className="rlt-stats">
+          <span><i style={{ background: 'var(--blue)' }} />{Math.round(lastLoad.ctl)}</span>
+          <span><i style={{ background: zone ? zone.color : 'var(--muted)' }} />{T.wellness.signed(tsbNow)}</span>
+          {ramp != null && <span><i style={{ background: rZone ? rZone.color : 'var(--muted)' }} />{T.wellness.signed(ramp)}</span>}
+        </span>}
+        <span className="rlt-chev">{open ? '▾' : '▸'}</span>
       </div>
-      {(() => {
-        // Readiness over the recent days, each scored against its own rolling
-        // baseline; the shaded band is the amber zone (55-75), so where the line
-        // sits tells you green/amber/red at a glance.
-        const hist = T.wellness.history(wellness, 14);
-        if (hist.length < 3) return null;
-        const amber = T.wellness.MODEL.bands.find(b => b.key === 'amber').min;
-        const green = T.wellness.MODEL.bands.find(b => b.key === 'green').min;
-        return (
+      {open && <>
+        <div className="rd-why">
+          {(() => {
+            // Only the signals that actually moved the score; a chip that says
+            // "everything is normal" three different ways is noise.
+            const movers = rd.why.filter(w => Math.abs(w.points || 0) >= 1);
+            if (!movers.length) return <span className="rd-chip">All signals around your baseline</span>;
+            return movers.map((w, i) => <span key={i} className={'rd-chip' + (w.bad ? ' bad' : '')}>{w.t}</span>);
+          })()}
+        </div>
+        {hist.length >= 3 && (() => {
+          // Readiness over the recent days, each scored against its own rolling
+          // baseline; the shaded band is the amber zone (55-75), so where the line
+          // sits tells you green/amber/red at a glance.
+          const amber = T.wellness.MODEL.bands.find(b => b.key === 'amber').min;
+          const green = T.wellness.MODEL.bands.find(b => b.key === 'green').min;
+          return (
+            <div className="rd-trend">
+              <div className="rd-trend-head">
+                <span>Readiness trend</span>
+                <span>{T.fmtDate(hist[0].date, { month: 'short', day: 'numeric' })} – {T.fmtDate(hist[hist.length - 1].date, { month: 'short', day: 'numeric' })}</span>
+              </div>
+              <TrendChart height={84} band={{ lo: amber, hi: green }}
+                series={[{ values: hist.map(h => h.score), color: BAND_COLOR[rd.band], fill: true }]} />
+            </div>
+          );
+        })()}
+        {hasLoad && <>
           <div className="rd-trend">
             <div className="rd-trend-head">
-              <span>Readiness trend</span>
-              <span>{T.fmtDate(hist[0].date, { month: 'short', day: 'numeric' })} – {T.fmtDate(hist[hist.length - 1].date, { month: 'short', day: 'numeric' })}</span>
+              <span>Fitness &amp; Fatigue</span>
+              <span>{load.length} days</span>
             </div>
-            <TrendChart height={84} band={{ lo: amber, hi: green }}
-              series={[{ values: hist.map(h => h.score), color: BAND_COLOR[rd.band], fill: true }]} />
+            <div className="load-stats">
+              <span><b style={{ color: 'var(--blue)' }}>{Math.round(lastLoad.ctl)}</b> Fitness</span>
+              <span><b style={{ color: 'var(--danger)' }}>{Math.round(lastLoad.atl)}</b> Fatigue</span>
+            </div>
+            <TrendChart height={84} axis series={[
+              { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
+              { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
+            ]} />
           </div>
-        );
-      })()}
-      {(() => {
-        // Training load lives behind a one-line summary (full-size analysis on
-        // the Progress tab). The summary itself carries the status: each number
-        // wears a dot in its zone's colour, so collapsed still answers "am I OK?".
-        const load = wellness.filter(r => r.ctl != null && r.atl != null).slice(-60);
-        if (load.length < 3) return null;
-        const tsbSeries = load.map(r => (r.tsb != null ? r.tsb : r.ctl - r.atl));
-        const lastLoad = load[load.length - 1];
-        const tsbNow = tsbSeries[tsbSeries.length - 1];
-        const zone = T.wellness.formZone(tsbNow);
-        const ramp = T.wellness.rampRate(wellness);
-        const rZone = T.wellness.rampZone(ramp);
-        const alarm = (rZone && (rZone.key === 'aggressive' || rZone.key === 'risky'))
-          || (zone && zone.key === 'highRisk');
-        const open = loadChoice != null ? loadChoice === '1' : alarm;
-        const toggle = () => { saveLoadPref(!open); setLoadChoice(open ? '0' : '1'); };
-        return (
-          <>
-            <div className="rd-load-toggle" {...tap(toggle)} role="button"
-              aria-expanded={open} aria-label="Toggle training load charts">
-              <span className="rlt-title">Training load</span>
-              <span className="rlt-stats">
-                <span><i style={{ background: 'var(--blue)' }} />{Math.round(lastLoad.ctl)} fit</span>
-                <span><i style={{ background: zone ? zone.color : 'var(--muted)' }} />{T.wellness.signed(tsbNow)} form</span>
-                {ramp != null && <span><i style={{ background: rZone ? rZone.color : 'var(--muted)' }} />{T.wellness.signed(ramp)}/wk</span>}
-              </span>
-              <span className="rlt-chev">{open ? '▾' : '▸'}</span>
+          <div className="rd-trend">
+            <div className="rd-trend-head">
+              <span>Form</span>
+              <span>fitness − fatigue</span>
             </div>
-            {!open && (() => {
-              // The coach line: the engine's voice when it has nothing to
-              // propose — one sentence synthesising form + ramp, so the folded
-              // card still reads like a coach, not a dashboard.
-              const line = T.wellness.coachLine(tsbNow, ramp);
-              return line ? <div className="rd-coach">{line}</div> : null;
-            })()}
-            {open && <>
-            <div className="rd-trend">
-              <div className="rd-trend-head">
-                <span>Fitness &amp; Fatigue</span>
-                <span>{load.length} days</span>
-              </div>
-              <div className="load-stats">
-                <span><b style={{ color: 'var(--blue)' }}>{Math.round(lastLoad.ctl)}</b> Fitness</span>
-                <span><b style={{ color: 'var(--danger)' }}>{Math.round(lastLoad.atl)}</b> Fatigue</span>
-              </div>
-              <TrendChart height={84} axis series={[
-                { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
-                { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
-              ]} />
+            <div className="load-stats">
+              <span><b style={{ color: 'var(--brick)' }}>{T.wellness.signed(tsbNow)}</b> Form</span>
             </div>
-            <div className="rd-trend">
-              <div className="rd-trend-head">
-                <span>Form</span>
-                <span>fitness − fatigue</span>
-              </div>
-              <div className="load-stats">
-                <span><b style={{ color: 'var(--brick)' }}>{T.wellness.signed(tsbNow)}</b> Form</span>
-              </div>
-              <TrendChart height={84} domain={{ min: -35, max: 32 }}
-                zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
-                series={[{ values: tsbSeries, color: 'var(--brick)', width: 2 }]} />
-            </div>
-            {(() => {
-              // Ramp rate as a histogram: one bar per week, coloured by its zone
-              // (a weekly rate is discrete — bars say that; a line implies a
-              // continuity that isn't there). Dashed lines mark the +5
-              // sustainable ceiling and +8 injury territory.
-              const weekly = T.wellness.weeklyRamps(wellness, 8);
-              if (weekly.length < 2 || ramp == null) return null;
-              return (
-                <div className="rd-trend">
-                  <div className="rd-trend-head">
-                    <span>Ramp rate</span>
-                    <span>fitness gained per week</span>
-                  </div>
-                  <div className="load-stats">
-                    <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk · {rZone ? rZone.label : ''}</span>
-                  </div>
-                  <TrendChart height={84} domain={{ min: -3, max: 9 }}
-                    bars={weekly.map((e, i) => ({
-                      v: e.ramp,
-                      color: (T.wellness.rampZone(e.ramp) || {}).color,
-                      label: i === weekly.length - 1 ? 'now' : T.fmtDate(e.week, { day: 'numeric', month: 'numeric' }),
-                    }))}
-                    refLines={[{ v: 5, color: '#facc15' }, { v: 8, color: '#ef4444' }]} />
+            <TrendChart height={84} domain={{ min: -35, max: 32 }}
+              zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
+              series={[{ values: tsbSeries, color: 'var(--brick)', width: 2 }]} />
+          </div>
+          {(() => {
+            // Ramp rate as a histogram: one bar per week, coloured by its zone
+            // (a weekly rate is discrete — bars say that; a line implies a
+            // continuity that isn't there). Dashed lines mark the +5
+            // sustainable ceiling and +8 injury territory.
+            const weekly = T.wellness.weeklyRamps(wellness, 8);
+            if (weekly.length < 2 || ramp == null) return null;
+            return (
+              <div className="rd-trend">
+                <div className="rd-trend-head">
+                  <span>Ramp rate</span>
+                  <span>fitness gained per week</span>
                 </div>
-              );
-            })()}
-            </>}
-          </>
-        );
-      })()}
+                <div className="load-stats">
+                  <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk · {rZone ? rZone.label : ''}</span>
+                </div>
+                <TrendChart height={84} domain={{ min: -3, max: 9 }}
+                  bars={weekly.map((e, i) => ({
+                    v: e.ramp,
+                    color: (T.wellness.rampZone(e.ramp) || {}).color,
+                    label: i === weekly.length - 1 ? 'now' : T.fmtDate(e.week, { day: 'numeric', month: 'numeric' }),
+                  }))}
+                  refLines={[{ v: 5, color: '#facc15' }, { v: 8, color: '#ef4444' }]} />
+              </div>
+            );
+          })()}
+        </>}
+      </>}
       <div className="rd-foot">
         <span>{stale ? 'From ' + T.fmtDate(rec.date, { month: 'short', day: 'numeric' }) : 'This morning'}</span>
         <a className="reset" {...tap(onEdit)}>Update →</a>
