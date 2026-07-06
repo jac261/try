@@ -122,6 +122,14 @@ describe('integrations (intervals.icu)', () => {
     await syncWellness(getToken);
     [url, opts] = global.fetch.mock.calls[1];
     expect(url).toContain('/api/wellness/sync');
+    expect(url).not.toContain('days=');
     expect(opts.method).toBe('POST');
+  });
+
+  it('syncWellness appends the days window for a history backfill', async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, text: async () => '[]' }));
+    const { syncWellness } = await import('./api.js');
+    await syncWellness(getToken, 365);
+    expect(global.fetch.mock.calls[0][0]).toContain('/api/wellness/sync?days=365');
   });
 });

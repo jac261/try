@@ -3,7 +3,9 @@ import { Icon } from '@/components/Icon.jsx';
 import { TrendChart } from '@/components/charts.jsx';
 
 export function WellnessTrends({ wellness }) {
-  const w = wellness.filter(r => r.ctl != null || r.hrv != null);
+  // After a history backfill the store can hold a year+; the charts stay
+  // readable on the trailing 120 days (the "last N days" labels follow).
+  const w = wellness.filter(r => r.ctl != null || r.hrv != null).slice(-120);
   if (w.length < 2) return (
     <>
       <div className="section-title">Fitness &amp; recovery</div>

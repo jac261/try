@@ -176,10 +176,13 @@ export function deleteWellness(getToken, date) {
   return request('/api/wellness/' + encodeURIComponent(date), { getToken, method: 'DELETE' });
 }
 
-// Pull the last ~60 days from intervals.icu into the server's wellness store and
+// Pull recent history from intervals.icu into the server's wellness store and
 // return the refreshed list (same shape as getWellness). 404 → not connected.
-export function syncWellness(getToken) {
-  return request('/api/wellness/sync', { getToken, method: 'POST' });
+// `days` deepens the window (backfill; backend caps at 730) — a backend that
+// predates the parameter ignores it and does its normal ~60-day sync.
+export function syncWellness(getToken, days) {
+  const query = days ? '?days=' + encodeURIComponent(days) : '';
+  return request('/api/wellness/sync' + query, { getToken, method: 'POST' });
 }
 
 /* ---------------- integrations (intervals.icu) ----------------

@@ -21,6 +21,7 @@ function IntervalsIcuCard({ onWellnessSynced }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [backfilled, setBackfilled] = useState(null); // record count after a deep pull
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -56,6 +57,22 @@ function IntervalsIcuCard({ onWellnessSynced }) {
     setBusy(false);
   }
 
+  // One-time deep pull: a year of history gives the fitness charts and the
+  // adaptive engine real depth instead of a 60-day stub. On a backend that
+  // predates the days parameter this degrades to a normal sync.
+  async function backfill() {
+    setBusy(true); setError(null);
+    const res = await syncWellness(getToken, 365);
+    if (res.ok && Array.isArray(res.body)) {
+      onWellnessSynced && onWellnessSynced(res.body);
+      setBackfilled(res.body.length);
+      setStatus(s => ({ ...s, lastSyncedAtUtc: new Date().toISOString() }));
+    } else {
+      setError(res.message || 'Backfill failed — try again in a minute.');
+    }
+    setBusy(false);
+  }
+
   if (unavailable) return null; // backend predates the integration — hide quietly
   if (!status) return <div className="authbox"><div className="authmeta">Checking intervals.icu…</div></div>;
 
@@ -70,6 +87,14 @@ function IntervalsIcuCard({ onWellnessSynced }) {
           <button className="btn ghost sm" type="button" onClick={disconnect} disabled={busy}>Disconnect</button>
         </div>
         <div className="authmeta">Readiness pulls your HRV, sleep, resting HR &amp; Form automatically on each visit.</div>
+        <div className="authrow" style={{ marginTop: 8 }}>
+          <div className="authmeta">{backfilled != null
+            ? backfilled + ' days of history loaded — your charts and baselines now run deep.'
+            : 'Load a year of fitness history for deeper charts and baselines.'}</div>
+          {backfilled == null && <button className="btn ghost sm" type="button" onClick={backfill} disabled={busy}>
+            {busy ? 'Loading…' : 'Backfill a year'}</button>}
+        </div>
+        {error && <div className="authstatus bad"><div>{error}</div></div>}
       </div>
     );
   }
