@@ -185,10 +185,12 @@ export function App({ storage, getToken, user }) {
     setAdjust(a => { const n = { ...a }; delete n[id]; return n; });
     if (gid(id)) sync.removeAdjustment(gid(id));
   };
-  // Phase 2 — the ramp guardrail's week-level proposal (rules R1-R3), and what
-  // accepting it does: trim entries land in the same adjust overlay (and sync the
-  // same way), so the calendar, detail sheet and undo all just work.
-  const weekly = T.proposeWeek({ wellness, plan, log, moves, adjust, todayISO: T.iso(new Date()) });
+  // The engine's structural proposal (one banner): race-day form targeting
+  // (Phase 4) outranks the week rules (Phases 2-3) — inside the final fortnight
+  // the taper is the thing that matters. Accepting lands trim/boost/ease entries
+  // in the same adjust overlay (and sync), so calendar, sheet and undo just work.
+  const engineInputs = { wellness, plan, log, moves, adjust, todayISO: T.iso(new Date()) };
+  const weekly = T.proposeRace(engineInputs) || T.proposeWeek(engineInputs);
   const applyWeekly = p => {
     if (!p) return;
     if (p.action === 'catchUp') return catchUp();

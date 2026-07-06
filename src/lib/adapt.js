@@ -8,7 +8,7 @@
  * ignores. The engine never mutates the plan itself.
  */
 import { INTENSITY_TYPES } from './tuning.js';
-import { iso, addDays, startOfWeekMonday } from './date.js';
+import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { wellness as wellnessLib } from './wellness.js';
 
 // A proposal: { kind, workout, headline, why, action }
@@ -239,4 +239,116 @@ export function proposeWeek({ wellness, plan, log, moves, adjust, todayISO }) {
   }
 
   return null;
+}
+
+/* ---------------- Phase 4 — race-day form targeting ---------------- */
+
+export const RACE_RULES = {
+  freshLo: 5, freshHi: 25, // arrive on race morning inside the Fresh band
+  horizonDays: 14,         // steer only inside the final two weeks
+  trimFactor: 0.6,         // arriving heavy: shorten sessions, keep their intensity
+  boostFactor: 1.15,       // arriving flat: a touch more volume, early in the taper
+};
+
+// Rough per-type intensity factors for estimating a session's training load:
+// TSS ≈ hours × IF² × 100. Estimates only — the projection needs the shape of
+// the taper, not watt-accurate numbers.
+const TYPE_IF = {
+  'Easy': 0.65, 'Recovery': 0.6, 'Endurance': 0.7, 'Technique': 0.6, 'Long': 0.72,
+  'Tempo': 0.85, 'Sweet Spot': 0.9, 'Threshold': 0.95, 'VO2 Intervals': 1.05,
+  'CSS Intervals': 0.95, 'Race Pace': 0.95, 'Open Water': 0.75, 'Brick': 0.8,
+  'Strength': 0.5, 'Test': 0.9,
+};
+const DEFAULT_IF = 0.7;
+
+export function estimateTss(w, adj) {
+  let dur = w.durationMin || 0;
+  let type = w.type;
+  if (adj) {
+    if (adj.kind === 'ease') { dur *= 0.65; type = 'Easy'; }
+    else if (adj.factor) dur *= adj.factor;
+  }
+  const f = TYPE_IF[type] != null ? TYPE_IF[type] : DEFAULT_IF;
+  return (dur / 60) * f * f * 100;
+}
+
+// Project race-morning form: walk each day from the last fitness reading to the
+// day before the race with the standard impulse-response model
+// (CTL' = CTL + (TSS − CTL)/42, ATL' = ATL + (TSS − ATL)/7), feeding it the
+// planned sessions on their effective dates with the adjustment overlay applied.
+// Returns { tsb, raceDate, daysToRace } or null (no race / no data / stale data).
+export function projectRaceForm({ wellness, plan, log, moves, adjust, todayISO }) {
+  if (!plan || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
+  const today = todayISO || iso(new Date());
+  const race = plan.weeks.flatMap(w => w.workouts).find(w => w.race);
+  if (!race) return null;
+  const raceDate = (moves && moves[race.id]) || race.date;
+  if (raceDate <= today) return null;
+  const recs = (wellness || []).filter(r => r.ctl != null && r.atl != null);
+  if (!recs.length) return null;
+  const last = recs[recs.length - 1];
+  if (last.date < iso(addDays(today, -RAMP_RULES.freshDays))) return null; // stale sensors
+
+  const byDate = {};
+  plan.weeks.flatMap(w => w.workouts).forEach(w => {
+    if (w.race || w.discipline === 'rest' || (log || {})[w.id]) return;
+    const d = (moves && moves[w.id]) || w.date;
+    if (d > last.date && d < raceDate) (byDate[d] = byDate[d] || []).push(w);
+  });
+
+  let ctl = last.ctl, atl = last.atl;
+  for (let d = iso(addDays(last.date, 1)); d < raceDate; d = iso(addDays(d, 1))) {
+    const tss = (byDate[d] || []).reduce((s, w) => s + estimateTss(w, (adjust || {})[w.id]), 0);
+    ctl += (tss - ctl) / 42;
+    atl += (tss - atl) / 7;
+  }
+  return { tsb: Math.round((ctl - atl) * 10) / 10, raceDate, daysToRace: daysBetween(today, raceDate) };
+}
+
+// Race-level proposal: inside the final horizonDays, if projected race-morning
+// form misses the Fresh window, steer the taper — arriving heavy trims the
+// sessions closest to the race (volume down, intensity kept: standard taper
+// practice); arriving flat adds volume where it hurts freshness least, at the
+// far end of the taper. Sessions are added to the plan one at a time, re-running
+// the projection, until it lands (or every candidate is used: best effort).
+export function proposeRace({ wellness, plan, log, moves, adjust, todayISO }) {
+  const today = todayISO || iso(new Date());
+  const proj = projectRaceForm({ wellness, plan, log, moves, adjust, todayISO: today });
+  if (!proj || proj.daysToRace > RACE_RULES.horizonDays) return null;
+  if (proj.tsb >= RACE_RULES.freshLo && proj.tsb <= RACE_RULES.freshHi) return null;
+
+  const heavy = proj.tsb < RACE_RULES.freshLo;
+  const eff = w => (moves && moves[w.id]) || w.date;
+  const cands = plan.weeks.flatMap(w => w.workouts).filter(w => {
+    if (w.race || w.test || (log || {})[w.id] || (adjust || {})[w.id]) return false;
+    if (w.discipline !== 'run' && w.discipline !== 'bike' && w.discipline !== 'swim') return false;
+    return eff(w) > today && eff(w) < proj.raceDate;
+  }).sort((a, b) => (heavy ? (eff(a) < eff(b) ? 1 : -1) : (eff(a) < eff(b) ? -1 : 1)));
+  if (!cands.length) return null;
+
+  const kind = heavy ? 'trim' : 'boost';
+  const factor = heavy ? RACE_RULES.trimFactor : RACE_RULES.boostFactor;
+  const chosen = [];
+  let landed = proj.tsb;
+  for (const c of cands) {
+    chosen.push(c);
+    const overlay = { ...(adjust || {}) };
+    chosen.forEach(w => { overlay[w.id] = { kind, factor }; });
+    landed = projectRaceForm({ wellness, plan, log, moves, adjust: overlay, todayISO: today }).tsb;
+    if (heavy ? landed >= RACE_RULES.freshLo : landed <= RACE_RULES.freshHi) break;
+  }
+
+  const n = chosen.length === 1 ? 'session' : chosen.length + ' sessions';
+  if (heavy) return {
+    kind: 'trim-week', action: 'trimWeek', factor,
+    targets: chosen.map(w => w.id), ease: [],
+    headline: 'Protect your race freshness',
+    why: `Projected race-morning form is ${fmtTsb(proj.tsb)}, below the +${RACE_RULES.freshLo} fresh window. Lighten your final ${n} (shorter, same intensity): projected form improves to ${fmtTsb(landed)}.`,
+  };
+  return {
+    kind: 'boost-week', action: 'boostWeek', factor,
+    targets: chosen.map(w => w.id), ease: [],
+    headline: 'Too fresh for race day',
+    why: `Projected race-morning form is ${fmtTsb(proj.tsb)}, past the +${RACE_RULES.freshHi} ceiling where fitness leaks. A touch more volume early in the taper brings you to ${fmtTsb(landed)} with the same freshness and more fitness.`,
+  };
 }

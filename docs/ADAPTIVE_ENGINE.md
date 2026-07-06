@@ -82,15 +82,30 @@ grey form caused by skipped training needs the catch-up, not a bigger plan.
 The same guardrails as Phase 2 apply: fresh data only, recovery/taper/race
 weeks untouched, no re-proposing an adjusted week.
 
-## Phase 4 — race-day form targeting
+## Phase 4 — race-day form targeting *(this release)*
 
 Race-level. Project TSB forward from the remaining planned sessions and steer the
-taper so the athlete **arrives in Fresh (+5…+25)** on race day.
+taper so the athlete **arrives in Fresh (+5…+25)** on race morning. Named
+thresholds: `RACE_RULES` in `src/lib/adapt.js`.
 
-Projection: standard impulse-response — `CTL' = CTL + (TSS − CTL)/42`,
-`ATL' = ATL + (TSS − ATL)/7`, per planned day (session TSS estimated from duration ×
-intensity factor of its zone). If projected race-day TSB falls outside **+5…+25**,
-propose lengthening/shortening the taper by whole days until it lands.
+Projection (`projectRaceForm`): standard impulse-response — `CTL' = CTL +
+(TSS − CTL)/42`, `ATL' = ATL + (TSS − ATL)/7` — walked day by day from the last
+fitness reading to the day before the race, feeding it each planned session on
+its effective date with the adjustment overlay applied. Session TSS is estimated
+as `hours × IF² × 100` from a per-type intensity-factor table (`TYPE_IF`) —
+estimates, but the projection needs the shape of the taper, not watt-accurate
+numbers.
+
+Steering (`proposeRace`), active only inside the final **14 days**:
+
+| Condition | Proposal |
+|---|---|
+| Projected race-morning TSB **< +5** (arriving heavy) | **Trim** sessions to 60%, closest to the race first — volume down, intensity kept (standard taper practice) — adding one at a time and re-projecting until the window is reached (or every candidate is used: best effort) |
+| Projected race-morning TSB **> +25** (arriving flat) | **Boost** sessions 15%, earliest first — extra volume where it costs the least freshness |
+
+The race proposal takes the single structural-banner slot ahead of the week
+rules (inside the final fortnight the taper is the thing that matters); tests
+and the race itself are never candidates, and stale fitness data stays quiet.
 
 ## Sync contract (backend, for Jack)
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { proposeToday, proposeWeek, RAMP_RULES, FORM_RULES } from './adapt.js';
+import { proposeToday, proposeWeek, proposeRace, projectRaceForm, estimateTss, RAMP_RULES, FORM_RULES, RACE_RULES } from './adapt.js';
 import { iso, addDays } from './date.js';
 
 const hard = { id: '0-1', title: 'Threshold Run', type: 'Threshold', discipline: 'run', durationMin: 50 };
@@ -194,5 +194,66 @@ describe('adaptive engine — Phase 3 (form-aware blocks)', () => {
   it('form rules stay quiet without TSB data or in healthy zones', () => {
     expect(proposeWeek({ ...base, log: cleanWeek, wellness: recsAt(0.5) })).toBe(null);          // no tsb
     expect(proposeWeek({ ...base, log: cleanWeek, wellness: recsAt(0.5, 25, 0, -15) })).toBe(null); // optimal
+  });
+});
+
+/* ---------------- Phase 4 — race-day form targeting ---------------- */
+
+// A taper fixture: sessions on TODAY+1 .. TODAY+6, race on TODAY+raceOffset.
+const racePlan = (raceOffset, type = 'Easy', durationMin = 40) => ({
+  weeks: [{
+    index: 0, phase: 'Taper', isRecovery: false, start: TODAY,
+    workouts: Array.from({ length: 6 }, (_, i) => ({
+      id: '0-' + i, week: 0, phase: 'Taper', date: iso(addDays(TODAY, i + 1)),
+      discipline: ['run', 'bike', 'swim'][i % 3], type,
+      title: type + ' ' + ['Run', 'Ride', 'Swim'][i % 3], durationMin,
+    })).concat([{ id: '9-0', week: 0, phase: 'Taper', date: iso(addDays(TODAY, raceOffset)), discipline: 'brick', type: 'RACE', title: 'RACE DAY', race: true, durationMin: 0 }]),
+  }],
+});
+// Flat fitness history ending TODAY with a chosen ctl/atl (so form projection
+// starts from a known point).
+const loadRecs = (ctl, atl, days = 8) => Array.from({ length: days }, (_, i) => ({
+  date: iso(addDays(TODAY, i - days + 1)), ctl, atl, tsb: ctl - atl,
+}));
+
+describe('adaptive engine — Phase 4 (race-day form targeting)', () => {
+  it('estimateTss scales with duration and intensity, and respects adjustments', () => {
+    const thr = { type: 'Threshold', durationMin: 60 };
+    expect(estimateTss(thr)).toBeCloseTo(90.25, 1);                       // 1h × .95² × 100
+    expect(estimateTss(thr, { kind: 'trim', factor: 0.5 })).toBeCloseTo(45.1, 1);
+    expect(estimateTss(thr, { kind: 'ease' })).toBeCloseTo(0.65 * 0.65 * 0.65 * 100, 1); // easy type + 65% volume
+  });
+
+  it('projects race-morning TSB through the remaining plan', () => {
+    const proj = projectRaceForm({ wellness: loadRecs(55, 45), plan: racePlan(7), log: {}, moves: {}, adjust: {}, todayISO: TODAY });
+    expect(proj.daysToRace).toBe(7);
+    expect(proj.tsb).toBeGreaterThan(RACE_RULES.freshLo);   // easy taper week sheds fatigue
+    expect(proj.tsb).toBeLessThan(RACE_RULES.freshHi);
+  });
+
+  it('arriving heavy → trim the sessions closest to the race (volume down, intensity kept)', () => {
+    const p = proposeRace({ wellness: loadRecs(60, 85), plan: racePlan(7, 'Threshold', 60), log: {}, moves: {}, adjust: {}, todayISO: TODAY });
+    expect(p.kind).toBe('trim-week');
+    expect(p.factor).toBe(RACE_RULES.trimFactor);
+    expect(p.targets[0]).toBe('0-5');                       // nearest the race first
+    expect(p.headline).toMatch(/freshness/i);
+    expect(p.why).toMatch(/below the \+5/);
+  });
+
+  it('arriving flat → boost the earliest sessions in the taper', () => {
+    const p = proposeRace({ wellness: loadRecs(55, 22), plan: racePlan(7, 'Technique', 30), log: {}, moves: {}, adjust: {}, todayISO: TODAY });
+    expect(p.kind).toBe('boost-week');
+    expect(p.factor).toBe(RACE_RULES.boostFactor);
+    expect(p.targets[0]).toBe('0-0');                       // furthest from the race first
+    expect(p.headline).toMatch(/Too fresh/);
+  });
+
+  it('stays quiet when the projection lands in the window, outside the horizon, or with stale data', () => {
+    const ok = { wellness: loadRecs(55, 45), plan: racePlan(7), log: {}, moves: {}, adjust: {}, todayISO: TODAY };
+    expect(proposeRace(ok)).toBe(null);                                        // in the window
+    const far = { ...ok, wellness: loadRecs(60, 85), plan: racePlan(30, 'Threshold', 60) };
+    expect(proposeRace(far)).toBe(null);                                       // > horizonDays out
+    const stale = { ...ok, wellness: loadRecs(60, 85, 8).map(r => ({ ...r, date: iso(addDays(r.date, -5)) })) };
+    expect(proposeRace({ ...stale, plan: racePlan(7, 'Threshold', 60) })).toBe(null); // stale sensors
   });
 });
