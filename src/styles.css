@@ -153,6 +153,11 @@ body {
 .banner.tune .bi { color: var(--run); }
 .banner.tune .bt { color: #6ee7b7; }
 
+/* ramp-guardrail banner (adaptive engine phase 2) — amber, matching the Aggressive ramp zone */
+.banner.ramp { background: rgba(250, 204, 21, .10); border-color: rgba(250, 204, 21, .35); }
+.banner.ramp .bi { color: #facc15; }
+.banner.ramp .bt { color: #fde68a; }
+
 /* post-session feel picker */
 .feel { margin-top: 16px; }
 .feel-q { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
@@ -237,6 +242,7 @@ body {
 .rd-eased { margin-top: 13px; font-size: 12.5px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 7px; line-height: 1.4; }
 .rd-eased svg { flex: none; color: var(--run); }
 .tag.eased { background: rgba(52, 211, 153, .16); color: var(--run); }
+.tag.trimmed { background: rgba(250, 204, 21, .16); color: #facc15; }
 
 /* trend chart legend */
 .chart-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 11px; font-size: 11.5px; color: var(--muted); font-weight: 600; }

@@ -158,8 +158,13 @@ export function App({ storage, getToken, user }) {
     setLog(l => ({ ...l, [id]: entry }));
     if (gid(id)) sync.saveLog(gid(id), entry);
   };
-  // Readiness-driven adjustments overlay: eased session ids → easy aerobic version.
-  const easedOf = w => (w && adjust[w.id] ? T.easeWorkout(w, plan) : w);
+  // Engine-adjustments overlay: session ids → their eased (readiness) or trimmed
+  // (ramp guardrail) version. The name predates the trim kind; it applies both.
+  const easedOf = w => {
+    const a = w && adjust[w.id];
+    if (!a) return w;
+    return a.kind === 'trim' ? T.trimWorkout(w, plan, a.factor || 0.8) : T.easeWorkout(w, plan);
+  };
   const todaysHard = () => { const t = T.iso(new Date()); return plan.weeks.flatMap(wk => wk.workouts).filter(w => effDate(w, moves) === t && INTENSITY_TYPES[w.type] && !w.race); };
   const easeToday = () => {
     const hard = todaysHard(); if (!hard.length) return;
@@ -176,6 +181,27 @@ export function App({ storage, getToken, user }) {
   const unEase = id => {
     setAdjust(a => { const n = { ...a }; delete n[id]; return n; });
     if (gid(id)) sync.removeAdjustment(gid(id));
+  };
+  // Phase 2 — the ramp guardrail's week-level proposal (rules R1-R3), and what
+  // accepting it does: trim entries land in the same adjust overlay (and sync the
+  // same way), so the calendar, detail sheet and undo all just work.
+  const weekly = T.proposeWeek({ wellness, plan, log, moves, adjust, todayISO: T.iso(new Date()) });
+  const applyWeekly = p => {
+    if (!p) return;
+    if (p.action === 'catchUp') return catchUp();
+    const at = new Date().toISOString();
+    const all = plan.weeks.flatMap(wk => wk.workouts);
+    setAdjust(a => {
+      const n = { ...a };
+      p.targets.forEach(id => { n[id] = { kind: 'trim', factor: p.factor, at }; });
+      if (p.ease) n[p.ease] = { kind: 'ease', at };
+      return n;
+    });
+    p.targets.forEach(id => { if (gid(id)) sync.saveAdjustment(gid(id), { kind: 'trim', factor: p.factor, at }); });
+    if (p.ease && gid(p.ease)) {
+      const w = all.find(x => x.id === p.ease);
+      sync.saveAdjustment(gid(p.ease), { kind: 'ease', easedFrom: w && w.type, at });
+    }
   };
   // Rebuild the plan after a race/schedule change. This reshapes the structure, so we
   // prune log & moves to the workout IDs that still exist (fitness/history carry over).
@@ -219,7 +245,7 @@ export function App({ storage, getToken, user }) {
         <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
       </div>
 
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} />}
       {view === 'plan' && <PlanView plan={plan} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={wellness} />}

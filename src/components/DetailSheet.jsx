@@ -37,6 +37,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           <div><h2>{w.title}</h2><div className="s">{T.fmtDate(shown, { weekday: 'long', month: 'long', day: 'numeric' })} · {w.phase} phase</div></div>
         </div>
         {w.eased && <div className="testnote"><Icon name="heartrate" size={18} /><span>Eased from your planned {w.easedFrom} session for recovery. {onRestore && <a className="reset" {...tap(onRestore)}>Restore the hard session</a>}</span></div>}
+        {w.trimmed && <div className="testnote"><Icon name="trend" size={18} /><span>Trimmed from {T.fmtDuration(w.trimmedFrom)} by the ramp guardrail — your fitness was climbing faster than is sustainable. {onRestore && <a className="reset" {...tap(onRestore)}>Restore full volume</a>}</span></div>}
         {!w.race && <div className="statline">
           <div className="s"><b>{T.fmtDuration(w.durationMin || 0)}</b><span>Duration</span></div>
           {w.distance && <div className="s"><b>{w.distance}</b><span>{w.unit}</span></div>}

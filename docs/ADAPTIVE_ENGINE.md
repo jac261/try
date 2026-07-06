@@ -28,9 +28,9 @@ eventually validates or retunes the rules.
 | G2 | **Fitness tests are never auto-adapted** — they recalibrate the paces everything else depends on. If readiness is red on a test day, the proposal is to *move* the test, not soften it. |
 | G3 | A session already adapted today is not re-proposed (no stacking). |
 | G4 | Completed sessions are history, never adapted. |
-| G5 | At most **one** engine proposal is shown at a time — the most urgent. |
+| G5 | At most **one** engine proposal per horizon at a time — one same-day (Phase 1, on the readiness card) and one week-level (Phase 2, as a banner). Within a horizon, the most urgent rule wins. |
 
-## Phase 1 — readiness-driven days *(this release)*
+## Phase 1 — readiness-driven days *(shipped)*
 
 Acute, same-day adaptation from the readiness band. The signal: this morning's
 score/band (HRV, sleep, resting HR, form — see `READINESS_MODEL.md`).
@@ -46,16 +46,24 @@ Mechanics: the swap is `easeWorkout` (same discipline, easy type, 65% volume, ke
 the workout id so logs/moves/sync still apply). The proposal renders on the readiness
 card with the score and the driving signals as its reason.
 
-## Phase 2 — ramp guardrail *(next)*
+## Phase 2 — ramp guardrail *(this release)*
 
 Chronic, week-level. Signal: the ramp-rate chart (weekly CTL change; zones per
-`RAMP_ZONES`).
+`RAMP_ZONES`). Named thresholds: `RAMP_RULES` in `src/lib/adapt.js`.
 
 | # | Condition | Proposal |
 |---|---|---|
-| R1 | Ramp > **+5/wk** (Aggressive) for **2 consecutive weeks** | Trim next week's total volume **20%** (long sessions first, key flag preserved) |
-| R2 | Ramp > **+8/wk** (Risky) for **1 week** | Trim next week **30%** + convert one quality session to easy |
-| R3 | Ramp **negative during a Base/Build week** with ≥ 2 missed sessions | Offer the catch-up redistribution (existing `catchUpMoves`) framed as "your build has stalled" |
+| R1 | Ramp > **+5/wk** (Aggressive) averaged across **2 consecutive weeks** | Trim next week's volume to **80%** (`trimWorkout`: same session type rebuilt shorter, key flag preserved) |
+| R2 | Ramp > **+8/wk** (Risky) averaged across the trailing week | Trim next week to **70%** + take the biggest quality session easy |
+| R3 | Ramp **negative during a Base/Build week** with ≥ 2 missed sessions | The catch-up redistribution (existing `catchUpMoves`) framed as "your build has stalled" |
+
+Mechanics: `proposeWeek` renders as a banner on the Today tab; R2 outranks R1.
+A week's ramp is the mean of its daily ramp readings, and a window with fewer
+than 3 readings — or fitness data older than 3 days — never triggers (missing
+data stays quiet, same principle as the readiness model). Recovery, Taper and
+race weeks are never trimmed: their relief is already scheduled. Accepted trims
+land in the same synced adjustment overlay as eased sessions (`kind: "trim"`),
+so undo, calendar and cross-device sync all behave identically.
 
 ## Phase 3 — form-aware blocks
 
@@ -81,7 +89,7 @@ propose lengthening/shortening the taper by whole days until it lands.
 
 Accepted day-adaptations become synced state, exactly like logs and moves:
 
-- `PUT /api/workouts/{workoutId}/adjustment` — body `{ kind: "ease", easedFrom: "<original type>", at: "<ISO timestamp>" }`, upsert, one active adjustment per workout per user.
+- `PUT /api/workouts/{workoutId}/adjustment` — body `{ kind: "ease" | "trim", easedFrom?: "<original type>", factor?: <number, trim only>, at: "<ISO timestamp>" }`, upsert, one active adjustment per workout per user.
 - `DELETE /api/workouts/{workoutId}/adjustment` — restore (hard delete; an adjustment is a decision, not a record — 204 / repeat 404).
 - Returned inside `PlanResponse` per workout (like `log`/`move`), so hydrate rebuilds the eased state on any device.
 

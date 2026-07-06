@@ -217,7 +217,10 @@ export function toClientState(resp) {
     refToId[wo.clientWorkoutRef] = wo.id;
     if (wo.log) log[wo.clientWorkoutRef] = { done: !!wo.log.completed, at: wo.log.completedAtUtc || null, feel: wo.log.feel || undefined };
     if (wo.move) moves[wo.clientWorkoutRef] = wo.move.movedDate;
-    if (wo.adjustment) adjust[wo.clientWorkoutRef] = { kind: wo.adjustment.kind || 'ease', at: wo.adjustment.at || null };
+    if (wo.adjustment) {
+      adjust[wo.clientWorkoutRef] = { kind: wo.adjustment.kind || 'ease', at: wo.adjustment.at || null };
+      if (wo.adjustment.factor != null) adjust[wo.clientWorkoutRef].factor = wo.adjustment.factor;
+    }
     return {
       id: wo.clientWorkoutRef,
       week: wo.week, phase: wo.phase, date: wo.date,

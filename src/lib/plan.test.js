@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan, easeWorkout } from './plan.js';
+import { generatePlan, easeWorkout, trimWorkout } from './plan.js';
 import { iso, addDays } from './date.js';
 
 const profile = (raceDate, startDate) => ({
@@ -53,5 +53,29 @@ describe('easeWorkout', () => {
     const p = generatePlan(profile('2026-09-23', '2026-07-01'));
     const strength = p.weeks.flatMap(w => w.workouts).find(w => w.discipline === 'strength');
     if (strength) expect(easeWorkout(strength, p)).toBe(strength);
+  });
+});
+
+describe('trimWorkout (ramp guardrail)', () => {
+  const p = generatePlan(profile('2026-09-23', '2026-07-01'));
+  const run = p.weeks.flatMap(w => w.workouts).find(w => w.discipline === 'run' && w.durationMin >= 40);
+
+  it('reduces volume but keeps the session type and key flag', () => {
+    const t = trimWorkout(run, p, 0.8);
+    expect(t.trimmed).toBe(true);
+    expect(t.trimmedFrom).toBe(run.durationMin);
+    expect(t.durationMin).toBeLessThan(run.durationMin);
+    expect(t.type).toBe(run.type);
+    expect(t.key).toBe(run.key);
+  });
+
+  it('never lengthens: at the 20-minute floor the session comes back unchanged', () => {
+    const short = { ...run, durationMin: 20 };
+    expect(trimWorkout(short, p, 0.9)).toBe(short);
+  });
+
+  it('leaves non-swim/bike/run sessions untouched', () => {
+    const strength = p.weeks.flatMap(w => w.workouts).find(w => w.discipline === 'strength');
+    if (strength) expect(trimWorkout(strength, p, 0.8)).toBe(strength);
   });
 });

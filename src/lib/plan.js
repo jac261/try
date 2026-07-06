@@ -293,6 +293,23 @@ export const easeWorkout = function (w, plan) {
   });
 };
 
+// Ramp-guardrail downgrade (Phase 2, docs/ADAPTIVE_ENGINE.md): reduce a session's
+// volume without changing its character. Same type, rebuilt at factor × duration
+// (floor 20 min) so title/distance/segments stay coherent; the key flag survives —
+// a trimmed key session is still the week's key session.
+export const trimWorkout = function (w, plan, factor) {
+  const disc = w.discipline;
+  if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
+  const dur = Math.max(20, round5(w.durationMin * factor));
+  if (dur >= w.durationMin) return w;
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase);
+  return Object.assign({}, w, {
+    title: built.title, durationMin: dur,
+    distance: built.distance, unit: built.unit, segments: built.segments,
+    trimmed: true, trimmedFrom: w.durationMin,
+  });
+};
+
 /* ---- phase plan across the whole block ---- */
 function computePhases(totalWeeks, taperWeeks) {
   const taper = Math.min(taperWeeks, Math.max(1, totalWeeks - 3));

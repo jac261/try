@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { proposeToday } from './adapt.js';
+import { proposeToday, proposeWeek, RAMP_RULES } from './adapt.js';
+import { iso, addDays } from './date.js';
 
 const hard = { id: '0-1', title: 'Threshold Run', type: 'Threshold', discipline: 'run', durationMin: 50 };
 const easy = { id: '0-2', title: 'Easy Run', type: 'Easy', discipline: 'run', durationMin: 40 };
@@ -51,5 +52,94 @@ describe('adaptive engine — Phase 1 (readiness-driven days)', () => {
     expect(proposeToday({ band: 'green', score: 90, todays: [hard] })).toBe(null);
     expect(proposeToday({ band: 'red', score: 40, todays: [easy] })).toBe(null);
     expect(proposeToday({ band: 'amber', score: 60, todays: [] })).toBe(null);
+  });
+});
+
+/* ---------------- Phase 2 — the ramp guardrail ---------------- */
+
+// 2026-07-09 is a Thursday: mid-week, so this week has past days for R3's
+// missed-session count and a following week for R1/R2 to trim.
+const TODAY = '2026-07-09';
+
+// Daily wellness records with CTL climbing at `slope` per day for `days` days
+// ending TODAY — every 7-day ramp reading is exactly 7 × slope.
+const recsAt = (slope, days = 25, endOffset = 0) => {
+  let ctl = 50;
+  return Array.from({ length: days }, (_, i) => {
+    ctl += slope;
+    return { date: iso(addDays(TODAY, i - days + 1 + endOffset)), ctl: Math.round(ctl * 10) / 10 };
+  });
+};
+
+// A hand-built two-week plan: week 0 holds TODAY, week 1 is the trim target.
+const wk = (index, phase, startISO, types, opts = {}) => ({
+  index, phase, isRecovery: !!opts.recovery, start: startISO,
+  workouts: types.map((type, i) => ({
+    id: index + '-' + i, week: index, phase, date: iso(addDays(startISO, i)),
+    discipline: ['run', 'bike', 'swim'][i % 3], type,
+    title: type + ' ' + ['Run', 'Ride', 'Swim'][i % 3], durationMin: 40 + i * 10,
+  })),
+});
+const buildPlan = (opts = {}) => ({
+  weeks: [
+    wk(0, opts.phase0 || 'Build', '2026-07-06', ['Easy', 'Endurance', 'Technique', 'Easy']),
+    wk(1, opts.phase1 || 'Build', '2026-07-13', opts.types1 || ['Easy', 'Threshold', 'Technique', 'Long'], { recovery: !!opts.recovery1 }),
+  ],
+});
+const base = { plan: buildPlan(), log: {}, moves: {}, adjust: {}, todayISO: TODAY };
+
+describe('adaptive engine — Phase 2 (ramp guardrail)', () => {
+  it('R1: two straight weeks above +5/wk → trim next week to 80%', () => {
+    const p = proposeWeek({ ...base, wellness: recsAt(0.9) }); // ramp ≈ +6.3/wk
+    expect(p.kind).toBe('trim-week');
+    expect(p.factor).toBe(RAMP_RULES.trimAggressive);
+    expect(p.week).toBe(1);
+    expect(p.targets).toEqual(['1-0', '1-1', '1-2', '1-3']);
+    expect(p.ease).toBe(null);
+    expect(p.why).toMatch(/Two straight weeks/);
+  });
+
+  it('R2: risky ramp (> +8/wk) → trim to 70% AND ease the biggest quality session, outranking R1', () => {
+    const p = proposeWeek({ ...base, wellness: recsAt(1.3) }); // ramp ≈ +9.1/wk
+    expect(p.kind).toBe('trim-week');
+    expect(p.factor).toBe(RAMP_RULES.trimRisky);
+    expect(p.ease).toBe('1-1'); // the Threshold ride
+    expect(p.targets).not.toContain('1-1');
+    expect(p.why).toMatch(/injury and illness/i);
+  });
+
+  it('sustainable ramp → quiet', () => {
+    expect(proposeWeek({ ...base, wellness: recsAt(0.5) })).toBe(null); // +3.5/wk
+  });
+
+  it('recovery and race weeks are never trimmed — the relief is already scheduled', () => {
+    const recovery = { ...base, plan: buildPlan({ recovery1: true }), wellness: recsAt(1.3) };
+    expect(proposeWeek(recovery)).toBe(null);
+    const raceWeek = buildPlan();
+    raceWeek.weeks[1].workouts.push({ id: '1-9', race: true, discipline: 'brick', type: 'RACE', title: 'RACE DAY', date: '2026-07-19', durationMin: 0 });
+    expect(proposeWeek({ ...base, plan: raceWeek, wellness: recsAt(1.3) })).toBe(null);
+  });
+
+  it('no stacking (G3): a week with an adjusted session is not re-proposed', () => {
+    const p = proposeWeek({ ...base, adjust: { '1-1': { kind: 'trim', factor: 0.8 } }, wellness: recsAt(1.3) });
+    expect(p).toBe(null);
+  });
+
+  it('stale fitness data (> 3 days old) never triggers', () => {
+    expect(proposeWeek({ ...base, wellness: recsAt(1.3, 25, -5) })).toBe(null);
+  });
+
+  it('R3: negative ramp in a Build week with ≥2 missed sessions → catch-up, urgently framed', () => {
+    const p = proposeWeek({ ...base, wellness: recsAt(-0.3) }); // week 0 days 07-06..07-08 unlogged
+    expect(p.kind).toBe('catch-up');
+    expect(p.action).toBe('catchUp');
+    expect(p.headline).toMatch(/stalled/);
+    expect(p.why).toMatch(/3 sessions missed/);
+  });
+
+  it('R3 stays quiet outside Base/Build, or with the sessions logged', () => {
+    expect(proposeWeek({ ...base, plan: buildPlan({ phase0: 'Taper' }), wellness: recsAt(-0.3) })).toBe(null);
+    const logged = { '0-0': { done: true }, '0-1': { done: true }, '0-2': { done: true } };
+    expect(proposeWeek({ ...base, log: logged, wellness: recsAt(-0.3) })).toBe(null);
   });
 });

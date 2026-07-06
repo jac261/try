@@ -7,7 +7,7 @@ import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { ReadinessCard } from '@/features/wellness/ReadinessCard.jsx';
 const D = T.DISCIPLINES;
 
-export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEditWellness, easedOf, onEaseToday, onRestoreToday }) {
+export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
@@ -25,7 +25,12 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
       <div className="section-title">Today's readiness</div>
       <ReadinessCard wellness={wellness} today={today.map(w => ({ ...easedOf(w), done: !!log[w.id] }))}
         onEdit={onEditWellness} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} />
-      {missed.length > 0 && <div className="banner" {...tap(onCatchUp)}>
+      {weekly && <div className={weekly.kind === 'trim-week' ? 'banner ramp' : 'banner'} {...tap(() => onWeekly(weekly))}>
+        <div className="bi"><Icon name={weekly.kind === 'trim-week' ? 'trend' : 'bolt'} size={20} /></div>
+        <div><div className="bt">{weekly.headline}</div>
+          <div className="bs">{weekly.why} Tap to apply →</div></div>
+      </div>}
+      {missed.length > 0 && (!weekly || weekly.kind !== 'catch-up') && <div className="banner" {...tap(onCatchUp)}>
         <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">{missed.length} session{missed.length > 1 ? 's' : ''} missed this week</div>
           <div className="bs">Tap to reschedule onto your free days →</div></div>
