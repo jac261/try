@@ -75,12 +75,17 @@ export function App({ storage, getToken, user }) {
       if (cancelled || !serverRecs) return; // null → offline/error, keep local cache
       applyServerWellness(serverRecs);
       // Self-healing history: connected but the fitness record only reaches
-      // back a few weeks → quietly deepen it to a year, once. The flag stops a
-      // retry loop against a backend that ignores the days window; users who
+      // back a few weeks → quietly deepen it to a year, once. The flag is only
+      // set on a successful response, so an offline or not-yet-deployed backend
+      // retries next load; a backend that ignores the days window still answers
+      // (shallow), which sets the flag and stops a retry loop. Users who
       // connect fresh get the deep pull at connect time instead.
       if (T.wellness.shallowHistory(serverRecs, T.iso(new Date())) && !storage.load('backfilled', false)) {
-        storage.save('backfilled', true);
-        sync.backfillWellness().then(deep => { if (!cancelled && deep) applyServerWellness(deep); });
+        sync.backfillWellness().then(deep => {
+          if (!deep) return;
+          storage.save('backfilled', true);
+          if (!cancelled) applyServerWellness(deep);
+        });
       }
     });
     // Recent watch activities → the "spotted on your watch" one-tap logging.
