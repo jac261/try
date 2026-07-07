@@ -4,7 +4,7 @@ import { effDate } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 
-export function CalendarView({ plan, log, moves, open, easedOf }) {
+export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout }) {
   const todayISO = T.iso(new Date());
   const firstFuture = plan.weeks.findIndex(w => w.workouts.some(x => x.date >= todayISO));
   const [openWeek, setOpenWeek] = useState(firstFuture < 0 ? 0 : firstFuture);
@@ -27,7 +27,7 @@ export function CalendarView({ plan, log, moves, open, easedOf }) {
             </div>
             <div className="weekbar"><span style={{ width: (sessions.length ? doneCount / sessions.length * 100 : 0) + '%', background: 'var(--accent)' }} /></div>
             {isOpen && <div style={{ marginTop: 8 }}>
-              {ordered.map(w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} />)}
+              {ordered.map(w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />)}
             </div>}
           </div>
         );

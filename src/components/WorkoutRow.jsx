@@ -6,7 +6,7 @@ import { ProfileStrip } from '@/components/WorkoutProfile.jsx';
 const D = T.DISCIPLINES;
 
 /* ---------------- workout row + detail ---------------- */
-export function WorkoutRow({ w, done, onClick, eff, moved, profile }) {
+export function WorkoutRow({ w, done, onClick, eff, moved, profile, onToggle }) {
   if (w.discipline === 'rest') return (
     <div className="wk" style={{ opacity: .6, cursor: 'default' }}>
       <div className="dot" style={{ background: 'var(--rest)' }}><Icon name="rest" size={22} /></div>
@@ -23,7 +23,8 @@ export function WorkoutRow({ w, done, onClick, eff, moved, profile }) {
         {profile && <ProfileStrip w={w} />}
       </div>
       <div className="right">{T.fmtDate(eff || w.date, { weekday: 'short' })}</div>
-      <div className="check">✓</div>
+      <div className="check" aria-label={done ? 'Mark as not done' : 'Mark as done'}
+        {...(onToggle && !w.race ? tap(e => { e.stopPropagation(); onToggle(); }) : {})}>✓</div>
     </div>
   );
 }

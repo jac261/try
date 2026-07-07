@@ -17,7 +17,7 @@ const saveWeekPref = v => { try { localStorage.setItem(WEEK_PREF, JSON.stringify
    dots (faded = logged, gold = race day, dash = rest), tap to fold out the
    remaining sessions in full detail. Replaces the old separate "Week N of M"
    card and always-open "Coming up" list. */
-function WeekOverview({ plan, log, moves, open, easedOf, todayISO }) {
+function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorkout }) {
   const [openWk, setOpenWk] = useState(() => loadWeekPref() === true);
   const toggle = () => setOpenWk(o => { saveWeekPref(!o); return !o; });
   const days = weekRange(todayISO);
@@ -56,13 +56,13 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO }) {
       </div>
       {openWk && (upcoming.length
         ? upcoming.map(w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
-          moved={effDate(w, moves) !== w.date} onClick={() => open(w)} />)
+          moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />)
         : <div className="muted" style={{ fontSize: 13, padding: '10px 2px 2px' }}>Nothing more this week — rest up.</div>)}
     </div>
   );
 }
 
-export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp }) {
+export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
@@ -72,7 +72,7 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
   const suggestions = paceSuggestions(plan, log);
   const [coachIdx, setCoachIdx] = useState(0);
   const [reviewToday, setReviewToday] = useState(false);
-  const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile />;
+  const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile onToggle={() => onToggleWorkout(w.id)} />;
 
   // One coach voice at a time: every possible nudge queues into a single slot,
   // most important first; a counter chip cycles through the rest. Applying a
@@ -137,7 +137,7 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
         </div>}
         <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> Add a session</div>
       </div>
-      <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} />
+      <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout} />
     </>
   );
 }
