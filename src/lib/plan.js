@@ -576,6 +576,46 @@ export const boostWorkout = function (w, plan, factor) {
   });
 };
 
+/* ---- user-added sessions (outside the generated plan) ---- */
+
+// Build an ad-hoc session from the same library and slot it into the week that
+// owns its date, flagged custom. It becomes a first-class plan workout: the
+// log, calendar, training-load estimates, watch push and the adaptive engine
+// all see it. Returns the new plan plus the workout for follow-up UI.
+export const addCustomWorkout = function (plan, { discipline, type, durationMin, dateISO }) {
+  const wk = plan.weeks.find(w => dateISO >= w.start && dateISO <= iso(addDays(w.start, 6)))
+    || plan.weeks[plan.weeks.length - 1];
+  const seed = wk.isRecovery ? 0 : wk.index;
+  const built = buildWorkout(discipline, type, durationMin, plan.paces, wk.phase, seed);
+  const dur = built.durationMin || durationMin; // strength fixes its own length
+  const key = 'x-' + dateISO.split('-').join('');
+  const taken = new Set(wk.workouts.map(x => x.id));
+  let n = 0;
+  while (taken.has(key + '-' + n)) n++;
+  const workout = {
+    id: key + '-' + n, week: wk.index, seed: seed, phase: wk.phase, date: dateISO,
+    discipline: discipline, role: 'custom', type: type, title: built.title,
+    durationMin: dur, distance: built.distance, unit: built.unit,
+    segments: built.segments, custom: true,
+  };
+  const weeks = plan.weeks.map(w => w.index !== wk.index ? w
+    : Object.assign({}, w, { workouts: w.workouts.concat([workout]), totalMin: w.totalMin + dur }));
+  return { plan: Object.assign({}, plan, { weeks: weeks }), workout: workout };
+};
+
+// Take a user-added session out again (plan-generated sessions are never removable).
+export const removeCustomWorkout = function (plan, id) {
+  const weeks = plan.weeks.map(w => {
+    const target = w.workouts.find(x => x.id === id && x.custom);
+    if (!target) return w;
+    return Object.assign({}, w, {
+      workouts: w.workouts.filter(x => x.id !== id),
+      totalMin: w.totalMin - (target.durationMin || 0),
+    });
+  });
+  return Object.assign({}, plan, { weeks: weeks });
+};
+
 /* ---- phase plan across the whole block ---- */
 function computePhases(totalWeeks, taperWeeks) {
   const taper = Math.min(taperWeeks, Math.max(1, totalWeeks - 3));

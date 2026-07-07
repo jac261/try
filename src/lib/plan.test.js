@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan, easeWorkout, trimWorkout, boostWorkout } from './plan.js';
+import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout } from './plan.js';
 import { iso, addDays } from './date.js';
 
 const profile = (raceDate, startDate) => ({
@@ -198,5 +198,45 @@ describe('durability long sessions', () => {
       .filter(x => x.phase === 'Base' || x.phase === 'Taper' || recWeeks.has(x.week));
     expect(offLimits.length).toBeGreaterThan(0);
     expect(offLimits.some(hasIntervals)).toBe(false);
+  });
+});
+
+describe('custom workouts (user-added sessions)', () => {
+  const p = generatePlan(profile('2026-09-23', '2026-07-01'));
+  const someDate = p.weeks[1].start; // a Monday inside the plan
+
+  it('builds from the library, flags custom and lands in the owning week', () => {
+    const { plan: np, workout } = addCustomWorkout(p, { discipline: 'run', type: 'Tempo', durationMin: 40, dateISO: someDate });
+    expect(workout.custom).toBe(true);
+    expect(workout.week).toBe(1);
+    expect(workout.title).toBe('Tempo Run');
+    expect(workout.durationMin).toBe(40);
+    expect(workout.segments.length).toBeGreaterThan(0);
+    expect(np.weeks[1].workouts).toContain(workout);
+    expect(np.weeks[1].totalMin).toBe(p.weeks[1].totalMin + 40);
+    expect(p.weeks[1].workouts).not.toContain(workout); // original untouched
+  });
+
+  it('never reuses an id, even after a remove', () => {
+    const a = addCustomWorkout(p, { discipline: 'bike', type: 'Endurance', durationMin: 60, dateISO: someDate });
+    const b = addCustomWorkout(a.plan, { discipline: 'swim', type: 'Technique', durationMin: 30, dateISO: someDate });
+    expect(b.workout.id).not.toBe(a.workout.id);
+    const removed = removeCustomWorkout(b.plan, a.workout.id);
+    const c = addCustomWorkout(removed, { discipline: 'run', type: 'Easy', durationMin: 30, dateISO: someDate });
+    expect(c.workout.id).not.toBe(b.workout.id);
+  });
+
+  it('remove takes out only custom sessions and restores the weekly total', () => {
+    const { plan: np, workout } = addCustomWorkout(p, { discipline: 'run', type: 'Easy', durationMin: 30, dateISO: someDate });
+    const back = removeCustomWorkout(np, workout.id);
+    expect(back.weeks[1].workouts.find(x => x.id === workout.id)).toBe(undefined);
+    expect(back.weeks[1].totalMin).toBe(p.weeks[1].totalMin);
+    const planned = p.weeks[1].workouts.find(x => x.discipline !== 'rest');
+    expect(removeCustomWorkout(p, planned.id).weeks[1].workouts.length).toBe(p.weeks[1].workouts.length);
+  });
+
+  it('strength fixes its own duration', () => {
+    const { workout } = addCustomWorkout(p, { discipline: 'strength', type: 'Strength', durationMin: 90, dateISO: someDate });
+    expect(workout.durationMin).toBeLessThan(90);
   });
 });

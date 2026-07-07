@@ -7,6 +7,7 @@ import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
 import { downloadICS } from '@/lib/ics.js';
 import { Icon } from '@/components/Icon.jsx';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
+import { AddWorkoutSheet } from '@/components/AddWorkoutSheet.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
 import { BuildingPlan } from '@/features/onboarding/BuildingPlan.jsx';
 import { FitnessEditor } from '@/features/settings/FitnessEditor.jsx';
@@ -41,6 +42,7 @@ export function App({ storage, getToken, user }) {
   const saveWellness = rec => { setWellness(storage.upsertWellness(rec)); sync.saveWellness(rec); setEditWellness(false); };
   const [adjust, setAdjust] = useState(() => storage.load('adjust', {}));
   const [activities, setActivities] = useState(null); // recent watch activities (null until loaded / not connected)
+  const [addOpen, setAddOpen] = useState(false);   // "Add a session" sheet (Today tab)
   const [watchSync, setWatchSync] = useState(() => storage.load('watchSync', false));
   const toggleWatchSync = on => {
     setWatchSync(on);
@@ -283,6 +285,24 @@ export function App({ storage, getToken, user }) {
     // no longer exist, mirroring the local prune above.
     sync.replacePlan(np).then(map => { if (map) setRefToId(map); });
   };
+  // User-added sessions: first-class plan workouts (flagged custom), persisted
+  // through the same plan replace as retargets — server preserves logs by ref.
+  const addWorkout = spec => {
+    const r = T.addCustomWorkout(plan, Object.assign({}, spec, { dateISO: T.iso(new Date()) }));
+    setPlan(r.plan);
+    setAddOpen(false);
+    sync.replacePlan(r.plan).then(map => { if (map) setRefToId(map); });
+  };
+  const removeWorkout = id => {
+    const np = T.removeCustomWorkout(plan, id);
+    setPlan(np);
+    setDetail(null);
+    setLog(l => { const n = { ...l }; delete n[id]; return n; });
+    setMoves(m => { const n = { ...m }; delete n[id]; return n; });
+    setAdjust(a => { const n = { ...a }; delete n[id]; return n; });
+    sync.replacePlan(np).then(map => { if (map) setRefToId(map); });
+  };
+
   const race = T.RACES[plan.race];
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
 
@@ -309,7 +329,7 @@ export function App({ storage, getToken, user }) {
         <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
       </div>
 
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} />}
       {view === 'plan' && <PlanView plan={plan} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={wellness} />}
@@ -334,7 +354,10 @@ export function App({ storage, getToken, user }) {
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}
-        onLogResult={() => { setDetail(null); setEditFitness(true); }} />}
+        onLogResult={() => { setDetail(null); setEditFitness(true); }}
+        onRemove={detail.custom ? () => removeWorkout(detail.id) : null} />}
+
+      {addOpen && <AddWorkoutSheet onAdd={addWorkout} onClose={() => setAddOpen(false)} />}
 
       <div className="nav">
         {tabs.map(([k, ic, label]) => (

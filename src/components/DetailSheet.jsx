@@ -8,6 +8,7 @@ const D = T.DISCIPLINES;
 const WHY = {
   'Easy': 'Build your aerobic base. Keep it conversational — easy enough to chat the whole way.',
   'Long': 'Build endurance for race day. Stay aerobic and relaxed, and practise your fuelling.',
+  'Fartlek': 'Play with speed. Surge when it feels right, float in between - structure without the track.',
   'Tempo': 'Raise the pace you can hold for the long haul. Settle into a steady "comfortably hard" effort.',
   'Threshold': 'Lift your threshold — the effort you could just sustain for an hour. Strong and controlled, never all-out.',
   'VO2 Intervals': 'Sharpen your top-end fitness. Commit to the target pace on every rep, then recover fully.',
@@ -21,7 +22,7 @@ const WHY = {
   'Open Water': 'Rehearse race-day swimming. Practise sighting, drafting and holding a straight line without walls to push off.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove }) {
   const canFit = T.FIT && T.FIT.supports(w);
   const disc = D[w.discipline];
   const why = !w.race && !w.test ? WHY[w.type] : null;
@@ -84,6 +85,10 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           </div>
         </div>}
         {w.race && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
+        {w.custom && onRemove && <>
+          <div style={{ height: 10 }} />
+          <button className="btn ghost remove" onClick={onRemove}>Remove this session</button>
+        </>}
       </div>
     </div>
   );
