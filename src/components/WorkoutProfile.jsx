@@ -26,3 +26,24 @@ export function WorkoutProfile({ w }) {
     </div>
   );
 }
+
+/* Compact strip variant for workout rows: the same bars, no chrome. */
+export function ProfileStrip({ w }) {
+  const blocks = workoutBlocks(w);
+  if (blocks.length < 2) return null;
+  const total = blocks.reduce((a, b) => a + b.min, 0);
+  if (!total) return null;
+  let x = 0;
+  return (
+    <svg className="wk-prof" viewBox="0 0 100 12" preserveAspectRatio="none">
+      {blocks.map((b, i) => {
+        const bw = b.min / total * 100;
+        const bh = (ZONE_LEVEL[b.zone] || 0.4) * 11;
+        const el = <rect key={i} x={x + 0.15} y={12 - bh} width={Math.max(bw - 0.3, 0.25)} height={bh}
+          fill={ZONE_COLORS[b.zone] || 'var(--track)'} opacity="0.9" />;
+        x += bw;
+        return el;
+      })}
+    </svg>
+  );
+}

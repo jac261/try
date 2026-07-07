@@ -42,7 +42,8 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO }) {
         {days.map(d => {
           const ws = byDay(d);
           return (
-            <div key={d} className={'wt-day' + (d === todayISO ? ' today' : '') + (d < todayISO ? ' past' : '')}>
+            <div key={d} className={'wt-day' + (d === todayISO ? ' today' : '') + (d < todayISO ? ' past' : '')}
+              {...tap(e => { e.stopPropagation(); if (ws.length) open(ws[0]); else toggle(); })}>
               <div className="wt-lab">{T.fmtDate(d, { weekday: 'short' }).slice(0, 1)}</div>
               <div className="wt-dots">
                 {ws.length === 0 ? <i className="wt-rest" />
@@ -69,50 +70,71 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
   const weekStart = weekRange(todayISO)[0];
   const missed = sessions.filter(w => { const d = effDate(w, moves); return d < todayISO && d >= weekStart && !log[w.id]; });
   const suggestions = paceSuggestions(plan, log);
-  const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} />;
+  const [coachIdx, setCoachIdx] = useState(0);
+  const [reviewToday, setReviewToday] = useState(false);
+  const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile />;
+
+  // One coach voice at a time: every possible nudge queues into a single slot,
+  // most important first; a counter chip cycles through the rest. Applying a
+  // suggestion clears its condition, so the queue drains itself.
+  const coach = [];
+  if (weekly) {
+    const skin = { 'trim-week': ['banner ramp', 'trend'], 'boost-week': ['banner tune', 'flame'], 'restore-week': ['banner', 'bolt'], 'catch-up': ['banner', 'bolt'] };
+    const [cls, icon] = skin[weekly.kind] || ['banner', 'bolt'];
+    coach.push({ key: 'weekly', cls, icon, title: weekly.headline, sub: weekly.why + ' Tap to apply →', act: () => onWeekly(weekly) });
+  }
+  if (spotted && spotted.length > 0) coach.push({
+    key: 'spotted', cls: 'banner', icon: 'watch',
+    title: spotted.length === 1 ? 'Session spotted on your watch' : spotted.length + ' sessions spotted on your watch',
+    sub: spotted.map(m => m.workout.title).join(' · ') + ' — tap to log ' + (spotted.length === 1 ? 'it' : 'them') + ' →', act: onLogSpotted,
+  });
+  if (missed.length > 0 && (!weekly || weekly.kind !== 'catch-up')) coach.push({
+    key: 'missed', cls: 'banner', icon: 'bolt',
+    title: missed.length + ' session' + (missed.length > 1 ? 's' : '') + ' missed this week',
+    sub: 'Tap to reschedule onto your free days →', act: onCatchUp,
+  });
+  if (eftp) coach.push({ key: 'eftp', cls: eftp.up ? 'banner tune' : 'banner ramp', icon: 'trend', title: eftp.headline, sub: eftp.why + ' Tap to retarget →', act: onEftp });
+  if (suggestions.length > 0) coach.push({
+    key: 'tune', cls: 'banner tune', icon: 'pace', title: 'Time to tune your paces',
+    sub: suggestions.map(s => D[s.discipline].name + (s.direction === 'faster' ? ' feels easy' : ' feels hard')).join(' · ') + ' — tap to adjust →', act: onTune,
+  });
+  const slot = coach.length ? coach[coachIdx % coach.length] : null;
+
+  // Closing the loop: when today's training is logged (or it is a rest day),
+  // answer the evening question — what's next?
+  const todayReal = today.filter(w => w.discipline !== 'rest' && !w.race);
+  const allDone = todayReal.length > 0 && todayReal.every(w => log[w.id]);
+  const next = sessions.filter(w => effDate(w, moves) > todayISO)
+    .sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1)[0];
+  const restDay = todayReal.length === 0;
 
   return (
     <>
-      <div className="section-title">Today's readiness</div>
+      <div className="section-title">Today · {T.fmtDate(todayISO, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <ReadinessCard wellness={wellness} today={today.map(w => ({ ...easedOf(w), done: !!log[w.id] }))}
         onEdit={onEditWellness} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} />
-      {weekly && (() => {
-        // banner skin per proposal kind: trims wear the amber ramp variant,
-        // the build nudge wears the green tune variant, restores stay blue
-        const skin = { 'trim-week': ['banner ramp', 'trend'], 'boost-week': ['banner tune', 'flame'], 'restore-week': ['banner', 'bolt'], 'catch-up': ['banner', 'bolt'] };
-        const [cls, icon] = skin[weekly.kind] || ['banner', 'bolt'];
-        return (
-          <div className={cls} {...tap(() => onWeekly(weekly))}>
-            <div className="bi"><Icon name={icon} size={20} /></div>
-            <div><div className="bt">{weekly.headline}</div>
-              <div className="bs">{weekly.why} Tap to apply →</div></div>
-          </div>
-        );
-      })()}
-      {spotted && spotted.length > 0 && <div className="banner" {...tap(onLogSpotted)}>
-        <div className="bi"><Icon name="watch" size={20} /></div>
-        <div><div className="bt">{spotted.length === 1 ? 'Session spotted on your watch' : spotted.length + ' sessions spotted on your watch'}</div>
-          <div className="bs">{spotted.map(m => m.workout.title).join(' · ')} — tap to log {spotted.length === 1 ? 'it' : 'them'} →</div></div>
+      {slot && <div className={slot.cls} {...tap(slot.act)}>
+        <div className="bi"><Icon name={slot.icon} size={20} /></div>
+        <div style={{ flex: 1 }}><div className="bt">{slot.title}</div>
+          <div className="bs">{slot.sub}</div></div>
+        {coach.length > 1 && <div className="bmore" {...tap(e => { e.stopPropagation(); setCoachIdx(i => i + 1); })}>
+          {(coachIdx % coach.length) + 1}/{coach.length} ▸</div>}
       </div>}
-      {missed.length > 0 && (!weekly || weekly.kind !== 'catch-up') && <div className="banner" {...tap(onCatchUp)}>
-        <div className="bi"><Icon name="bolt" size={20} /></div>
-        <div><div className="bt">{missed.length} session{missed.length > 1 ? 's' : ''} missed this week</div>
-          <div className="bs">Tap to reschedule onto your free days →</div></div>
-      </div>}
-      {eftp && <div className={eftp.up ? 'banner tune' : 'banner ramp'} {...tap(onEftp)}>
-        <div className="bi"><Icon name="trend" size={20} /></div>
-        <div><div className="bt">{eftp.headline}</div>
-          <div className="bs">{eftp.why} Tap to retarget →</div></div>
-      </div>}
-      {suggestions.length > 0 && <div className="banner tune" {...tap(onTune)}>
-        <div className="bi"><Icon name="pace" size={20} /></div>
-        <div><div className="bt">Time to tune your paces</div>
-          <div className="bs">{suggestions.map(s => D[s.discipline].name + (s.direction === 'faster' ? ' feels easy' : ' feels hard')).join(' · ')} — tap to adjust →</div></div>
-      </div>}
-      <div className="section-title">Today · {T.fmtDate(todayISO, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <div className="card">
-        {today.length === 0 ? <div className="empty"><div className="big"><Icon name="rest" size={40} /></div>No session scheduled today.</div>
-          : today.map(row)}
+        {allDone && !reviewToday
+          ? <div className="today-done">
+            <div className="td-tick">✓</div>
+            <div className="td-t">Done for today</div>
+            <div className="td-s">{todayReal.map(w => easedOf(w).title).join(' · ')} logged</div>
+            <a className="reset" {...tap(() => setReviewToday(true))}>Review</a>
+          </div>
+          : today.length === 0
+            ? <div className="empty"><div className="big"><Icon name="rest" size={40} /></div>No session scheduled today.</div>
+            : today.map(row)}
+        {(allDone || restDay) && next && <div className="tmrw" {...tap(() => open(next))}>
+          <Icon name="calendar" size={15} />
+          <span>Next up · {T.fmtDate(effDate(next, moves), { weekday: 'long' })}: <b>{easedOf(next).title}</b> · {T.fmtDuration(easedOf(next).durationMin || 0)}</span>
+        </div>}
         <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> Add a session</div>
       </div>
       <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} />
