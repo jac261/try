@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildWatchEvents, watchDescription } from './watch.js';
+import { buildWatchEvents, watchDescription, watchSteps } from './watch.js';
+import { generatePlan, addCustomWorkout } from './plan.js';
 
 const TODAY = '2026-07-09';
 const wk = (id, discipline, type, date, durationMin, extra = {}) => ({
@@ -57,5 +58,64 @@ describe('watchDescription', () => {
     expect(watchDescription({ segments: [], eased: true, easedFrom: 'Threshold' }))
       .toBe('• Eased by the adaptive engine (was Threshold)');
     expect(watchDescription({ segments: [] })).toBe(null);
+  });
+});
+
+describe('watchSteps (structured DSL, v2)', () => {
+  const p = generatePlan({ name: 'T', raceType: 'olympic', fitness: 'intermediate', trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5, raceDate: '2026-09-23', startDate: '2026-07-01', ftp: 250, fivekSec: 1500 });
+  const custom = (type, dur, disc = 'run') => addCustomWorkout(p, { discipline: disc, type, durationMin: dur, dateISO: p.weeks[0].start }).workout;
+
+  it('emits verified DSL for a run: Warmup/Cooldown headers, Nx repeats, Pace zones', () => {
+    const { dsl, seconds } = watchSteps(custom('Threshold', 60)); // canonical 3 × (9m Z4 / 3m Z2)
+    expect(dsl).toBe('Warmup\n- 15m Z2 Pace\n\n3x\n- 9m Z4 Pace\n- 3m Z2 Pace\n\nCooldown\n- 10m Z1 Pace');
+    expect(seconds).toBe((15 + 3 * 12 + 10) * 60);
+  });
+
+  it('bike zones stay bare (power is the DSL default)', () => {
+    const { dsl } = watchSteps(custom('Sweet Spot', 60, 'bike'));
+    expect(dsl).toContain('- 12m Z3');
+    expect(dsl).not.toContain('Pace');
+  });
+
+  it('non-uniform patterns are written block by block, never a wrong Nx', () => {
+    const w = addCustomWorkout(p, { discipline: 'run', type: 'Fartlek', durationMin: 55, dateISO: p.weeks[1].start }).workout; // pyramid
+    const { dsl } = watchSteps(w);
+    expect(dsl).not.toMatch(/\dx\n/);
+    expect(dsl).toContain('- 1m Z3 Pace\n- 1m Z2 Pace\n- 2m Z3 Pace'); // rises step by step
+  });
+
+  it('sub-minute blocks are written in seconds', () => {
+    const w = { discipline: 'run', segments: [{ label: 'Main', blocks: [{ min: 0.5, zone: 'Z5' }, { min: 0.5, zone: 'Z1' }] }] };
+    expect(watchSteps(w).dsl).toContain('- 30s Z5 Pace');
+  });
+
+  it('declines swims, bricks, strength and pre-profile builds', () => {
+    expect(watchSteps(custom('CSS Intervals', 40, 'swim'))).toBe(null);
+    expect(watchSteps({ discipline: 'brick', segments: [{ label: 'Bike', min: 40, zone: 'Z2' }] })).toBe(null);
+    expect(watchSteps({ discipline: 'run', segments: [{ label: 'Relaxed', min: 40 }] })).toBe(null); // no zone
+  });
+});
+
+describe('buildWatchEvents v2 integration', () => {
+  const p = generatePlan({ name: 'T', raceType: 'olympic', fitness: 'intermediate', trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5, raceDate: '2026-09-23', startDate: '2026-07-01', ftp: 250, fivekSec: 1500 });
+
+  it('structured events report the step total as moving time and append notes as plain text', () => {
+    const { workout, plan: np } = addCustomWorkout(p, { discipline: 'run', type: 'Threshold', durationMin: 60, dateISO: p.weeks[0].start });
+    const easedOf = w => (w.id === workout.id ? { ...w, trimmed: true } : w);
+    const { events } = buildWatchEvents({ plan: np, moves: {}, easedOf, todayISO: p.weeks[0].start });
+    const ev = events.find(e => e.ref === workout.id);
+    expect(ev.description).toContain('3x');
+    expect(ev.description).toContain('\n\nTrimmed by the adaptive engine.');
+    expect(ev.description).not.toContain('•');
+    expect(ev.movingTimeSec).toBe((15 + 36 + 10) * 60); // step total, not durationMin
+  });
+
+  it('swims keep the descriptive bullet form and the nominal duration', () => {
+    const { workout, plan: np } = addCustomWorkout(p, { discipline: 'swim', type: 'CSS Intervals', durationMin: 40, dateISO: p.weeks[0].start });
+    const { events } = buildWatchEvents({ plan: np, moves: {}, todayISO: p.weeks[0].start });
+    const ev = events.find(e => e.ref === workout.id);
+    expect(ev.description).toContain('•');
+    expect(ev.description).not.toMatch(/^- /m);
+    expect(ev.movingTimeSec).toBe(40 * 60);
   });
 });
