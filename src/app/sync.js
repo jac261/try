@@ -10,7 +10,7 @@ import {
   getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan,
   putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
   putWorkoutAdjustment, deleteWorkoutAdjustment,
-  getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents,
+  getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents, getIntervalsThresholds,
   toClientState, logToApi,
 } from '@/lib/api.js';
 
@@ -107,6 +107,13 @@ export function makeSync(getToken) {
     loadActivities: async (days = 10) => {
       const res = await getIntervalsActivities(getToken, days);
       return res.ok && Array.isArray(res.body) ? res.body : null;
+    },
+
+    // Per-sport thresholds for the fitness watcher; null when not connected,
+    // offline, or the backend predates the endpoint.
+    loadThresholds: async () => {
+      const res = await getIntervalsThresholds(getToken);
+      return res.ok && res.body ? res.body : null;
     },
 
     // Workouts-to-watch: reconcile the upcoming plan onto the athlete's

@@ -14,6 +14,7 @@ vi.mock('@/lib/api.js', () => ({
   syncWellness: vi.fn(),
   getIntervalsActivities: vi.fn(),
   putPlannedEvents: vi.fn(),
+  getIntervalsThresholds: vi.fn(),
   putWellness: vi.fn(),
   toClientState: vi.fn(),
   logToApi: e => ({ completed: !!(e && e.done), completedAtUtc: e && e.at, feel: (e && e.feel) || null, notes: null }),
@@ -124,6 +125,17 @@ describe('makeSync.loadActivities', () => {
   it('returns null when not connected or on an older backend (404)', async () => {
     api.getIntervalsActivities.mockResolvedValue({ ok: false, status: 404 });
     expect(await makeSync(getToken).loadActivities()).toBe(null);
+  });
+});
+
+describe('makeSync.loadThresholds', () => {
+  it('returns the per-sport thresholds', async () => {
+    api.getIntervalsThresholds.mockResolvedValue({ ok: true, body: { bikeFtp: 222, runThresholdPace: 4.115, swimThresholdPace: 0.833 } });
+    expect(await makeSync(getToken).loadThresholds()).toEqual({ bikeFtp: 222, runThresholdPace: 4.115, swimThresholdPace: 0.833 });
+  });
+  it('returns null when not connected or on an older backend', async () => {
+    api.getIntervalsThresholds.mockResolvedValue({ ok: false, status: 404 });
+    expect(await makeSync(getToken).loadThresholds()).toBe(null);
   });
 });
 

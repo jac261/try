@@ -48,3 +48,43 @@ describe('eftpProposal (eFTP watcher)', () => {
     expect(EFTP_RULES.freshDays).toBeGreaterThan(0);
   });
 });
+
+describe('fitness watcher v2 (run and swim thresholds)', () => {
+  // intermediate estimates: 5k 1620 → threshold 336 s/km; CSS 120 s/100m
+  const p2 = { profile: {}, paces: { run: { threshold: 336 }, swim: { css: 120 } } };
+
+  it('proposes a run retarget from the configured threshold pace', () => {
+    const r = eftpProposal({ thresholds: { runThresholdPace: 1000 / 310 }, plan: p2, todayISO: TODAY });
+    expect(r.sport).toBe('run');
+    expect(r.up).toBe(true); // 310 s/km is faster than the plan's 336
+    expect(r.retarget).toEqual({ fivekSec: Math.round((310 - 12) * 5) });
+    expect(r.why).toContain('/km');
+  });
+
+  it('proposes a swim retarget from the configured CSS', () => {
+    const r = eftpProposal({ thresholds: { swimThresholdPace: 100 / 113 }, plan: p2, todayISO: TODAY });
+    expect(r.sport).toBe('swim');
+    expect(r.retarget.css100Sec).toBe(113);
+  });
+
+  it('the biggest drift wins the single banner', () => {
+    const r = eftpProposal({
+      activities: [act('2026-07-06', 214)],
+      thresholds: { runThresholdPace: 1000 / 300 }, // ~11% run drift vs ~14% bike? bike: |214-250|/250 = 14.4%
+      plan: { profile: { ftp: 250 }, paces: { run: { threshold: 336 }, swim: { css: 120 } } },
+      todayISO: TODAY,
+    });
+    expect(r.sport).toBe('bike');
+  });
+
+  it('ignores implausible paces and tiny drifts', () => {
+    expect(eftpProposal({ thresholds: { runThresholdPace: 25 }, plan: p2, todayISO: TODAY })).toBe(null); // 40 s/km nonsense
+    expect(eftpProposal({ thresholds: { swimThresholdPace: 100 / 121 }, plan: p2, todayISO: TODAY })).toBe(null); // <1% drift
+  });
+
+  it('bike-only callers keep working without thresholds', () => {
+    const r = eftpProposal({ activities: [act('2026-07-05', 265)], plan: { profile: { ftp: 250 } }, todayISO: TODAY });
+    expect(r.sport).toBe('bike');
+    expect(r.retarget).toEqual({ ftp: 265 });
+  });
+});

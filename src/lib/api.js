@@ -210,6 +210,12 @@ export function getIntervalsActivities(getToken, days) {
   return request('/api/integrations/intervals-icu/activities' + query, { getToken });
 }
 
+// The athlete's per-sport thresholds as configured on intervals.icu
+// (bikeFtp watts; run/swim threshold paces in metres per second).
+export function getIntervalsThresholds(getToken) {
+  return request('/api/integrations/intervals-icu/thresholds', { getToken });
+}
+
 // Reconcile the athlete's intervals.icu calendar with the app's upcoming plan
 // (workouts-to-watch). Body: { oldest, newest, events: [{ref, date, type,
 // name, description, movingTimeSec}] }.

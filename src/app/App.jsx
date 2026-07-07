@@ -44,6 +44,7 @@ export function App({ storage, getToken, user }) {
   const saveWellness = rec => { setWellness(storage.upsertWellness(rec)); sync.saveWellness(rec); setEditWellness(false); };
   const [adjust, setAdjust] = useState(() => storage.load('adjust', {}));
   const [activities, setActivities] = useState(null); // recent watch activities (null until loaded / not connected)
+  const [thresholds, setThresholds] = useState(null); // intervals.icu per-sport thresholds (fitness watcher)
   const [addOpen, setAddOpen] = useState(false);   // "Add a session" sheet (Today tab)
   const [watchSync, setWatchSync] = useState(() => storage.load('watchSync', false));
   const toggleWatchSync = on => {
@@ -144,6 +145,7 @@ export function App({ storage, getToken, user }) {
     });
     // Recent watch activities → the "spotted on your watch" one-tap logging.
     sync.loadActivities().then(a => { if (!cancelled && a) setActivities(a); });
+    sync.loadThresholds().then(t => { if (!cancelled && t) setThresholds(t); });
     return () => { cancelled = true; };
   }, [sync]);
 
@@ -265,8 +267,8 @@ export function App({ storage, getToken, user }) {
   // athlete's recorded RPE as the feel, and a calibration observation each).
   const spotted = T.matchActivities({ activities, plan, log, moves, todayISO: T.iso(new Date()) });
   // eFTP watcher: dormant until the backend passes eftp through on activities.
-  const eftp = T.eftpProposal({ activities, plan, todayISO: T.iso(new Date()) });
-  const applyEftp = () => { if (eftp) retarget({ ftp: eftp.eftp }); };
+  const eftp = T.eftpProposal({ activities, thresholds, plan, todayISO: T.iso(new Date()) });
+  const applyEftp = () => { if (eftp) retarget(eftp.retarget); };
   const logSpotted = () => {
     const at = new Date().toISOString();
     const entries = {};
