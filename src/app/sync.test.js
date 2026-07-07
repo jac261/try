@@ -13,6 +13,7 @@ vi.mock('@/lib/api.js', () => ({
   getWellness: vi.fn(),
   syncWellness: vi.fn(),
   getIntervalsActivities: vi.fn(),
+  putPlannedEvents: vi.fn(),
   putWellness: vi.fn(),
   toClientState: vi.fn(),
   logToApi: e => ({ completed: !!(e && e.done), completedAtUtc: e && e.at, feel: (e && e.feel) || null, notes: null }),
@@ -123,6 +124,20 @@ describe('makeSync.loadActivities', () => {
   it('returns null when not connected or on an older backend (404)', async () => {
     api.getIntervalsActivities.mockResolvedValue({ ok: false, status: 404 });
     expect(await makeSync(getToken).loadActivities()).toBe(null);
+  });
+});
+
+describe('makeSync.pushWatchEvents', () => {
+  it('PUTs the desired window and returns the reconcile counts', async () => {
+    api.putPlannedEvents.mockResolvedValue({ ok: true, body: { created: 2, removed: 1, unchanged: 3 } });
+    const body = { oldest: '2026-07-09', newest: '2026-08-05', events: [] };
+    const r = await makeSync(getToken).pushWatchEvents(body);
+    expect(api.putPlannedEvents).toHaveBeenCalledWith(getToken, body);
+    expect(r).toEqual({ created: 2, removed: 1, unchanged: 3 });
+  });
+  it('returns null when not connected or on an older backend (404)', async () => {
+    api.putPlannedEvents.mockResolvedValue({ ok: false, status: 404 });
+    expect(await makeSync(getToken).pushWatchEvents({ events: [] })).toBe(null);
   });
 });
 

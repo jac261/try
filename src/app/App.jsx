@@ -41,11 +41,35 @@ export function App({ storage, getToken, user }) {
   const saveWellness = rec => { setWellness(storage.upsertWellness(rec)); sync.saveWellness(rec); setEditWellness(false); };
   const [adjust, setAdjust] = useState(() => storage.load('adjust', {}));
   const [activities, setActivities] = useState(null); // recent watch activities (null until loaded / not connected)
+  const [watchSync, setWatchSync] = useState(() => storage.load('watchSync', false));
+  const toggleWatchSync = on => {
+    setWatchSync(on);
+    storage.save('watchSync', on);
+    // Forget the last pushed payload so re-enabling always reconciles afresh.
+    if (!on) storage.save('watchPushed', null);
+  };
 
   useEffect(() => { if (plan) storage.save('plan', plan); }, [plan, storage]);
   useEffect(() => { storage.save('log', log); }, [log, storage]);
   useEffect(() => { storage.save('moves', moves); }, [moves, storage]);
   useEffect(() => { storage.save('adjust', adjust); }, [adjust, storage]);
+
+  // Workouts-to-watch: while enabled, keep the intervals.icu calendar equal to
+  // the upcoming plan (moves and engine adjustments included). The pushed-hash
+  // guard makes the reconcile idempotent across loads; the short delay
+  // coalesces bursts of changes, e.g. accepting a weekly proposal. easedOf is
+  // declared below — safe here because the guard returns before it's touched
+  // whenever the component bails out early (no plan yet).
+  useEffect(() => {
+    if (!plan || !watchSync) return;
+    const body = T.buildWatchEvents({ plan, moves, easedOf, todayISO: T.iso(new Date()) });
+    const hash = JSON.stringify(body);
+    if (storage.load('watchPushed', null) === hash) return;
+    const t = setTimeout(() => {
+      sync.pushWatchEvents(body).then(r => { if (r) storage.save('watchPushed', hash); });
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [plan, moves, adjust, watchSync, sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On mount (per user): pull the server's plan graph. The server is the source of
   // truth; localStorage is the offline fallback if it's unreachable.
@@ -296,6 +320,7 @@ export function App({ storage, getToken, user }) {
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)}
         onWellnessSynced={applyServerWellness} onReadinessInfo={() => setView('readinessInfo')}
+        watchSync={watchSync} onWatchSync={toggleWatchSync}
         onExportCalibration={() => downloadCalibration(storage)} calibrationCount={storage.loadCalibration().length} />}
       {view === 'readinessInfo' && <ReadinessInfo onBack={() => setView('settings')} />}
 

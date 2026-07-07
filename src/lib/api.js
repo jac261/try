@@ -210,6 +210,13 @@ export function getIntervalsActivities(getToken, days) {
   return request('/api/integrations/intervals-icu/activities' + query, { getToken });
 }
 
+// Reconcile the athlete's intervals.icu calendar with the app's upcoming plan
+// (workouts-to-watch). Body: { oldest, newest, events: [{ref, date, type,
+// name, description, movingTimeSec}] }.
+export function putPlannedEvents(getToken, body) {
+  return request('/api/integrations/intervals-icu/planned-events', { getToken, method: 'PUT', body });
+}
+
 /* ---------------- shape mapping (server ⇄ client) ---------------- */
 
 // PlanResponse → the frontend's { plan, log, moves, refToId }. The server returns

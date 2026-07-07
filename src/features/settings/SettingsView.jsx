@@ -13,7 +13,7 @@ import { APP_BASE_URL } from '@/config/env.js';
    backend (write-only there); once connected, readiness fills itself from the
    watch data instead of manual entry. onWellnessSynced hands the freshly synced
    records up so the Today readiness card updates without a reload. */
-function IntervalsIcuCard({ onWellnessSynced }) {
+function IntervalsIcuCard({ onWellnessSynced, watchSync, onWatchSync }) {
   const { getToken, isLoaded } = useAuth();
   const [status, setStatus] = useState(null);   // null = loading; {connected, athleteId, lastSyncedAtUtc}
   const [athleteId, setAthleteId] = useState('');
@@ -72,6 +72,13 @@ function IntervalsIcuCard({ onWellnessSynced }) {
           <button className="btn ghost sm" type="button" onClick={disconnect} disabled={busy}>Disconnect</button>
         </div>
         <div className="authmeta">Readiness pulls your HRV, sleep, resting HR &amp; Form automatically on each visit.</div>
+        <label className="authrow" style={{ cursor: 'pointer' }}>
+          <div>
+            <div className="authlabel">Send workouts to my watch</div>
+            <div className="authmeta">Upcoming sessions land on your intervals.icu calendar, and Garmin picks them up from there. Plan changes and engine adjustments follow automatically.</div>
+          </div>
+          <input type="checkbox" checked={!!watchSync} onChange={e => onWatchSync && onWatchSync(e.target.checked)} />
+        </label>
       </div>
     );
   }
@@ -139,7 +146,7 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced, onReadinessInfo, onExportCalibration, calibrationCount }) {
+export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced, onReadinessInfo, onExportCalibration, calibrationCount, watchSync, onWatchSync }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
@@ -177,7 +184,7 @@ export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitn
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Connections</h2>
-        <IntervalsIcuCard onWellnessSynced={onWellnessSynced} />
+        <IntervalsIcuCard onWellnessSynced={onWellnessSynced} watchSync={watchSync} onWatchSync={onWatchSync} />
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Support</h2>

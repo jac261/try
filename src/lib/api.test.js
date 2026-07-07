@@ -132,4 +132,16 @@ describe('integrations (intervals.icu)', () => {
     await syncWellness(getToken, 365);
     expect(global.fetch.mock.calls[0][0]).toContain('/api/wellness/sync?days=365');
   });
+
+  it('putPlannedEvents PUTs the desired watch calendar', async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ created: 1, removed: 0, unchanged: 2 }) }));
+    const { putPlannedEvents } = await import('./api.js');
+    const body = { oldest: '2026-07-09', newest: '2026-08-05', events: [{ ref: '0-1' }] };
+    const r = await putPlannedEvents(getToken, body);
+    expect(r.ok).toBe(true);
+    const [url, opts] = global.fetch.mock.calls[0];
+    expect(url).toContain('/api/integrations/intervals-icu/planned-events');
+    expect(opts.method).toBe('PUT');
+    expect(JSON.parse(opts.body)).toEqual(body);
+  });
 });

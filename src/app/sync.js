@@ -10,7 +10,7 @@ import {
   getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan,
   putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
   putWorkoutAdjustment, deleteWorkoutAdjustment,
-  getWellness, putWellness, syncWellness, getIntervalsActivities,
+  getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents,
   toClientState, logToApi,
 } from '@/lib/api.js';
 
@@ -77,6 +77,14 @@ export function makeSync(getToken) {
     loadActivities: async (days = 10) => {
       const res = await getIntervalsActivities(getToken, days);
       return res.ok && Array.isArray(res.body) ? res.body : null;
+    },
+
+    // Workouts-to-watch: reconcile the upcoming plan onto the athlete's
+    // intervals.icu calendar. Returns the {created, removed, unchanged}
+    // counts, or null when not connected, offline, or on an older backend.
+    pushWatchEvents: async body => {
+      const res = await putPlannedEvents(getToken, body);
+      return res.ok && res.body ? res.body : null;
     },
 
     // Prefer the intervals.icu proxy: POST /api/wellness/sync pulls the athlete's
