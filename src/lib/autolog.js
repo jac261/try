@@ -60,3 +60,26 @@ export function matchActivities({ activities, plan, log, moves, todayISO }) {
   });
   return matches;
 }
+
+// Link-out matching for a single (typically logged) session: the same
+// discipline + effective-date + duration-window rule as matchActivities,
+// without the claimed-set bookkeeping. A view helper, not a logging proposal —
+// worst case a near-miss opens the wrong recording, which the athlete can see.
+export function activityFor({ workout, activities, moves }) {
+  if (!workout || !Array.isArray(activities)) return null;
+  const planned = workout.durationMin || 0;
+  if (!planned) return null;
+  const date = (moves && moves[workout.id]) || workout.date;
+  const best = activities
+    .filter(a => a && DISCIPLINE[a.type] === workout.discipline && a.date === date && a.movingTimeSec != null)
+    .map(a => ({ a, min: a.movingTimeSec / 60 }))
+    .filter(x => x.min >= planned * 0.5 && x.min <= planned * 1.7)
+    .sort((x, y) => Math.abs(x.min - planned) - Math.abs(y.min - planned))[0];
+  return best ? best.a : null;
+}
+
+// The athlete-facing intervals.icu page for a passthrough activity (ids come
+// through verbatim, e.g. "i80852013").
+export function activityUrl(a) {
+  return 'https://intervals.icu/activities/' + a.id;
+}

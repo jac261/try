@@ -24,7 +24,7 @@ const WHY = {
   'Open Water': 'Rehearse race-day swimming. Practise sighting, drafting and holding a straight line without walls to push off.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity }) {
   const canFit = T.FIT && T.FIT.supports(w);
   const disc = D[w.discipline];
   const why = !w.race && !w.test ? WHY[w.type] : null;
@@ -91,6 +91,8 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
               <button key={k} className={'feelbtn' + (feel === k ? ' on ' + k : '')} onClick={() => onFeel(w.id, k)}>{lab}</button>)}
           </div>
         </div>}
+        {activity && <a className="act-link" href={T.activityUrl(activity)} target="_blank" rel="noopener noreferrer">
+          <Icon name="watch" size={15} /> See your recording on intervals.icu{activity.name ? ' · ' + activity.name : ''} ↗</a>}
         {w.race && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
         {w.custom && onRemove && <>
           <div style={{ height: 10 }} />

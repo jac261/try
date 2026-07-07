@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchActivities } from './autolog.js';
+import { matchActivities, activityFor, activityUrl } from './autolog.js';
 
 const TODAY = '2026-07-09';
 const wk = (id, discipline, type, date, durationMin) => ({
@@ -57,5 +57,30 @@ describe('matchActivities (spotted on your watch)', () => {
     expect(matchActivities({ ...base, activities: null })).toEqual([]);
     expect(matchActivities({ ...base, activities: [] })).toEqual([]);
     expect(matchActivities({ activities: [act('a1', 'Run', TODAY, 40)], plan: null, log: {}, moves: {}, todayISO: TODAY })).toEqual([]);
+  });
+});
+
+describe('activityFor (link-out to the recording)', () => {
+  const run = wk('0-0', 'run', 'Easy', '2026-07-08', 50);
+  it('finds the recording on discipline + date + duration window, nearest first', () => {
+    const a = activityFor({ workout: run, moves: {}, activities: [
+      act('a1', 'Ride', '2026-07-08', 48),   // wrong discipline
+      act('a2', 'Run', '2026-07-07', 48),    // wrong day
+      act('a3', 'Run', '2026-07-08', 70),    // in window, further
+      act('a4', 'Run', '2026-07-08', 52),    // nearest
+    ] });
+    expect(a.id).toBe('a4');
+  });
+  it('matches on the EFFECTIVE date when the session was moved', () => {
+    const a = activityFor({ workout: run, moves: { '0-0': '2026-07-09' }, activities: [act('a1', 'Run', '2026-07-09', 48)] });
+    expect(a.id).toBe('a1');
+  });
+  it('returns null outside the duration window or with nothing loaded', () => {
+    expect(activityFor({ workout: run, moves: {}, activities: [act('a1', 'Run', '2026-07-08', 10)] })).toBe(null);
+    expect(activityFor({ workout: run, moves: {}, activities: null })).toBe(null);
+    expect(activityFor({ workout: null, moves: {}, activities: [] })).toBe(null);
+  });
+  it('activityUrl points at the intervals.icu activity page', () => {
+    expect(activityUrl({ id: 'i80852013' })).toBe('https://intervals.icu/activities/i80852013');
   });
 });

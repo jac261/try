@@ -384,6 +384,7 @@ export function App({ storage, getToken, user }) {
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} />}
 
       {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)}
+        activity={log[detail.id] ? T.activityFor({ workout: detail, activities, moves }) : null}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}

@@ -167,6 +167,9 @@ body {
 .feelbtn.on.right { border-color: var(--blue); color: #9ab8ff; background: var(--blue-soft); }
 .feelbtn.on.hard { border-color: var(--bike); color: var(--bike); background: rgba(251, 191, 36, .12); }
 
+/* link-out to the matched intervals.icu recording */
+.act-link { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 12px 4px 0; color: var(--blue); font-size: 13px; font-weight: 700; text-decoration: none; }
+
 /* fitness progression rows */
 .trend { display: flex; align-items: center; gap: 14px; padding: 14px 0; }
 .trend + .trend { border-top: 1px solid var(--line); }
