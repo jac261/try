@@ -389,3 +389,19 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .rd-proposal { margin-top: 13px; background: var(--chip); border-radius: 13px; padding: 12px 13px; }
 .rd-proposal .ph { font-size: 13.5px; font-weight: 800; letter-spacing: -.2px; display: flex; align-items: center; gap: 7px; }
 .rd-proposal .pw { color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 5px; }
+
+/* ---------- week overview tab (Today, below the day's session) ---------- */
+.week-tab .wt-head { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.week-tab .wt-title { font-size: 16px; font-weight: 800; letter-spacing: -.2px; }
+.week-tab .wt-chev { color: var(--faint); font-size: 13px; }
+.week-tab .wt-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 12px; cursor: pointer; user-select: none; }
+.week-tab .wt-day { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 7px 0 8px; border-radius: 10px; }
+.week-tab .wt-day.today { background: var(--blue-soft); }
+.week-tab .wt-day.today .wt-lab { color: var(--ink); font-weight: 800; }
+.week-tab .wt-day.past { opacity: .5; }
+.week-tab .wt-lab { font-size: 10px; font-weight: 700; color: var(--faint); text-transform: uppercase; }
+.week-tab .wt-dots { display: flex; gap: 3px; align-items: center; min-height: 8px; }
+.week-tab .wt-dots i { width: 8px; height: 8px; border-radius: 50%; display: block; }
+.week-tab .wt-rest { width: 7px; height: 2px; border-radius: 1px; background: var(--line); display: block; }
+.week-tab .wk { border-top: 1px solid var(--line); }
+.week-tab .wk:first-of-type { margin-top: 10px; }

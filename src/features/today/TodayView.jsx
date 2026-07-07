@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import * as T from '@/lib';
 import { effDate, weekRange } from '@/lib/schedule.js';
 import { paceSuggestions } from '@/lib/tuning.js';
@@ -7,14 +8,64 @@ import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { ReadinessCard } from '@/features/wellness/ReadinessCard.jsx';
 const D = T.DISCIPLINES;
 
+// The user's expand/collapse choice for the week tab sticks across visits.
+const WEEK_PREF = 'try.showWeek';
+const loadWeekPref = () => { try { return JSON.parse(localStorage.getItem(WEEK_PREF)); } catch (e) { return null; } };
+const saveWeekPref = v => { try { localStorage.setItem(WEEK_PREF, JSON.stringify(v)); } catch (e) {} };
+
+/* One glanceable card for the rest of the week: a 7-day strip of discipline
+   dots (faded = logged, gold = race day, dash = rest), tap to fold out the
+   remaining sessions in full detail. Replaces the old separate "Week N of M"
+   card and always-open "Coming up" list. */
+function WeekOverview({ plan, log, moves, open, easedOf, todayISO }) {
+  const [openWk, setOpenWk] = useState(() => loadWeekPref() === true);
+  const toggle = () => setOpenWk(o => { saveWeekPref(!o); return !o; });
+  const days = weekRange(todayISO);
+  const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest');
+  const byDay = d => all.filter(w => effDate(w, moves) === d);
+  const curWeek = plan.weeks.find(w => w.workouts.some(x => x.date >= todayISO)) || plan.weeks[plan.weeks.length - 1];
+  const upcoming = all.filter(w => { const d = effDate(w, moves); return !w.race && d > todayISO && d <= days[6]; })
+    .sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1);
+  return (
+    <div className="card week-tab">
+      <div className="wt-head" {...tap(toggle)}>
+        <div>
+          <div className="wt-title">This week</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+            Week {curWeek.index + 1} of {plan.totalWeeks} · {curWeek.phase} · {T.fmtDuration(curWeek.totalMin)} planned
+          </div>
+        </div>
+        <div className="spacer" />
+        <span className="wt-chev">{openWk ? '▾' : '▸'}</span>
+      </div>
+      <div className="wt-strip" {...tap(toggle)}>
+        {days.map(d => {
+          const ws = byDay(d);
+          return (
+            <div key={d} className={'wt-day' + (d === todayISO ? ' today' : '') + (d < todayISO ? ' past' : '')}>
+              <div className="wt-lab">{T.fmtDate(d, { weekday: 'short' }).slice(0, 1)}</div>
+              <div className="wt-dots">
+                {ws.length === 0 ? <i className="wt-rest" />
+                  : ws.slice(0, 3).map(w => <i key={w.id}
+                    style={{ background: w.race ? '#facc15' : D[w.discipline].color, opacity: log[w.id] ? 0.35 : 1 }} />)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {openWk && (upcoming.length
+        ? upcoming.map(w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
+          moved={effDate(w, moves) !== w.date} onClick={() => open(w)} />)
+        : <div className="muted" style={{ fontSize: 13, padding: '10px 2px 2px' }}>Nothing more this week — rest up.</div>)}
+    </div>
+  );
+}
+
 export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
   const today = all.filter(w => effDate(w, moves) === todayISO);
-  const upcoming = sessions.filter(w => effDate(w, moves) > todayISO)
-    .sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1).slice(0, 4);
-  const curWeek = plan.weeks.find(w => w.workouts.some(x => x.date >= todayISO)) || plan.weeks[plan.weeks.length - 1];
   const weekStart = weekRange(todayISO)[0];
   const missed = sessions.filter(w => { const d = effDate(w, moves); return d < todayISO && d >= weekStart && !log[w.id]; });
   const suggestions = paceSuggestions(plan, log);
@@ -58,17 +109,7 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
         {today.length === 0 ? <div className="empty"><div className="big"><Icon name="rest" size={40} /></div>No session scheduled today.</div>
           : today.map(row)}
       </div>
-      {curWeek && <div className="card">
-        <div className="row"><div><h2 style={{ margin: 0 }}>Week {curWeek.index + 1} of {plan.totalWeeks}</h2>
-          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{curWeek.phase} · {T.PHASE_INFO[curWeek.phase].blurb}</div></div>
-          <div className="spacer" /><div className="center"><div style={{ fontSize: 22, fontWeight: 700 }}>{T.fmtDuration(curWeek.totalMin)}</div>
-            <div className="muted" style={{ fontSize: 11 }}>planned</div></div></div>
-      </div>}
-      <div className="section-title">Coming up</div>
-      <div className="card">
-        {upcoming.length ? upcoming.map(row)
-          : <div className="empty"><div className="big"><Icon name="trophy" size={40} /></div>All done — race time!</div>}
-      </div>
+      <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} />
     </>
   );
 }
