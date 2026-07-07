@@ -25,6 +25,36 @@ function refFrom(r) {
   return r && r.ok && r.body ? (toClientState(r.body).refToId || {}) : null;
 }
 
+/* ---------------- reconcile helpers (local overlays ⇄ server copies) ----------------
+   The optimistic pushes above are skipped whenever a workout's GUID isn't known yet
+   (plan push still in flight) or we're offline, so an overlay entry can exist only
+   locally. These two helpers make sure such entries reach the server instead of
+   being wiped by the next hydrate. */
+
+// Fold a hydrated server overlay (log/moves/adjust) into its local counterpart:
+// the server wins per workout, but a local-only entry whose workout still exists
+// in the plan (present in refToId) is kept and pushed up via push(guid, entry) —
+// the server never saw it. Trade-off: with no tombstones, an entry deleted on
+// another device is resurrected by a device still holding it; never losing a
+// log beats perfect deletion sync here.
+export function mergeOverlay(server, local, refToId, push) {
+  const merged = { ...(server || {}) };
+  Object.keys(local || {}).forEach(id => {
+    if (merged[id] === undefined && refToId[id]) { merged[id] = local[id]; push(refToId[id], local[id]); }
+  });
+  return merged;
+}
+
+// After a plan create/replace resolves with a fresh ref→GUID map, push the
+// overlay entries the old map couldn't resolve but the new one can. There is no
+// synced flag, so an entry that did sync in the meantime may be pushed again —
+// an idempotent PUT, harmless.
+export function sweepStale(overlay, oldMap, newMap, push) {
+  Object.keys(overlay || {}).forEach(id => {
+    if (!oldMap[id] && newMap[id]) push(newMap[id], overlay[id]);
+  });
+}
+
 export function makeSync(getToken) {
   // Load the server's plan graph. Returns { plan, log, moves, refToId } | 'none'
   // (signed in, no plan) | null (offline/error → caller keeps the local cache).

@@ -20,7 +20,7 @@ vi.mock('@/lib/api.js', () => ({
 }));
 
 import * as api from '@/lib/api.js';
-import { makeSync } from './sync.js';
+import { makeSync, mergeOverlay, sweepStale } from './sync.js';
 
 const getToken = async () => 'tok';
 beforeEach(() => { vi.clearAllMocks(); });
@@ -158,6 +158,57 @@ describe('makeSync.refreshWellness', () => {
     api.syncWellness.mockResolvedValue({ ok: false, status: null });
     api.getWellness.mockResolvedValue({ ok: false, status: null });
     expect(await makeSync(getToken).refreshWellness()).toBe(null);
+  });
+});
+
+describe('mergeOverlay (hydrate: server wins per workout, local-only entries survive)', () => {
+  const ids = { '0-0': 'g00', '0-1': 'g01' };
+  it('takes the server copy when both sides have an entry', () => {
+    const push = vi.fn();
+    const merged = mergeOverlay({ '0-0': { done: true, feel: 'good' } }, { '0-0': { done: true, feel: 'hard' } }, ids, push);
+    expect(merged['0-0'].feel).toBe('good');
+    expect(push).not.toHaveBeenCalled();
+  });
+  it('keeps a local-only entry whose workout still exists, and pushes it up', () => {
+    const push = vi.fn();
+    const entry = { done: true, at: '2026-07-06T10:00:00Z' };
+    const merged = mergeOverlay({ '0-0': { done: true } }, { '0-0': { done: true }, '0-1': entry }, ids, push);
+    expect(merged['0-1']).toBe(entry);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith('g01', entry);
+  });
+  it('drops a local-only entry whose workout left the plan', () => {
+    const push = vi.fn();
+    const merged = mergeOverlay({}, { '9-9': { done: true } }, ids, push);
+    expect(merged['9-9']).toBeUndefined();
+    expect(push).not.toHaveBeenCalled();
+  });
+  it('treats a missing server overlay as empty', () => {
+    const push = vi.fn();
+    const merged = mergeOverlay(undefined, { '0-0': { done: true } }, ids, push);
+    expect(merged['0-0']).toEqual({ done: true });
+    expect(push).toHaveBeenCalledWith('g00', { done: true });
+  });
+});
+
+describe('sweepStale (plan response: push entries created while the ref→GUID map was stale)', () => {
+  it('pushes entries the old map could not resolve but the new map can', () => {
+    const push = vi.fn();
+    const entry = { done: true, at: '2026-07-06T10:00:00Z' };
+    sweepStale({ 'c-1': entry, '0-0': { done: true } }, { '0-0': 'g00' }, { '0-0': 'g00', 'c-1': 'gc1' }, push);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith('gc1', entry);
+  });
+  it('ignores entries still missing from the new map (workout unknown to the server)', () => {
+    const push = vi.fn();
+    sweepStale({ 'c-2': { done: true } }, {}, { '0-0': 'g00' }, push);
+    expect(push).not.toHaveBeenCalled();
+  });
+  it('pushes everything on a fresh migration (empty old map)', () => {
+    const push = vi.fn();
+    sweepStale({ '0-0': '2026-07-09', '0-1': '2026-07-10' }, {}, { '0-0': 'g00', '0-1': 'g01' }, push);
+    expect(push).toHaveBeenCalledWith('g00', '2026-07-09');
+    expect(push).toHaveBeenCalledWith('g01', '2026-07-10');
   });
 });
 

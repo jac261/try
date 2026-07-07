@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as T from '@/lib';
-import { makeSync } from '@/app/sync.js';
+import { makeSync, mergeOverlay, sweepStale } from '@/app/sync.js';
 import { buildObservation, toNote, downloadCalibration } from '@/app/calibration.js';
 import { effDate, catchUpMoves } from '@/lib/schedule.js';
 import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
@@ -53,6 +53,23 @@ export function App({ storage, getToken, user }) {
     if (!on) storage.save('watchPushed', null);
   };
 
+  // Overlays as the async plan-response handlers must see them — a .then()
+  // closure only holds the render it was created in.
+  const live = useRef(null);
+  live.current = { log, moves, adjust, refToId };
+  // Adopt the fresh ref→GUID map from a plan create/replace response, then push
+  // any overlay entries created while the old map was stale — their optimistic
+  // sync was skipped (gid() was undefined), so the server never saw them and
+  // the next hydrate would drop them.
+  const adoptMap = map => {
+    if (!map) return;
+    const cur = live.current;
+    sweepStale(cur.log, cur.refToId, map, (g, e) => sync.saveLog(g, e));
+    sweepStale(cur.moves, cur.refToId, map, (g, d) => sync.saveMove(g, d));
+    sweepStale(cur.adjust, cur.refToId, map, (g, a) => sync.saveAdjustment(g, a));
+    setRefToId(map);
+  };
+
   useEffect(() => { if (plan) storage.save('plan', plan); }, [plan, storage]);
   useEffect(() => { storage.save('log', log); }, [log, storage]);
   useEffect(() => { storage.save('moves', moves); }, [moves, storage]);
@@ -85,13 +102,22 @@ export function App({ storage, getToken, user }) {
       if (cancelled) return;
       if (result === 'none') {
         // Signed in but no server plan: migrate a pre-backend local plan up, else
-        // fall through to onboarding.
-        if (plan) sync.savePlan(plan).then(map => { if (map) setRefToId(map); }); else setPlan(null);
+        // fall through to onboarding. adoptMap migrates the local overlays too.
+        if (plan) sync.savePlan(plan).then(adoptMap); else setPlan(null);
       } else if (result) {
-        setPlan(T.upgradePlanSegments(result.plan)); setLog(result.log); setMoves(result.moves); setRefToId(result.refToId || {});
+        const ids = result.refToId || {};
+        setPlan(T.upgradePlanSegments(result.plan));
+        // Merge, don't replace: an entry created while a plan push was still in
+        // flight (stale gid → its own push was skipped) or offline exists only
+        // locally — wholesale-replacing would silently lose it. The loading
+        // screen blocks input until hydration, so the mount-time overlays
+        // captured here are current.
+        setLog(mergeOverlay(result.log, log, ids, (g, e) => sync.saveLog(g, e)));
+        setMoves(mergeOverlay(result.moves, moves, ids, (g, d) => sync.saveMove(g, d)));
+        setRefToId(ids);
         // Adjustments sync only once the backend supports them; an empty result
         // means "unknown", so the local overlay is kept rather than wiped.
-        if (result.adjust && Object.keys(result.adjust).length) setAdjust(result.adjust);
+        if (result.adjust && Object.keys(result.adjust).length) setAdjust(mergeOverlay(result.adjust, adjust, ids, (g, a) => sync.saveAdjustment(g, a)));
       } // result === null → offline/error: keep the cache already loaded
       setHydrated(true);
     });
@@ -142,7 +168,7 @@ export function App({ storage, getToken, user }) {
       <div className="card"><p className="lead">Loading your plan…</p></div>
     </div>
   );
-  if (!plan) return <Onboarding onCreate={p => { const np = T.generatePlan(p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np).then(map => { if (map) setRefToId(map); }); }} />;
+  if (!plan) return <Onboarding onCreate={p => { const np = T.generatePlan(p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np).then(adoptMap); }} />;
   if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
 
   // Resolve our client ref → server workout GUID for the log/move endpoints; skip
@@ -192,7 +218,7 @@ export function App({ storage, getToken, user }) {
     np.createdAt = plan.createdAt;
     np.updatedAt = new Date().toISOString();
     setPlan(np);
-    sync.replacePlan(np).then(map => { if (map) setRefToId(map); });
+    sync.replacePlan(np).then(adoptMap);
   };
   const updateFitness = fields => { retarget(fields); setEditFitness(false); };
   const applyTune = () => { const s = paceSuggestions(plan, log); if (s.length) retarget(tuneFields(plan.profile, s)); };
@@ -288,7 +314,7 @@ export function App({ storage, getToken, user }) {
     setEditPlan(false);
     // PUT replaces the plan graph; the server prunes logs/moves for workouts that
     // no longer exist, mirroring the local prune above.
-    sync.replacePlan(np).then(map => { if (map) setRefToId(map); });
+    sync.replacePlan(np).then(adoptMap);
   };
   // User-added sessions: first-class plan workouts (flagged custom), persisted
   // through the same plan replace as retargets — server preserves logs by ref.
@@ -296,7 +322,9 @@ export function App({ storage, getToken, user }) {
     const r = T.addCustomWorkout(plan, Object.assign({}, spec, { dateISO: T.iso(new Date()) }));
     setPlan(r.plan);
     setAddOpen(false);
-    sync.replacePlan(r.plan).then(map => { if (map) setRefToId(map); });
+    // adoptMap sweeps for a quick-complete raced against this replace: the new
+    // workout's log lands once its GUID is known instead of staying local-only.
+    sync.replacePlan(r.plan).then(adoptMap);
   };
   const removeWorkout = id => {
     const np = T.removeCustomWorkout(plan, id);
@@ -305,7 +333,7 @@ export function App({ storage, getToken, user }) {
     setLog(l => { const n = { ...l }; delete n[id]; return n; });
     setMoves(m => { const n = { ...m }; delete n[id]; return n; });
     setAdjust(a => { const n = { ...a }; delete n[id]; return n; });
-    sync.replacePlan(np).then(map => { if (map) setRefToId(map); });
+    sync.replacePlan(np).then(adoptMap);
   };
 
   const race = T.RACES[plan.race];
