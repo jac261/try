@@ -28,7 +28,8 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
     .sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1);
   return (
     <div className="card week-tab">
-      <div className="wt-head" {...tap(toggle)}>
+      <div className="wt-head" {...tap(toggle)} aria-expanded={openWk}
+        aria-label={'This week, week ' + (curWeek.index + 1) + ' of ' + plan.totalWeeks + ': show remaining sessions'}>
         <div>
           <div className="wt-title">This week</div>
           <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
@@ -38,17 +39,22 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
         <div className="spacer" />
         <span className="wt-chev">{openWk ? '▾' : '▸'}</span>
       </div>
-      <div className="wt-strip" {...tap(toggle)}>
+      {/* strip background is a pointer-only shortcut to toggle; each day cell is
+          the keyboard/screen-reader path (avoids a button-inside-a-button). */}
+      <div className="wt-strip" onClick={toggle}>
         {days.map(d => {
           const ws = byDay(d);
+          const logged = ws.filter(w => log[w.id]).length;
           return (
             <div key={d} className={'wt-day' + (d === todayISO ? ' today' : '') + (d < todayISO ? ' past' : '')}
+              aria-label={T.fmtDate(d, { weekday: 'long' }) + ': ' + (ws.length === 0 ? 'rest day'
+                : ws.map(w => w.title).join(' and ') + (logged ? ', ' + logged + ' logged' : ''))}
               {...tap(e => { e.stopPropagation(); if (ws.length) open(ws[0]); else toggle(); })}>
               <div className="wt-lab">{T.fmtDate(d, { weekday: 'short' }).slice(0, 1)}</div>
               <div className="wt-dots">
                 {ws.length === 0 ? <i className="wt-rest" />
-                  : ws.slice(0, 3).map(w => <i key={w.id}
-                    style={{ background: w.race ? '#facc15' : D[w.discipline].color, opacity: log[w.id] ? 0.35 : 1 }} />)}
+                  : ws.slice(0, 3).map(w => <i key={w.id} className={log[w.id] ? 'done' : ''}
+                    style={{ background: w.race ? '#facc15' : D[w.discipline].color }} />)}
               </div>
             </div>
           );
@@ -132,7 +138,8 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
           : today.length === 0
             ? <div className="empty"><div className="big"><Icon name="rest" size={40} /></div>No session scheduled today.</div>
             : today.map(row)}
-        {(allDone || restDay) && next && <div className="tmrw" {...tap(() => open(next))}>
+        {(allDone || restDay) && next && <div className="tmrw" {...tap(() => open(next))}
+          aria-label={'Next up, ' + T.fmtDate(effDate(next, moves), { weekday: 'long' }) + ': ' + easedOf(next).title + '. Open details'}>
           <Icon name="calendar" size={15} />
           <span>Next up · {T.fmtDate(effDate(next, moves), { weekday: 'long' })}: <b>{easedOf(next).title}</b> · {T.fmtDuration(easedOf(next).durationMin || 0)}</span>
         </div>}

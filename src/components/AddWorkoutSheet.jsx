@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
+import { useSheetFocus } from '@/utils/useSheetFocus.js';
 import { Icon } from '@/components/Icon.jsx';
 
 const D = T.DISCIPLINES;
@@ -23,9 +24,11 @@ export function AddWorkoutSheet({ onAdd, onClose }) {
   const [dur, setDur] = useState(DEFAULT_DUR.run);
   const pick = d => { setDisc(d); setType(TYPE_OPTIONS[d][0]); setDur(DEFAULT_DUR[d]); };
   const fixed = disc === 'strength';
+  const sheetRef = useSheetFocus(onClose);
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
+      <div className="sheet" ref={sheetRef} tabIndex={-1} role="dialog" aria-modal="true"
+        aria-label="Add a session" onClick={e => e.stopPropagation()}>
         <div className="grab" />
         <h2 style={{ margin: '0 0 4px', fontSize: 21, letterSpacing: '-.5px' }}>Add a session</h2>
         <div className="muted" style={{ fontSize: 13 }}>An extra session on today, outside your plan. It counts towards your training load like any other.</div>

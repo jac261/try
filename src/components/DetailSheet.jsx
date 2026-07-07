@@ -1,5 +1,6 @@
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
+import { useSheetFocus } from '@/utils/useSheetFocus.js';
 import { weekRange } from '@/lib/schedule.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutProfile } from '@/components/WorkoutProfile.jsx';
@@ -30,9 +31,11 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
   const shown = eff || w.date;
   const moved = shown !== w.date;
   const days = weekRange(w.date);
+  const sheetRef = useSheetFocus(onClose);
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
+      <div className="sheet" ref={sheetRef} tabIndex={-1} role="dialog" aria-modal="true"
+        aria-label={w.title} onClick={e => e.stopPropagation()}>
         <div className="grab" />
         <div className="hero">
           <div className="dot" style={{ background: disc.grad }}><Icon name={disc.icon} size={26} /></div>
@@ -62,7 +65,9 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           <div className="days">
             {days.map((d, i) => {
               const lab = ['M', 'T', 'W', 'T', 'F', 'S', 'S'][i];
-              return <div key={d} className={'d' + (d === shown ? ' on' : '')} {...tap(() => onMove(w.id, d))}>
+              return <div key={d} className={'d' + (d === shown ? ' on' : '')}
+                aria-label={'Move to ' + T.fmtDate(d, { weekday: 'long', month: 'short', day: 'numeric' }) + (d === shown ? ' (current day)' : '')}
+                {...tap(() => onMove(w.id, d))}>
                 <div style={{ fontSize: 10, fontWeight: 600, opacity: .7 }}>{lab}</div>
                 {Number(d.slice(8))}</div>;
             })}
