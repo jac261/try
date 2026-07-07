@@ -107,6 +107,21 @@ The race proposal takes the single structural-banner slot ahead of the week
 rules (inside the final fortnight the taper is the thing that matters); tests
 and the race itself are never candidates, and stale fitness data stays quiet.
 
+## The workout library
+
+Every session type carries several classic formats of the same intensity
+character (a threshold run is 9-minute reps one week, 5-minute cruise reps the
+next, two 12-minute blocks the week after). Selection is deterministic: the
+plan week index seeds the rotation, recovery weeks pin the canonical (gentlest)
+format, and each workout stores its seed so the engine's rebuilds (ease, trim,
+boost) reshape a session without changing its format. There is no randomness:
+the same profile always generates the identical plan.
+
+This is what gives the engine room to move. Trims and boosts land on a format
+that scales its rep count with duration; eases swap to the discipline's easy
+type in the same week's format; and the athlete never sees the same quality
+session twice in a row.
+
 ## Sync contract (backend, for Jack)
 
 Accepted day-adaptations become synced state, exactly like logs and moves:

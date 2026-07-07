@@ -101,3 +101,38 @@ describe('boostWorkout (build nudge)', () => {
     if (strength) expect(boostWorkout(strength, p, 1.1)).toBe(strength);
   });
 });
+
+describe('workout library variants', () => {
+  const p = generatePlan(profile('2026-09-23', '2026-07-01'));
+
+  it('is deterministic: the same profile always generates the identical plan', () => {
+    const p2 = generatePlan(profile('2026-09-23', '2026-07-01'));
+    const labels = pl => pl.weeks.flatMap(w => w.workouts).map(w => w.segments.map(x => x.label).join('|')).join('~');
+    expect(labels(p2)).toBe(labels(p));
+  });
+
+  it('rotates session formats across weeks', () => {
+    const longRuns = p.weeks.flatMap(w => w.workouts).filter(w => w.discipline === 'run' && w.type === 'Long');
+    const shapes = new Set(longRuns.map(w => w.segments.length));
+    expect(shapes.size).toBeGreaterThan(1); // steady weeks alternate with fast-finish weeks
+  });
+
+  it('selects the format from the week seed, wrapping deterministically', () => {
+    const wk = seed => ({ discipline: 'run', type: 'Threshold', durationMin: 60, week: seed, phase: 'Build', id: seed + '-1' });
+    const main = w => trimWorkout(w, p, 0.9).segments[1].label;
+    expect(main(wk(0))).toContain('9 min threshold');
+    expect(main(wk(1))).toContain('5 min threshold');
+    expect(main(wk(2))).toContain('12 min cruise');
+    expect(main(wk(3))).toContain('9 min threshold'); // wraps around
+  });
+
+  it('engine rebuilds keep the session in its week format', () => {
+    const runs = p.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline === 'run' && w.durationMin >= 40 && !w.race && !w.test);
+    const shape = w => w.segments.map(x => x.label.replace(/\d+/g, 'N')).join('|');
+    runs.forEach(run => {
+      expect(shape(trimWorkout(run, p, 0.8)), run.id).toBe(shape(run));
+      expect(shape(boostWorkout(run, p, 1.15)), run.id).toBe(shape(run));
+    });
+  });
+});
