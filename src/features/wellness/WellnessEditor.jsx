@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import * as T from '@/lib';
 import { Icon } from '@/components/Icon.jsx';
+import { useSheetFocus } from '@/utils/useSheetFocus.js';
 const D = T.DISCIPLINES;
 
 export function WellnessEditor({ onClose, onSave }) {
   const [f, setF] = useState({ hrv: '', sleepH: '', rhr: '', tsb: '' });
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
   const num = v => (v === '' || v == null ? null : Number(v));
+  const sheetRef = useSheetFocus(onClose);
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
+      <div className="sheet" ref={sheetRef} tabIndex={-1} role="dialog" aria-modal="true"
+        aria-label="This morning's readiness" onClick={e => e.stopPropagation()}>
         <div className="grab" />
         <div className="hero"><div className="dot" style={{ background: D.run.grad }}><Icon name="heartrate" size={26} /></div>
           <div><h2>This morning's readiness</h2><div className="s">From your watch or intervals.icu</div></div></div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
+import { useSheetFocus } from '@/utils/useSheetFocus.js';
 import { DaySelector } from '@/components/DaySelector.jsx';
 
 const DEFAULT_DAYS = { 3: [1, 5, 6], 4: [0, 1, 3, 5], 5: [0, 1, 3, 5, 6], 6: [0, 1, 2, 3, 5, 6], 7: [0, 1, 2, 3, 4, 5, 6] };
@@ -19,9 +20,11 @@ export function PlanSettingsEditor({ profile, onClose, onSave }) {
   });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
   const todayISO = T.iso(new Date());
+  const sheetRef = useSheetFocus(onClose);
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
+      <div className="sheet" ref={sheetRef} tabIndex={-1} role="dialog" aria-modal="true"
+        aria-label="Edit plan" onClick={e => e.stopPropagation()}>
         <div className="grab" />
         <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 800 }}>Edit plan</h2>
         <p className="lead">Change your race or schedule and the plan rebuilds around it. Completed sessions and reschedules are kept for the days that still exist; your fitness, paces and progress carry over.</p>

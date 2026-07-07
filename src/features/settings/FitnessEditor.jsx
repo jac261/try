@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
+import { useSheetFocus } from '@/utils/useSheetFocus.js';
 
 export function FitnessEditor({ profile, onClose, onSave }) {
   const lvl0 = T.FITNESS[profile.fitness] ? profile.fitness : 'intermediate';
@@ -11,9 +12,11 @@ export function FitnessEditor({ profile, onClose, onSave }) {
     ftp: profile.ftp || '',
   });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
+  const sheetRef = useSheetFocus(onClose);
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
+      <div className="sheet" ref={sheetRef} tabIndex={-1} role="dialog" aria-modal="true"
+        aria-label="Update fitness" onClick={e => e.stopPropagation()}>
         <div className="grab" />
         <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 800 }}>Update fitness</h2>
         <p className="lead">Logged a test, race or just got fitter? Update your numbers and every <b>upcoming</b> session re-targets to the new paces. Completed sessions and reschedules stay put.</p>
