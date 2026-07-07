@@ -44,3 +44,30 @@ describe('workoutBlocks (interval profile)', () => {
     });
   });
 });
+
+describe('swim blocks (CSS-anchored)', () => {
+  it('draws CSS intervals as work/rest alternation timed from CSS pace', () => {
+    const w = custom('CSS Intervals', 40, 'swim');
+    const blocks = workoutBlocks(w);
+    const work = blocks.filter(b => b.zone === 'Z4');
+    expect(work.length).toBeGreaterThanOrEqual(6);
+    // intermediate estimated CSS is 120 s/100m → each 100 m rep ≈ 2 min
+    expect(work[0].min).toBeCloseTo(2, 1);
+    expect(blocks.some(b => b.zone === 'Z1')).toBe(true); // rests drawn
+  });
+
+  it('times continuous swimming from the pace of its zone', () => {
+    const w = custom('Endurance', 40, 'swim');
+    const blocks = workoutBlocks(w);
+    expect(blocks.length).toBeGreaterThanOrEqual(3);
+    const total = blocks.reduce((a, b) => a + b.min, 0);
+    expect(total).toBeGreaterThan(20); // a real session, not seconds
+    expect(total).toBeLessThan(60);
+  });
+
+  it('leaves the swim fitness test without a profile', () => {
+    const p2 = generatePlan(profile);
+    const test = p2.weeks.flatMap(w => w.workouts).find(x => x.test && x.discipline === 'swim');
+    if (test) expect(workoutBlocks(test)).toEqual([]);
+  });
+});

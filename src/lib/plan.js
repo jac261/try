@@ -57,6 +57,16 @@ function rep(n, on, onZone, off, offZone) {
   return blocks;
 }
 
+// Swim segments are distance-based, so profile blocks estimate their minutes
+// from the CSS-anchored paces: one steady block for continuous swimming, or
+// work/rest alternation for interval sets (rest drawn as Z1).
+function swimBlock(pc, key, zone, distM, restPer100) {
+  return [{ min: (distM / 100) * (pc.swim[key] + (restPer100 || 0)) / 60, zone: zone }];
+}
+function swimRep(pc, key, zone, n, repM, restSec) {
+  return rep(n, (repM / 100) * pc.swim[key] / 60, zone, (restSec || 0) / 60, 'Z1');
+}
+
 function buildRun(type, dur, pc, seed, phase) {
   const v = n => (seed || 0) % n;
   // Durability: intervals on tired legs at the end of the long session build
@@ -329,16 +339,16 @@ function buildSwim(type, dur, pc, seed) {
     main = reps * 100;
     segs = v(2) === 0
       ? [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2') },
-        { label: '6 × 50 m drills', detail: 'Catch-up, single-arm, scull' },
-        { label: reps + ' × 100 m steady', detail: swimDetail(pc, 'steady', 'Z3') },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), blocks: swimBlock(pc, 'easy', 'Z2', 300) },
+        { label: '6 × 50 m drills', detail: 'Catch-up, single-arm, scull', blocks: swimRep(pc, 'easy', 'Z1', 6, 50, 15) },
+        { label: reps + ' × 100 m steady', detail: swimDetail(pc, 'steady', 'Z3'), blocks: swimRep(pc, 'steady', 'Z3', reps, 100, 10) },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), blocks: swimBlock(pc, 'easy', 'Z1', 200) },
       ]
       : [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2') },
-        { label: '8 × 50 m drills', detail: 'Fist, 6-1-6, kick on side' },
-        { label: reps + ' × 100 m as 25 m drill / 75 m smooth', detail: swimDetail(pc, 'steady', 'Z3') },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), blocks: swimBlock(pc, 'easy', 'Z2', 300) },
+        { label: '8 × 50 m drills', detail: 'Fist, 6-1-6, kick on side', blocks: swimRep(pc, 'easy', 'Z1', 8, 50, 15) },
+        { label: reps + ' × 100 m as 25 m drill / 75 m smooth', detail: swimDetail(pc, 'steady', 'Z3'), blocks: swimRep(pc, 'steady', 'Z3', reps, 100, 10) },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), blocks: swimBlock(pc, 'easy', 'Z1', 200) },
       ];
   } else if (type === 'CSS Intervals') {
     title = 'CSS Intervals';
@@ -347,29 +357,29 @@ function buildSwim(type, dur, pc, seed) {
     main = variant === 1 ? twos * 200 : reps * 100;
     segs = [
       [
-        { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2') },
-        { label: reps + ' × 100 m @ CSS', detail: swimDetail(pc, 'css', 'Z4') + ' · 15 s rest' },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2'), blocks: swimBlock(pc, 'easy', 'Z2', 400) },
+        { label: reps + ' × 100 m @ CSS', detail: swimDetail(pc, 'css', 'Z4') + ' · 15 s rest', blocks: swimRep(pc, 'css', 'Z4', reps, 100, 15) },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), blocks: swimBlock(pc, 'easy', 'Z1', 200) },
       ],
       [
-        { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2') },
-        { label: twos + ' × 200 m @ CSS + 2 s/100 m', detail: swimDetail(pc, 'css', 'Z4') + ' · 20 s rest' },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2'), blocks: swimBlock(pc, 'easy', 'Z2', 400) },
+        { label: twos + ' × 200 m @ CSS + 2 s/100 m', detail: swimDetail(pc, 'css', 'Z4') + ' · 20 s rest', blocks: swimRep(pc, 'css', 'Z4', twos, 200, 20) },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), blocks: swimBlock(pc, 'easy', 'Z1', 200) },
       ],
       [
-        { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2') },
-        { label: (reps * 2) + ' × 50 m fast', detail: swimDetail(pc, 'fast', 'Z5') + ' · 20 s rest' },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2'), blocks: swimBlock(pc, 'easy', 'Z2', 400) },
+        { label: (reps * 2) + ' × 50 m fast', detail: swimDetail(pc, 'fast', 'Z5') + ' · 20 s rest', blocks: swimRep(pc, 'fast', 'Z5', reps * 2, 50, 20) },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), blocks: swimBlock(pc, 'easy', 'Z1', 200) },
       ],
     ][variant];
   } else if (type === 'Open Water') {
     title = 'Open Water Swim';
     main = reps * 100;
     segs = [
-      { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2') },
-      { label: '4 × 200 m @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes' },
+      { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), blocks: swimBlock(pc, 'easy', 'Z2', 300) },
+      { label: '4 × 200 m @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes', blocks: swimRep(pc, 'css', 'Z4', 4, 200, 30) },
       { label: 'Open-water skills', detail: 'Deep-water start, drafting, buoy turns — practise swimming straight' },
-      { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+      { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), blocks: swimBlock(pc, 'easy', 'Z1', 200) },
     ];
   } else { // Endurance / Race Pace
     title = type === 'Race Pace' ? 'Race-Pace Swim' : 'Endurance Swim';
@@ -377,14 +387,14 @@ function buildSwim(type, dur, pc, seed) {
     const third = Math.max(1, Math.round(reps / 3)) * 100;
     segs = type === 'Endurance' && v(2) === 1
       ? [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2') },
-        { label: '3 × ' + third + ' m steady · 30 s rest', detail: swimDetail(pc, 'steady', 'Z2') },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), blocks: swimBlock(pc, 'easy', 'Z2', 300) },
+        { label: '3 × ' + third + ' m steady · 30 s rest', detail: swimDetail(pc, 'steady', 'Z2'), blocks: swimRep(pc, 'steady', 'Z2', 3, third, 30) },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), blocks: swimBlock(pc, 'easy', 'Z1', 200) },
       ]
       : [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2') },
-        { label: (reps * 100) + ' m continuous', detail: swimDetail(pc, type === 'Race Pace' ? 'css' : 'steady', type === 'Race Pace' ? 'Z4' : 'Z2') },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), blocks: swimBlock(pc, 'easy', 'Z2', 300) },
+        { label: (reps * 100) + ' m continuous', detail: swimDetail(pc, type === 'Race Pace' ? 'css' : 'steady', type === 'Race Pace' ? 'Z4' : 'Z2'), blocks: swimBlock(pc, type === 'Race Pace' ? 'css' : 'steady', type === 'Race Pace' ? 'Z4' : 'Z2', reps * 100) },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), blocks: swimBlock(pc, 'easy', 'Z1', 200) },
       ];
     if (type === 'Endurance' && v(2) === 1) main = third * 3;
   }
