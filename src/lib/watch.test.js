@@ -19,7 +19,7 @@ describe('buildWatchEvents (workouts-to-watch)', () => {
   it('maps upcoming sessions to calendar events inside the window', () => {
     const { oldest, newest, events } = buildWatchEvents({ plan, moves: {}, todayISO: TODAY });
     expect(oldest).toBe(TODAY);
-    expect(newest).toBe('2026-08-05'); // 28 days inclusive of today
+    expect(newest).toBe('2026-07-15'); // a rolling week inclusive of today
     expect(events.map(e => [e.ref, e.date, e.type])).toEqual([
       ['0-0', '2026-07-09', 'Run'],
       ['0-1', '2026-07-10', 'Ride'],

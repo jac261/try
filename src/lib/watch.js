@@ -12,9 +12,10 @@ import { effDate } from './schedule.js';
 // discipline → intervals.icu sport type; bricks ride as their bike leg.
 export const WATCH_TYPES = { run: 'Run', bike: 'Ride', swim: 'Swim', strength: 'WeightTraining', brick: 'Ride' };
 
-// Two training blocks ahead is plenty for a wrist calendar and stays well
-// inside the backend's 60-day / 100-event caps.
-export const WATCH_WINDOW_DAYS = 28;
+// A rolling week is all the wrist needs: the next few sessions, always
+// including tomorrow. Anything longer just churns events the engine may
+// reshape anyway before they arrive.
+export const WATCH_WINDOW_DAYS = 7;
 
 const line = s => '• ' + [s.label, s.min ? s.min + 'm' : null, s.detail].filter(Boolean).join(' · ');
 
