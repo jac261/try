@@ -9,11 +9,16 @@ import { daysBetween } from './date.js';
 
 export const EFTP_RULES = { minDriftPct: 0.03, freshDays: 10 };
 
+// intervals.icu keeps a rolling FTP per SPORT: runs carry a running-power
+// estimate (e.g. 359 W against a 222 W bike FTP), so only ride activities may
+// feed the bike watcher.
+const RIDE_TYPES = new Set(['Ride', 'VirtualRide', 'MountainBikeRide', 'GravelRide', 'TrackRide', 'Cyclocross']);
+
 export function eftpProposal({ activities, plan, todayISO }) {
   const ftp = plan && plan.profile && plan.profile.ftp;
   if (!ftp || !activities || !activities.length) return null;
   const latest = activities
-    .filter(a => a.eftp && a.date && daysBetween(a.date, todayISO) <= EFTP_RULES.freshDays)
+    .filter(a => a.eftp && a.date && RIDE_TYPES.has(a.type) && daysBetween(a.date, todayISO) <= EFTP_RULES.freshDays)
     .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
   if (!latest) return null;
   const eftp = Math.round(latest.eftp);

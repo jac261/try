@@ -3,7 +3,7 @@ import { eftpProposal, EFTP_RULES } from './eftp.js';
 
 const TODAY = '2026-07-07';
 const plan = { profile: { ftp: 250 } };
-const act = (date, eftp) => ({ id: 'a' + date, date, type: 'Ride', eftp });
+const act = (date, eftp, type = 'Ride') => ({ id: 'a' + date, date, type, eftp });
 
 describe('eftpProposal (eFTP watcher)', () => {
   it('proposes a retarget when the estimate has moved up', () => {
@@ -28,6 +28,13 @@ describe('eftpProposal (eFTP watcher)', () => {
     const p = eftpProposal({ activities: [act('2026-07-01', 300), act('2026-07-06', 262)], plan, todayISO: TODAY });
     expect(p.eftp).toBe(262); // newest wins
     expect(eftpProposal({ activities: [act('2026-06-20', 300)], plan, todayISO: TODAY })).toBe(null); // > freshDays old
+  });
+
+  it('ignores non-ride estimates: running power FTP must never reach the bike watcher', () => {
+    // the real bug: a run's rolling estimate (359 W running power) vs a 222 W bike FTP
+    expect(eftpProposal({ activities: [act('2026-07-06', 359, 'Run')], plan: { profile: { ftp: 222 } }, todayISO: TODAY })).toBe(null);
+    const p = eftpProposal({ activities: [act('2026-07-06', 359, 'Run'), act('2026-07-04', 214, 'VirtualRide')], plan: { profile: { ftp: 222 } }, todayISO: TODAY });
+    expect(p.eftp).toBe(214); // the ride's estimate, not the newer run's
   });
 
   it('is quiet without a plan FTP, activities, or estimates', () => {
