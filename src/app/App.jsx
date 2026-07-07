@@ -22,7 +22,9 @@ import { ProgressView } from '@/features/progress/ProgressView.jsx';
 import { WurmReveal } from '@/features/easter-egg/WurmReveal.jsx';
 
 export function App({ storage, getToken, user }) {
-  const [plan, setPlan] = useState(() => storage.load('plan', null));
+  // upgradePlanSegments backfills profile data (zones/blocks) into plans
+  // cached before the workout-profile release; a no-op on current plans.
+  const [plan, setPlan] = useState(() => T.upgradePlanSegments(storage.load('plan', null)));
   const [log, setLog] = useState(() => storage.load('log', {}));
   const [moves, setMoves] = useState(() => storage.load('moves', {}));
   const sync = useMemo(() => makeSync(getToken), [getToken]);
@@ -86,7 +88,7 @@ export function App({ storage, getToken, user }) {
         // fall through to onboarding.
         if (plan) sync.savePlan(plan).then(map => { if (map) setRefToId(map); }); else setPlan(null);
       } else if (result) {
-        setPlan(result.plan); setLog(result.log); setMoves(result.moves); setRefToId(result.refToId || {});
+        setPlan(T.upgradePlanSegments(result.plan)); setLog(result.log); setMoves(result.moves); setRefToId(result.refToId || {});
         // Adjustments sync only once the backend supports them; an empty result
         // means "unknown", so the local overlay is kept rather than wiped.
         if (result.adjust && Object.keys(result.adjust).length) setAdjust(result.adjust);

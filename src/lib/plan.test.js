@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout } from './plan.js';
+import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout, upgradePlanSegments } from './plan.js';
 import { iso, addDays } from './date.js';
 
 const profile = (raceDate, startDate) => ({
@@ -238,5 +238,41 @@ describe('custom workouts (user-added sessions)', () => {
   it('strength fixes its own duration', () => {
     const { workout } = addCustomWorkout(p, { discipline: 'strength', type: 'Strength', durationMin: 90, dateISO: someDate });
     expect(workout.durationMin).toBeLessThan(90);
+  });
+});
+
+describe('upgradePlanSegments (schema migration for cached plans)', () => {
+  const p = generatePlan(profile('2026-09-23', '2026-07-01'));
+  // simulate cached plans from two past eras: post-variant/pre-profile keeps
+  // its seed and just lacks zone/blocks; pre-variant lacks the seed too.
+  const strip = (pl, dropSeed) => ({ ...pl, weeks: pl.weeks.map(w => ({ ...w, workouts: w.workouts.map(x => ({
+    ...x, seed: dropSeed ? undefined : x.seed,
+    segments: x.segments.map(({ zone, blocks, ...rest }) => rest),
+  })) })) });
+
+  it('restores profile data without changing any session shape (seeded plans)', () => {
+    const old = strip(p, false);
+    const up = upgradePlanSegments(old);
+    const shape = pl => pl.weeks.flatMap(w => w.workouts).map(x => x.id + '|' + x.title + '|' + x.durationMin + '|' + x.segments.map(s => s.label).join(';')).join('~');
+    expect(shape(up)).toBe(shape(old)); // identical labels and durations
+    const runs = up.weeks.flatMap(w => w.workouts).filter(x => x.discipline === 'run' && !x.race && !x.test && x.durationMin);
+    expect(runs.length).toBeGreaterThan(0);
+    runs.forEach(x => expect(x.segments.some(s => s.zone || s.blocks), x.id).toBe(true));
+  });
+
+  it('pins pre-variant plans (no seed) to the canonical format their sessions had', () => {
+    const up = upgradePlanSegments(strip(p, true));
+    const thresholds = up.weeks.flatMap(w => w.workouts).filter(x => x.type === 'Threshold' && x.discipline === 'run' && !x.test);
+    thresholds.forEach(x => expect(x.segments[1].label, x.id).toContain('9 min threshold')); // v0, never the week's rotation
+  });
+
+  it('leaves race day, tests and current plans alone', () => {
+    const old = strip(p, false);
+    const up = upgradePlanSegments(old);
+    const pick = (pl, f) => pl.weeks.flatMap(w => w.workouts).find(f);
+    expect(pick(up, x => x.race)).toBe(pick(old, x => x.race));
+    expect(pick(up, x => x.test)).toBe(pick(old, x => x.test));
+    expect(upgradePlanSegments(p)).toBe(p); // already current → same reference
+    expect(upgradePlanSegments(null)).toBe(null);
   });
 });

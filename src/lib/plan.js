@@ -637,6 +637,29 @@ export const removeCustomWorkout = function (plan, id) {
   return Object.assign({}, plan, { weeks: weeks });
 };
 
+// Bring a cached plan up to the current library schema: segments gained
+// zone/blocks data (workout profiles) after older plans were generated.
+// Pre-variant plans were built entirely from the canonical templates, so the
+// rebuild pins seed 0 unless the workout recorded one — the same shape comes
+// back, now carrying the profile data. Race days, tests and anything already
+// current are left alone; the whole pass is a no-op on an up-to-date plan.
+export const upgradePlanSegments = function (plan) {
+  if (!plan || !plan.weeks || !plan.paces) return plan;
+  let changed = false;
+  const weeks = plan.weeks.map(week => {
+    const workouts = week.workouts.map(w => {
+      if (w.race || w.test || w.discipline === 'rest' || !w.durationMin) return w;
+      if ((w.segments || []).some(s => s.zone || s.blocks)) return w; // already current
+      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0);
+      if (!(built.segments || []).some(s => s.zone || s.blocks)) return w; // swims/strength stay as they are
+      changed = true;
+      return Object.assign({}, w, { segments: built.segments });
+    });
+    return Object.assign({}, week, { workouts: workouts });
+  });
+  return changed ? Object.assign({}, plan, { weeks: weeks }) : plan;
+};
+
 /* ---- phase plan across the whole block ---- */
 function computePhases(totalWeeks, taperWeeks) {
   const taper = Math.min(taperWeeks, Math.max(1, totalWeeks - 3));
