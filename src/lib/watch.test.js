@@ -89,10 +89,22 @@ describe('watchSteps (structured DSL, v2)', () => {
     expect(watchSteps(w).dsl).toContain('- 30s Z5 Pace');
   });
 
-  it('declines swims, bricks, strength and pre-profile builds', () => {
-    expect(watchSteps(custom('CSS Intervals', 40, 'swim'))).toBe(null);
+  it('declines bricks, strength and pre-profile builds', () => {
     expect(watchSteps({ discipline: 'brick', segments: [{ label: 'Bike', min: 40, zone: 'Z2' }] })).toBe(null);
     expect(watchSteps({ discipline: 'run', segments: [{ label: 'Relaxed', min: 40 }] })).toBe(null); // no zone
+    expect(watchSteps({ discipline: 'swim', segments: [{ label: 'Main', blocks: [{ min: 2, zone: 'Z4' }] }] })).toBe(null); // blocks but no prescription (pre-v3 build)
+  });
+
+  it('swims prescribe distance steps at % of CSS with rest steps (v3)', () => {
+    const { dsl, seconds } = watchSteps(custom('CSS Intervals', 40, 'swim'));
+    expect(seconds).toBe(null); // duration is the athlete's threshold's business
+    expect(dsl).toContain('Warmup\n- 0.4km 91% Pace');   // easy = CSS+12 at estimated CSS 120 → 91% of CSS speed
+    expect(dsl).toContain('x\n- 0.1km 100% Pace\n- 15s rest');
+    expect(dsl).toContain('Cooldown\n- 0.2km 91% Pace');
+  });
+
+  it('open water keeps its skills segment and falls back to descriptive', () => {
+    expect(watchSteps(custom('Open Water', 40, 'swim'))).toBe(null);
   });
 });
 
@@ -110,12 +122,15 @@ describe('buildWatchEvents v2 integration', () => {
     expect(ev.movingTimeSec).toBe((15 + 36 + 10) * 60); // step total, not durationMin
   });
 
-  it('swims keep the descriptive bullet form and the nominal duration', () => {
-    const { workout, plan: np } = addCustomWorkout(p, { discipline: 'swim', type: 'CSS Intervals', durationMin: 40, dateISO: p.weeks[0].start });
-    const { events } = buildWatchEvents({ plan: np, moves: {}, todayISO: p.weeks[0].start });
-    const ev = events.find(e => e.ref === workout.id);
-    expect(ev.description).toContain('•');
-    expect(ev.description).not.toMatch(/^- /m);
-    expect(ev.movingTimeSec).toBe(40 * 60);
+  it('structured swims assert no moving time; open water keeps bullets and its duration', () => {
+    const css = addCustomWorkout(p, { discipline: 'swim', type: 'CSS Intervals', durationMin: 40, dateISO: p.weeks[0].start });
+    const ow = addCustomWorkout(css.plan, { discipline: 'swim', type: 'Open Water', durationMin: 40, dateISO: p.weeks[0].start });
+    const { events } = buildWatchEvents({ plan: ow.plan, moves: {}, todayISO: p.weeks[0].start });
+    const cssEv = events.find(e => e.ref === css.workout.id);
+    expect(cssEv.description).toContain('% Pace');
+    expect(cssEv.movingTimeSec).toBe(null);
+    const owEv = events.find(e => e.ref === ow.workout.id);
+    expect(owEv.description).toContain('•');
+    expect(owEv.movingTimeSec).toBe(40 * 60);
   });
 });

@@ -11,14 +11,16 @@
    header lines set the Garmin step types, and run/swim zones need the
    ` Pace` suffix or intervals defaults them to POWER zones. Absolute paces
    (`4:35/km`) do not parse, so targets are zone-based — which the workout
-   blocks already carry. `m` means MINUTES in the DSL (swim distances would
-   need `0.4km`), so swims and bricks stay descriptive (`•` bullets, which the
-   parser ignores) until a distance-step probe lands.
+   blocks already carry. `m` means MINUTES in the DSL, so swim distances are
+   written `0.4km` (v3: swims prescribe distance steps at % of CSS with `Ns
+   rest` steps, all probed live). Bricks stay descriptive (`•` bullets, which
+   the parser ignores): two sports cannot share one structured event.
 
    intervals.icu recomputes an event's duration from parsed steps, and the
    backend reconciler treats a moving-time mismatch as drift (delete +
-   recreate). Structured events therefore report the STEP TOTAL as their
-   moving time, not the nominal session duration. */
+   recreate). Time-stepped events therefore report the STEP TOTAL as their
+   moving time; distance-stepped swims assert none at all (the athlete's
+   intervals threshold pace decides it server-side). */
 import { iso, addDays } from './date.js';
 import { effDate } from './schedule.js';
 
@@ -71,6 +73,7 @@ function uniformReps(blocks) {
 // Returns { dsl, seconds } (seconds = step total, see header comment), or
 // null → caller falls back to the descriptive form.
 export function watchSteps(w) {
+  if (w.discipline === 'swim') return swimWatchSteps(w);
   if (w.discipline !== 'run' && w.discipline !== 'bike') return null;
   const segs = w.segments || [];
   if (!segs.length || !segs.every(s => (s.blocks && s.blocks.length) || (s.min && s.zone))) return null;
@@ -89,6 +92,31 @@ export function watchSteps(w) {
     else sections.push((header ? header + '\n' : '') + blocks.map(tok).join('\n'));
   });
   return { dsl: sections.join('\n\n'), seconds };
+}
+
+// Swims prescribe DISTANCE steps (`- 0.1km 100% Pace`, probed live): metres
+// and % of CSS speed come from the structural prescription each swim segment
+// carries since the v3 builders. Rests are untargeted `Ns rest` steps inside
+// the repeat. seconds is null: intervals.icu computes a distance step's
+// duration from the ATHLETE'S threshold pace, which the client cannot
+// predict, so no duration is asserted (the backend skips the moving-time
+// drift check when it is absent). Open-water sessions keep a skills segment
+// with no prescription and fall back to the descriptive form.
+function swimWatchSteps(w) {
+  const segs = w.segments || [];
+  if (!segs.length || !segs.every(s => s.swim)) return null;
+  const km = m => m / 1000 + 'km';
+  const sections = segs.map((s, i) => {
+    const sw = s.swim;
+    const label = (s.label || '').toLowerCase();
+    const header = i === 0 && label.includes('warm') ? 'Warmup'
+      : i === segs.length - 1 && label.includes('cool') ? 'Cooldown'
+        : null;
+    const step = '- ' + km(sw.repM || sw.distM) + ' ' + sw.pct + '% Pace';
+    if (sw.n) return sw.n + 'x\n' + step + (sw.restSec ? '\n- ' + sw.restSec + 's rest' : '');
+    return (header ? header + '\n' : '') + step;
+  });
+  return { dsl: sections.join('\n\n'), seconds: null };
 }
 
 // The desired calendar for [todayISO .. todayISO+days): one event per upcoming
