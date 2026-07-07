@@ -12,3 +12,4 @@ export * from './wellness.js';
 export * from './adapt.js';
 export * from './autolog.js';
 export * from './watch.js';
+export * from './profile.js';

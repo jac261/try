@@ -2,6 +2,7 @@ import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { weekRange } from '@/lib/schedule.js';
 import { Icon } from '@/components/Icon.jsx';
+import { WorkoutProfile } from '@/components/WorkoutProfile.jsx';
 
 const D = T.DISCIPLINES;
 
@@ -47,6 +48,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         </div>}
         {why && <div className="why" style={{ borderColor: disc.color }}><span className="why-label">Why this session</span>{why}</div>}
         <div className="section-title" style={{ margin: '8px 0 2px' }}>{w.race ? 'Race plan' : 'Workout'}</div>
+        <WorkoutProfile w={w} />
         {w.segments.map((s, i) => (
           <div className="seg" key={i}>
             <div className="bar" style={{ background: disc.color }} />

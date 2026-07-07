@@ -46,6 +46,17 @@ function bikeDetail(pc, lo, hi, zone) {
    Recovery weeks pin variant 0 (the gentlest, canonical shape). No
    randomness anywhere — the same profile always generates the same plan. */
 
+// Expand an interval pattern into drawable blocks for the workout profile:
+// n × (on minutes at onZone / off minutes at offZone), recoveries included.
+function rep(n, on, onZone, off, offZone) {
+  const blocks = [];
+  for (let i = 0; i < n; i++) {
+    blocks.push({ min: on, zone: onZone });
+    if (off) blocks.push({ min: off, zone: offZone });
+  }
+  return blocks;
+}
+
 function buildRun(type, dur, pc, seed, phase) {
   const v = n => (seed || 0) % n;
   // Durability: intervals on tired legs at the end of the long session build
@@ -55,29 +66,29 @@ function buildRun(type, dur, pc, seed, phase) {
   if (type === 'Long') {
     title = 'Long Run';
     segs = [
-      [{ label: 'Steady aerobic', min: dur, detail: runDetail(pc, 'long', 'Z2') }],
+      [{ label: 'Steady aerobic', min: dur, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' }],
       [
-        { label: 'Steady aerobic', min: dur - 15, detail: runDetail(pc, 'long', 'Z2') },
-        { label: 'Fast finish', min: 15, detail: runDetail(pc, 'tempo', 'Z3') },
+        { label: 'Steady aerobic', min: dur - 15, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+        { label: 'Fast finish', min: 15, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
       ],
       [
-        { label: 'Steady aerobic', min: dur - 25, detail: runDetail(pc, 'long', 'Z2') },
-        { label: '4 × (3 min threshold / 2 min easy) — on tired legs', min: 20, detail: runDetail(pc, 'threshold', 'Z4') },
-        { label: 'Ease home', min: 5, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Steady aerobic', min: dur - 25, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+        { label: '4 × (3 min threshold / 2 min easy) — on tired legs', min: 20, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(4, 3, 'Z4', 2, 'Z2') },
+        { label: 'Ease home', min: 5, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ][v(durability ? 3 : 2)];
   } else if (type === 'Easy') {
     title = 'Easy Run';
     const half = Math.round(dur / 2);
     segs = [
-      [{ label: 'Relaxed', min: dur, detail: runDetail(pc, 'easy', 'Z2') }],
+      [{ label: 'Relaxed', min: dur, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' }],
       [
-        { label: 'Relaxed', min: dur - 8, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: '6 × 20 s strides · walk back', min: 8, detail: 'Fast but relaxed · form over force' },
+        { label: 'Relaxed', min: dur - 8, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: '6 × 20 s strides · walk back', min: 8, detail: 'Fast but relaxed · form over force', blocks: rep(6, 0.35, 'Z5', 1, 'Z1') },
       ],
       [
-        { label: 'First half · very relaxed', min: half, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: 'Second half · steady', min: dur - half, detail: runDetail(pc, 'long', 'Z2') },
+        { label: 'First half · very relaxed', min: half, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Second half · steady', min: dur - half, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
       ],
     ][v(3)];
   } else if (type === 'Tempo') {
@@ -87,19 +98,19 @@ function buildRun(type, dur, pc, seed, phase) {
     const third = Math.round(dur / 3);
     segs = [
       [
-        { label: 'Warm-up', min: 12, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: 'Tempo block', min: main, detail: runDetail(pc, 'tempo', 'Z3') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 12, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Tempo block', min: main, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
+        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 12, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: '2 × (' + half + ' min tempo / 4 min float)', min: main, detail: runDetail(pc, 'tempo', 'Z3') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 12, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: '2 × (' + half + ' min tempo / 4 min float)', min: main, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3', blocks: rep(2, half, 'Z3', 4, 'Z2') },
+        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Settle in · relaxed', min: third, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: 'Steady', min: third, detail: runDetail(pc, 'long', 'Z2') },
-        { label: 'Wind it up · tempo', min: dur - 2 * third, detail: runDetail(pc, 'tempo', 'Z3') },
+        { label: 'Settle in · relaxed', min: third, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Steady', min: third, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+        { label: 'Wind it up · tempo', min: dur - 2 * third, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
       ],
     ][v(3)];
   } else if (type === 'VO2 Intervals') {
@@ -107,41 +118,47 @@ function buildRun(type, dur, pc, seed, phase) {
     const reps = clamp(Math.round((dur - 25) / 5), 4, 8);
     const sets = clamp(Math.round((dur - 25) / 12), 2, 3);
     const hills = clamp(Math.round((dur - 25) / 4), 5, 10);
+    const thirties = Array.from({ length: sets }).flatMap((x, i) =>
+      rep(10, 0.5, 'Z5', 0.5, 'Z1').concat(i < sets - 1 ? [{ min: 3, zone: 'Z1' }] : []));
     segs = [
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: reps + ' × (3 min hard / 2 min easy)', min: reps * 5, detail: runDetail(pc, 'interval', 'Z5') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: reps + ' × (3 min hard / 2 min easy)', min: reps * 5, detail: runDetail(pc, 'interval', 'Z5'), zone: 'Z5', blocks: rep(reps, 3, 'Z5', 2, 'Z1') },
+        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: sets + ' × 10 × (30 s hard / 30 s easy) · 3 min between sets', min: sets * 12, detail: runDetail(pc, 'interval', 'Z5') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: sets + ' × 10 × (30 s hard / 30 s easy) · 3 min between sets', min: sets * 12, detail: runDetail(pc, 'interval', 'Z5'), zone: 'Z5', blocks: thirties },
+        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: hills + ' × 75 s uphill hard · jog down', min: hills * 4, detail: runDetail(pc, 'interval', 'Z5') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: hills + ' × 75 s uphill hard · jog down', min: hills * 4, detail: runDetail(pc, 'interval', 'Z5'), zone: 'Z5', blocks: rep(hills, 1.25, 'Z5', 2.75, 'Z1') },
+        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
   } else if (type === 'Fartlek') {
     title = 'Fartlek Run';
     const surges = clamp(Math.round((dur - 18) / 3), 6, 12);
+    // Pick the tallest pyramid that fits the session (work + equal-jog = 2 × sum).
+    const steps = dur - 18 >= 32 ? [1, 2, 3, 4, 3, 2, 1] : dur - 18 >= 24 ? [1, 2, 3, 3, 2, 1] : [1, 2, 3, 2, 1];
+    const pyramidMin = 2 * steps.reduce((a, b) => a + b, 0);
+    const pyramid = steps.flatMap(m => [{ min: m, zone: 'Z3' }, { min: m, zone: 'Z2' }]);
     segs = [
       [
-        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: surges + ' × (1 min brisk / 2 min easy)', min: surges * 3, detail: runDetail(pc, 'tempo', 'Z3') },
-        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: surges + ' × (1 min brisk / 2 min easy)', min: surges * 3, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3', blocks: rep(surges, 1, 'Z3', 2, 'Z2') },
+        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: 'Pyramid: 1-2-3-4-3-2-1 min brisk / equal easy jog', min: dur - 18, detail: runDetail(pc, 'tempo', 'Z3') },
-        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Pyramid: ' + steps.join('-') + ' min brisk / equal easy jog', min: pyramidMin, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3', blocks: pyramid },
+        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: 'Surges by feel · 8–12 × 30–60 s quick on rolling terrain', min: dur - 18, detail: runDetail(pc, 'tempo', 'Z3') },
-        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Surges by feel · 8–12 × 30–60 s quick on rolling terrain', min: dur - 18, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
+        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
   } else { // Threshold
@@ -151,19 +168,19 @@ function buildRun(type, dur, pc, seed, phase) {
     const blocks = clamp(Math.round((dur - 25) / 16), 2, 3);
     segs = [
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: reps + ' × (9 min threshold / 3 min easy)', min: reps * 12, detail: runDetail(pc, 'threshold', 'Z4') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: reps + ' × (9 min threshold / 3 min easy)', min: reps * 12, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(reps, 9, 'Z4', 3, 'Z2') },
+        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: cruise + ' × (5 min threshold / 2 min easy)', min: cruise * 7, detail: runDetail(pc, 'threshold', 'Z4') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: cruise + ' × (5 min threshold / 2 min easy)', min: cruise * 7, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(cruise, 5, 'Z4', 2, 'Z2') },
+        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2') },
-        { label: blocks + ' × (12 min cruise / 4 min easy)', min: blocks * 16, detail: runDetail(pc, 'threshold', 'Z4') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: blocks + ' × (12 min cruise / 4 min easy)', min: blocks * 16, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(blocks, 12, 'Z4', 4, 'Z2') },
+        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
   }
@@ -180,30 +197,30 @@ function buildBike(type, dur, pc, seed, phase) {
     title = 'Long Ride';
     segs = [
       [
-        { label: 'Endurance', min: dur - 20, detail: bikeDetail(pc, 0.6, 0.75, 'Z2') },
-        { label: '2 × 6 min tempo surges', min: 20, detail: bikeDetail(pc, 0.83, 0.9, 'Z3') },
+        { label: 'Endurance', min: dur - 20, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+        { label: '2 × 6 min tempo surges', min: 20, detail: bikeDetail(pc, 0.83, 0.9, 'Z3'), zone: 'Z3', blocks: rep(2, 6, 'Z3', 4, 'Z2') },
       ],
       [
-        { label: 'Endurance', min: dur - 25, detail: bikeDetail(pc, 0.6, 0.75, 'Z2') },
-        { label: '2 × 10 min sweet spot / 5 min easy', min: 25, detail: bikeDetail(pc, 0.84, 0.9, 'Z3') },
+        { label: 'Endurance', min: dur - 25, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+        { label: '2 × 10 min sweet spot / 5 min easy', min: 25, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3', blocks: rep(2, 10, 'Z3', 2.5, 'Z1') },
       ],
       [
-        { label: 'Endurance', min: dur - 32, detail: bikeDetail(pc, 0.6, 0.75, 'Z2') },
-        { label: '3 × (5 min at threshold / 3 min easy) — on tired legs', min: 24, detail: bikeDetail(pc, 0.95, 1.05, 'Z4') },
-        { label: 'Ease home', min: 8, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Endurance', min: dur - 32, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+        { label: '3 × (5 min at threshold / 3 min easy) — on tired legs', min: 24, detail: bikeDetail(pc, 0.95, 1.05, 'Z4'), zone: 'Z4', blocks: rep(3, 5, 'Z4', 3, 'Z1') },
+        { label: 'Ease home', min: 8, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
     ][v(durability ? 3 : 2)];
   } else if (type === 'Endurance') {
     title = 'Endurance Ride';
     segs = [
-      [{ label: 'Steady', min: dur, detail: bikeDetail(pc, 0.6, 0.75, 'Z2') }],
+      [{ label: 'Steady', min: dur, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' }],
       [
-        { label: 'Steady', min: dur - 18, detail: bikeDetail(pc, 0.6, 0.75, 'Z2') },
-        { label: '3 × 6 min high cadence (95–105 rpm)', min: 18, detail: bikeDetail(pc, 0.6, 0.75, 'Z2') },
+        { label: 'Steady', min: dur - 18, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+        { label: '3 × 6 min high cadence (95–105 rpm)', min: 18, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
       ],
       [
-        { label: 'Steady', min: dur - 24, detail: bikeDetail(pc, 0.6, 0.75, 'Z2') },
-        { label: '3 × 8 min low cadence (60–65 rpm), seated', min: 24, detail: bikeDetail(pc, 0.72, 0.8, 'Z3') },
+        { label: 'Steady', min: dur - 24, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+        { label: '3 × 8 min low cadence (60–65 rpm), seated', min: 24, detail: bikeDetail(pc, 0.72, 0.8, 'Z3'), zone: 'Z3' },
       ],
     ][v(3)];
   } else if (type === 'Sweet Spot') {
@@ -213,19 +230,19 @@ function buildBike(type, dur, pc, seed, phase) {
     const block = clamp(dur - 25, 20, 40);
     segs = [
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: reps + ' × (12 min / 5 min easy)', min: reps * 17, detail: bikeDetail(pc, 0.84, 0.9, 'Z3') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: reps + ' × (12 min / 5 min easy)', min: reps * 17, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3', blocks: rep(reps, 12, 'Z3', 5, 'Z1') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: nines + ' × (9 min / 3 min easy)', min: nines * 12, detail: bikeDetail(pc, 0.84, 0.9, 'Z3') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: nines + ' × (9 min / 3 min easy)', min: nines * 12, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3', blocks: rep(nines, 9, 'Z3', 3, 'Z1') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: block + ' min continuous sweet spot', min: block, detail: bikeDetail(pc, 0.84, 0.9, 'Z3') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: block + ' min continuous sweet spot', min: block, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3' },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
   } else if (type === 'Tempo') {
@@ -235,19 +252,19 @@ function buildBike(type, dur, pc, seed, phase) {
     const eights = clamp(Math.round((dur - 25) / 11), 2, 4);
     segs = [
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: blocks + ' × (12 min tempo / 4 min easy)', min: blocks * 16, detail: bikeDetail(pc, 0.76, 0.85, 'Z3') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: blocks + ' × (12 min tempo / 4 min easy)', min: blocks * 16, detail: bikeDetail(pc, 0.76, 0.85, 'Z3'), zone: 'Z3', blocks: rep(blocks, 12, 'Z3', 4, 'Z1') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: cont + ' min steady tempo', min: cont, detail: bikeDetail(pc, 0.76, 0.85, 'Z3') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: cont + ' min steady tempo', min: cont, detail: bikeDetail(pc, 0.76, 0.85, 'Z3'), zone: 'Z3' },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: eights + ' × (8 min tempo / 3 min easy)', min: eights * 11, detail: bikeDetail(pc, 0.76, 0.85, 'Z3') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: eights + ' × (8 min tempo / 3 min easy)', min: eights * 11, detail: bikeDetail(pc, 0.76, 0.85, 'Z3'), zone: 'Z3', blocks: rep(eights, 8, 'Z3', 3, 'Z1') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
   } else if (type === 'VO2 Intervals') {
@@ -255,21 +272,23 @@ function buildBike(type, dur, pc, seed, phase) {
     const reps = clamp(Math.round((dur - 25) / 6), 3, 6);
     const sets = clamp(Math.round((dur - 25) / 14), 2, 3);
     const fours = clamp(Math.round((dur - 25) / 8), 3, 5);
+    const thirties = Array.from({ length: sets }).flatMap((x, i) =>
+      rep(12, 0.5, 'Z5', 0.5, 'Z1').concat(i < sets - 1 ? [{ min: 2, zone: 'Z1' }] : []));
     segs = [
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: reps + ' × (3 min hard / 3 min easy)', min: reps * 6, detail: bikeDetail(pc, 1.06, 1.2, 'Z5') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: reps + ' × (3 min hard / 3 min easy)', min: reps * 6, detail: bikeDetail(pc, 1.06, 1.2, 'Z5'), zone: 'Z5', blocks: rep(reps, 3, 'Z5', 3, 'Z1') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: sets + ' × 12 × (30 s hard / 30 s easy) · 4 min between sets', min: sets * 14, detail: bikeDetail(pc, 1.06, 1.2, 'Z5') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: sets + ' × 12 × (30 s hard / 30 s easy) · 4 min between sets', min: sets * 14, detail: bikeDetail(pc, 1.06, 1.2, 'Z5'), zone: 'Z5', blocks: thirties },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: fours + ' × (4 min hard / 4 min easy)', min: fours * 8, detail: bikeDetail(pc, 1.06, 1.15, 'Z5') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: fours + ' × (4 min hard / 4 min easy)', min: fours * 8, detail: bikeDetail(pc, 1.06, 1.15, 'Z5'), zone: 'Z5', blocks: rep(fours, 4, 'Z5', 4, 'Z1') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
   } else { // Threshold
@@ -277,21 +296,23 @@ function buildBike(type, dur, pc, seed, phase) {
     const reps = clamp(Math.round((dur - 25) / 12), 3, 5);
     const overs = clamp(Math.round((dur - 25) / 12), 2, 4);
     const shorts = clamp(Math.round((dur - 25) / 8), 3, 6);
+    const ou = Array.from({ length: overs }).flatMap(() =>
+      [{ min: 2, zone: 'Z3' }, { min: 1, zone: 'Z5' }, { min: 2, zone: 'Z3' }, { min: 1, zone: 'Z5' }, { min: 2, zone: 'Z3' }, { min: 1, zone: 'Z5' }, { min: 3, zone: 'Z1' }]);
     segs = [
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: reps + ' × (8 min / 4 min easy)', min: reps * 12, detail: bikeDetail(pc, 0.95, 1.05, 'Z4') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: reps + ' × (8 min / 4 min easy)', min: reps * 12, detail: bikeDetail(pc, 0.95, 1.05, 'Z4'), zone: 'Z4', blocks: rep(reps, 8, 'Z4', 4, 'Z1') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: overs + ' × (9 min over-unders: 2 min low / 1 min high / 3 min easy)', min: overs * 12, detail: bikeDetail(pc, 0.92, 1.06, 'Z4') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: overs + ' × (9 min over-unders: 2 min low / 1 min high / 3 min easy)', min: overs * 12, detail: bikeDetail(pc, 0.92, 1.06, 'Z4'), zone: 'Z4', blocks: ou },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
-        { label: shorts + ' × (5 min / 3 min easy)', min: shorts * 8, detail: bikeDetail(pc, 0.98, 1.08, 'Z4') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+        { label: shorts + ' × (5 min / 3 min easy)', min: shorts * 8, detail: bikeDetail(pc, 0.98, 1.08, 'Z4'), zone: 'Z4', blocks: rep(shorts, 5, 'Z4', 3, 'Z1') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
   }
@@ -382,29 +403,29 @@ function buildBrick(dur, pc, phase, seed) {
     // race-sim: effort blocks on the bike, then hold form off it
     segs = [
       { label: base ? 'Bike — steady with 2 × 8 min upper Z2' : 'Bike — steady with 3 × 8 min at race effort', min: bikeMin,
-        detail: bikeDetail(pc, base ? 0.65 : 0.78, base ? 0.75 : 0.9, base ? 'Z2' : 'Z3') },
+        detail: bikeDetail(pc, base ? 0.65 : 0.78, base ? 0.75 : 0.9, base ? 'Z2' : 'Z3'), zone: base ? 'Z2' : 'Z3' },
       t2,
       { label: 'Run off the bike — negative split', min: runMin,
-        detail: runDetail(pc, base ? 'easy' : 'tempo', base ? 'Z2' : 'Z3') },
+        detail: runDetail(pc, base ? 'easy' : 'tempo', base ? 'Z2' : 'Z3'), zone: base ? 'Z2' : 'Z3' },
     ];
   } else if (v === 2) {
     // double transition: two shorter rounds, twice the T2 practice
     const bike1 = Math.round(dur * 0.35), run1 = Math.round(dur * 0.15);
     segs = [
-      { label: 'Round 1 — bike', min: bike1, detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.85, base ? 'Z2' : 'Z3') },
+      { label: 'Round 1 — bike', min: bike1, detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.85, base ? 'Z2' : 'Z3'), zone: base ? 'Z2' : 'Z3' },
       t2,
-      { label: 'Round 1 — run off the bike', min: run1, detail: runDetail(pc, base ? 'easy' : 'tempo', base ? 'Z2' : 'Z3') },
-      { label: 'Round 2 — bike', min: bike1, detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.85, base ? 'Z2' : 'Z3') },
+      { label: 'Round 1 — run off the bike', min: run1, detail: runDetail(pc, base ? 'easy' : 'tempo', base ? 'Z2' : 'Z3'), zone: base ? 'Z2' : 'Z3' },
+      { label: 'Round 2 — bike', min: bike1, detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.85, base ? 'Z2' : 'Z3'), zone: base ? 'Z2' : 'Z3' },
       t2,
-      { label: 'Round 2 — run off the bike', min: dur - 2 * bike1 - run1, detail: runDetail(pc, base ? 'easy' : 'tempo', base ? 'Z2' : 'Z3') },
+      { label: 'Round 2 — run off the bike', min: dur - 2 * bike1 - run1, detail: runDetail(pc, base ? 'easy' : 'tempo', base ? 'Z2' : 'Z3'), zone: base ? 'Z2' : 'Z3' },
     ];
   } else {
     segs = [
       { label: base ? 'Bike — steady aerobic' : 'Bike — build to race effort', min: bikeMin,
-        detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.88, base ? 'Z2' : 'Z3') },
+        detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.88, base ? 'Z2' : 'Z3'), zone: base ? 'Z2' : 'Z3' },
       t2,
       { label: base ? 'Run off the bike — easy' : (peak ? 'Run off the bike — race pace' : 'Run off the bike — tempo'), min: runMin,
-        detail: runDetail(pc, base ? 'easy' : (peak ? 'threshold' : 'tempo'), base ? 'Z2' : (peak ? 'Z4' : 'Z3')) },
+        detail: runDetail(pc, base ? 'easy' : (peak ? 'threshold' : 'tempo'), base ? 'Z2' : (peak ? 'Z4' : 'Z3')), zone: base ? 'Z2' : (peak ? 'Z4' : 'Z3') },
     ];
   }
   return { title: 'Brick', segments: segs, distance: null, unit: 'km' };
@@ -433,7 +454,7 @@ function buildTest(kind, pc) {
       segments: [
         { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2') + ' + 3 × 20 s strides' },
         { label: '5 km time trial — all out', min: 22, detail: 'Even effort, finish hard. Note your finish time.' },
-        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1') },
+        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       note: 'Enter your 5k time in Update fitness to re-target your run paces.',
     };
