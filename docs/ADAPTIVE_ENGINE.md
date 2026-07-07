@@ -129,7 +129,9 @@ Technique, Endurance, CSS, Race Pace). Each phase anchors onto the ladder
 shifts around the anchor, so beginners get structured play like fartlek before
 hard reps and elites top out at VO2 in every sport. Bricks rotate through
 single-transition, race-simulation and double-transition formats, with
-recovery weeks always pinned to the gentlest shape.
+recovery weeks always pinned to the gentlest shape. Long runs and rides add a
+durability format in Build and Peak — threshold intervals on tired legs at the
+end of the session — which never appears in Base, Taper or recovery weeks.
 
 ## Sync contract (backend, for Jack)
 

@@ -181,3 +181,22 @@ describe('brick variants', () => {
     if (recBrick) expect(recBrick.segments.some(s => s.label.includes('Round'))).toBe(false);
   });
 });
+
+describe('durability long sessions', () => {
+  const p = generatePlan(profile('2026-09-23', '2026-07-01'));
+  const longs = disc => p.weeks.flatMap(w => w.workouts).filter(x => x.discipline === disc && x.type === 'Long');
+  const hasIntervals = x => x.segments.some(s => s.label.includes('on tired legs'));
+
+  it('finishes some Build/Peak long sessions with intervals', () => {
+    expect(longs('run').filter(x => (x.phase === 'Build' || x.phase === 'Peak') && hasIntervals(x)).length).toBeGreaterThan(0);
+    expect(longs('bike').filter(x => (x.phase === 'Build' || x.phase === 'Peak') && hasIntervals(x)).length).toBeGreaterThan(0);
+  });
+
+  it('never puts interval finishes in Base, Taper or recovery weeks', () => {
+    const recWeeks = new Set(p.weeks.filter(w => w.isRecovery).map(w => w.index));
+    const offLimits = [...longs('run'), ...longs('bike')]
+      .filter(x => x.phase === 'Base' || x.phase === 'Taper' || recWeeks.has(x.week));
+    expect(offLimits.length).toBeGreaterThan(0);
+    expect(offLimits.some(hasIntervals)).toBe(false);
+  });
+});

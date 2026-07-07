@@ -46,17 +46,26 @@ function bikeDetail(pc, lo, hi, zone) {
    Recovery weeks pin variant 0 (the gentlest, canonical shape). No
    randomness anywhere — the same profile always generates the same plan. */
 
-function buildRun(type, dur, pc, seed) {
+function buildRun(type, dur, pc, seed, phase) {
   const v = n => (seed || 0) % n;
+  // Durability: intervals on tired legs at the end of the long session build
+  // fatigue resistance — a Build/Peak tool, never Base or recovery weeks.
+  const durability = phase === 'Build' || phase === 'Peak';
   let segs = [], title = 'Run';
   if (type === 'Long') {
     title = 'Long Run';
-    segs = v(2) === 0
-      ? [{ label: 'Steady aerobic', min: dur, detail: runDetail(pc, 'long', 'Z2') }]
-      : [
+    segs = [
+      [{ label: 'Steady aerobic', min: dur, detail: runDetail(pc, 'long', 'Z2') }],
+      [
         { label: 'Steady aerobic', min: dur - 15, detail: runDetail(pc, 'long', 'Z2') },
         { label: 'Fast finish', min: 15, detail: runDetail(pc, 'tempo', 'Z3') },
-      ];
+      ],
+      [
+        { label: 'Steady aerobic', min: dur - 25, detail: runDetail(pc, 'long', 'Z2') },
+        { label: '4 × (3 min threshold / 2 min easy) — on tired legs', min: 20, detail: runDetail(pc, 'threshold', 'Z4') },
+        { label: 'Ease home', min: 5, detail: runDetail(pc, 'easy', 'Z1') },
+      ],
+    ][v(durability ? 3 : 2)];
   } else if (type === 'Easy') {
     title = 'Easy Run';
     const half = Math.round(dur / 2);
@@ -162,20 +171,28 @@ function buildRun(type, dur, pc, seed) {
   return { title: title, segments: segs, distance: dist, unit: 'km' };
 }
 
-function buildBike(type, dur, pc, seed) {
+function buildBike(type, dur, pc, seed, phase) {
   const v = n => (seed || 0) % n;
+  // Durability: see buildRun — interval finishes are a Build/Peak tool only.
+  const durability = phase === 'Build' || phase === 'Peak';
   let segs = [], title = 'Bike';
   if (type === 'Long') {
     title = 'Long Ride';
-    segs = v(2) === 0
-      ? [
+    segs = [
+      [
         { label: 'Endurance', min: dur - 20, detail: bikeDetail(pc, 0.6, 0.75, 'Z2') },
         { label: '2 × 6 min tempo surges', min: 20, detail: bikeDetail(pc, 0.83, 0.9, 'Z3') },
-      ]
-      : [
+      ],
+      [
         { label: 'Endurance', min: dur - 25, detail: bikeDetail(pc, 0.6, 0.75, 'Z2') },
         { label: '2 × 10 min sweet spot / 5 min easy', min: 25, detail: bikeDetail(pc, 0.84, 0.9, 'Z3') },
-      ];
+      ],
+      [
+        { label: 'Endurance', min: dur - 32, detail: bikeDetail(pc, 0.6, 0.75, 'Z2') },
+        { label: '3 × (5 min at threshold / 3 min easy) — on tired legs', min: 24, detail: bikeDetail(pc, 0.95, 1.05, 'Z4') },
+        { label: 'Ease home', min: 8, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+      ],
+    ][v(durability ? 3 : 2)];
   } else if (type === 'Endurance') {
     title = 'Endurance Ride';
     segs = [
@@ -504,8 +521,8 @@ function baseDuration(discipline, role, race) {
 }
 
 function buildWorkout(discipline, type, dur, pc, phase, seed) {
-  if (discipline === 'run') return buildRun(type, dur, pc, seed);
-  if (discipline === 'bike') return buildBike(type, dur, pc, seed);
+  if (discipline === 'run') return buildRun(type, dur, pc, seed, phase);
+  if (discipline === 'bike') return buildBike(type, dur, pc, seed, phase);
   if (discipline === 'swim') return buildSwim(type, dur, pc, seed);
   if (discipline === 'brick') return buildBrick(dur, pc, phase, seed);
   if (discipline === 'strength') return buildStrength(phase);
