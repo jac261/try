@@ -23,7 +23,7 @@ const line = s => '• ' + [s.label, s.min ? s.min + 'm' : null, s.detail].filte
 // reshaped the session, so the watch copy explains itself.
 export function watchDescription(w) {
   const notes = [];
-  if (w.eased) notes.push('• Eased by the adaptive engine' + (w.easedFrom ? ' (was ' + w.easedFrom + ')' : ''));
+  if (w.eased) notes.push('• Eased by the adaptive engine' + (w.easedFrom ? ' (was ' + String(w.easedFrom).replace(/\s+/g, ' ') + ')' : ''));
   if (w.trimmed) notes.push('• Trimmed by the adaptive engine');
   if (w.boosted) notes.push('• Boosted by the adaptive engine');
   return (w.segments || []).map(line).concat(notes).join('\n') || null;

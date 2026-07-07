@@ -23,8 +23,11 @@ export function WorkoutRow({ w, done, onClick, eff, moved, profile, onToggle }) 
         {profile && <ProfileStrip w={w} />}
       </div>
       <div className="right">{T.fmtDate(eff || w.date, { weekday: 'short' })}</div>
-      <div className="check" aria-label={done ? 'Mark as not done' : 'Mark as done'}
-        {...(onToggle && !w.race ? tap(e => { e.stopPropagation(); onToggle(); }) : {})}>✓</div>
+      {/* pointer-only quick-complete: kept out of the accessibility tree so the
+          row is not a button-inside-a-button; keyboard and screen-reader users
+          complete sessions via the detail sheet's button. */}
+      <div className="check" aria-hidden="true"
+        onClick={onToggle && !w.race ? e => { e.stopPropagation(); onToggle(); } : undefined}>✓</div>
     </div>
   );
 }

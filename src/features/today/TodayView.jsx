@@ -117,7 +117,8 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
         <div className="bi"><Icon name={slot.icon} size={20} /></div>
         <div style={{ flex: 1 }}><div className="bt">{slot.title}</div>
           <div className="bs">{slot.sub}</div></div>
-        {coach.length > 1 && <div className="bmore" {...tap(e => { e.stopPropagation(); setCoachIdx(i => i + 1); })}>
+        {coach.length > 1 && <div className="bmore" aria-hidden="true"
+          onClick={e => { e.stopPropagation(); setCoachIdx(i => i + 1); }}>
           {(coachIdx % coach.length) + 1}/{coach.length} ▸</div>}
       </div>}
       <div className="card">
