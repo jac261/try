@@ -115,6 +115,26 @@ function buildRun(type, dur, pc, seed) {
         { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1') },
       ],
     ][v(3)];
+  } else if (type === 'Fartlek') {
+    title = 'Fartlek Run';
+    const surges = clamp(Math.round((dur - 18) / 3), 6, 12);
+    segs = [
+      [
+        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2') },
+        { label: surges + ' × (1 min brisk / 2 min easy)', min: surges * 3, detail: runDetail(pc, 'tempo', 'Z3') },
+        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1') },
+      ],
+      [
+        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2') },
+        { label: 'Pyramid: 1-2-3-4-3-2-1 min brisk / equal easy jog', min: dur - 18, detail: runDetail(pc, 'tempo', 'Z3') },
+        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1') },
+      ],
+      [
+        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2') },
+        { label: 'Surges by feel · 8–12 × 30–60 s quick on rolling terrain', min: dur - 18, detail: runDetail(pc, 'tempo', 'Z3') },
+        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1') },
+      ],
+    ][v(3)];
   } else { // Threshold
     title = 'Threshold Run';
     const reps = clamp(Math.round((dur - 25) / 12), 2, 4);
@@ -188,6 +208,50 @@ function buildBike(type, dur, pc, seed) {
       [
         { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
         { label: block + ' min continuous sweet spot', min: block, detail: bikeDetail(pc, 0.84, 0.9, 'Z3') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+      ],
+    ][v(3)];
+  } else if (type === 'Tempo') {
+    title = 'Tempo Ride';
+    const blocks = clamp(Math.round((dur - 25) / 16), 2, 3);
+    const cont = clamp(dur - 25, 20, 45);
+    const eights = clamp(Math.round((dur - 25) / 11), 2, 4);
+    segs = [
+      [
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
+        { label: blocks + ' × (12 min tempo / 4 min easy)', min: blocks * 16, detail: bikeDetail(pc, 0.76, 0.85, 'Z3') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+      ],
+      [
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
+        { label: cont + ' min steady tempo', min: cont, detail: bikeDetail(pc, 0.76, 0.85, 'Z3') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+      ],
+      [
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
+        { label: eights + ' × (8 min tempo / 3 min easy)', min: eights * 11, detail: bikeDetail(pc, 0.76, 0.85, 'Z3') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+      ],
+    ][v(3)];
+  } else if (type === 'VO2 Intervals') {
+    title = 'Bike VO2';
+    const reps = clamp(Math.round((dur - 25) / 6), 3, 6);
+    const sets = clamp(Math.round((dur - 25) / 14), 2, 3);
+    const fours = clamp(Math.round((dur - 25) / 8), 3, 5);
+    segs = [
+      [
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
+        { label: reps + ' × (3 min hard / 3 min easy)', min: reps * 6, detail: bikeDetail(pc, 1.06, 1.2, 'Z5') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+      ],
+      [
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
+        { label: sets + ' × 12 × (30 s hard / 30 s easy) · 4 min between sets', min: sets * 14, detail: bikeDetail(pc, 1.06, 1.2, 'Z5') },
+        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
+      ],
+      [
+        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2') },
+        { label: fours + ' × (4 min hard / 4 min easy)', min: fours * 8, detail: bikeDetail(pc, 1.06, 1.15, 'Z5') },
         { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1') },
       ],
     ][v(3)];
@@ -290,21 +354,43 @@ function buildSwim(type, dur, pc, seed) {
   return { title: title, segments: segs, distance: dist, unit: 'km' };
 }
 
-function buildBrick(dur, pc, phase) {
+function buildBrick(dur, pc, phase, seed) {
+  const v = (seed || 0) % 3;
   const base = phase === 'Base', peak = phase === 'Peak';
   const bikeMin = Math.round(dur * (peak ? 0.62 : 0.7));   // more run off the bike at peak
   const runMin = dur - bikeMin;
-  return {
-    title: 'Brick',
-    segments: [
+  const t2 = { label: 'T2 — quick transition', detail: 'Rack bike, shoes on, < 60 s' };
+  let segs;
+  if (v === 1) {
+    // race-sim: effort blocks on the bike, then hold form off it
+    segs = [
+      { label: base ? 'Bike — steady with 2 × 8 min upper Z2' : 'Bike — steady with 3 × 8 min at race effort', min: bikeMin,
+        detail: bikeDetail(pc, base ? 0.65 : 0.78, base ? 0.75 : 0.9, base ? 'Z2' : 'Z3') },
+      t2,
+      { label: 'Run off the bike — negative split', min: runMin,
+        detail: runDetail(pc, base ? 'easy' : 'tempo', base ? 'Z2' : 'Z3') },
+    ];
+  } else if (v === 2) {
+    // double transition: two shorter rounds, twice the T2 practice
+    const bike1 = Math.round(dur * 0.35), run1 = Math.round(dur * 0.15);
+    segs = [
+      { label: 'Round 1 — bike', min: bike1, detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.85, base ? 'Z2' : 'Z3') },
+      t2,
+      { label: 'Round 1 — run off the bike', min: run1, detail: runDetail(pc, base ? 'easy' : 'tempo', base ? 'Z2' : 'Z3') },
+      { label: 'Round 2 — bike', min: bike1, detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.85, base ? 'Z2' : 'Z3') },
+      t2,
+      { label: 'Round 2 — run off the bike', min: dur - 2 * bike1 - run1, detail: runDetail(pc, base ? 'easy' : 'tempo', base ? 'Z2' : 'Z3') },
+    ];
+  } else {
+    segs = [
       { label: base ? 'Bike — steady aerobic' : 'Bike — build to race effort', min: bikeMin,
         detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.88, base ? 'Z2' : 'Z3') },
-      { label: 'T2 — quick transition', detail: 'Rack bike, shoes on, < 60 s' },
+      t2,
       { label: base ? 'Run off the bike — easy' : (peak ? 'Run off the bike — race pace' : 'Run off the bike — tempo'), min: runMin,
         detail: runDetail(pc, base ? 'easy' : (peak ? 'threshold' : 'tempo'), base ? 'Z2' : (peak ? 'Z4' : 'Z3')) },
-    ],
-    distance: null, unit: 'km',
-  };
+    ];
+  }
+  return { title: 'Brick', segments: segs, distance: null, unit: 'km' };
 }
 
 // Strength session — durability, power and injury resistance (Base/Build only).
@@ -384,10 +470,16 @@ const WEEKEND = [5, 6];                 // Sat, Sun
 // (Base 0, Build 1, Peak/Taper 2) shifted by the athlete's intensity level, so a
 // beginner trains one rung easier and an elite two rungs harder for the same week.
 const INTENSITY_LADDER = {
-  run:  ['Easy', 'Tempo', 'Threshold', 'VO2 Intervals'],
-  bike: ['Endurance', 'Sweet Spot', 'Threshold'],
-  swim: ['Technique', 'CSS Intervals', 'Race Pace'],
+  run:  ['Easy', 'Fartlek', 'Tempo', 'Threshold', 'VO2 Intervals'],
+  bike: ['Endurance', 'Tempo', 'Sweet Spot', 'Threshold', 'VO2 Intervals'],
+  swim: ['Technique', 'Endurance', 'CSS Intervals', 'Race Pace'],
 };
+// Anchor each phase onto the ladder so the intermediate athlete keeps the
+// classic Base → Build → Peak arc (easy end → mid → race-specific) while the
+// intensity level (−1 beginner … +2 elite) spreads across the extra rungs:
+// beginners get structured play (Fartlek / Tempo Ride) instead of jumping
+// straight to hard reps, elites top out at VO2 on the bike too.
+const LADDER_ANCHOR = { Base: 0, Build: 2, Peak: 3 };
 function typeFor(discipline, role, phase, isRecovery, intensity) {
   if (role === 'long') return 'Long';
   if (role === 'brick') return 'Brick';
@@ -397,8 +489,8 @@ function typeFor(discipline, role, phase, isRecovery, intensity) {
   // role === 'quality'
   if (isRecovery) return discipline === 'swim' ? 'Technique' : (discipline === 'bike' ? 'Endurance' : 'Easy');
   const ladder = INTENSITY_LADDER[discipline] || ['Easy'];
-  const phaseIdx = phase === 'Base' ? 0 : (phase === 'Build' ? 1 : 2);
-  const idx = clamp(phaseIdx + (intensity || 0), 0, ladder.length - 1);
+  const anchor = LADDER_ANCHOR[phase] != null ? LADDER_ANCHOR[phase] : LADDER_ANCHOR.Peak;
+  const idx = clamp(anchor + (intensity || 0), 0, ladder.length - 1);
   return ladder[idx];
 }
 
@@ -415,7 +507,7 @@ function buildWorkout(discipline, type, dur, pc, phase, seed) {
   if (discipline === 'run') return buildRun(type, dur, pc, seed);
   if (discipline === 'bike') return buildBike(type, dur, pc, seed);
   if (discipline === 'swim') return buildSwim(type, dur, pc, seed);
-  if (discipline === 'brick') return buildBrick(dur, pc, phase);
+  if (discipline === 'brick') return buildBrick(dur, pc, phase, seed);
   if (discipline === 'strength') return buildStrength(phase);
   return { title: 'Session', segments: [], distance: null, unit: '' };
 }
@@ -636,7 +728,7 @@ export const generatePlan = function (profile) {
     // on the hardest training day — so easy days and (chosen) rest days stay easy/rest.
     if (phase === 'Base' || phase === 'Build') {
       const built = buildStrength(phase);
-      const HARD = { 'Tempo': 3, 'Threshold': 4, 'VO2 Intervals': 5, 'Sweet Spot': 3, 'CSS Intervals': 3, 'Race Pace': 4 };
+      const HARD = { 'Fartlek': 2, 'Tempo': 3, 'Threshold': 4, 'VO2 Intervals': 5, 'Sweet Spot': 3, 'CSS Intervals': 3, 'Race Pace': 4 };
       const score = x => (HARD[x.type] || 0) + (x.role === 'quality' ? 1 : 0);
       const hosts = workouts.filter(x => x.discipline !== 'rest' && !x.race && !x.test && x.role !== 'long' && x.discipline !== 'brick');
       hosts.sort((a, b) => score(b) - score(a) || b.durationMin - a.durationMin);

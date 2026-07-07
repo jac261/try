@@ -255,7 +255,7 @@ export const RACE_RULES = {
 // the taper, not watt-accurate numbers.
 const TYPE_IF = {
   'Easy': 0.65, 'Recovery': 0.6, 'Endurance': 0.7, 'Technique': 0.6, 'Long': 0.72,
-  'Tempo': 0.85, 'Sweet Spot': 0.9, 'Threshold': 0.95, 'VO2 Intervals': 1.05,
+  'Fartlek': 0.78, 'Tempo': 0.85, 'Sweet Spot': 0.9, 'Threshold': 0.95, 'VO2 Intervals': 1.05,
   'CSS Intervals': 0.95, 'Race Pace': 0.95, 'Open Water': 0.75, 'Brick': 0.8,
   'Strength': 0.5, 'Test': 0.9,
 };

@@ -136,3 +136,48 @@ describe('workout library variants', () => {
     });
   });
 });
+
+describe('intensity ladders (widened)', () => {
+  const forFitness = fitness => generatePlan({ ...profile('2026-09-23', '2026-07-01'), fitness });
+  const quality = (p, disc) => p.weeks.filter(w => !w.isRecovery).flatMap(w => w.workouts)
+    .filter(x => x.discipline === disc && x.role === 'quality' && !x.test);
+
+  it('keeps the intermediate arc unchanged: Base easy end, Build mid, Peak race-specific', () => {
+    const p = forFitness('intermediate');
+    const runs = quality(p, 'run');
+    expect(runs.filter(x => x.phase === 'Base').every(x => x.type === 'Easy')).toBe(true);
+    expect(runs.filter(x => x.phase === 'Build').every(x => x.type === 'Tempo')).toBe(true);
+    expect(runs.filter(x => x.phase === 'Peak').every(x => x.type === 'Threshold')).toBe(true);
+  });
+
+  it('gives beginners structured play in Build instead of a jump to hard reps', () => {
+    const p = forFitness('beginner');
+    const buildRuns = quality(p, 'run').filter(x => x.phase === 'Build');
+    expect(buildRuns.length).toBeGreaterThan(0);
+    expect(buildRuns.every(x => x.type === 'Fartlek')).toBe(true);
+    const buildBikes = quality(p, 'bike').filter(x => x.phase === 'Build');
+    expect(buildBikes.every(x => x.type === 'Tempo')).toBe(true);
+  });
+
+  it('lets elites top out at VO2 on the bike', () => {
+    const p = forFitness('elite');
+    expect(new Set(quality(p, 'bike').map(x => x.type)).has('VO2 Intervals')).toBe(true);
+  });
+});
+
+describe('brick variants', () => {
+  const p = generatePlan({ ...profile('2026-09-23', '2026-07-01'), daysPerWeek: 4, trainingDays: [1, 3, 5, 6] });
+  const bricks = p.weeks.flatMap(w => w.workouts).filter(x => x.discipline === 'brick' && !x.race);
+
+  it('rotates brick formats across weeks', () => {
+    expect(bricks.length).toBeGreaterThan(2);
+    const shapes = new Set(bricks.map(x => x.segments.map(s => s.label.replace(/\d+/g, 'N')).join('|')));
+    expect(shapes.size).toBeGreaterThan(1);
+  });
+
+  it('pins recovery-week bricks to the canonical single-transition shape', () => {
+    const rec = p.weeks.find(w => w.isRecovery);
+    const recBrick = rec && rec.workouts.find(x => x.discipline === 'brick' && !x.race);
+    if (recBrick) expect(recBrick.segments.some(s => s.label.includes('Round'))).toBe(false);
+  });
+});

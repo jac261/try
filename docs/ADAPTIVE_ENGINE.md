@@ -122,6 +122,15 @@ that scales its rep count with duration; eases swap to the discipline's easy
 type in the same week's format; and the athlete never sees the same quality
 session twice in a row.
 
+The intensity ladders span five rungs per sport (run: Easy, Fartlek, Tempo,
+Threshold, VO2; bike: Endurance, Tempo, Sweet Spot, Threshold, VO2; swim:
+Technique, Endurance, CSS, Race Pace). Each phase anchors onto the ladder
+(Base at the easy end, Build mid, Peak race-specific) and the athlete's level
+shifts around the anchor, so beginners get structured play like fartlek before
+hard reps and elites top out at VO2 in every sport. Bricks rotate through
+single-transition, race-simulation and double-transition formats, with
+recovery weeks always pinned to the gentlest shape.
+
 ## Sync contract (backend, for Jack)
 
 Accepted day-adaptations become synced state, exactly like logs and moves:
