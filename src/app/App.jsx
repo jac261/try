@@ -238,6 +238,9 @@ export function App({ storage, getToken, user }) {
   // Completed sessions spotted on the watch → one-tap logging (with the
   // athlete's recorded RPE as the feel, and a calibration observation each).
   const spotted = T.matchActivities({ activities, plan, log, moves, todayISO: T.iso(new Date()) });
+  // eFTP watcher: dormant until the backend passes eftp through on activities.
+  const eftp = T.eftpProposal({ activities, plan, todayISO: T.iso(new Date()) });
+  const applyEftp = () => { if (eftp) retarget({ ftp: eftp.eftp }); };
   const logSpotted = () => {
     const at = new Date().toISOString();
     const entries = {};
@@ -331,7 +334,7 @@ export function App({ storage, getToken, user }) {
         <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
       </div>
 
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} />}
       {view === 'plan' && <PlanView plan={plan} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={wellness} />}

@@ -61,7 +61,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO }) {
   );
 }
 
-export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout }) {
+export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
@@ -98,6 +98,11 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
         <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">{missed.length} session{missed.length > 1 ? 's' : ''} missed this week</div>
           <div className="bs">Tap to reschedule onto your free days →</div></div>
+      </div>}
+      {eftp && <div className={eftp.up ? 'banner tune' : 'banner ramp'} {...tap(onEftp)}>
+        <div className="bi"><Icon name="trend" size={20} /></div>
+        <div><div className="bt">{eftp.headline}</div>
+          <div className="bs">{eftp.why} Tap to retarget →</div></div>
       </div>}
       {suggestions.length > 0 && <div className="banner tune" {...tap(onTune)}>
         <div className="bi"><Icon name="pace" size={20} /></div>
