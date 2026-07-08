@@ -35,6 +35,25 @@ timeout" that had a cleanup two lines down) and an overly clean report
 - Treat "no findings" as a prompt to spot-check that dimension yourself.
 - Re-grade severities yourself; auditors inflate.
 
+**Simulate imperfect use, not ideal use.** Every field report becomes a
+permanent simulated case for future audits and verifications:
+
+- Pointers WANDER: drags pass over padding cells, gaps, invalid targets and
+  other UI on the way to their destination — test the journey, not just the
+  destination (2026-07-08: blank calendar cells lit up as drop targets
+  because a null-vs-null comparison only showed while hovering somewhere
+  invalid).
+- Users NAVIGATE MID-FLOW: change month/tab/view while a panel, drag or
+  sheet is open, and check what stale state survives (2026-07-08: the
+  selected day panel outlived its month).
+- Devices are STALE: an installed PWA runs one service-worker generation
+  behind — reproduce reports against the previous bundle too, and remember
+  a "does nothing" report can be a silently failing server write rather
+  than a dead handler (the catalog-drift incident).
+- Third-party fields have PER-SPORT semantics: probe intervals.icu values
+  for each sport that can produce them, not just one (the 359 W running
+  power vs bike FTP incident).
+
 ## The four dimensions
 
 ### 1. Engine and plan correctness (lib/)
