@@ -5,6 +5,7 @@ import { buildObservation, toNote, downloadCalibration } from '@/app/calibration
 import { effDate, catchUpMoves } from '@/lib/schedule.js';
 import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
 import { downloadICS } from '@/lib/ics.js';
+import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
 import { AddWorkoutSheet } from '@/components/AddWorkoutSheet.jsx';
@@ -45,6 +46,9 @@ export function App({ storage, getToken, user }) {
   const [adjust, setAdjust] = useState(() => storage.load('adjust', {}));
   const [activities, setActivities] = useState(null); // recent watch activities (null until loaded / not connected)
   const [thresholds, setThresholds] = useState(null); // intervals.icu per-sport thresholds (fitness watcher)
+  // A failed plan write means this device and the account have diverged — the
+  // catalog-drift incident proved that must never be silent again.
+  const [planSyncFailed, setPlanSyncFailed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);   // "Add a session" sheet (Today tab)
   const [watchSync, setWatchSync] = useState(() => storage.load('watchSync', false));
   const toggleWatchSync = on => {
@@ -63,7 +67,8 @@ export function App({ storage, getToken, user }) {
   // sync was skipped (gid() was undefined), so the server never saw them and
   // the next hydrate would drop them.
   const adoptMap = map => {
-    if (!map) return;
+    if (!map) { setPlanSyncFailed(true); return; }
+    setPlanSyncFailed(false);
     const cur = live.current;
     sweepStale(cur.log, cur.refToId, map, (g, e) => sync.saveLog(g, e));
     sweepStale(cur.moves, cur.refToId, map, (g, d) => sync.saveMove(g, d));
@@ -364,6 +369,11 @@ export function App({ storage, getToken, user }) {
         <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
       </div>
 
+      {planSyncFailed && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptMap))}>
+        <div className="bi"><Icon name="bolt" size={20} /></div>
+        <div><div className="bt">Your plan didn't save to your account</div>
+          <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
+      </div>}
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} />}
       {view === 'plan' && <PlanView plan={plan} />}
