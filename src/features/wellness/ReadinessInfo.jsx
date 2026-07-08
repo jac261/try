@@ -40,14 +40,15 @@ export function ReadinessInfo({ onBack }) {
         <div className="card" key={f.key}>
           <div className="factor-head">
             <h3>{f.label}</h3>
-            <span className="factor-weight">up to −{f.weight}</span>
           </div>
           <p className="lead" style={{ marginTop: 6 }}>{f.what}</p>
           <div className="factor-bands">
             {f.bands.map(([desc, effect]) => (
               <div className="factor-band" key={desc}>
                 <span>{desc}</span>
-                <b className={effect.startsWith('+') ? 'good' : effect === '0' ? 'muted' : 'bad'}>{effect}</b>
+                <b className={effect.startsWith('+') ? 'good' : effect === '0' ? 'muted' : 'bad'}>
+                  {effect.startsWith('+') ? 'helps' : effect === '0' ? 'neutral'
+                    : Math.abs(parseInt(effect.replace('−', '-'), 10) || 0) >= 10 ? 'costs a lot' : 'costs'}</b>
               </div>
             ))}
           </div>
@@ -55,7 +56,7 @@ export function ReadinessInfo({ onBack }) {
       ))}
 
       <p className="lead center" style={{ margin: '4px 8px 8px', fontSize: 12 }}>
-        These weights are a considered heuristic, not medical advice — tuned to feel right against
+        The scoring is a considered heuristic, not medical advice — tuned to feel right against
         real training data. Missing a signal never counts against you.
       </p>
     </>

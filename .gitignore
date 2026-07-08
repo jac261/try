@@ -21,3 +21,6 @@ npm-debug.log*
 # Unrelated Fuel Planner sketch that shares this folder
 fuel.html
 js/fuel.js
+
+# Proprietary engine specifications - never commit (Jon, 2026-07-08)
+private-docs/

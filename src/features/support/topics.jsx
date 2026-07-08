@@ -42,15 +42,15 @@ export const TOPICS = [
       <H>Reading the zones</H>
       <P><b>Optimal (about −30 to −10):</b> you are training harder than you are adapted to, which
         is exactly where fitness is built. Most productive weeks live here.</P>
-      <P><b>Grey zone (−10 to +5):</b> neither building nor fresh. Fine in passing; a whole week
-        spent here in a Base or Build phase usually means there is room to push, and the engine
+      <P><b>Grey zone (−10 to +5):</b> neither building nor fresh. Fine in passing; extended
+        stretches here during a building phase usually mean there is room to push, and the engine
         will say so.</P>
       <P><b>Fresh (+5 to +25):</b> fatigue has drained away and the fitness remains. This is where
         you want to be standing on a start line, and it is the window the engine steers you into
         across the final two weeks before your race.</P>
       <P><b>High risk (below −30):</b> fatigue is far ahead of adaptation. A day or two here after
-        a big block is normal; living here is how injury and illness happen. Three consecutive
-        days triggers the engine's recovery-week proposal.</P>
+        a big block is normal; living here is how injury and illness happen, and staying too long
+        triggers the engine's recovery-week proposal.</P>
       <H>Why fresher is not always better</H>
       <P>Form rises when you rest, so chasing a high number all the time means never training
         enough to build anything. The skill is spending most of your time slightly negative and
@@ -65,17 +65,16 @@ export const TOPICS = [
       <P>Ramp rate is how much your fitness climbed in the trailing seven days. The histogram shows
         one bar per week so you can see the shape of your build at a glance: steady bars mean a
         sustainable ramp, a spike means a sudden jump in load.</P>
-      <H>The +5 and +8 lines</H>
+      <H>The two guide lines</H>
       <P>Research and long coaching practice agree that the injury and illness risk of a build is
-        driven less by how much you train than by how fast that amount grows. Gaining up to about
-        +5 fitness points a week is a solid, repeatable build. Between +5 and +8 is aggressive:
-        fine for a deliberate short block, risky as a habit. Beyond +8 the odds of breaking down
-        start beating the odds of adapting.</P>
+        driven less by how much you train than by how fast that amount grows. The lower guide marks
+        where a build turns aggressive: fine for a deliberate short block, risky as a habit. The
+        upper guide marks where the odds of breaking down start beating the odds of adapting.</P>
       <H>What the engine does about it</H>
-      <P>Two weeks in a row above +5 and next week is trimmed to about 80% volume. Any single week
-        above +8 trims next week to about 70% and eases its hardest quality session. A negative
-        ramp mid-Base or mid-Build with missed sessions triggers a catch-up proposal instead: your
-        build has stalled, which carries its own cost.</P>
+      <P>When your build runs hot, the engine proposes trimming the coming week back to a
+        sustainable level, easing the hardest work first. When the build stalls instead, with a
+        falling ramp and missed sessions, it proposes a catch-up: an interrupted build carries its
+        own cost.</P>
       <H>Reading it honestly</H>
       <P>A negative bar is not failure. Taper weeks, recovery weeks and life weeks are supposed to
         dip. What matters is the pattern across a phase, not any single bar.</P>
@@ -90,11 +89,11 @@ export const TOPICS = [
         zones are anchored to three personal numbers, one per sport: your recent 5 km run time,
         your swim CSS pace (per 100 m), and your cycling FTP (watts).</P>
       <H>How each anchor works</H>
-      <P><b>Run:</b> your 5 km time sets a reference pace. Easy runs sit about 70 seconds per km
-        slower than it, threshold work about 12 seconds slower, VO2 intervals slightly faster than
-        it. <b>Swim:</b> CSS is the pace you could hold for a long steady swim; easy swimming is
-        CSS +12 s/100 m, threshold sets swim at CSS itself, sprint work a touch faster.
-        <b> Bike:</b> zones are percentage bands of FTP, e.g. sweet spot at 84 to 97%.</P>
+      <P><b>Run:</b> your 5 km time sets a reference pace; easy running sits well behind it,
+        threshold work just off it, and VO2 intervals a touch beyond it. <b>Swim:</b> CSS is the
+        pace you could hold for a long steady swim; easy swimming sits comfortably behind it and
+        threshold sets swim at CSS itself. <b>Bike:</b> zones are the standard percentage bands of
+        your FTP.</P>
       <H>Estimated vs precise</H>
       <P>If you skipped a number during onboarding, the app estimates it from your experience level
         and marks paces with a tilde (~). Sessions then guide by effort and heart-rate zones
@@ -125,11 +124,11 @@ export const TOPICS = [
       <P>The ramp guardrail (see Ramp rate) trims building weeks that grow too fast, and offers a
         catch-up when the build stalls.</P>
       <H>This block</H>
-      <P>Three straight days deep in high-risk form turns next week into a recovery week. A whole
-        week idling in the grey zone during Base or Build, with a clean training log, proposes a
-        gentle boost: you have room to push.</P>
+      <P>Sustained deep fatigue turns the coming week into a recovery week. Idling in the grey
+        zone through a building phase, with a clean training log, proposes a gentle boost: you
+        have room to push.</P>
       <H>Race day</H>
-      <P>Inside the final 14 days the engine projects your form forward to race morning. Arriving
+      <P>Approaching your race the engine projects your form forward to race morning. Arriving
         heavy proposes targeted trims; arriving flat proposes small boosts, always the minimum
         intervention that lands you in the fresh window.</P>
       <H>The guardrails</H>
@@ -148,16 +147,17 @@ export const TOPICS = [
         there is nothing to build toward yet.</P>
       <H>The load curve</H>
       <P>Weekly volume is expressed relative to your reference week (which your experience level
-        sizes). Base ramps from about 82% to 100%, Build pushes on to 112%, Peak briefly touches
-        118%, and Taper cuts to roughly 55%. Starting at 82% rather than lower keeps the ramp rate
-        inside the same safety limits the engine enforces, about 3 to 5% growth per week.</P>
+        sizes). Base opens moderately and climbs steadily, Build pushes past your reference, Peak
+        briefly overshoots it, and Taper sheds roughly half so you arrive fresh. The opening level
+        is deliberately not low: starting gently and doubling would break the same ramp-rate
+        safety limits the engine enforces.</P>
       <H>Recovery weeks</H>
       <P>Every third or fourth week (depending on experience level) steps volume down. Adaptation
         happens when you absorb training, not while you pile it on. Recovery weeks also pin every
         session to its gentlest format.</P>
       <H>Duration bounds</H>
-      <P>Each distance has a sensible build window: roughly 6 to 16 weeks for a sprint up to 16 to
-        40 for a full. Pick a race inside the window and you get the classic arc. Closer than the
+      <P>Each distance has a sensible build window, from a couple of months for a sprint to most
+        of a year for a full. Pick a race inside the window and you get the classic arc. Closer than the
         minimum and the plan becomes a sharpen-and-arrive: it works with the fitness you have
         rather than pretending to build more. Further than the maximum and the plan opens with a
         maintenance lead-in, holding fitness at moderate volume until the real build begins.</P>
