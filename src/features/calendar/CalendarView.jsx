@@ -71,10 +71,10 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
       <div className="card">
         <div className="cal-head">
           <button className="cal-nav" type="button" disabled={!canPrev} aria-label="Previous month"
-            onClick={() => setAnchor(a => addMonths(a, -1))}>‹</button>
+            onClick={() => { setAnchor(a => addMonths(a, -1)); setSelected(null); }}>‹</button>
           <div className="ttl">{grid.label}</div>
           <button className="cal-nav" type="button" disabled={!canNext} aria-label="Next month"
-            onClick={() => setAnchor(a => addMonths(a, 1))}>›</button>
+            onClick={() => { setAnchor(a => addMonths(a, 1)); setSelected(null); }}>›</button>
         </div>
         <div className="cal-dow">{['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i}>{d}</span>)}</div>
         <div className="cal-grid">
@@ -85,7 +85,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
               <div key={i} data-caldate={d || undefined}
                 className={'cal-day' + (!d ? ' blank' : '') + (d && !inPlan ? ' off' : '')
                   + (d === todayISO ? ' today' : '') + (d === selected ? ' sel' : '')
-                  + (d === raceISO ? ' race' : '') + (drag && drag.over === d ? ' drop' : '')}
+                  + (d === raceISO ? ' race' : '') + (drag && d && drag.over === d ? ' drop' : '')}
                 aria-current={d === selected ? 'date' : undefined}
                 aria-label={d ? T.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })
                   + (ws.length ? ': ' + ws.map(w => w.title).join(' and ') : '') : undefined}
@@ -101,24 +101,26 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         </div>
       </div>
 
-      <div className="section-title">{T.fmtDate(selected, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
-      <div className="card">
-        {daySessions.length === 0
-          ? <div className="empty" style={{ padding: '18px 8px' }}>Nothing planned — drop a session here, or rest.</div>
-          : daySessions.map(w => (
-            <div className="cal-row" key={w.id}>
-              {/* pointer-only grip, aria-hidden: the accessible reschedule path
-                  is the detail sheet's day picker */}
-              {!w.race && <div className="drag-handle" aria-hidden="true"
-                onPointerDown={e => startDrag(w, e)} onPointerMove={moveDrag}
-                onPointerUp={endDrag} onPointerCancel={endDrag}>
-                <Icon name="grip" size={17} /></div>}
-              <WorkoutRow w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
-                moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />
-            </div>
-          ))}
-        {daySessions.some(w => !w.race) && <div className="cal-hint">Hold a session's grip and drag it onto a day above to reschedule</div>}
-      </div>
+      {selected && <>
+        <div className="section-title">{T.fmtDate(selected, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+        <div className="card">
+          {daySessions.length === 0
+            ? <div className="empty" style={{ padding: '18px 8px' }}>Nothing planned — drop a session here, or rest.</div>
+            : daySessions.map(w => (
+              <div className="cal-row" key={w.id}>
+                {/* pointer-only grip, aria-hidden: the accessible reschedule path
+                    is the detail sheet's day picker */}
+                {!w.race && <div className="drag-handle" aria-hidden="true"
+                  onPointerDown={e => startDrag(w, e)} onPointerMove={moveDrag}
+                  onPointerUp={endDrag} onPointerCancel={endDrag}>
+                  <Icon name="grip" size={17} /></div>}
+                <WorkoutRow w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
+                  moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />
+              </div>
+            ))}
+          {daySessions.some(w => !w.race) && <div className="cal-hint">Hold a session's grip and drag it onto a day above to reschedule</div>}
+        </div>
+      </>}
 
       {drag && <div className="drag-ghost" style={{ left: drag.x, top: drag.y, borderColor: drag.color }}>{drag.title}</div>}
     </>
