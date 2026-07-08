@@ -45,8 +45,9 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   const setDragBoth = d => { dragRef.current = d; setDrag(d); };
   const startDrag = (w, e) => {
     e.preventDefault();
+    if (dragRef.current) return; // a second finger must not hijack an active drag
     if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
-    setDragBoth({ id: w.id, title: w.title, color: D[w.discipline].color, x: e.clientX, y: e.clientY, over: null });
+    setDragBoth({ id: w.id, home: w.date, title: w.title, color: D[w.discipline].color, x: e.clientX, y: e.clientY, over: null });
   };
   const moveDrag = e => {
     if (!dragRef.current) return;
@@ -58,7 +59,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   };
   const endDrag = () => {
     const d = dragRef.current;
-    if (d && d.over) { onMove(d.id, d.over); setSelected(d.over); }
+    if (d && d.over) { onMove(d.id, d.over === d.home ? null : d.over); setSelected(d.over); }
     setDragBoth(null);
   };
 
@@ -85,6 +86,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                 className={'cal-day' + (!d ? ' blank' : '') + (d && !inPlan ? ' off' : '')
                   + (d === todayISO ? ' today' : '') + (d === selected ? ' sel' : '')
                   + (d === raceISO ? ' race' : '') + (drag && drag.over === d ? ' drop' : '')}
+                aria-current={d === selected ? 'date' : undefined}
                 aria-label={d ? T.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })
                   + (ws.length ? ': ' + ws.map(w => w.title).join(' and ') : '') : undefined}
                 {...(d ? tap(() => setSelected(d)) : {})}>

@@ -97,6 +97,20 @@ timeout" that had a cleanup two lines down) and an overly clean report
 
 ## Audit log
 
+### 2026-07-08 — focused audit: Calendar/Plan restructure
+- 2 auditors (DnD/date logic; UI/mobile/a11y), 17 raw findings, verified to:
+  2 real logic bugs fixed same-day (a second finger mid-drag overwrote the
+  active drag state; dropping a session back on its planned date wrote a
+  redundant move and left a phantom Moved tag — now clears the move), and 4
+  cheap UI fixes (done-dots gain the week strip's ✓ mark, grip widened to
+  40×48, aria-current on the selected day, -webkit-touch-callout suppressed).
+- False positives verified as such: "iOS scrolls during drag" (touch-action:
+  none on the grip prevents pan for pointers starting there), "addMonths
+  anchor drift" (the grid renders whole months; day-of-month is irrelevant),
+  "tests/custom shouldn't be draggable" (moves are allowed by the guardrails).
+- Honest deferrals: per-pointermove re-renders (~35 cells at 60Hz — fine at
+  this scale), grid density on <360px phones, verbose day-cell labels.
+
 ### 2026-07-08 — full app audit (first run)
 - 4 auditors (engine, sync, security, UI), 37 raw findings, verified down to:
   1 real data-loss race (unsynced log entries wiped by hydrate's wholesale
