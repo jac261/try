@@ -22,5 +22,3 @@ npm-debug.log*
 fuel.html
 js/fuel.js
 
-# Proprietary engine specifications - never commit (Jon, 2026-07-08)
-private-docs/
