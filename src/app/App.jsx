@@ -344,7 +344,31 @@ export function App({ storage, getToken, user }) {
   };
 
   const race = T.RACES[plan.race];
-  const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
+  const rawDaysToRace = T.daysBetween(new Date(), plan.profile.raceDate);
+  const daysToRace = Math.max(0, rawDaysToRace);
+  // The plan's edges: race day passed → offer a maintenance block (with a
+  // recovery week baked in); a maintenance block near its horizon → offer to
+  // roll another. Both reshape the plan, pruning overlays to the new graph.
+  const rollMaintenance = postRace => {
+    const mon = T.startOfWeekMonday(new Date());
+    reshapePlan({
+      raceType: 'maintenance', postRace,
+      startDate: T.iso(mon), raceDate: T.iso(T.addDays(mon, 12 * 7 - 1)), horizonWeeks: 12,
+    });
+  };
+  let planEdge = null;
+  if (plan.race !== 'maintenance' && rawDaysToRace < 0) planEdge = {
+    key: 'post-race', icon: 'trophy',
+    title: 'Race day is behind you — congratulations!',
+    sub: 'Recover well, then keep the engine ticking. Tap to start a 12-week maintenance block →',
+    act: () => rollMaintenance(true),
+  };
+  else if (plan.race === 'maintenance' && rawDaysToRace <= 14) planEdge = {
+    key: 'extend', icon: 'flame',
+    title: 'Your maintenance block is nearly done',
+    sub: 'Tap to roll another 12 weeks — or pick your next race in Settings →',
+    act: () => rollMaintenance(false),
+  };
 
   // Settings/profile now lives behind the avatar (top-left), Runna-style — off the
   // bottom nav, which stays focused on training.
@@ -366,7 +390,9 @@ export function App({ storage, getToken, user }) {
           <h1><Icon name="logo" size={26} /> Try</h1>
         </div>
         <div className="sub">Hi {plan.profile.name} — let's get to the finish line</div>
-        <div className="race-chip"><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></div>
+        <div className="race-chip">{race.noRace
+          ? <><span>Maintenance block</span><b>{Math.max(0, Math.ceil(rawDaysToRace / 7))}</b><span>weeks left</span></>
+          : <><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></>}</div>
       </div>
 
       {planSyncFailed && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptMap))}>
@@ -374,7 +400,7 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={wellness} />}

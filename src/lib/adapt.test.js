@@ -257,3 +257,9 @@ describe('adaptive engine — Phase 4 (race-day form targeting)', () => {
     expect(proposeRace({ ...stale, plan: racePlan(7, 'Threshold', 60) })).toBe(null); // stale sensors
   });
 });
+
+describe('maintenance plans and the race engine', () => {
+  it('proposeRace never fires for a maintenance horizon', () => {
+    expect(proposeRace({ wellness: [], plan: { race: 'maintenance' }, log: {}, moves: {}, adjust: {}, todayISO: '2026-07-08' })).toBe(null);
+  });
+});

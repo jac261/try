@@ -26,11 +26,26 @@ export function Onboarding({ onCreate }) {
   }, [user]);
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
 
+  // How the chosen date sits against the race's recommended build window.
+  const runway = (() => {
+    if (f.raceType === 'maintenance') return null;
+    const race = T.RACES[f.raceType];
+    const weeks = Math.ceil((T.daysBetween(T.startOfWeekMonday(new Date()), f.raceDate) + 1) / 7);
+    if (weeks > 52) return { blocked: true, color: '#f87171', note: 'That is over a year away — start with a maintenance block and pick the race later.' };
+    if (weeks > race.maxWeeks) return { color: '#9ab8ff', note: weeks + ' weeks out: you will hold in maintenance for ' + (weeks - race.maxWeeks) + ' weeks, then the ' + race.maxWeeks + '-week ' + race.name + ' build begins.' };
+    if (weeks < race.minWeeks) return { color: '#fde68a', note: weeks + ' weeks is under the recommended ' + race.minWeeks + ' for a ' + race.name + ' — this will be a sharpen-and-arrive plan, not a full build.' };
+    return null;
+  })();
+
   function finish() {
+    const mon = T.startOfWeekMonday(new Date());
+    const maintenance = f.raceType === 'maintenance';
     onCreate({
       name: f.name.trim() || 'Athlete', raceType: f.raceType, fitness: f.fitness,
       trainingDays: f.trainingDays, longDay: f.longDay,
-      daysPerWeek: f.trainingDays.length, raceDate: f.raceDate,
+      daysPerWeek: f.trainingDays.length,
+      raceDate: maintenance ? T.iso(T.addDays(mon, 12 * 7 - 1)) : f.raceDate,
+      horizonWeeks: maintenance ? 12 : undefined,
       fivekSec: T.parseTimeToSec(f.fivek), css100Sec: T.parseTimeToSec(f.css100),
       ftp: f.ftp ? Number(f.ftp) : null, startDate: T.iso(new Date()),
     });
@@ -47,10 +62,12 @@ export function Onboarding({ onCreate }) {
             <input value={f.name} placeholder="Your name" onChange={e => set('name', e.target.value)} /></label>
           <label className="field"><span className="lab">Which race are you training for?</span></label>
           <div className="choice">
-            {Object.values(T.RACES).map(r => (
+            {Object.values(T.RACES).filter(r => !r.noRace).map(r => (
               <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} {...tap(() => set('raceType', r.key))}>
                 {r.name}<small>{r.swim}k swim · {r.bike}k bike · {r.run}k run</small></div>
             ))}
+            <div className={'opt' + (f.raceType === 'maintenance' ? ' on' : '')} {...tap(() => set('raceType', 'maintenance'))}>
+              No race yet<small>A rolling 12-week block to stay fit until you pick one</small></div>
           </div>
           <div style={{ height: 12 }} />
           <button className="btn primary" onClick={() => setStep(1)}>Continue</button>
@@ -59,8 +76,14 @@ export function Onboarding({ onCreate }) {
         {step === 1 && <>
           <h2>Schedule & experience</h2>
           <p className="lead">This shapes your volume, intensity and ramp rate.</p>
-          <label className="field"><span className="lab">Race date</span>
-            <input type="date" value={f.raceDate} min={T.iso(T.addDays(new Date(), 7))} onChange={e => set('raceDate', e.target.value)} /></label>
+          {f.raceType !== 'maintenance' && <>
+            <label className="field"><span className="lab">Race date</span>
+              <input type="date" value={f.raceDate} min={T.iso(T.addDays(new Date(), 7))} onChange={e => set('raceDate', e.target.value)} /></label>
+            {runway && runway.note && <p className="lead" style={{ color: runway.color, fontSize: 13, marginTop: -6 }}>{runway.note}</p>}
+          </>}
+          {f.raceType === 'maintenance' && <p className="lead" style={{ fontSize: 13 }}>
+            A 12-week keep-fit block: balanced swim, bike and run with a recovery week every few weeks.
+            When you enter a race, the plan rebuilds around it.</p>}
           <label className="field" style={{ marginBottom: 8 }}><span className="lab">Which days will you train?</span></label>
           <DaySelector days={f.trainingDays} longDay={f.longDay} onChange={(d, l) => setF(s => ({ ...s, trainingDays: d, longDay: l }))} />
           <div style={{ height: 18 }} />
@@ -72,7 +95,7 @@ export function Onboarding({ onCreate }) {
           </div>
           <div style={{ height: 12 }} />
           <div className="row"><button className="btn ghost" onClick={() => setStep(0)}>Back</button>
-            <button className="btn primary" onClick={() => setStep(2)}>Continue</button></div>
+            <button className="btn primary" disabled={!!(runway && runway.blocked)} onClick={() => setStep(2)}>Continue</button></div>
         </>}
 
         {step === 2 && <>

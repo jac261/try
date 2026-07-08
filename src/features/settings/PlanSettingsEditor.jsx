@@ -30,7 +30,7 @@ export function PlanSettingsEditor({ profile, onClose, onSave }) {
         <p className="lead">Change your race or schedule and the plan rebuilds around it. Completed sessions and reschedules are kept for the days that still exist; your fitness, paces and progress carry over.</p>
         <label className="field"><span className="lab">Race</span></label>
         <div className="choice">
-          {Object.values(T.RACES).map(r => (
+          {Object.values(T.RACES).filter(r => !r.noRace).map(r => (
             <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} {...tap(() => set('raceType', r.key))}>{r.name}<small>{r.swim}k · {r.bike}k · {r.run}k</small></div>
           ))}
         </div>

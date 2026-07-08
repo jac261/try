@@ -312,6 +312,7 @@ export function projectRaceForm({ wellness, plan, log, moves, adjust, todayISO }
 // far end of the taper. Sessions are added to the plan one at a time, re-running
 // the projection, until it lands (or every candidate is used: best effort).
 export function proposeRace({ wellness, plan, log, moves, adjust, todayISO }) {
+  if (plan && plan.race === 'maintenance') return null; // no race day to peak for
   const today = todayISO || iso(new Date());
   const proj = projectRaceForm({ wellness, plan, log, moves, adjust, todayISO: today });
   if (!proj || proj.daysToRace > RACE_RULES.horizonDays) return null;

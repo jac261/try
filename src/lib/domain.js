@@ -1,10 +1,17 @@
 /* Try — plan-domain constants: races, training zones, experience levels, phases. */
 
+// minWeeks/maxWeeks bound the BUILD for each distance: under min the plan is
+// a sharpen-and-arrive (warned, not blocked, down to the 4-week floor); over
+// max the plan opens with a Maintain block until the build window begins.
+// "maintenance" is the no-race rolling block (noRace: true); its raceDate is
+// just the block's horizon.
 export const RACES = {
-  sprint:  { key: 'sprint',  name: 'Sprint',       swim: 0.75, bike: 20,  run: 5,    taperWeeks: 1 },
-  olympic: { key: 'olympic', name: 'Olympic',      swim: 1.5,  bike: 40,  run: 10,   taperWeeks: 1 },
-  half:    { key: 'half',    name: 'Half (70.3)',  swim: 1.9,  bike: 90,  run: 21.1, taperWeeks: 2 },
-  full:    { key: 'full',    name: 'Full (140.6)', swim: 3.8,  bike: 180, run: 42.2, taperWeeks: 2 },
+  sprint:  { key: 'sprint',  name: 'Sprint',       swim: 0.75, bike: 20,  run: 5,    taperWeeks: 1, minWeeks: 6,  maxWeeks: 16 },
+  olympic: { key: 'olympic', name: 'Olympic',      swim: 1.5,  bike: 40,  run: 10,   taperWeeks: 1, minWeeks: 8,  maxWeeks: 24 },
+  half:    { key: 'half',    name: 'Half (70.3)',  swim: 1.9,  bike: 90,  run: 21.1, taperWeeks: 2, minWeeks: 12, maxWeeks: 32 },
+  t100:    { key: 't100',    name: 'T100 (100k)',  swim: 2,    bike: 80,  run: 18,   taperWeeks: 2, minWeeks: 12, maxWeeks: 32 },
+  full:    { key: 'full',    name: 'Full (140.6)', swim: 3.8,  bike: 180, run: 42.2, taperWeeks: 2, minWeeks: 16, maxWeeks: 40 },
+  maintenance: { key: 'maintenance', name: 'Maintenance', swim: 0, bike: 0, run: 0, taperWeeks: 0, minWeeks: 4, maxWeeks: 52, noRace: true },
 };
 
 export const ZONES = {
@@ -34,4 +41,5 @@ export const PHASE_INFO = {
   Build: { color: '#fb923c', blurb: 'Add intensity & race-specific work' },
   Peak:  { color: '#f87171', blurb: 'Sharpen at race pace' },
   Taper: { color: '#c084fc', blurb: 'Rest, recover & arrive fresh' },
+  Maintain: { color: '#2dd4bf', blurb: 'Stay fit & keep the engine ticking' },
 };

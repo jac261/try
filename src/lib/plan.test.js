@@ -34,7 +34,39 @@ describe('generatePlan', () => {
     const short = generatePlan(profile(iso(addDays('2026-07-01', 10)), '2026-07-01'));
     expect(short.totalWeeks).toBe(4);
     const long = generatePlan(profile(iso(addDays('2026-07-01', 500)), '2026-07-01'));
-    expect(long.totalWeeks).toBe(40);
+    expect(long.totalWeeks).toBe(52); // a year+ of runway caps at 52 (onboarding blocks beyond)
+  });
+
+  it('opens with a Maintain lead-in when the race is beyond the build window', () => {
+    const p = generatePlan(profile(iso(addDays('2026-07-01', 30 * 7)), '2026-07-01')); // 30 weeks, olympic max 24
+    expect(p.leadIn).toBe(p.totalWeeks - 24);
+    p.weeks.slice(0, p.leadIn).forEach(w => expect(w.phase).toBe('Maintain'));
+    expect(p.weeks[p.leadIn].phase).toBe('Base'); // the build starts after
+    const raceDay = p.weeks.flatMap(w => w.workouts).find(w => w.race);
+    expect(raceDay).toBeTruthy(); // race day reachable even beyond the window
+  });
+
+  it('flags a short runway instead of blocking', () => {
+    const p = generatePlan({ ...profile(iso(addDays('2026-07-01', 6 * 7)), '2026-07-01'), raceType: 'half' }); // 6 weeks for a 12-min half
+    expect(p.shortRunway).toBe(true);
+    expect(p.weeks.flatMap(w => w.workouts).some(w => w.race)).toBe(true);
+  });
+
+  it('generates a t100 plan with its race-day distances', () => {
+    const p = generatePlan({ ...profile('2026-10-14', '2026-07-01'), raceType: 't100' });
+    const raceDay = p.weeks.flatMap(w => w.workouts).find(w => w.race);
+    expect(raceDay.segments.map(s => s.label).join(' ')).toContain('80');
+    expect(p.shortRunway).toBe(undefined);
+  });
+
+  it('builds a maintenance block: all Maintain, no race day, recovery cadence, tests included', () => {
+    const p = generatePlan({ ...profile('2026-09-23', '2026-07-01'), raceType: 'maintenance', horizonWeeks: 12, postRace: true });
+    expect(p.totalWeeks).toBe(12);
+    p.weeks.forEach(w => expect(w.phase).toBe('Maintain'));
+    expect(p.weeks[0].isRecovery).toBe(true); // post-race conversion starts easy
+    expect(p.weeks.flatMap(w => w.workouts).some(w => w.race)).toBe(false);
+    expect(p.weeks.flatMap(w => w.workouts).some(w => w.test)).toBe(true);
+    expect(p.weeks.some(w => w.isRecovery && w.index > 0)).toBe(true);
   });
 });
 

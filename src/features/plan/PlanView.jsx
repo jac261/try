@@ -29,8 +29,12 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout }) {
     <>
       <div className="section-title">Plan overview</div>
       <div className="card">
-        <h2>{race.name} Triathlon</h2>
-        <p className="lead">{plan.totalWeeks}-week build · {totalHrs} total training hours · {plan.profile.daysPerWeek} days/week</p>
+        <h2>{race.noRace ? 'Maintenance block' : race.name + ' Triathlon'}</h2>
+        <p className="lead">{plan.totalWeeks}-week {race.noRace ? 'block' : 'build'} · {totalHrs} total training hours · {plan.profile.daysPerWeek} days/week</p>
+        {plan.shortRunway && <p className="lead" style={{ color: '#fde68a', fontSize: 13 }}>
+          Short runway: fewer weeks than the recommended minimum for this distance, so this plan sharpens what you have rather than building from scratch.</p>}
+        {plan.leadIn > 0 && <p className="lead" style={{ color: '#9ab8ff', fontSize: 13 }}>
+          Your race is beyond the ideal build window, so the first {plan.leadIn} {plan.leadIn === 1 ? 'week is' : 'weeks are'} maintenance — the real build starts after.</p>}
         {phaseGroups.map((g, i) => {
           const pi = T.PHASE_INFO[g.phase];
           return (

@@ -412,7 +412,7 @@ function buildSwim(type, dur, pc, seed) {
 
 function buildBrick(dur, pc, phase, seed) {
   const v = (seed || 0) % 3;
-  const base = phase === 'Base', peak = phase === 'Peak';
+  const base = phase === 'Base' || phase === 'Maintain', peak = phase === 'Peak';
   const bikeMin = Math.round(dur * (peak ? 0.62 : 0.7));   // more run off the bike at peak
   const runMin = dur - bikeMin;
   const t2 = { label: 'T2 — quick transition', detail: 'Rack bike, shoes on, < 60 s' };
@@ -506,9 +506,9 @@ const TEST_ROTATION = ['run5k', 'bikeFtp', 'swimCss'];
 const TEST_DISC = { run5k: 'run', bikeFtp: 'bike', swimCss: 'swim' };
 
 /* ---- base session durations (minutes, intermediate athlete) ---- */
-const LONG_RUN = { sprint: 55, olympic: 70, half: 95, full: 120 };
-const LONG_BIKE = { sprint: 70, olympic: 100, half: 160, full: 210 };
-const LONG_BRICK = { sprint: 70, olympic: 95, half: 135, full: 165 };
+const LONG_RUN = { sprint: 55, olympic: 70, half: 95, t100: 100, full: 120, maintenance: 70 };
+const LONG_BIKE = { sprint: 70, olympic: 100, half: 160, t100: 170, full: 210, maintenance: 100 };
+const LONG_BRICK = { sprint: 70, olympic: 95, half: 135, t100: 145, full: 165, maintenance: 90 };
 
 const TEMPLATES = {
   3: ['swim:quality', 'bike:long', 'run:long'],
@@ -535,7 +535,7 @@ const INTENSITY_LADDER = {
 // intensity level (−1 beginner … +2 elite) spreads across the extra rungs:
 // beginners get structured play (Fartlek / Tempo Ride) instead of jumping
 // straight to hard reps, elites top out at VO2 on the bike too.
-const LADDER_ANCHOR = { Base: 0, Build: 2, Peak: 3 };
+const LADDER_ANCHOR = { Base: 0, Build: 2, Peak: 3, Maintain: 1 };
 function typeFor(discipline, role, phase, isRecovery, intensity) {
   if (role === 'long') return 'Long';
   if (role === 'brick') return 'Brick';
@@ -706,6 +706,7 @@ function loadFactor(phase, posInPhase, lenPhase) {
   if (phase === 'Build') return lerp(1.0, 1.12, frac);
   if (phase === 'Peak') return lerp(1.12, 1.18, frac);
   if (phase === 'Taper') return lenPhase === 2 ? (posInPhase === 0 ? 0.8 : 0.55) : 0.55;
+  if (phase === 'Maintain') return 0.95; // steady keep-fit volume; recovery weeks make the dips
   return 1.0;
 }
 
@@ -720,10 +721,25 @@ export const generatePlan = function (profile) {
   // always lands inside the plan. (Math.round(weeksBetween) truncated a race
   // that fell more than half a week past the last Monday — e.g. the default
   // 84-days-out date on a mid-week start — leaving race day unmarked.)
-  let totalWeeks = Math.ceil((daysBetween(weekStart0, profile.raceDate) + 1) / 7);
-  totalWeeks = clamp(totalWeeks, 4, 40);
+  // Duration bounds are per race (RACES.minWeeks/maxWeeks). Over max, the
+  // plan opens with a Maintain lead-in until the build window begins — race
+  // day is always reachable. Under min it is a compressed sharpen-and-arrive
+  // plan, flagged so the UI can say so. Maintenance plans are a rolling
+  // keep-fit block: every week is Maintain, no race day, horizonWeeks long.
+  const maintenance = !!race.noRace;
+  let totalWeeks, leadIn = 0, shortRunway = false;
+  if (maintenance) {
+    totalWeeks = clamp(profile.horizonWeeks || 12, race.minWeeks, race.maxWeeks);
+  } else {
+    totalWeeks = Math.ceil((daysBetween(weekStart0, profile.raceDate) + 1) / 7);
+    totalWeeks = clamp(totalWeeks, 4, 52);
+    if (totalWeeks > race.maxWeeks) leadIn = totalWeeks - race.maxWeeks;
+    shortRunway = totalWeeks < race.minWeeks;
+  }
 
-  const phases = computePhases(totalWeeks, race.taperWeeks);
+  const phases = maintenance
+    ? Array.from({ length: totalWeeks }, () => 'Maintain')
+    : Array.from({ length: leadIn }, () => 'Maintain').concat(computePhases(totalWeeks - leadIn, race.taperWeeks));
   // Scheduling preference: explicit training weekdays (0=Mon..6=Sun) + a long-session
   // day. Falls back to the legacy fixed layout when a profile predates the preference.
   const prefDays = (profile.trainingDays && profile.trainingDays.length >= 3)
@@ -745,7 +761,7 @@ export const generatePlan = function (profile) {
   for (let w = 0; w < totalWeeks; w++) {
     const ph = phases[w];
     const rec = ((w + 1) % fitness.recoveryEvery === 0) && ph !== 'Taper' && w < totalWeeks - 2;
-    if ((ph === 'Base' || ph === 'Build') && !rec && w >= 1) eligibleTestWeeks.push(w);
+    if ((ph === 'Base' || ph === 'Build' || ph === 'Maintain') && !rec && w >= 1) eligibleTestWeeks.push(w);
   }
   const testByWeek = {};
   const nTests = Math.min(TEST_ROTATION.length, eligibleTestWeeks.length);
@@ -759,7 +775,8 @@ export const generatePlan = function (profile) {
   for (let w = 0; w < totalWeeks; w++) {
     const phase = phases[w];
     phasePos[phase] = phasePos[phase] === undefined ? 0 : phasePos[phase] + 1;
-    const isRecovery = ((w + 1) % fitness.recoveryEvery === 0) && phase !== 'Taper' && w < totalWeeks - 2;
+    const isRecovery = (profile.postRace && w === 0)
+      || (((w + 1) % fitness.recoveryEvery === 0) && phase !== 'Taper' && w < totalWeeks - 2);
     let load = loadFactor(phase, phasePos[phase], phaseLen[phase]) * fitness.factor;
     if (isRecovery) load *= fitness.recoveryDepth;
 
@@ -814,8 +831,8 @@ export const generatePlan = function (profile) {
       });
     }
 
-    // mark race day (replace that day's workout)
-    const raceISO = iso(profile.raceDate);
+    // mark race day (replace that day's workout) — maintenance has none
+    const raceISO = maintenance ? null : iso(profile.raceDate);
     workouts.forEach((wo, i) => {
       if (wo.date === raceISO) {
         workouts[i] = {
@@ -869,5 +886,6 @@ export const generatePlan = function (profile) {
   return {
     profile: profile, race: race.key, createdAt: new Date().toISOString(),
     totalWeeks: totalWeeks, paces: pc, weeks: weeks,
+    leadIn: leadIn || undefined, shortRunway: shortRunway || undefined,
   };
 };
