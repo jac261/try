@@ -42,6 +42,27 @@ describe('toClientState', () => {
   it('returns null for a null response', () => {
     expect(toClientState(null)).toBe(null);
   });
+
+  it('reconstructs the fields the server does not store: custom from role, seed from the week', () => {
+    const r2 = JSON.parse(JSON.stringify(resp));
+    r2.weeks[0].workouts[0].role = 'custom';
+    r2.weeks.push({ index: 3, phase: 'Base', isRecovery: true, start: '2026-07-27', totalMin: 30, workouts: [
+      { id: 'guid-3-1', clientWorkoutRef: '3-1', week: 3, phase: 'Base', date: '2026-07-28', discipline: 'run', role: 'quality', type: 'Easy', title: 'Easy Run', durationMin: 35, key: false, race: false, test: false, second: false, segments: [] },
+    ] });
+    const { plan } = toClientState(r2);
+    expect(plan.weeks[0].workouts[0].custom).toBe(true);   // Added tag + Remove survive hydrate
+    expect(plan.weeks[0].workouts[1].custom).toBe(undefined);
+    expect(plan.weeks[0].workouts[0].seed).toBe(0);        // normal week → week index
+    expect(plan.weeks[1].workouts[0].seed).toBe(0);        // recovery week → pinned 0
+  });
+
+  it('passes segment profile fields through when the server starts echoing them', () => {
+    const r2 = JSON.parse(JSON.stringify(resp));
+    r2.weeks[0].workouts[0].segments = [{ label: 'Main', min: 20, detail: 'x', zone: 'Z4', blocks: [{ min: 9, zone: 'Z4' }] }];
+    const { plan } = toClientState(r2);
+    expect(plan.weeks[0].workouts[0].segments[0].zone).toBe('Z4');
+    expect(plan.weeks[0].workouts[0].segments[0].blocks).toEqual([{ min: 9, zone: 'Z4' }]);
+  });
 });
 
 describe('logToApi', () => {

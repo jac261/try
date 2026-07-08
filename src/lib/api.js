@@ -237,7 +237,7 @@ export function toClientState(resp) {
   const adjust = {};
   const refToId = {};
 
-  const mapWorkout = (wo) => {
+  const mapWorkout = (wo, week) => {
     refToId[wo.clientWorkoutRef] = wo.id;
     if (wo.log) log[wo.clientWorkoutRef] = { done: !!wo.log.completed, at: wo.log.completedAtUtc || null, feel: wo.log.feel || undefined };
     if (wo.move) moves[wo.clientWorkoutRef] = wo.move.movedDate;
@@ -250,9 +250,22 @@ export function toClientState(resp) {
       week: wo.week, phase: wo.phase, date: wo.date,
       discipline: wo.discipline, role: wo.role || undefined, type: wo.type, title: wo.title,
       durationMin: wo.durationMin, distance: wo.distance ?? null, unit: wo.unit || '',
-      segments: (wo.segments || []).map(s => ({ label: s.label, min: s.min ?? undefined, detail: s.detail || undefined })),
+      // the server's segment DTO is label/min/detail only, so profile data
+      // (zone/blocks/swim) does not round-trip yet — upgradePlanSegments
+      // rebuilds it on load. Pass any fields through in case the DTO widens.
+      segments: (wo.segments || []).map(s => ({
+        label: s.label, min: s.min ?? undefined, detail: s.detail || undefined,
+        zone: s.zone || undefined, blocks: s.blocks || undefined, swim: s.swim || undefined,
+      })),
       key: !!wo.key, race: wo.race || undefined, test: wo.test || undefined,
       testKind: wo.testKind || undefined, note: wo.note || undefined, second: wo.second || undefined,
+      // not stored server-side, but fully derivable: user-added sessions carry
+      // role "custom", and the variant seed is the generation rule (recovery
+      // weeks pin 0). Without these, hydrated custom workouts lost their
+      // Added tag and Remove button, and the segment rebuild silently pinned
+      // rotated sessions back to the canonical format.
+      custom: wo.role === 'custom' || undefined,
+      seed: week && week.isRecovery ? 0 : (week ? week.index : undefined),
     };
   };
 
@@ -265,7 +278,7 @@ export function toClientState(resp) {
     paces: resp.paces || null,
     weeks: (resp.weeks || []).map(w => ({
       index: w.index, phase: w.phase, isRecovery: w.isRecovery, start: w.start,
-      totalMin: w.totalMin, workouts: (w.workouts || []).map(mapWorkout),
+      totalMin: w.totalMin, workouts: (w.workouts || []).map(wo => mapWorkout(wo, w)),
     })),
   };
 
