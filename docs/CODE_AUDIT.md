@@ -56,6 +56,10 @@ timeout" that had a cleanup two lines down) and an overly clean report
 - Optimistic `fire()` calls: which failures self-heal, which diverge forever.
 - localStorage: per-user namespacing, quota failures, what `clear()` spares.
 - Rapid successive replacePlan calls; failure mid-flight.
+- **Catalog parity**: any new workout type, role, discipline or adjustment
+  kind on the frontend needs a matching PlanCatalog allow-list entry in the
+  backend BEFORE shipping — drift rejects every plan write for affected
+  accounts, silently (the 2026-07-08 Fartlek incident).
 
 ### 3. Security and privacy
 - Public repo: no secrets, tokens, health data, or personal identifiers in
