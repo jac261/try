@@ -819,7 +819,15 @@ export const generatePlan = function (profile) {
         continue;
       }
       const type = typeFor(s.disc, s.role, phase, isRecovery, fitness.intensity);
-      const dur = round5(baseDuration(s.disc, s.role, race.key) * load);
+      // Lead-in Maintain weeks hold fitness, they don't rehearse the race:
+      // long sessions cap at maintenance scale (a far-out full would otherwise
+      // spend months on 3h+ "maintenance" rides). Standalone maintenance and
+      // build phases use their own tables directly.
+      const raceScale = baseDuration(s.disc, s.role, race.key);
+      const durBase = phase === 'Maintain' && !maintenance
+        ? Math.min(raceScale, baseDuration(s.disc, s.role, 'maintenance'))
+        : raceScale;
+      const dur = round5(durBase * load);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
       const built = buildWorkout(s.disc, type, dur, pc, phase, seed);

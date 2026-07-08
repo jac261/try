@@ -37,6 +37,16 @@ describe('generatePlan', () => {
     expect(long.totalWeeks).toBe(52); // a year+ of runway caps at 52 (onboarding blocks beyond)
   });
 
+  it('lead-in long sessions hold at maintenance scale, not race scale', () => {
+    const far = { ...profile(iso(addDays('2026-07-01', 45 * 7)), '2026-07-01'), raceType: 'full' }; // 45w for a 40w-max full
+    const p = generatePlan(far);
+    expect(p.leadIn).toBeGreaterThan(0);
+    const leadLongs = p.weeks.slice(0, p.leadIn).flatMap(w => w.workouts).filter(w => w.type === 'Long' && w.discipline === 'bike');
+    leadLongs.forEach(w => expect(w.durationMin, w.id).toBeLessThanOrEqual(100)); // maintenance long-bike scale
+    const buildLongs = p.weeks.slice(p.leadIn + 4).flatMap(w => w.workouts).filter(w => w.type === 'Long' && w.discipline === 'bike' && !w.race);
+    expect(Math.max(...buildLongs.map(w => w.durationMin))).toBeGreaterThan(150); // the build still reaches full scale
+  });
+
   it('opens with a Maintain lead-in when the race is beyond the build window', () => {
     const p = generatePlan(profile(iso(addDays('2026-07-01', 30 * 7)), '2026-07-01')); // 30 weeks, olympic max 24
     expect(p.leadIn).toBe(p.totalWeeks - 24);
