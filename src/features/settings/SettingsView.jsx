@@ -146,7 +146,7 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced, onReadinessInfo, onExportCalibration, calibrationCount, watchSync, onWatchSync }) {
+export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced, onReadinessInfo, onExportCalibration, calibrationCount, watchSync, onWatchSync, onSupportHub }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
@@ -188,6 +188,8 @@ export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitn
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Support</h2>
+        <button className="btn ghost" onClick={onSupportHub}><Icon name="plan" size={18} /> The science behind Try</button>
+        <div style={{ height: 8 }} />
         <button className="btn ghost" onClick={onReadinessInfo}><Icon name="heartrate" size={18} /> How your readiness score works</button>
         <div style={{ height: 10 }} />
         <button className="btn ghost" onClick={onExportCalibration}><Icon name="download" size={18} /> Export readiness calibration data</button>

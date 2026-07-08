@@ -3,12 +3,13 @@ import * as T from '@/lib';
 import { effDate } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
+import { InfoLink } from '@/components/InfoLink.jsx';
 const D = T.DISCIPLINES;
 
 /* The plan tab owns the whole programme: the phase overview, then every week
    as an expandable card (moved here from the old calendar tab, which is now a
    real month calendar). */
-export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout }) {
+export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onSupport }) {
   const todayISO = T.iso(new Date());
   const firstFuture = plan.weeks.findIndex(w => w.workouts.some(x => x.date >= todayISO));
   const [openWeek, setOpenWeek] = useState(firstFuture < 0 ? 0 : firstFuture);
@@ -27,7 +28,7 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout }) {
 
   return (
     <>
-      <div className="section-title">Plan overview</div>
+      <div className="section-title"><InfoLink onOpen={onSupport} topic="plan-structure" />Plan overview</div>
       <div className="card">
         <h2>{race.noRace ? 'Maintenance block' : race.name + ' Triathlon'}</h2>
         <p className="lead">{plan.totalWeeks}-week {race.noRace ? 'block' : 'build'} · {totalHrs} total training hours · {plan.profile.daysPerWeek} days/week</p>
@@ -53,7 +54,7 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout }) {
         </div>
       </div>
 
-      <div className="section-title">Week by week</div>
+      <div className="section-title"><InfoLink onOpen={onSupport} topic="workout-library" />Week by week</div>
       {plan.weeks.map(week => {
         const isOpen = week.index === openWeek;
         const pi = T.PHASE_INFO[week.phase];

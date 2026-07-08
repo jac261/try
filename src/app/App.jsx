@@ -16,6 +16,7 @@ import { PlanSettingsEditor } from '@/features/settings/PlanSettingsEditor.jsx';
 import { SettingsView } from '@/features/settings/SettingsView.jsx';
 import { WellnessEditor } from '@/features/wellness/WellnessEditor.jsx';
 import { ReadinessInfo } from '@/features/wellness/ReadinessInfo.jsx';
+import { SupportView } from '@/features/support/SupportView.jsx';
 import { TodayView } from '@/features/today/TodayView.jsx';
 import { CalendarView } from '@/features/calendar/CalendarView.jsx';
 import { PlanView } from '@/features/plan/PlanView.jsx';
@@ -50,6 +51,10 @@ export function App({ storage, getToken, user }) {
   // catalog-drift incident proved that must never be silent again.
   const [planSyncFailed, setPlanSyncFailed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);   // "Add a session" sheet (Today tab)
+  // Support library: which topic is open, and where to return to when leaving
+  // (charts on any tab deep-link in via openSupport).
+  const [supportTopic, setSupportTopic] = useState(null);
+  const supportReturn = useRef('settings');
   const [watchSync, setWatchSync] = useState(() => storage.load('watchSync', false));
   const toggleWatchSync = on => {
     setWatchSync(on);
@@ -343,6 +348,13 @@ export function App({ storage, getToken, user }) {
     sync.replacePlan(np).then(adoptMap);
   };
 
+  const openSupport = topic => {
+    if (view !== 'support' && view !== 'readinessInfo') supportReturn.current = view;
+    if (topic === 'readiness') { setView('readinessInfo'); return; } // its own explainer
+    setSupportTopic(topic || null);
+    setView('support');
+  };
+
   const race = T.RACES[plan.race];
   const rawDaysToRace = T.daysBetween(new Date(), plan.profile.raceDate);
   const daysToRace = Math.max(0, rawDaysToRace);
@@ -400,20 +412,22 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} />}
-      {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} wellness={wellness} />}
+      {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} wellness={wellness} onSupport={openSupport} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { storage.clear(); setLog({}); setMoves({}); setPlan(null); } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)}
-        onWellnessSynced={applyServerWellness} onReadinessInfo={() => setView('readinessInfo')}
+        onWellnessSynced={applyServerWellness} onReadinessInfo={() => { supportReturn.current = 'settings'; setView('readinessInfo'); }} onSupportHub={() => openSupport(null)}
         watchSync={watchSync} onWatchSync={toggleWatchSync}
         onExportCalibration={() => downloadCalibration(storage)} calibrationCount={storage.loadCalibration().length} />}
-      {view === 'readinessInfo' && <ReadinessInfo onBack={() => setView('settings')} />}
+      {view === 'readinessInfo' && <ReadinessInfo onBack={() => setView(supportReturn.current === 'settings' ? 'settings' : 'support')} />}
+      {view === 'support' && <SupportView topic={supportTopic} onTopic={setSupportTopic}
+        onBack={() => setView(supportReturn.current)} onReadinessInfo={() => setView('readinessInfo')} />}
 
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
 
@@ -427,7 +441,7 @@ export function App({ storage, getToken, user }) {
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}
         onLogResult={() => { setDetail(null); setEditFitness(true); }}
-        onRemove={detail.custom ? () => removeWorkout(detail.id) : null} />}
+        onRemove={detail.custom ? () => removeWorkout(detail.id) : null} onSupport={t => { setDetail(null); openSupport(t); }} />}
 
       {addOpen && <AddWorkoutSheet onAdd={addWorkout} onClose={() => setAddOpen(false)} />}
 

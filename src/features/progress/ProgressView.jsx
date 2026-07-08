@@ -3,9 +3,10 @@ import { Icon } from '@/components/Icon.jsx';
 import { BarChart, Donut, Sparkline } from '@/components/charts.jsx';
 import { fitnessSeries } from '@/features/progress/fitnessSeries.js';
 import { WellnessTrends } from '@/features/wellness/WellnessTrends.jsx';
+import { InfoLink } from '@/components/InfoLink.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, wellness }) {
+export function ProgressView({ plan, log, wellness , onSupport }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
   const done = all.filter(w => log[w.id]);
@@ -72,7 +73,7 @@ export function ProgressView({ plan, log, wellness }) {
       <div className="section-title">Weekly volume <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(planned vs completed)</span></div>
       <div className="card"><BarChart data={bars} height={160} /></div>
 
-      <div className="section-title">Fitness progression</div>
+      <div className="section-title"><InfoLink onOpen={onSupport} topic="zones" />Fitness progression</div>
       {trends.length === 0 ? (
         <div className="card"><div className="empty" style={{ padding: '24px 16px' }}><div className="big"><Icon name="trend" size={34} /></div>Log a benchmark test or update your fitness, and your pace &amp; power trends will appear here.</div></div>
       ) : (
@@ -105,7 +106,7 @@ export function ProgressView({ plan, log, wellness }) {
         </div>
       </div>
 
-      <WellnessTrends wellness={wellness} />
+      <WellnessTrends onSupport={onSupport} wellness={wellness} />
     </>
   );
 }

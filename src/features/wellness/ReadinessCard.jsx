@@ -4,6 +4,7 @@ import { INTENSITY_TYPES } from '@/lib/tuning.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { Signed } from '@/components/Signed.jsx';
+import { InfoLink } from '@/components/InfoLink.jsx';
 import { TrendChart } from '@/components/charts.jsx';
 
 // Everything analytical lives behind one "Details" fold: driver chips, the
@@ -34,7 +35,7 @@ function ReadinessRing({ score, band }) {
   );
 }
 
-export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOpen }) {
+export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOpen , onSupport }) {
   const [loadChoice, setLoadChoice] = useState(loadPref);
   const todayISO = T.iso(new Date());
   const rec = wellness.find(r => r.date === todayISO) || (wellness.length ? wellness[wellness.length - 1] : null);
@@ -134,7 +135,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
           return (
             <div className="rd-trend">
               <div className="rd-trend-head">
-                <span>Readiness trend</span>
+                <span>Readiness trend <InfoLink onOpen={onSupport} topic="readiness" label="What is this?" /></span>
                 <span>{T.fmtDate(hist[0].date, { month: 'short', day: 'numeric' })} – {T.fmtDate(hist[hist.length - 1].date, { month: 'short', day: 'numeric' })}</span>
               </div>
               <TrendChart height={84} band={{ lo: amber, hi: green }}
@@ -145,7 +146,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
         {hasLoad && <>
           <div className="rd-trend">
             <div className="rd-trend-head">
-              <span>Fitness &amp; Fatigue</span>
+              <span>Fitness &amp; Fatigue <InfoLink onOpen={onSupport} topic="fitness-fatigue" /></span>
               <span>{load.length} days</span>
             </div>
             <div className="load-stats">
@@ -159,7 +160,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
           </div>
           <div className="rd-trend">
             <div className="rd-trend-head">
-              <span>Form</span>
+              <span>Form <InfoLink onOpen={onSupport} topic="form" /></span>
               <span>fitness − fatigue</span>
             </div>
             <div className="load-stats">
@@ -179,7 +180,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
             return (
               <div className="rd-trend">
                 <div className="rd-trend-head">
-                  <span>Ramp rate</span>
+                  <span>Ramp rate <InfoLink onOpen={onSupport} topic="ramp-rate" /></span>
                   <span>fitness gained per week</span>
                 </div>
                 <div className="load-stats">

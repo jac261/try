@@ -480,3 +480,12 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .drag-handle:active { cursor: grabbing; color: var(--ink); }
 .drag-ghost { position: fixed; z-index: 80; transform: translate(-50%, -130%); background: var(--card-2); border: 1.5px solid; border-radius: 999px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; color: var(--ink); pointer-events: none; box-shadow: 0 10px 26px rgba(0, 0, 0, .5); white-space: nowrap; }
 .cal-hint { font-size: 11.5px; color: var(--faint); text-align: center; margin-top: 10px; }
+
+/* ---------- support library ---------- */
+.info-link { float: right; font-size: 11px; font-weight: 700; color: var(--blue); cursor: pointer; text-transform: none; letter-spacing: 0; }
+.support-list { padding: 6px 16px; }
+.support-item { display: flex; align-items: center; gap: 12px; padding: 13px 2px; cursor: pointer; }
+.support-item + .support-item { border-top: 1px solid var(--line); }
+.support-item .t { font-weight: 800; font-size: 14.5px; letter-spacing: -.2px; }
+.support-item .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.support-item .chev { margin-left: auto; color: var(--faint); font-size: 16px; }

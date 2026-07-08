@@ -4,6 +4,7 @@ import { useSheetFocus } from '@/utils/useSheetFocus.js';
 import { weekRange } from '@/lib/schedule.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutProfile } from '@/components/WorkoutProfile.jsx';
+import { InfoLink } from '@/components/InfoLink.jsx';
 
 const D = T.DISCIPLINES;
 
@@ -24,7 +25,7 @@ const WHY = {
   'Open Water': 'Rehearse race-day swimming. Practise sighting, drafting and holding a straight line without walls to push off.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onSupport }) {
   const canFit = T.FIT && T.FIT.supports(w);
   const disc = D[w.discipline];
   const why = !w.race && !w.test ? WHY[w.type] : null;
@@ -50,7 +51,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           <div className="s"><b>{disc.name}</b><span>{w.type}</span></div>
         </div>}
         {why && <div className="why" style={{ borderColor: disc.color }}><span className="why-label">Why this session</span>{why}</div>}
-        <div className="section-title" style={{ margin: '8px 0 2px' }}>{w.race ? 'Race plan' : 'Workout'}</div>
+        <div className="section-title" style={{ margin: '8px 0 2px' }}>{!w.race && <InfoLink onOpen={onSupport} topic="workout-library" />}{w.race ? 'Race plan' : 'Workout'}</div>
         <WorkoutProfile w={w} />
         {w.segments.map((s, i) => (
           <div className="seg" key={i}>

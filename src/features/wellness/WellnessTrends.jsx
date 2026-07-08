@@ -1,9 +1,10 @@
 import * as T from '@/lib';
 import { Icon } from '@/components/Icon.jsx';
 import { Signed } from '@/components/Signed.jsx';
+import { InfoLink } from '@/components/InfoLink.jsx';
 import { TrendChart } from '@/components/charts.jsx';
 
-export function WellnessTrends({ wellness }) {
+export function WellnessTrends({ wellness , onSupport }) {
   // After a history backfill the store can hold a year+; the charts stay
   // readable on the trailing 120 days (the "last N days" labels follow).
   const w = wellness.filter(r => r.ctl != null || r.hrv != null).slice(-120);
@@ -34,7 +35,7 @@ export function WellnessTrends({ wellness }) {
   const zone = T.wellness.formZone(tsb);
   return (
     <>
-      <div className="section-title">Fitness &amp; Fatigue <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>last {w.length} days</span></div>
+      <div className="section-title"><InfoLink onOpen={onSupport} topic="fitness-fatigue" />Fitness &amp; Fatigue <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>last {w.length} days</span></div>
       <div className="card">
         {/* the stat strip is the legend: each number wears its line's colour */}
         <div className="load-stats" style={{ marginBottom: 10 }}>
@@ -48,7 +49,7 @@ export function WellnessTrends({ wellness }) {
       </div>
 
 
-      <div className="section-title">Form <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness − fatigue, on its own scale</span></div>
+      <div className="section-title"><InfoLink onOpen={onSupport} topic="form" />Form <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness − fatigue, on its own scale</span></div>
       <div className="card">
         {/* Form gets its OWN axis: the training zones only mean anything against a
             TSB scale. The domain always frames all five zones in true proportion,
@@ -71,7 +72,7 @@ export function WellnessTrends({ wellness }) {
         const rZone = T.wellness.rampZone(ramp);
         return (
           <>
-            <div className="section-title">Ramp rate <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness gained per week</span></div>
+            <div className="section-title"><InfoLink onOpen={onSupport} topic="ramp-rate" />Ramp rate <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness gained per week</span></div>
             <div className="card">
               <div className="load-stats" style={{ marginBottom: 10 }}>
                 <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}><Signed v={ramp} /></b> Ramp /wk · {rZone ? rZone.label : ''}</span>
