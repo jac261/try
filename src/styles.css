@@ -452,3 +452,30 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 
 /* signed values: lift +/− to the optical centre of lining digits */
 .sgn { display: inline-block; transform: translateY(-0.11em); }
+
+/* ---------- month calendar (Calendar tab) ---------- */
+.cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cal-head .ttl { flex: 1; text-align: center; font-weight: 800; font-size: 16px; letter-spacing: -.2px; }
+.cal-nav { width: 38px; height: 38px; border-radius: 10px; background: var(--chip); border: 0; color: var(--ink); font-size: 17px; cursor: pointer; font-family: inherit; font-weight: 700; }
+.cal-nav:disabled { opacity: .3; cursor: default; }
+.cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
+.cal-dow span { text-align: center; font-size: 10px; font-weight: 700; color: var(--faint); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-day { min-height: 52px; border-radius: 10px; background: var(--chip); padding: 6px 3px 5px; display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer; border: 1.5px solid transparent; user-select: none; }
+.cal-day.blank { background: transparent; cursor: default; }
+.cal-day.off { opacity: .35; }
+.cal-day .cd-num { font-size: 11.5px; font-weight: 700; color: var(--muted); line-height: 1; }
+.cal-day.today { border-color: var(--blue); }
+.cal-day.today .cd-num { color: var(--ink); }
+.cal-day.sel { background: var(--blue-soft); }
+.cal-day.race { border-color: #facc15; }
+.cal-day.drop { border-color: var(--run); background: rgba(52, 211, 153, .14); }
+.cd-dots { display: flex; gap: 3px; min-height: 7px; flex-wrap: wrap; justify-content: center; }
+.cd-dots i { width: 7px; height: 7px; border-radius: 50%; display: block; }
+.cd-dots i.done { opacity: .4; }
+.cal-row { display: flex; align-items: center; }
+.cal-row .wk { flex: 1; min-width: 0; }
+.drag-handle { flex: none; width: 32px; height: 46px; display: grid; place-items: center; color: var(--faint); cursor: grab; touch-action: none; border-radius: 8px; margin-right: 2px; }
+.drag-handle:active { cursor: grabbing; color: var(--ink); }
+.drag-ghost { position: fixed; z-index: 80; transform: translate(-50%, -130%); background: var(--card-2); border: 1.5px solid; border-radius: 999px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; color: var(--ink); pointer-events: none; box-shadow: 0 10px 26px rgba(0, 0, 0, .5); white-space: nowrap; }
+.cal-hint { font-size: 11.5px; color: var(--faint); text-align: center; margin-top: 10px; }

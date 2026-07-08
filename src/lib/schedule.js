@@ -25,3 +25,25 @@ export function catchUpMoves(plan, log, moves) {
   });
   return { next: next, count: missed.length };
 }
+
+/* ---------------- month grid (Calendar tab) ---------------- */
+
+// Monday-first cells for the month containing anchorISO; nulls pad the edges
+// so dates align to weekday columns. label is e.g. "July 2026".
+export function monthGrid(anchorISO) {
+  const y = Number(anchorISO.slice(0, 4));
+  const m = Number(anchorISO.slice(5, 7)) - 1;
+  const first = new Date(y, m, 1);
+  const lead = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const cells = Array.from({ length: lead }, () => null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(T.iso(new Date(y, m, d)));
+  while (cells.length % 7 !== 0) cells.push(null);
+  return { label: first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }), cells };
+}
+
+export function addMonths(anchorISO, n) {
+  const y = Number(anchorISO.slice(0, 4));
+  const m = Number(anchorISO.slice(5, 7)) - 1;
+  return T.iso(new Date(y, m + n, 1));
+}
