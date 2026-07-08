@@ -1,5 +1,6 @@
 import * as T from '@/lib';
 import { Icon } from '@/components/Icon.jsx';
+import { Signed } from '@/components/Signed.jsx';
 import { TrendChart } from '@/components/charts.jsx';
 
 export function WellnessTrends({ wellness }) {
@@ -37,7 +38,7 @@ export function WellnessTrends({ wellness }) {
       <div className="card">
         {/* the stat strip is the legend: each number wears its line's colour */}
         <div className="load-stats" style={{ marginBottom: 10 }}>
-          <span><b style={{ color: 'var(--blue)' }}>{Math.round(last.ctl)}</b> Fitness (CTL){ctlD != null ? ' ' + T.wellness.signed(ctlD) : ''}</span>
+          <span><b style={{ color: 'var(--blue)' }}>{Math.round(last.ctl)}</b> Fitness (CTL){ctlD != null && <> <Signed v={ctlD} /></>}</span>
           <span><b style={{ color: 'var(--danger)' }}>{Math.round(last.atl)}</b> Fatigue (ATL)</span>
         </div>
         {ctl.length >= 2 && <TrendChart height={120} axis series={[
@@ -53,7 +54,7 @@ export function WellnessTrends({ wellness }) {
             TSB scale. The domain always frames all five zones in true proportion,
             with the numeric boundaries marked on the axis. */}
         <div className="load-stats" style={{ marginBottom: 10 }}>
-          <span><b style={{ color: 'var(--brick)' }}>{tsb != null ? T.wellness.signed(tsb) : '—'}</b> Form (TSB)</span>
+          <span><b style={{ color: 'var(--brick)' }}>{tsb != null ? <Signed v={tsb} /> : '—'}</b> Form (TSB)</span>
         </div>
         {tsbSeries.length >= 2 && <TrendChart height={120} domain={{ min: -35, max: 32 }}
           zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
@@ -73,7 +74,7 @@ export function WellnessTrends({ wellness }) {
             <div className="section-title">Ramp rate <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness gained per week</span></div>
             <div className="card">
               <div className="load-stats" style={{ marginBottom: 10 }}>
-                <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk · {rZone ? rZone.label : ''}</span>
+                <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}><Signed v={ramp} /></b> Ramp /wk · {rZone ? rZone.label : ''}</span>
               </div>
               <TrendChart height={120} domain={{ min: -3, max: 9 }}
                 bars={weekly.map((e, i) => ({

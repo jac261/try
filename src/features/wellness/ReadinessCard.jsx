@@ -3,6 +3,7 @@ import * as T from '@/lib';
 import { INTENSITY_TYPES } from '@/lib/tuning.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
+import { Signed } from '@/components/Signed.jsx';
 import { TrendChart } from '@/components/charts.jsx';
 
 // Everything analytical lives behind one "Details" fold: driver chips, the
@@ -109,8 +110,8 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
         <span className="rlt-title">Details</span>
         {hasLoad && <span className="rlt-stats">
           <span><i style={{ background: 'var(--blue)' }} />{Math.round(lastLoad.ctl)}</span>
-          <span><i style={{ background: zone ? zone.color : 'var(--muted)' }} />{T.wellness.signed(tsbNow)}</span>
-          {ramp != null && <span><i style={{ background: rZone ? rZone.color : 'var(--muted)' }} />{T.wellness.signed(ramp)}</span>}
+          <span><i style={{ background: zone ? zone.color : 'var(--muted)' }} /><Signed v={tsbNow} /></span>
+          {ramp != null && <span><i style={{ background: rZone ? rZone.color : 'var(--muted)' }} /><Signed v={ramp} /></span>}
         </span>}
         <span className="rlt-chev">{open ? '▾' : '▸'}</span>
       </div>
@@ -162,7 +163,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
               <span>fitness − fatigue</span>
             </div>
             <div className="load-stats">
-              <span><b style={{ color: 'var(--brick)' }}>{T.wellness.signed(tsbNow)}</b> Form</span>
+              <span><b style={{ color: 'var(--brick)' }}><Signed v={tsbNow} /></b> Form</span>
             </div>
             <TrendChart height={84} domain={{ min: -35, max: 32 }}
               zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
@@ -182,7 +183,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
                   <span>fitness gained per week</span>
                 </div>
                 <div className="load-stats">
-                  <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}>{T.wellness.signed(ramp)}</b> Ramp /wk · {rZone ? rZone.label : ''}</span>
+                  <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}><Signed v={ramp} /></b> Ramp /wk · {rZone ? rZone.label : ''}</span>
                 </div>
                 <TrendChart height={84} domain={{ min: -3, max: 9 }}
                   bars={weekly.map((e, i) => ({

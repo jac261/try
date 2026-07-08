@@ -51,9 +51,9 @@ export function AddWorkoutSheet({ onAdd, onClose }) {
         {fixed
           ? <div className="muted" style={{ fontSize: 13 }}>Strength sessions run their own ~40 minute structure.</div>
           : <div className="aw-dur">
-            <button className="btn ghost sm" type="button" onClick={() => setDur(d => Math.max(20, d - 5))}>−5</button>
+            <button className="btn ghost sm" type="button" onClick={() => setDur(d => Math.max(20, d - 5))}><span className="sgn">−</span>5</button>
             <div className="aw-durv">{T.fmtDuration(dur)}</div>
-            <button className="btn ghost sm" type="button" onClick={() => setDur(d => Math.min(240, d + 5))}>+5</button>
+            <button className="btn ghost sm" type="button" onClick={() => setDur(d => Math.min(240, d + 5))}><span className="sgn">+</span>5</button>
           </div>}
         <button className="btn primary" style={{ width: '100%', marginTop: 18 }} type="button"
           onClick={() => onAdd({ discipline: disc, type, durationMin: dur })}>Add to today</button>

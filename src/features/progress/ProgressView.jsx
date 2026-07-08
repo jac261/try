@@ -50,10 +50,13 @@ export function ProgressView({ plan, log, wellness }) {
     let deltaStr = null;
     if (changed) {
       const d = Math.abs(latest - first);
-      deltaStr = m.key === 'bike' ? (improved ? '+' : '−') + d + ' W'
+      // the watt delta renders its sign separately so it can be optically
+      // lifted to the digits (see .sgn); pace deltas read "faster/slower"
+      deltaStr = m.key === 'bike' ? d + ' W'
         : T.fmtPace(d / m.div) + (improved ? ' faster' : ' slower');
     }
-    return { key: m.key, label: m.label, color: m.color, betterDown: m.betterDown, vals: pts.map(p => p.value), latest: m.fmt(latest), changed, improved, deltaStr };
+    const deltaSign = changed && m.key === 'bike' ? (improved ? '+' : '−') : null;
+    return { key: m.key, label: m.label, color: m.color, betterDown: m.betterDown, vals: pts.map(p => p.value), latest: m.fmt(latest), changed, improved, deltaStr, deltaSign };
   }).filter(Boolean);
 
   return (
@@ -78,7 +81,7 @@ export function ProgressView({ plan, log, wellness }) {
             <div className="trend" key={t.key}>
               <div className="trend-info">
                 <div className="trend-label">{t.label}</div>
-                <div className="trend-val">{t.latest}{t.deltaStr && <span className={'trend-delta ' + (t.improved ? 'up' : 'down')}>{t.deltaStr}</span>}</div>
+                <div className="trend-val">{t.latest}{t.deltaStr && <span className={'trend-delta ' + (t.improved ? 'up' : 'down')}>{t.deltaSign && <span className="sgn">{t.deltaSign}</span>}{t.deltaStr}</span>}</div>
               </div>
               {t.vals.length >= 2 ? <Sparkline values={t.vals} betterDown={t.betterDown} color={t.color} /> : <span className="trend-base">baseline</span>}
             </div>

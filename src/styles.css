@@ -449,3 +449,6 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .wk .check { cursor: pointer; position: relative; flex: none; }
 .wk .check::before { content: ''; position: absolute; inset: -10px; border-radius: 50%; }
 .wk:not(.done) .check:hover { border-color: var(--accent); color: var(--line); }
+
+/* signed values: lift +/− to the optical centre of lining digits */
+.sgn { display: inline-block; transform: translateY(-0.11em); }
