@@ -18,6 +18,11 @@ export function storageForUser(userId) {
   const calKey = ns + 'calibration';
   const loadCalibration = () => { try { return JSON.parse(localStorage.getItem(calKey) || '[]'); } catch (e) { return []; } };
   const saveCalibration = arr => { try { localStorage.setItem(calKey, JSON.stringify(arr)); } catch (e) {} };
+  // Morning check-in answers, {date: 'fresh'|'okay'|'rough'|'skip'}. A separate
+  // store (not a field on the wellness records) because the server sync is
+  // authoritative per date and would silently drop a field it doesn't know.
+  const feelKey = ns + 'feel';
+  const loadFeels = () => { try { return JSON.parse(localStorage.getItem(feelKey) || '{}'); } catch (e) { return {}; } };
 
   return {
     load(k, fb) { try { const v = localStorage.getItem(ns + k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
@@ -32,6 +37,17 @@ export function storageForUser(userId) {
       a.sort((x, y) => (x.date < y.date ? -1 : 1));
       saveWellness(a);
       return a;
+    },
+    loadFeels,
+    saveFeel(date, value) {
+      const m = loadFeels();
+      m[date] = value;
+      // Prune answers older than ~6 months; the durable copy for fitting lives
+      // in the calibration observations, this map only feeds live scoring.
+      const dates = Object.keys(m).sort();
+      dates.slice(0, Math.max(0, dates.length - 180)).forEach(d => delete m[d]);
+      try { localStorage.setItem(feelKey, JSON.stringify(m)); } catch (e) {}
+      return m;
     },
     loadCalibration,
     // One observation per workout+date: re-ticking or rating feel replaces the

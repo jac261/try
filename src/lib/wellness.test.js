@@ -86,10 +86,11 @@ describe('wellness readiness — interpolation & model', () => {
     const m = wellness.MODEL;
     expect(m.start).toBe(100);
     expect(m.bands.map(b => b.key)).toEqual(['green', 'amber', 'red']);
-    expect(m.factors.map(f => f.key)).toEqual(['hrv', 'sleep', 'rhr', 'form', 'debt', 'spike']);
-    // weights are derived from importance 4/3/2/2/2/2 and the band-anchored budget,
-    // not hand-set: HRV 26, sleep 19, the four secondaries 13 each.
-    expect(m.factors.map(f => f.weight)).toEqual([26, 19, 13, 13, 13, 13]);
+    expect(m.factors.map(f => f.key)).toEqual(['hrv', 'sleep', 'feel', 'rhr', 'form', 'debt', 'spike']);
+    // weights are derived from importance 4/3/3/2/2/2/2 and the band-anchored
+    // budget, not hand-set: HRV 26, sleep and feel 19, the secondaries 13 each.
+    // Adding factors never shifts existing weights (max = importance × 45/7).
+    expect(m.factors.map(f => f.weight)).toEqual([26, 19, 19, 13, 13, 13, 13]);
     expect(m.policy).toMatch(/two compromised signals/i);
     const sleep = m.factors.find(f => f.key === 'sleep');
     expect(sleep.what).toMatch(/7h/);
@@ -171,10 +172,62 @@ describe('wellness readiness — cumulative factors (sleep debt & load spike)', 
   it('snapshot captures the cumulative inputs for calibration and carries the new engine version', () => {
     const base = wellness.baseline(week, today.date);
     const snap = wellness.snapshot(today, base);
-    expect(snap.v).toBe(3);
+    expect(snap.v).toBe(4);
     expect(snap.inputs.sleepPrior.length).toBe(3);
     expect(snap.inputs.atlWeekAgo).toBe(18.9);
     expect(snap.inputs.atl).toBe(44.5);
+  });
+});
+
+describe('wellness readiness — the morning check-in (subjective feel)', () => {
+  const base = { hrvMean: 60, hrvSd: 8, rhrMean: 50 };
+
+  it('feeling rough shaves a perfect sensor day well into the ring, alone never past green→amber', () => {
+    const r = wellness.readiness({ hrv: 60, sleepH: 8, rhr: 50, tsb: 0, feel: 'rough' }, base);
+    expect(r.score).toBe(81);
+    const chip = r.why.find(w => w.key === 'feel');
+    expect(chip.bad).toBe(1);
+    expect(chip.t).toMatch(/rough/);
+  });
+
+  it('rough plus one genuinely bad signal reads amber', () => {
+    // Yesterday's field-report morning with a rough answer on top would have
+    // read 55 — the amber/red edge — instead of green.
+    const r = wellness.readiness({ hrv: 60, sleepH: 4.9, rhr: 50, tsb: 0, feel: 'rough' }, base);
+    expect(r.band).toBe('amber');
+  });
+
+  it('fresh earns the small bonus, okay is neutral and chipless, skip scores nothing', () => {
+    // A slightly short night keeps the score off the 100 clamp so the bonus is visible.
+    const at = feel => wellness.readiness({ hrv: 58, sleepH: 6, rhr: 50, tsb: 0, feel }, base);
+    expect(at('fresh').score).toBe(at(undefined).score + 3);
+    expect(at('okay').score).toBe(at(undefined).score);
+    expect(at('okay').why.some(w => w.key === 'feel')).toBe(false);
+    expect(at('skip').score).toBe(at(undefined).score);
+    expect(at('skip').why.some(w => w.key === 'feel')).toBe(false);
+  });
+
+  it('a feel-only day scores (the sensor-less path) and joins the trend', () => {
+    const r = wellness.readiness({ date: '2026-07-09', feel: 'rough' }, { hrvMean: 0, hrvSd: 4, rhrMean: 0 });
+    expect(r.score).toBe(81);
+    const h = wellness.history([{ date: '2026-07-09', feel: 'rough' }], 14);
+    expect(h.length).toBe(1);
+  });
+
+  it('mergeFeel overlays answers without touching the records and invents records for answer-only days', () => {
+    const records = [{ date: '2026-07-08', hrv: 60 }, { date: '2026-07-09', hrv: 59 }];
+    const merged = wellness.mergeFeel(records, { '2026-07-09': 'rough', '2026-07-10': 'fresh', '2026-07-11': 'skip' });
+    expect(merged.map(r => r.date)).toEqual(['2026-07-08', '2026-07-09', '2026-07-10']); // skip-only day invents nothing
+    expect(merged[1].feel).toBe('rough');
+    expect(merged[1].hrv).toBe(59);
+    expect(merged[2]).toEqual({ date: '2026-07-10', feel: 'fresh' });
+    expect(records[1].feel).toBeUndefined(); // originals untouched
+    expect(wellness.mergeFeel(records, {})).toBe(records);
+  });
+
+  it('snapshot carries the answer for calibration', () => {
+    const snap = wellness.snapshot({ date: '2026-07-09', hrv: 59, feel: 'rough' }, { hrvMean: 60, hrvSd: 8, rhrMean: 50 });
+    expect(snap.inputs.feel).toBe('rough');
   });
 });
 

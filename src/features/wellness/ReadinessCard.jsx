@@ -19,6 +19,23 @@ const saveLoadPref = v => { try { localStorage.setItem(LOAD_PREF, v ? '1' : '0')
 
 const BAND_COLOR = { green: 'var(--run)', amber: 'var(--bike)', red: 'var(--danger)' };
 
+// The morning check-in: one tap, three answers, skippable, gone once answered.
+// The answer scores immediately (the "How you feel" factor) and becomes the
+// clean daily label the calibration observations have been missing.
+function FeelCheckin({ onFeel }) {
+  return (
+    <div className="rd-checkin">
+      <span className="ck-q">How do you feel?</span>
+      <div className="ck-opts">
+        {[['fresh', 'Fresh'], ['okay', 'Okay'], ['rough', 'Rough']].map(([v, label]) => (
+          <button key={v} className="btn ghost sm" onClick={() => onFeel(v)}>{label}</button>
+        ))}
+        <a className="reset ck-skip" {...tap(() => onFeel('skip'))} role="button" aria-label="Skip today's check-in">skip</a>
+      </div>
+    </div>
+  );
+}
+
 function ReadinessRing({ score, band }) {
   const r = 26, c = 2 * Math.PI * r;
   const col = BAND_COLOR[band];
@@ -35,17 +52,22 @@ function ReadinessRing({ score, band }) {
   );
 }
 
-export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOpen , onSupport }) {
+export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport }) {
   const [loadChoice, setLoadChoice] = useState(loadPref);
   const todayISO = T.iso(new Date());
   const rec = wellness.find(r => r.date === todayISO) || (wellness.length ? wellness[wellness.length - 1] : null);
   if (!rec) {
+    // No data at all yet: the check-in still works (it becomes the day's only
+    // signal — the sensor-less path), alongside the manual-entry prompt.
     return (
-      <div className="banner rd-empty" {...tap(onEdit)}>
-        <div className="bi"><Icon name="heartrate" size={20} /></div>
-        <div><div className="bt">Add your morning readiness</div>
-          <div className="bs">Log HRV, sleep &amp; resting HR for a daily go / ease / recover call →</div></div>
-      </div>
+      <>
+        {onFeel && <div className="card rd">{<FeelCheckin onFeel={onFeel} />}</div>}
+        <div className="banner rd-empty" {...tap(onEdit)}>
+          <div className="bi"><Icon name="heartrate" size={20} /></div>
+          <div><div className="bt">Add your morning readiness</div>
+            <div className="bs">Log HRV, sleep &amp; resting HR for a daily go / ease / recover call →</div></div>
+        </div>
+      </>
     );
   }
   const base = T.wellness.baseline(wellness, todayISO);
@@ -83,6 +105,7 @@ export function ReadinessCard({ wellness, today, onEdit, onEase, onRestore, onOp
           <div className="rd-advice">{adv}</div>
         </div>
       </div>
+      {onFeel && !(rec.date === todayISO && rec.feel) && <FeelCheckin onFeel={onFeel} />}
       {(() => {
         // The adaptive engine (Phase 1): at most one reasoned proposal for today,
         // from this morning's band — rules & thresholds in docs/ADAPTIVE_ENGINE.md.

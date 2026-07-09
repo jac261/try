@@ -44,28 +44,35 @@ red. That one rule pins how many points are "on the table" in total.
 |---|---|---|
 | **HRV** | 4 | Most direct read on autonomic recovery, self-calibrating. |
 | **Sleep** | 3 | The primary recovery _input_. |
+| **How you feel** | 3 | The morning check-in — subjective feel is among the most sensitive readiness signals in the literature, and the only signal without sensors. |
 | **Resting HR** | 2 | Corroborates HRV, but noisier/laggier — and penalty-only. |
 | **Form (TSB)** | 2 | Chronic training-load _context_, not today's acute state. |
 | **Sleep debt** | 2 | The hole dug across the prior nights — cumulative, where Sleep is acute. |
 | **Load spike** | 2 | How fast acute load rose this week — cumulative, where Form is a snapshot. |
 
 Each factor's **max penalty** is then `(its importance ÷ total) × budget`. With the
-"two-signal red" rule, the budget works out to ~96 points, and the weights fall out:
+"two-signal red" rule, the budget works out to ~116 points, and the weights fall out:
 
 | Factor | Derivation | **Max penalty** |
 |---|---|---|
-| HRV | 4/15 × 96 | **26** |
-| Sleep | 3/15 × 96 | **19** |
-| Resting HR | 2/15 × 96 | **13** |
-| Form | 2/15 × 96 | **13** |
-| Sleep debt | 2/15 × 96 | **13** |
-| Load spike | 2/15 × 96 | **13** |
+| HRV | 4/18 × 116 | **26** |
+| Sleep | 3/18 × 116 | **19** |
+| How you feel | 3/18 × 116 | **19** |
+| Resting HR | 2/18 × 116 | **13** |
+| Form | 2/18 × 116 | **13** |
+| Sleep debt | 2/18 × 116 | **13** |
+| Load spike | 2/18 × 116 | **13** |
 
-So **"−26" means "HRV is 4/15 of the importance, and the budget is set so no lone signal
+A pleasing property of the derivation: because the budget scales with the total
+importance, a factor's max is always `importance × 45/7` — so **adding factors never
+shifts the existing weights**, and scores from earlier engine versions stay comparable
+on days the new factors are silent.
+
+So **"−26" means "HRV is 4/18 of the importance, and the budget is set so no lone signal
 triggers red"** — not a number I liked the look of. Change the importance tiers or the
 policy and every weight recomputes. The only remaining judgements are the tiers
-(4/3/2/2/2/2) and the one behavioural rule — a handful of arguable decisions instead of
-~20 magic numbers. _(The genuinely rigorous next step is to fit even those to data — correlating
+(4/3/3/2/2/2/2) and the one behavioural rule — a handful of arguable decisions instead
+of ~20 magic numbers. _(The genuinely rigorous next step is to fit even those to data — correlating
 each morning's readiness against how that day's session felt via the `feel` log. Not
 enough history yet, but the hooks are there.)_
 
@@ -94,6 +101,21 @@ meaningful quantities you can argue about, unlike a bare "−11".
 
 _The ramp is convex, so the hour lost from 6→5 costs more than 7→6. **6.4h ≈ −1**:
 you've met most of your need, so a token nudge, not a flat penalty._
+
+### How you feel — max 19 · the morning check-in
+One tap on the readiness card: **Fresh / Okay / Rough** (or skip, which scores nothing —
+missing data never punishes). Rough carries the full weight, fresh earns the small bonus,
+okay is neutral. Subjective wellness measures track training strain as well as or better
+than objective ones in most of the literature, they catch what sensors miss (the v3 field
+report was exactly that), and for an athlete with no sensors the check-in is the whole
+acute picture. The answer is also stored raw in every calibration observation, giving the
+future weight-fitting a clean daily label right next to the objective inputs.
+
+| Answer | Effect |
+|---|---|
+| Fresh | **+3** (bonus) |
+| Okay | 0 |
+| Rough | −19 |
 
 ### Resting HR — max 13 · neutral: +2 bpm · worst: +8 bpm
 | Resting HR | Effect |
@@ -155,9 +177,10 @@ an ATL that rose from 19 to 45 in a week, ~46% of CTL (**−12**):
 
 > 100 + 1 + 2 − 10 − 7 − 12 = **74 → 🟠 Ease into it**
 
-which matched how the athlete actually felt. Scoring-model changes bump `ENGINE_VERSION`
-(now 3), carried on every calibration observation so a future fit can separate data
-gathered under different engines.
+which matched how the athlete actually felt. And had that morning's check-in been
+answered "rough", the read would have been 55 — the amber/red edge. Scoring-model changes
+bump `ENGINE_VERSION` (now 4), carried on every calibration observation so a future fit
+can separate data gathered under different engines.
 
 ## Caveat
 

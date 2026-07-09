@@ -14,8 +14,8 @@
  *      signals to reach "recover today", so the two most important factors, both
  *      at their worst, land exactly on the red line (a 45-point drop). No single
  *      signal alone can trigger red.
- *   3. Each factor's IMPORTANCE as an ordinal tier (HRV 4, sleep 3, resting HR 2,
- *      form 2, sleep debt 2, load spike 2) — one ranking judgement.
+ *   3. Each factor's IMPORTANCE as an ordinal tier (HRV 4, sleep 3, feel 3,
+ *      resting HR 2, form 2, sleep debt 2, load spike 2) — one ranking judgement.
  * A factor's max penalty is then (importance / total) x budget — so HRV's "26"
  * is an output (4/11 x ~70.7), not an input. Within a factor the penalty ramps
  * over a describable range (neutral -> worst), so there are no cliff edges either.
@@ -49,6 +49,24 @@ function baseline(records, beforeDate) {
   const wkTarget = iso(addDays(beforeDate, -7));
   const wk = [...prior].reverse().find(r => r.date <= wkTarget && r.atl != null);
   return { hrvMean: mean(hrv), hrvSd: sd(hrv) || 4, rhrMean: mean(rhr), sleepPrior, atlWeekAgo: wk ? wk.atl : null, n: prior.length };
+}
+
+// The morning check-in's three answers on the factor scale; anything else
+// (unanswered, or an explicit skip) is missing data and scores nothing.
+const feelValue = f => (f === 'fresh' ? 1 : f === 'okay' ? 0 : f === 'rough' ? -1 : null);
+
+// Merge the check-in store (a {date: answer} map) into server-shaped wellness
+// records at read time. Feel lives in its own store because the server sync is
+// authoritative per date and would clobber a field it doesn't know; a day with
+// an answer but no record becomes a record of its own (the sensor-less case).
+function mergeFeel(records, feels) {
+  if (!feels || !Object.keys(feels).length) return records || [];
+  const out = (records || []).map(r => (feels[r.date] ? { ...r, feel: feels[r.date] } : r));
+  const have = new Set(out.map(r => r.date));
+  Object.keys(feels).forEach(d => {
+    if (!have.has(d) && feelValue(feels[d]) != null) out.push({ date: d, feel: feels[d] });
+  });
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
 const fmtH = h => { const m = Math.round(h * 60); return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; };
@@ -99,6 +117,18 @@ const FACTORS = [
     },
     what: '7h is treated as meeting an adult’s need (no penalty); 4h is the worst case (full weight). The ramp is convex, so sleep debt bites harder the deeper it goes — the hour lost from 6→5 costs more than 7→6.',
     samples: [['7h or more', 7], ['6h', 6], ['5h', 5], ['4h or less', 4]],
+  },
+  {
+    key: 'feel', label: 'How you feel', importance: 3,
+    value: (rec) => feelValue(rec.feel),
+    neutral: 0, worst: -1, curve: 1, bonusAt: 1,
+    driver: (_rec, _base, p) => {
+      if (p < 0) return { bad: 1, t: 'You said you feel rough' };
+      if (p > 0) return { bad: 0, t: 'You said you feel fresh' };
+      return null;
+    },
+    what: 'Your own answer to the morning check-in. Subjective feel is one of the most sensitive readiness signals there is — it often catches what the sensors miss (and it’s the primary signal when there are no sensors at all). Feeling rough counts against the day, feeling fresh earns the small bonus, and skipping the question never costs anything.',
+    samples: [['Feeling fresh', 1], ['Feeling okay', 0], ['Feeling rough', -1]],
   },
   {
     key: 'rhr', label: 'Resting HR', importance: 2,
@@ -315,7 +345,7 @@ function weeklyRamps(records, weeks = 8) {
 // no readiness metrics (an empty day would misleadingly score 100).
 function history(records, days = 14) {
   const scored = (records || [])
-    .filter(r => r.hrv != null || r.sleepH != null || r.rhr != null || r.tsb != null)
+    .filter(r => r.hrv != null || r.sleepH != null || r.rhr != null || r.tsb != null || feelValue(r.feel) != null)
     .slice(-days)
     .map(r => {
       const rd = readiness(r, baseline(records, r.date));
@@ -326,7 +356,7 @@ function history(records, days = 14) {
 
 // Bump when the scoring model changes shape — calibration observations carry it
 // so a future fit can separate data gathered under different engines.
-const ENGINE_VERSION = 3;
+const ENGINE_VERSION = 4;
 
 // Immutable capture of "readiness as it stood" for calibration: the raw inputs
 // (not just the score) so future models can be fitted from the same observations,
@@ -347,6 +377,7 @@ function snapshot(rec, base) {
       rhrMean: round1(base.rhrMean) || null,
       sleepH: rec.sleepH ?? null,
       sleepPrior: (base.sleepPrior || []).map(round1),
+      feel: rec.feel ?? null,
       tsb: rec.tsb ?? null,
       atl: round1(rec.atl ?? null),
       ctl: round1(rec.ctl ?? null),
@@ -379,4 +410,4 @@ const MODEL = {
   })),
 };
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, formZone, rampRate, rampHistory, rampZone, weeklyRamps, coachLine, shallowHistory, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };
+export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, mergeFeel, formZone, rampRate, rampHistory, rampZone, weeklyRamps, coachLine, shallowHistory, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };

@@ -44,6 +44,13 @@ export function App({ storage, getToken, user }) {
   const [wellness, setWellness] = useState(() => storage.loadWellness());
   const [editWellness, setEditWellness] = useState(false);
   const saveWellness = rec => { setWellness(storage.upsertWellness(rec)); sync.saveWellness(rec); setEditWellness(false); };
+  // Morning check-in: one tap a day, kept in its own store (the server sync is
+  // authoritative per date and would clobber a field it doesn't know) and merged
+  // into the records at read time, so it scores immediately and rides along in
+  // that day's calibration snapshots.
+  const [feels, setFeels] = useState(() => storage.loadFeels());
+  const answerFeel = v => setFeels(storage.saveFeel(T.iso(new Date()), v));
+  const recs = T.wellness.mergeFeel(wellness, feels);
   const [adjust, setAdjust] = useState(() => storage.load('adjust', {}));
   const [activities, setActivities] = useState(null); // recent watch activities (null until loaded / not connected)
   const [thresholds, setThresholds] = useState(null); // intervals.icu per-sport thresholds (fitness watcher)
@@ -193,7 +200,7 @@ export function App({ storage, getToken, user }) {
     const w = plan.weeks.flatMap(wk => wk.workouts).find(x => x.id === id);
     if (!w || w.discipline === 'rest') return null;
     const obs = buildObservation({
-      workout: w, date: effDate(w, moves), feel, eased: !!adjust[id], wellnessRecs: wellness, at,
+      workout: w, date: effDate(w, moves), feel, eased: !!adjust[id], wellnessRecs: recs, at,
     });
     storage.upsertCalibration(obs);
     return toNote(obs);
@@ -271,7 +278,7 @@ export function App({ storage, getToken, user }) {
   // (Phase 4) outranks the week rules (Phases 2-3) — inside the final fortnight
   // the taper is the thing that matters. Accepting lands trim/boost/ease entries
   // in the same adjust overlay (and sync), so calendar, sheet and undo just work.
-  const engineInputs = { wellness, plan, log, moves, adjust, todayISO: T.iso(new Date()) };
+  const engineInputs = { wellness: recs, plan, log, moves, adjust, todayISO: T.iso(new Date()) };
   const weekly = T.proposeRace(engineInputs) || T.proposeWeek(engineInputs);
   // Completed sessions spotted on the watch → one-tap logging (with the
   // athlete's recorded RPE as the feel, and a calibration observation each).
@@ -412,10 +419,10 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={wellness} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} wellness={wellness} onSupport={openSupport} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} onSupport={openSupport} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
