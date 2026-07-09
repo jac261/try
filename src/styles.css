@@ -88,7 +88,7 @@ body {
 .topbar h1 { margin: 0; font-size: 23px; font-weight: 800; letter-spacing: -.6px; display: flex; align-items: center; gap: 8px; }
 .topbar .sub { color: #c3ccdb; opacity: .8; font-size: 13px; margin-top: 5px; }
 .topbar .race-chip {
-  margin-top: 14px; display: inline-flex; gap: 12px; align-items: baseline;
+  margin-top: 14px; display: inline-flex; gap: 12px; align-items: center;
   background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .12);
   padding: 9px 16px; border-radius: 40px; font-size: 13px; color: #c3ccdb;
 }
