@@ -234,6 +234,7 @@ body {
 .rd-headline { font-size: 17px; font-weight: 800; letter-spacing: -.3px; }
 .rd-advice { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 3px; }
 .rd-why { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.rd-why-toggle { width: 100%; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .rd-chip { font-size: 11.5px; font-weight: 600; color: #cfd6e2; background: var(--chip); border-radius: 8px; padding: 5px 9px; }
 .rd-chip.bad { background: rgba(251, 146, 60, .14); color: #f6b27a; }
 .rd-pmc { display: flex; gap: 10px; margin-top: 14px; }
@@ -487,7 +488,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .cal-hint { font-size: 11.5px; color: var(--faint); text-align: center; margin-top: 10px; }
 
 /* ---------- support library ---------- */
-.info-link { float: right; font-size: 11px; font-weight: 700; color: var(--blue); cursor: pointer; text-transform: none; letter-spacing: 0; }
+.info-link { float: right; margin-left: 12px; font-size: 11px; font-weight: 700; color: var(--blue); cursor: pointer; text-transform: none; letter-spacing: 0; }
 .support-list { padding: 6px 16px; }
 .support-item { display: flex; align-items: center; gap: 12px; padding: 13px 2px; cursor: pointer; }
 .support-item + .support-item { border-top: 1px solid var(--line); }
