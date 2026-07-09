@@ -49,7 +49,7 @@ export function WellnessTrends({ wellness , onSupport }) {
       </div>
 
 
-      <div className="section-title"><InfoLink onOpen={onSupport} topic="form" />Form <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness − fatigue, on its own scale</span></div>
+      <div className="section-title"><InfoLink onOpen={onSupport} topic="form" />Form</div>
       <div className="card">
         {/* Form gets its OWN axis: the training zones only mean anything against a
             TSB scale. The domain always frames all five zones in true proportion,
@@ -72,7 +72,7 @@ export function WellnessTrends({ wellness , onSupport }) {
         const rZone = T.wellness.rampZone(ramp);
         return (
           <>
-            <div className="section-title"><InfoLink onOpen={onSupport} topic="ramp-rate" />Ramp rate <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>fitness gained per week</span></div>
+            <div className="section-title"><InfoLink onOpen={onSupport} topic="ramp-rate" />Ramp rate</div>
             <div className="card">
               <div className="load-stats" style={{ marginBottom: 10 }}>
                 <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}><Signed v={ramp} /></b> Ramp /wk · {rZone ? rZone.label : ''}</span>

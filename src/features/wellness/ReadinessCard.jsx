@@ -193,7 +193,6 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
           <div className="rd-trend">
             <div className="rd-trend-head">
               <span>Form <InfoLink onOpen={onSupport} topic="form" /></span>
-              <span>fitness − fatigue</span>
             </div>
             <div className="load-stats">
               <span><b style={{ color: 'var(--brick)' }}><Signed v={tsbNow} /></b> Form</span>
@@ -213,7 +212,6 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
               <div className="rd-trend">
                 <div className="rd-trend-head">
                   <span>Ramp rate <InfoLink onOpen={onSupport} topic="ramp-rate" /></span>
-                  <span>fitness gained per week</span>
                 </div>
                 <div className="load-stats">
                   <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}><Signed v={ramp} /></b> Ramp /wk · {rZone ? rZone.label : ''}</span>
