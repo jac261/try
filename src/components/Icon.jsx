@@ -30,6 +30,8 @@ const ICON_PATHS = {
   pace: '<path d="M4.6 17a7.5 7.5 0 1114.8 0"/><path d="M12 17l4.2-4.2"/><circle cx="12" cy="17" r="1.2"/><path d="M4.6 17h1.4"/><path d="M18 17h1.4"/><path d="M12 9.6v1.4"/>',
   trophy: '<path d="M8 4.5h8v4.6a4 4 0 01-8 0z"/><path d="M8 5.6H5.2v1.7a3 3 0 002.9 3"/><path d="M16 5.6h2.8v1.7a3 3 0 01-2.9 3"/><path d="M12 13.5v3"/><path d="M9 20.5l.8-4h4.4l.8 4z"/><path d="M8.4 20.5h7.2"/>',
   settings: '<path d="M4 8h9"/><path d="M18 8h2"/><circle cx="15.5" cy="8" r="2.5"/><path d="M4 16h3"/><path d="M12 16h8"/><circle cx="9.5" cy="16" r="2.5"/>',
+  // Open book — the support library of explainers ("the science behind Try").
+  book: '<path d="M12 6.8C10.4 5.6 7.8 5 4.5 5.2V17.6C7.8 17.4 10.4 18 12 19.2"/><path d="M12 6.8C13.6 5.6 16.2 5 19.5 5.2V17.6C16.2 17.4 13.6 18 12 19.2"/>',
 };
 // New triathlon set is drawn for a uniform stroke-width of 2 (the app default);
 // no per-icon weight overrides needed.

@@ -429,7 +429,7 @@ export function App({ storage, getToken, user }) {
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { storage.clear(); setLog({}); setMoves({}); setPlan(null); } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)}
-        onWellnessSynced={applyServerWellness} onReadinessInfo={() => { supportReturn.current = 'settings'; setView('readinessInfo'); }} onSupportHub={() => openSupport(null)}
+        onWellnessSynced={applyServerWellness} onSupportHub={() => openSupport(null)}
         watchSync={watchSync} onWatchSync={toggleWatchSync}
         onExportCalibration={() => downloadCalibration(storage)} calibrationCount={storage.loadCalibration().length} />}
       {view === 'readinessInfo' && <ReadinessInfo onBack={() => setView(supportReturn.current === 'settings' ? 'settings' : 'support')} />}
