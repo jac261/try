@@ -78,6 +78,7 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
   const sessTitle = (hard || eased || today.find(w => w.discipline !== 'rest') || {}).title;
   const adv = T.wellness.advice(rd.band, !!hard, today.length && sessTitle ? sessTitle : 'rest day');
   const stale = rec.date !== todayISO;
+  const proposal = stale ? null : T.proposeToday({ band: rd.band, score: rd.score, todays: today });
 
   // Training-load signals feed the coach line, the summary numbers and the
   // auto-expand rule, so they're computed up front (all null-safe on thin data).
@@ -107,29 +108,29 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
         </div>
       </div>
       {onFeel && !(rec.date === todayISO && rec.feel) && <FeelCheckin onFeel={onFeel} />}
-      {(() => {
-        // The adaptive engine (Phase 1): at most one reasoned proposal for today,
-        // from this morning's band — rules & thresholds in docs/ADAPTIVE_ENGINE.md.
-        // Stale wellness data never drives a change (yesterday's read isn't advice).
-        const proposal = stale ? null : T.proposeToday({ band: rd.band, score: rd.score, todays: today });
-        if (proposal) {
-          const accept = proposal.action === 'easeToday' ? onEase
-            : proposal.action === 'restoreToday' ? onRestore
-            : () => onOpen && onOpen(proposal.workout);
-          return (
-            <div className="rd-proposal">
-              <div className="ph"><Icon name={proposal.kind === 'restore' ? 'bolt' : proposal.kind === 'move-test' ? 'calendar' : 'rest'} size={16} /> {proposal.headline}</div>
-              <div className="pw">{proposal.why}</div>
-              <button className="btn ghost sm rd-action" onClick={accept}>
-                {proposal.kind === 'move-test' ? 'Open & reschedule' : proposal.kind === 'restore' ? 'Restore the session' : 'Accept the swap'}
-              </button>
-            </div>
-          );
-        }
-        if (eased) return <div className="rd-eased"><Icon name="rest" size={15} /> Today eased to {eased.title} for recovery · <a className="reset" {...tap(onRestore)}>undo</a></div>;
-        return null;
-      })()}
-      {coach && <div className="rd-coach">{coach}</div>}
+      {/* The adaptive engine (Phase 1): at most one reasoned proposal for today,
+          from this morning's band — rules & thresholds in docs/ADAPTIVE_ENGINE.md.
+          Stale wellness data never drives a change (yesterday's read isn't advice). */}
+      {proposal ? (() => {
+        const accept = proposal.action === 'easeToday' ? onEase
+          : proposal.action === 'restoreToday' ? onRestore
+          : () => onOpen && onOpen(proposal.workout);
+        return (
+          <div className="rd-proposal">
+            <div className="ph"><Icon name={proposal.kind === 'restore' ? 'bolt' : proposal.kind === 'move-test' ? 'calendar' : 'rest'} size={16} /> {proposal.headline}</div>
+            <div className="pw">{proposal.why}</div>
+            <button className="btn ghost sm rd-action" onClick={accept}>
+              {proposal.kind === 'move-test' ? 'Open & reschedule' : proposal.kind === 'restore' ? 'Restore the session' : 'Accept the swap'}
+            </button>
+          </div>
+        );
+      })() : eased ? (
+        <div className="rd-eased"><Icon name="rest" size={15} /> Today eased to {eased.title} for recovery · <a className="reset" {...tap(onRestore)}>undo</a></div>
+      ) : null}
+      {/* The coach line synthesises the multi-week load trend, so it only speaks
+          when the engine has nothing more specific to say for today — otherwise
+          "room to push" stacks under a recovery ease and reads as a contradiction. */}
+      {coach && !proposal && !eased && <div className="rd-coach">{coach}</div>}
       <div className="rd-load-toggle" {...tap(toggle)} role="button"
         aria-expanded={open} aria-label="Toggle readiness and training-load details">
         <span className="rlt-title">Details</span>
