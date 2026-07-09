@@ -15,7 +15,7 @@
  *      at their worst, land exactly on the red line (a 45-point drop). No single
  *      signal alone can trigger red.
  *   3. Each factor's IMPORTANCE as an ordinal tier (HRV 4, sleep 3, resting HR 2,
- *      form 2) — one ranking judgement.
+ *      form 2, sleep debt 2, load spike 2) — one ranking judgement.
  * A factor's max penalty is then (importance / total) x budget — so HRV's "26"
  * is an output (4/11 x ~70.7), not an input. Within a factor the penalty ramps
  * over a describable range (neutral -> worst), so there are no cliff edges either.
@@ -37,12 +37,18 @@ const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
 const sd = a => { if (a.length < 2) return 0; const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) * (x - m)))); };
 const clamp01 = x => Math.max(0, Math.min(1, x));
 
-// Rolling baseline from the records before `date` (HRV & resting-HR norms).
+// Rolling baseline from the records before `date`: HRV & resting-HR norms, plus
+// the short-term context the cumulative factors need — the previous few nights'
+// sleep and where acute load (ATL) stood a week ago.
 function baseline(records, beforeDate) {
   const prior = records.filter(r => r.date < beforeDate);
   const hrv = prior.slice(-21).map(r => r.hrv).filter(v => v != null);
   const rhr = prior.slice(-21).map(r => r.rhr).filter(v => v != null);
-  return { hrvMean: mean(hrv), hrvSd: sd(hrv) || 4, rhrMean: mean(rhr), n: prior.length };
+  const nightFloor = iso(addDays(beforeDate, -3));
+  const sleepPrior = prior.filter(r => r.date >= nightFloor).slice(-3).map(r => r.sleepH).filter(v => v != null);
+  const wkTarget = iso(addDays(beforeDate, -7));
+  const wk = [...prior].reverse().find(r => r.date <= wkTarget && r.atl != null);
+  return { hrvMean: mean(hrv), hrvSd: sd(hrv) || 4, rhrMean: mean(rhr), sleepPrior, atlWeekAgo: wk ? wk.atl : null, n: prior.length };
 }
 
 const fmtH = h => { const m = Math.round(h * 60); return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; };
@@ -120,6 +126,35 @@ const FACTORS = [
     },
     what: 'Form (TSB = Fitness − Fatigue) is your training-load balance — chronic context, not today’s acute state, so it’s a secondary signal. Balanced is neutral; −25 or deeper is the worst case; +12 or fresher earns the freshness bonus.',
     samples: [['+12 or fresher', 12], ['Balanced (0)', 0], ['−10 (some fatigue)', -10], ['−25 or deeper', -25]],
+  },
+  {
+    key: 'debt', label: 'Sleep debt', importance: 2,
+    value: (rec, base) => {
+      const nights = base.sleepPrior || [];
+      if (!nights.length) return null;
+      return nights.reduce((s, h) => s + Math.max(0, 7 - h), 0);
+    },
+    neutral: 1.5, worst: 6, curve: 1,
+    driver: (_rec, _base, p) => {
+      if (p <= -7) return { bad: 1, t: 'Short sleep stacking up over recent nights' };
+      if (p <= -2) return { bad: 1, t: 'Sleep running a little short lately' };
+      return null;
+    },
+    what: 'Sleep shortfall added up across the few nights before last night — the hole, where the sleep factor is only the latest dig. One short night is quickly repaid; several in a row compound, so you can feel wrecked on a morning when last night alone looked passable.',
+    samples: [['Well slept all week', 0], ['One shortish night', 2], ['A couple of short nights', 3.5], ['Several short nights', 6]],
+  },
+  {
+    key: 'spike', label: 'Load spike', importance: 2,
+    value: (rec, base) => (rec.atl != null && rec.ctl > 0 && base.atlWeekAgo != null)
+      ? (rec.atl - base.atlWeekAgo) / rec.ctl : null,
+    neutral: 0.15, worst: 0.5, curve: 1,
+    driver: (_rec, _base, p) => {
+      if (p <= -8) return { bad: 1, t: 'Training load has jumped well above your recent norm' };
+      if (p <= -2) return { bad: 1, t: 'Training load climbing quickly' };
+      return null;
+    },
+    what: 'How sharply acute load (Fatigue/ATL) has risen over the past week, scaled to your fitness. Form can read fresh after a run of easy weeks, yet a sudden jump in weekly load is a classic overreach signal — a fast rise counts as fatigue even while the balance still looks positive.',
+    samples: [['Steady week', 0], ['Noticeably bigger week', 0.25], ['Big jump in load', 0.4], ['Sudden huge jump', 0.5]],
   },
 ];
 
@@ -291,7 +326,7 @@ function history(records, days = 14) {
 
 // Bump when the scoring model changes shape — calibration observations carry it
 // so a future fit can separate data gathered under different engines.
-const ENGINE_VERSION = 2;
+const ENGINE_VERSION = 3;
 
 // Immutable capture of "readiness as it stood" for calibration: the raw inputs
 // (not just the score) so future models can be fitted from the same observations,
@@ -311,7 +346,11 @@ function snapshot(rec, base) {
       rhr: rec.rhr ?? null,
       rhrMean: round1(base.rhrMean) || null,
       sleepH: rec.sleepH ?? null,
+      sleepPrior: (base.sleepPrior || []).map(round1),
       tsb: rec.tsb ?? null,
+      atl: round1(rec.atl ?? null),
+      ctl: round1(rec.ctl ?? null),
+      atlWeekAgo: round1(base.atlWeekAgo ?? null),
     },
   };
 }

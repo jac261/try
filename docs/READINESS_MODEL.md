@@ -46,22 +46,26 @@ red. That one rule pins how many points are "on the table" in total.
 | **Sleep** | 3 | The primary recovery _input_. |
 | **Resting HR** | 2 | Corroborates HRV, but noisier/laggier — and penalty-only. |
 | **Form (TSB)** | 2 | Chronic training-load _context_, not today's acute state. |
+| **Sleep debt** | 2 | The hole dug across the prior nights — cumulative, where Sleep is acute. |
+| **Load spike** | 2 | How fast acute load rose this week — cumulative, where Form is a snapshot. |
 
 Each factor's **max penalty** is then `(its importance ÷ total) × budget`. With the
-"two-signal red" rule, the budget works out to ~71 points, and the weights fall out:
+"two-signal red" rule, the budget works out to ~96 points, and the weights fall out:
 
 | Factor | Derivation | **Max penalty** |
 |---|---|---|
-| HRV | 4/11 × 71 | **26** |
-| Sleep | 3/11 × 71 | **19** |
-| Resting HR | 2/11 × 71 | **13** |
-| Form | 2/11 × 71 | **13** |
+| HRV | 4/15 × 96 | **26** |
+| Sleep | 3/15 × 96 | **19** |
+| Resting HR | 2/15 × 96 | **13** |
+| Form | 2/15 × 96 | **13** |
+| Sleep debt | 2/15 × 96 | **13** |
+| Load spike | 2/15 × 96 | **13** |
 
-So **"−26" means "HRV is 4/11 of the importance, and the budget is set so no lone signal
+So **"−26" means "HRV is 4/15 of the importance, and the budget is set so no lone signal
 triggers red"** — not a number I liked the look of. Change the importance tiers or the
-policy and every weight recomputes. The only remaining judgements are the tiers (4/3/2/2)
-and the one behavioural rule — a handful of arguable decisions instead of ~20 magic
-numbers. _(The genuinely rigorous next step is to fit even those to data — correlating
+policy and every weight recomputes. The only remaining judgements are the tiers
+(4/3/2/2/2/2) and the one behavioural rule — a handful of arguable decisions instead of
+~20 magic numbers. _(The genuinely rigorous next step is to fit even those to data — correlating
 each morning's readiness against how that day's session felt via the `feel` log. Not
 enough history yet, but the hooks are there.)_
 
@@ -101,10 +105,40 @@ you've met most of your need, so a token nudge, not a flat penalty._
 ### Form (TSB) — max 13 · neutral: 0 · worst: −25
 | Form | Effect |
 |---|---|
-| +12 or fresher | **+4** (bonus) |
+| +12 or fresher | **+2** (bonus) |
 | balanced | 0 |
 | −10 | −5 |
 | −25 or deeper | −13 |
+
+### Sleep debt — max 13 · neutral: 1.5h short · worst: 6h short
+The shortfall vs 7h summed over the **three nights before last night** (last night itself
+belongs to the Sleep factor — the two don't overlap). A field report taught the model this
+factor: four straight short nights, each individually "a bit short", scored 93 on a morning
+that felt wrecked. Debt compounds across nights even when no single night looks alarming.
+
+| Shortfall over the 3 prior nights | Effect |
+|---|---|
+| well slept all week | 0 |
+| ~2h down | −1 |
+| ~3.5h down | −6 |
+| 6h+ down | −13 |
+
+### Load spike — max 13 · neutral: ATL +15% of CTL per week · worst: +50%
+How much acute load (ATL) rose over the trailing 7 days, scaled by CTL so it
+self-calibrates to the athlete. This is the same morning's other blind spot: after easy
+weeks, TSB stays positive right through a sudden big block — Form was handing out a
+freshness bonus mid-spike. A fast ATL rise is a classic overreach signal regardless of
+where the balance sits.
+
+| ATL rise in a week (as share of CTL) | Effect |
+|---|---|
+| steady week | 0 |
+| +25% | −4 |
+| +40% | −9 |
+| +50% or more | −13 |
+
+Falling ATL (a taper or recovery week) is never penalised, and both cumulative factors
+stay silent without enough history — a brand-new account behaves exactly like v2.
 
 ## A worked example
 
@@ -113,6 +147,17 @@ A morning of **HRV 39** (~2.6 sd below a ~60 baseline → **−26**), **sleep 6.
 **+2**):
 
 > 100 − 26 − 1 − 4 + 2 = **71 → 🟠 Ease into it**
+
+And the morning that motivated v3 (real data, 2026-07-09): **HRV on baseline** (+1),
+**resting HR on baseline** (0), **Form +11** (fresh bonus, +2), **4h 56m sleep** (−10) —
+the v2 read: **93 → 🟢**. Adding the ~4h of debt over the three prior nights (**−7**) and
+an ATL that rose from 19 to 45 in a week, ~46% of CTL (**−12**):
+
+> 100 + 1 + 2 − 10 − 7 − 12 = **74 → 🟠 Ease into it**
+
+which matched how the athlete actually felt. Scoring-model changes bump `ENGINE_VERSION`
+(now 3), carried on every calibration observation so a future fit can separate data
+gathered under different engines.
 
 ## Caveat
 

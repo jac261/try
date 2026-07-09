@@ -86,10 +86,10 @@ describe('wellness readiness — interpolation & model', () => {
     const m = wellness.MODEL;
     expect(m.start).toBe(100);
     expect(m.bands.map(b => b.key)).toEqual(['green', 'amber', 'red']);
-    expect(m.factors.map(f => f.key)).toEqual(['hrv', 'sleep', 'rhr', 'form']);
-    // weights are derived from importance 4/3/2/2 and the band-anchored budget,
-    // not hand-set: HRV 26, sleep 19, resting HR 13, form 13.
-    expect(m.factors.map(f => f.weight)).toEqual([26, 19, 13, 13]);
+    expect(m.factors.map(f => f.key)).toEqual(['hrv', 'sleep', 'rhr', 'form', 'debt', 'spike']);
+    // weights are derived from importance 4/3/2/2/2/2 and the band-anchored budget,
+    // not hand-set: HRV 26, sleep 19, the four secondaries 13 each.
+    expect(m.factors.map(f => f.weight)).toEqual([26, 19, 13, 13, 13, 13]);
     expect(m.policy).toMatch(/two compromised signals/i);
     const sleep = m.factors.find(f => f.key === 'sleep');
     expect(sleep.what).toMatch(/7h/);
@@ -104,6 +104,77 @@ describe('wellness readiness — interpolation & model', () => {
     const twoWorst = wellness.readiness({ hrv: base.hrvMean - base.hrvSd * 2.6, sleepH: 4 }, base);
     expect(twoWorst.score).toBe(55);
     expect(twoWorst.band).toBe('amber'); // exactly on the amber/red edge
+  });
+});
+
+describe('wellness readiness — cumulative factors (sleep debt & load spike)', () => {
+  // Field report, 2026-07-09: readiness read 93 on a morning Jon felt wrecked.
+  // Every single-day signal was clean — HRV and resting HR on baseline, form
+  // positive — but four straight short nights and an ATL that more than doubled
+  // in a week were invisible to the model. These are his literal numbers.
+  const week = [
+    { date: '2026-06-28', hrv: 49, rhr: 52, sleepH: 14955 / 3600, ctl: 59.7, atl: 29.01 },
+    { date: '2026-06-29', hrv: 51, rhr: 51, sleepH: 22560 / 3600, ctl: 58.29, atl: 25.15 },
+    { date: '2026-06-30', hrv: 52, rhr: 49, sleepH: 21102 / 3600, ctl: 57.51, atl: 25.13 },
+    { date: '2026-07-01', hrv: 60, rhr: 51, sleepH: 21960 / 3600, ctl: 56.15, atl: 21.78 },
+    { date: '2026-07-02', hrv: 39, rhr: 57, sleepH: 22980 / 3600, ctl: 54.83, atl: 18.88 },
+    { date: '2026-07-03', hrv: 61, rhr: 50, sleepH: 30660 / 3600, ctl: 54.27, atl: 20.5 },
+    { date: '2026-07-04', hrv: 77, rhr: 46, sleepH: 19980 / 3600, ctl: 54.78, atl: 27.88 },
+    { date: '2026-07-05', hrv: 69, rhr: 47, sleepH: 23880 / 3600, ctl: 56.62, atl: 41.88 },
+    { date: '2026-07-06', hrv: 59, rhr: 49, sleepH: 19680 / 3600, ctl: 55.29, atl: 36.3 },
+    { date: '2026-07-07', hrv: 61, rhr: 49, sleepH: 22102 / 3600, ctl: 55.97, atl: 42.65 },
+    { date: '2026-07-08', hrv: 57, rhr: 50, sleepH: 19260 / 3600, ctl: 56.3, atl: 46.29 },
+  ];
+  const today = { date: '2026-07-09', hrv: 59, rhr: 50, sleepH: 17760 / 3600, ctl: 55.75, atl: 44.52, tsb: 11.23 };
+
+  it('the 93 morning: cumulative debt and a load spike pull a clean-signals day out of green', () => {
+    const base = wellness.baseline(week, today.date);
+    const r = wellness.readiness(today, base);
+    expect(r.band).toBe('amber');
+    expect(r.score).toBe(74);
+    const debt = r.why.find(w => w.key === 'debt');
+    const spike = r.why.find(w => w.key === 'spike');
+    expect(debt.bad).toBe(1);
+    expect(spike.bad).toBe(1);
+    expect(spike.t).toMatch(/jumped well above/);
+  });
+
+  it('the same morning scored 93 when only single-day signals were visible', () => {
+    // Strip the cumulative context (a hand-built base, like a brand-new account):
+    // the old model's read, kept as the contrast the field report exposed.
+    const base = wellness.baseline(week, today.date);
+    const r = wellness.readiness(today, { hrvMean: base.hrvMean, hrvSd: base.hrvSd, rhrMean: base.rhrMean });
+    expect(r.score).toBe(93);
+    expect(r.band).toBe('green');
+  });
+
+  it('well-slept prior nights and steady load add nothing (no behaviour change for the normal case)', () => {
+    const base = { hrvMean: 60, hrvSd: 8, rhrMean: 50, sleepPrior: [7.5, 8, 7.2], atlWeekAgo: 40 };
+    const r = wellness.readiness({ hrv: 60, sleepH: 8, rhr: 50, tsb: 0, ctl: 55, atl: 42 }, base);
+    expect(r.score).toBe(100);
+    expect(r.why.some(w => w.key === 'debt' || w.key === 'spike')).toBe(false);
+  });
+
+  it('one mildly short prior night costs at most a point and raises no chip', () => {
+    const base = { hrvMean: 60, hrvSd: 8, rhrMean: 50, sleepPrior: [7.5, 5, 7.5] };
+    const r = wellness.readiness({ hrv: 60, sleepH: 8, rhr: 50, tsb: 0 }, base);
+    expect(r.score).toBeGreaterThanOrEqual(99);
+    expect(r.why.some(w => w.key === 'debt')).toBe(false);
+  });
+
+  it('a falling ATL (taper) is never penalised as a spike', () => {
+    const base = { hrvMean: 60, hrvSd: 8, rhrMean: 50, atlWeekAgo: 50 };
+    const r = wellness.readiness({ hrv: 60, sleepH: 8, rhr: 50, tsb: 15, ctl: 55, atl: 30 }, base);
+    expect(r.why.some(w => w.key === 'spike')).toBe(false);
+  });
+
+  it('snapshot captures the cumulative inputs for calibration and carries the new engine version', () => {
+    const base = wellness.baseline(week, today.date);
+    const snap = wellness.snapshot(today, base);
+    expect(snap.v).toBe(3);
+    expect(snap.inputs.sleepPrior.length).toBe(3);
+    expect(snap.inputs.atlWeekAgo).toBe(18.9);
+    expect(snap.inputs.atl).toBe(44.5);
   });
 });
 
