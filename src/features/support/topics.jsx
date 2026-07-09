@@ -151,6 +151,12 @@ export const TOPICS = [
         briefly overshoots it, and Taper sheds roughly half so you arrive fresh. The opening level
         is deliberately not low: starting gently and doubling would break the same ramp-rate
         safety limits the engine enforces.</P>
+      <H>Load, not just minutes</H>
+      <P>The weekly chart on your progress page measures training <b>load</b>, not time on the
+        clock. Harder sessions count for more per minute than easy ones, so a short, sharp
+        benchmark test or a threshold session can outweigh a longer easy ride. That is why a test
+        week can read as one of your bigger weeks even with fewer minutes logged: the stress is
+        real, the minutes alone just do not show it.</P>
       <H>Recovery weeks</H>
       <P>Every third or fourth week (depending on experience level) steps volume down. Adaptation
         happens when you absorb training, not while you pile it on. Recovery weeks also pin every

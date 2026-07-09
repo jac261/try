@@ -13,11 +13,13 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
   const pct = all.length ? Math.round(done.length / all.length * 100) : 0;
 
-  // weekly bars
+  // weekly bars — training load, not raw minutes. A benchmark test or a sharp
+  // interval session is short but taxing; counting minutes made those weeks look
+  // like a step back, load shows them for the hard weeks they are.
   const bars = plan.weeks.map(w => {
     const sess = w.workouts.filter(x => x.discipline !== 'rest' && !x.race);
-    const planned = sess.reduce((a, b) => a + b.durationMin, 0) / 60;
-    const dn = sess.filter(x => log[x.id]).reduce((a, b) => a + b.durationMin, 0) / 60;
+    const planned = sess.reduce((a, b) => a + T.estimateTss(b), 0);
+    const dn = sess.filter(x => log[x.id]).reduce((a, b) => a + T.estimateTss(b), 0);
     return { label: w.index % 2 === 0 ? (w.index + 1) : '', planned, done: dn, color: 'var(--accent)' };
   });
 
@@ -70,7 +72,7 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
         <div className="kpi"><div className="v" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>{streak}<Icon name="flame" size={22} /></div><div className="k">Current streak</div></div>
       </div>
 
-      <div className="section-title">Weekly volume <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(planned vs completed)</span></div>
+      <div className="section-title"><InfoLink onOpen={onSupport} topic="plan-structure" />Weekly load <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(planned vs completed)</span></div>
       <div className="card"><BarChart data={bars} height={160} /></div>
 
       <div className="section-title"><InfoLink onOpen={onSupport} topic="zones" />Fitness progression</div>

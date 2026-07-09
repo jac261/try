@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout, upgradePlanSegments } from './plan.js';
+import { estimateTss } from './adapt.js';
 import { iso, addDays } from './date.js';
 
 const profile = (raceDate, startDate) => ({
@@ -316,5 +317,28 @@ describe('upgradePlanSegments (schema migration for cached plans)', () => {
     expect(pick(up, x => x.test)).toBe(pick(old, x => x.test));
     expect(upgradePlanSegments(p)).toBe(p); // already current → same reference
     expect(upgradePlanSegments(null)).toBe(null);
+  });
+});
+
+describe('generatePlan — weekly load reads test weeks honestly (the week-6 report)', () => {
+  const realSess = w => w.workouts.filter(x => x.discipline !== 'rest' && !x.race);
+  const weekMins = w => realSess(w).reduce((s, x) => s + x.durationMin, 0);
+  const weekLoad = w => realSess(w).reduce((s, x) => s + estimateTss(x), 0);
+
+  it('a non-recovery benchmark-test week can have fewer minutes than the week before yet more load', () => {
+    // A benchmark test is short but taxing; it replaces a longer endurance/quality
+    // session, so raw minutes dipped even though the week is harder. This is exactly
+    // why the progress chart plots training load, not time.
+    const p = generatePlan({
+      name: 'J', raceType: 'olympic', fitness: 'advanced',
+      trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5,
+      startDate: '2026-07-06', raceDate: iso(addDays('2026-07-06', 77)),
+    });
+    // The reported case: a non-recovery test week whose previous (also non-recovery)
+    // week has at least as many minutes — the minutes look like a step back.
+    const i = p.weeks.findIndex((w, k) => k > 0 && !w.isRecovery && !p.weeks[k - 1].isRecovery
+      && w.workouts.some(x => x.test) && weekMins(w) <= weekMins(p.weeks[k - 1]));
+    expect(i).toBeGreaterThan(0);
+    expect(weekLoad(p.weeks[i])).toBeGreaterThan(weekLoad(p.weeks[i - 1])); // load tells the truth
   });
 });
