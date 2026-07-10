@@ -53,6 +53,14 @@ permanent simulated case for future audits and verifications:
 - Third-party fields have PER-SPORT semantics: probe intervals.icu values
   for each sport that can produce them, not just one (the 359 W running
   power vs bike FTP incident).
+- Data sources STOP: when a feed disconnects or goes stale, every consumer
+  needs a recovery path — "stands down when real data exists" must not mean
+  "stands down forever once real data existed" (2026-07-10: one measured CTL
+  in the store would have disabled the log-derived model permanently, framing
+  the engine dormant and the Progress tab frozen for a lapsed intervals user).
+- Estimates never overwrite USER-ENTERED values: any read-time overlay must
+  fill only the fields that are genuinely missing (2026-07-10: a manually
+  entered TSB was silently replaced by the derived estimate).
 
 ## The four dimensions
 
@@ -115,6 +123,28 @@ permanent simulated case for future audits and verifications:
   the commit message or below.
 
 ## Audit log
+
+### 2026-07-10 — focused audit: sensor-less tier (readiness v3/v4, check-in, log-derived load)
+- 4 auditors (engine/model, sync/data-integrity, UI/a11y, imperfect-use
+  timelines), 15 raw findings, verified to 4 real fixes landed same-day:
+  stale-intervals dead end (derived model now CONTINUES from the last measured
+  CTL/ATL when the feed is stale, instead of standing down forever — no scale
+  seam, gaps self-heal), manually entered TSB clobbered by the estimate (the
+  merge now fills only null fields; found by the coordinator's spot-check after
+  the sync auditor reported clean — the process's "no findings → spot-check"
+  rule earning its keep), check-in tap targets ~29px (now ≥44px effective),
+  and the derived-series recomputation memoised.
+- False positives named: midnight "duplicate" check-in (a new calendar day
+  correctly gets a new check-in), the onFeel render-nothing guard (established
+  isolated-mount convention), multi-device feel divergence (documented cost of
+  a device-local store), day-1 empty-banner unreachable for plan holders
+  (intended — manual entry stays reachable via the card's Update link). One
+  auditor misread deriveLoadRecords as emitting only logged days; it emits
+  every day (decay), which invalidated their day-1 mechanics.
+- Honest deferrals: whyOpen toggle survives a midnight rollover (cosmetic),
+  coach-line tone during a return from a long break ("drifting down" reads
+  post-recovery), calibration feel-vs-evening-ATL temporal offset (accepted:
+  that pairing is what the model should learn from).
 
 ### 2026-07-08 — focused audit: Calendar/Plan restructure
 - 2 auditors (DnD/date logic; UI/mobile/a11y), 17 raw findings, verified to:

@@ -76,9 +76,36 @@ describe('loadmodel.withLogLoad (read-time merge)', () => {
   const plan = mkPlan([wo('0-0', 0, 'Endurance', 70)]);
   const inputs = { plan, log: {}, moves: {}, adjust: {}, todayISO: iso(addDays(START, 2)) };
 
-  it('one measured CTL anywhere means the derived model stays out entirely', () => {
+  it('fresh measured CTL means the derived model stays out entirely', () => {
     const records = [{ date: START, ctl: 55, atl: 40, tsb: 15 }];
-    expect(withLogLoad(records, inputs)).toBe(records);
+    expect(withLogLoad(records, inputs)).toBe(records); // START is within the freshness window of START+2
+  });
+
+  it('stale measured CTL seeds a continuation from the last measured values, not a re-seed', () => {
+    // The intervals.icu account went quiet 10 days ago; the athlete kept logging.
+    // The series must continue from the measured 55/40 (decaying, plus logged
+    // sessions), never jump back to the tiny week-1 seed — no seam in the chart.
+    const later = iso(addDays(START, 10));
+    const records = [{ date: START, ctl: 55, atl: 40, tsb: 15 }];
+    const out = withLogLoad(records, { plan, log: {}, moves: {}, adjust: {}, todayISO: later });
+    expect(out.length).toBe(11); // the measured day + 10 continued days
+    const first = out.find(r => r.date === iso(addDays(START, 1)));
+    expect(first.derived).toBe(true);
+    expect(first.ctl).toBeCloseTo(55 * 41 / 42, 1); // continues the measured value
+    expect(out[0]).toBe(records[0]); // the measured record itself is untouched
+    // and the stale day itself keeps its measured numbers, no overwrite
+    expect(out[0].ctl).toBe(55);
+  });
+
+  it('an estimate never overwrites a user-entered value on the same day', () => {
+    // Manual TSB from the wellness editor (ctl null, so the derived model runs):
+    // the athlete's own number must survive the merge; only the gaps fill in.
+    const records = [{ date: iso(addDays(START, 1)), tsb: 12, hrv: 60 }];
+    const out = withLogLoad(records, inputs);
+    const d1 = out.find(r => r.date === iso(addDays(START, 1)));
+    expect(d1.tsb).toBe(12);            // user's assertion wins
+    expect(d1.ctl).toBeGreaterThan(0);  // estimate fills the genuinely missing fields
+    expect(d1.hrv).toBe(60);
   });
 
   it('fills sensor-less records in place and invents the missing days, all flagged derived', () => {

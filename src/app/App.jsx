@@ -52,12 +52,14 @@ export function App({ storage, getToken, user }) {
   const answerFeel = v => setFeels(storage.saveFeel(T.iso(new Date()), v));
   const [adjust, setAdjust] = useState(() => storage.load('adjust', {}));
   // Read-time overlays on the server-shaped wellness store: the morning
-  // check-in answers, then — only when no real fitness data exists at all —
-  // Fitness/Fatigue/Form derived from the logged sessions themselves, so the
-  // charts, readiness factors and engine phases work without intervals.icu.
-  // Neither overlay is ever stored or synced.
-  const recs = T.withLogLoad(T.wellness.mergeFeel(wellness, feels),
-    { plan, log, moves, adjust, todayISO: T.iso(new Date()) });
+  // check-in answers, then Fitness/Fatigue/Form derived from the logged
+  // sessions wherever measured data is absent or stale, so the charts,
+  // readiness factors and engine phases work without intervals.icu. Neither
+  // overlay is ever stored or synced. Memoised because the derivation walks
+  // the whole plan; renders happen on state change, so staleness matches deps.
+  const recs = useMemo(() => T.withLogLoad(T.wellness.mergeFeel(wellness, feels),
+    { plan, log, moves, adjust, todayISO: T.iso(new Date()) }),
+    [wellness, feels, plan, log, moves, adjust]);
   const [activities, setActivities] = useState(null); // recent watch activities (null until loaded / not connected)
   const [thresholds, setThresholds] = useState(null); // intervals.icu per-sport thresholds (fitness watcher)
   // A failed plan write means this device and the account have diverged — the

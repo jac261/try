@@ -18,22 +18,26 @@
  * not a new constant.
  */
 import { iso, addDays, daysBetween } from './date.js';
-import { estimateTss } from './adapt.js';
+import { estimateTss, RAMP_RULES } from './adapt.js';
 
 const round2 = x => Math.round(x * 100) / 100;
 
-// The full derived series from the plan's start through `todayISO` (inclusive).
-// Only completed sessions count, on their effective (possibly moved) dates,
-// with the adjustment overlay applied — the same accounting as projectRaceForm.
-export function deriveLoadRecords({ plan, log, moves, adjust, todayISO }) {
+// The derived series through `todayISO` (inclusive). Only completed sessions
+// count, on their effective (possibly moved) dates, with the adjustment overlay
+// applied — the same accounting as projectRaceForm. By default the series runs
+// from the plan's start, seeded from week-1 planned load; pass `seed`
+// ({date, ctl, atl}, e.g. the last measured record) to instead CONTINUE from a
+// known state — the recurrence then walks forward from the day after.
+export function deriveLoadRecords({ plan, log, moves, adjust, todayISO, seed }) {
   if (!plan || !Array.isArray(plan.weeks) || !plan.weeks.length) return [];
   const today = todayISO || iso(new Date());
-  const start = plan.weeks[0].start || iso(plan.profile && plan.profile.startDate || today);
+  const start = seed ? iso(addDays(seed.date, 1))
+    : (plan.weeks[0].start || iso(plan.profile && plan.profile.startDate || today));
   if (today < start) return [];
 
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
-  const seedWeek = plan.weeks[0].workouts.filter(w => w.discipline !== 'rest' && !w.race);
-  const seed = seedWeek.reduce((s, w) => s + estimateTss(w), 0) / 7;
+  const wk1 = plan.weeks[0].workouts.filter(w => w.discipline !== 'rest' && !w.race);
+  const wk1Daily = wk1.reduce((s, w) => s + estimateTss(w), 0) / 7;
 
   const byDate = {};
   all.forEach(w => {
@@ -43,7 +47,7 @@ export function deriveLoadRecords({ plan, log, moves, adjust, todayISO }) {
   });
 
   const out = [];
-  let ctl = seed, atl = seed;
+  let ctl = seed ? seed.ctl : wk1Daily, atl = seed ? seed.atl : wk1Daily;
   const days = daysBetween(start, today);
   for (let i = 0; i <= days; i++) {
     const d = iso(addDays(start, i));
@@ -55,23 +59,35 @@ export function deriveLoadRecords({ plan, log, moves, adjust, todayISO }) {
   return out;
 }
 
-// Fill the wellness records with derived load — but ONLY when there is no real
-// fitness data at all. One measured CTL anywhere means intervals.icu (or a
-// manual feed) owns the series; mixing measured and estimated scales would
-// produce a chart that lies at the seam. Existing records (manual HRV/sleep,
-// check-in answers) keep their fields and gain the derived load for their day.
+// Fill the wellness records with derived load, deferring to measured data:
+// - FRESH measured CTL (within the engine's freshness window) owns the series
+//   outright — the derived model stays out entirely.
+// - STALE measured CTL (sync gap, disconnected account) seeds a CONTINUATION:
+//   the recurrence walks forward from the last measured values using logged
+//   sessions, so there is no scale seam, brief gaps self-heal, and a user who
+//   abandons intervals.icu keeps a live Progress tab instead of a frozen one.
+// - No measured CTL at all → the full from-plan-start derivation.
+// Existing records keep every non-null field they already have (a manually
+// entered TSB is the athlete's assertion — an estimate never overwrites it).
 export function withLogLoad(records, inputs) {
   const recs = records || [];
-  if (recs.some(r => r.ctl != null)) return recs;
-  const derived = deriveLoadRecords(inputs || {});
+  const today = (inputs && inputs.todayISO) || iso(new Date());
+  const real = recs.filter(r => r.ctl != null && !r.derived);
+  const last = real.length ? real[real.length - 1] : null;
+  if (last && last.date >= iso(addDays(today, -RAMP_RULES.freshDays))) return recs;
+  const derived = deriveLoadRecords({
+    ...(inputs || {}),
+    seed: last ? { date: last.date, ctl: last.ctl, atl: last.atl } : undefined,
+  });
   if (!derived.length) return recs;
   const byDate = {};
   derived.forEach(d => { byDate[d.date] = d; });
-  const out = recs.map(r => (byDate[r.date] ? { ...r, ...pick(byDate[r.date]) } : r));
+  const out = recs.map(r => {
+    const d = byDate[r.date];
+    if (!d) return r;
+    return { ...r, ctl: r.ctl ?? d.ctl, atl: r.atl ?? d.atl, tsb: r.tsb ?? d.tsb, derived: true };
+  });
   const have = new Set(recs.map(r => r.date));
   derived.forEach(d => { if (!have.has(d.date)) out.push(d); });
   return out.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
-
-// The load fields a derived day contributes to an existing record.
-const pick = d => ({ ctl: d.ctl, atl: d.atl, tsb: d.tsb, derived: true });
