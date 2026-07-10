@@ -279,6 +279,10 @@ export function toClientState(resp) {
       // rotated sessions back to the canonical format.
       custom: wo.role === 'custom' || undefined,
       seed: week && week.isRecovery ? 0 : (week ? week.index : undefined),
+      // Also derivable rather than stored: a RACE-typed workout that is not
+      // THE race is a tune-up (B) race — the flag drives calendar locking and
+      // proposal exclusions, so it must survive hydrate.
+      bRace: (wo.type === 'RACE' && !wo.race) || undefined,
     };
   };
 

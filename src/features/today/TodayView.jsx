@@ -54,7 +54,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
               <div className="wt-dots">
                 {ws.length === 0 ? <i className="wt-rest" />
                   : ws.slice(0, 3).map(w => <i key={w.id} className={log[w.id] ? 'done' : ''}
-                    style={{ background: w.race ? '#facc15' : D[w.discipline].color }} />)}
+                    style={{ background: w.race || w.bRace ? '#facc15' : D[w.discipline].color }} />)}
               </div>
             </div>
           );

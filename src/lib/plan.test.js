@@ -320,6 +320,64 @@ describe('upgradePlanSegments (schema migration for cached plans)', () => {
   });
 });
 
+describe('generatePlan — tune-up (B) races', () => {
+  // Base profile: Olympic on 2026-09-23, weeks run Monday 2026-06-29 onward,
+  // training days Mon/Tue/Thu/Sat/Sun. The tune-up lands on Saturday 2026-07-25.
+  const B_DATE = '2026-07-25';
+  const withB = kind => generatePlan({ ...profile('2026-09-23', '2026-07-01'), bRaces: [{ kind, date: B_DATE }] });
+  const flat = p => p.weeks.flatMap(w => w.workouts);
+  const at = (p, d) => flat(p).filter(x => x.date === d);
+
+  it('drops the race onto its day, replacing the planned session, and keeps the id', () => {
+    const base = generatePlan(profile('2026-09-23', '2026-07-01'));
+    const p = withB('sprint');
+    const day = at(p, B_DATE);
+    expect(day.length).toBe(1); // any strength double is dropped — racing is the session
+    const b = day[0];
+    expect(b.bRace).toBe(true);
+    expect(b.type).toBe('RACE');
+    expect(b.title).toMatch(/TUNE-UP — Sprint Triathlon/);
+    expect(b.discipline).toBe('brick');
+    expect(b.key).toBe(true);
+    expect(b.id).toBe(at(base, B_DATE)[0].id); // stable id → logs/moves survive reshape
+    expect(b.segments.length).toBe(3); // swim/bike/run legs for a tri tune-up
+    // the goal race is untouched
+    expect(flat(p).filter(x => x.race).length).toBe(1);
+    // week totals reflect the replacement
+    const wk = p.weeks.find(w => w.workouts.some(x => x.date === B_DATE));
+    expect(wk.totalMin).toBe(wk.workouts.reduce((a, x) => a + (x.durationMin || 0), 0));
+  });
+
+  it('eases the two days before and the day after (mini-taper in, recovery out)', () => {
+    const base = generatePlan(profile('2026-09-23', '2026-07-01'));
+    const p = withB('run10k');
+    ['2026-07-23', '2026-07-26'].forEach(d => { // trained Thu before, Sun after
+      const eased = at(p, d).filter(x => x.discipline !== 'rest' && x.discipline !== 'strength' && !x.test);
+      const orig = at(base, d).filter(x => x.discipline !== 'rest' && x.discipline !== 'strength' && !x.test);
+      eased.forEach((x, i) => expect(x.durationMin, d).toBeLessThan(orig[i].durationMin));
+    });
+    // a run race day carries warm-up / race / cool-down guidance
+    expect(at(p, B_DATE)[0].segments[1].label).toMatch(/race it/i);
+  });
+
+  it('protects the goal-race taper and the plan bounds: invalid tune-ups are ignored', () => {
+    const taper = generatePlan({ ...profile('2026-09-23', '2026-07-01'), bRaces: [{ kind: 'sprint', date: '2026-09-18' }] }); // 5 days out
+    expect(flat(taper).some(x => x.bRace)).toBe(false);
+    const outside = generatePlan({ ...profile('2026-09-23', '2026-07-01'), bRaces: [{ kind: 'sprint', date: '2026-11-01' }] });
+    expect(flat(outside).some(x => x.bRace)).toBe(false);
+    const junk = generatePlan({ ...profile('2026-09-23', '2026-07-01'), bRaces: [{ kind: 'marathon', date: B_DATE }, null] });
+    expect(flat(junk).some(x => x.bRace)).toBe(false);
+  });
+
+  it('a tune-up on a rest day just becomes the race day', () => {
+    const p = generatePlan({ ...profile('2026-09-23', '2026-07-01'), bRaces: [{ kind: 'run5k', date: '2026-07-24' }] }); // Friday, untrained
+    const day = at(p, '2026-07-24');
+    expect(day.length).toBe(1);
+    expect(day[0].bRace).toBe(true);
+    expect(day[0].discipline).toBe('run');
+  });
+});
+
 describe('generatePlan — weekly load reads test weeks honestly (the week-6 report)', () => {
   const realSess = w => w.workouts.filter(x => x.discipline !== 'rest' && !x.race);
   const weekMins = w => realSess(w).reduce((s, x) => s + x.durationMin, 0);

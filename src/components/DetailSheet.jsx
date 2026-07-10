@@ -51,7 +51,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           <div className="s"><b>{disc.name}</b><span>{w.type}</span></div>
         </div>}
         {why && <div className="why" style={{ borderColor: disc.color }}><span className="why-label">Why this session</span>{why}</div>}
-        <div className="section-title" style={{ margin: '8px 0 2px' }}>{!w.race && <InfoLink onOpen={onSupport} topic="workout-library" />}{w.race ? 'Race plan' : 'Workout'}</div>
+        <div className="section-title" style={{ margin: '8px 0 2px' }}>{!w.race && !w.bRace && <InfoLink onOpen={onSupport} topic="workout-library" />}{w.race || w.bRace ? 'Race plan' : 'Workout'}</div>
         <WorkoutProfile w={w} />
         {w.segments.map((s, i) => (
           <div className="seg" key={i}>
@@ -60,7 +60,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             {s.min ? <div className="m">{s.min} min</div> : null}
           </div>
         ))}
-        {!w.race && onMove && <>
+        {!w.race && !w.bRace && onMove && <>
           <div className="section-title" style={{ margin: '18px 0 8px' }}>Reschedule
             {moved && <a className="reset" {...tap(() => onResetMove(w.id))}> ↺ reset</a>}</div>
           <div className="days">
@@ -94,7 +94,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         </div>}
         {activity && <a className="act-link" href={T.activityUrl(activity)} target="_blank" rel="noopener noreferrer">
           <Icon name="watch" size={15} /> See your recording on intervals.icu{activity.name ? ' · ' + activity.name : ''} ↗</a>}
-        {w.race && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
+        {(w.race || w.bRace) && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
         {w.custom && onRemove && <>
           <div style={{ height: 10 }} />
           <button className="btn ghost remove" onClick={onRemove}>Remove this session</button>

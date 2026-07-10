@@ -14,7 +14,7 @@ export function weekRange(dateISO) {
 export function catchUpMoves(plan, log, moves) {
   const todayISO = T.iso(new Date());
   const week = weekRange(todayISO);
-  const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
+  const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race && !w.bRace);
   const missed = all.filter(w => { const d = effDate(w, moves); return d < todayISO && d >= week[0] && !log[w.id]; });
   const next = Object.assign({}, moves);
   const occ = mv => { const m = {}; all.forEach(w => { const d = effDate(w, mv); m[d] = (m[d] || 0) + 1; }); return m; };

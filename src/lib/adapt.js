@@ -18,7 +18,7 @@ export function proposeToday({ band, score, todays }) {
   if (!band || !Array.isArray(todays) || !todays.length) return null;
 
   // Guardrails: race day is immutable (G1); completed sessions are history (G4).
-  const candidates = todays.filter(w => !w.race && !w.done);
+  const candidates = todays.filter(w => !w.race && !w.bRace && !w.done);
   if (!candidates.length) return null;
 
   const test = candidates.find(w => w.test);
@@ -133,7 +133,7 @@ export function proposeWeek({ wellness, plan, log, moves, adjust, todayISO }) {
   // Volume rules target NEXT week — this week is already underway.
   const next = plan.weeks[curWeek.index + 1] || null;
   const trimmable = next && !next.isRecovery && next.phase !== 'Taper' && !next.workouts.some(w => w.race)
-    ? next.workouts.filter(w => (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim') && !w.test)
+    ? next.workouts.filter(w => (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim') && !w.test && !w.bRace)
     : [];
   const untouched = trimmable.length > 0 && trimmable.every(w => !(adjust || {})[w.id]);
   const quality = trimmable.filter(w => INTENSITY_TYPES[w.type])
@@ -257,7 +257,7 @@ const TYPE_IF = {
   'Easy': 0.65, 'Recovery': 0.6, 'Endurance': 0.7, 'Technique': 0.6, 'Long': 0.72,
   'Fartlek': 0.78, 'Tempo': 0.85, 'Sweet Spot': 0.9, 'Threshold': 0.95, 'VO2 Intervals': 1.05,
   'CSS Intervals': 0.95, 'Race Pace': 0.95, 'Open Water': 0.75, 'Brick': 0.8,
-  'Strength': 0.5, 'Test': 0.9,
+  'Strength': 0.5, 'Test': 0.9, 'RACE': 0.95,
 };
 const DEFAULT_IF = 0.7;
 
@@ -324,7 +324,7 @@ export function proposeRace({ wellness, plan, log, moves, adjust, todayISO }) {
   const heavy = proj.tsb < RACE_RULES.freshLo;
   const eff = w => (moves && moves[w.id]) || w.date;
   const cands = plan.weeks.flatMap(w => w.workouts).filter(w => {
-    if (w.race || w.test || (log || {})[w.id] || (adjust || {})[w.id]) return false;
+    if (w.race || w.bRace || w.test || (log || {})[w.id] || (adjust || {})[w.id]) return false;
     if (w.discipline !== 'run' && w.discipline !== 'bike' && w.discipline !== 'swim') return false;
     return eff(w) > today && eff(w) < proj.raceDate;
   }).sort((a, b) => (heavy ? (eff(a) < eff(b) ? 1 : -1) : (eff(a) < eff(b) ? -1 : 1)));

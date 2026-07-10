@@ -172,6 +172,11 @@ export const TOPICS = [
         minimum and the plan becomes a sharpen-and-arrive: it works with the fitness you have
         rather than pretending to build more. Further than the maximum and the plan opens with a
         maintenance lead-in, holding fitness at moderate volume until the real build begins.</P>
+      <H>Tune-up races</H>
+      <P>A real event raced mid-plan — a sprint before your Olympic, a parkrun in a base block —
+        can be added from the plan settings. The plan drops it onto its day, eases the approach so
+        you arrive reasonably fresh, and keeps the day after gentle. Tune-ups too close to your
+        goal race are skipped: nothing is allowed to disturb the real taper.</P>
       <H>Maintenance</H>
       <P>No race on the calendar? A rolling 12-week block keeps you fit: balanced across all three
         sports, a touch of intensity to hold your top end (holding fitness takes intensity, not

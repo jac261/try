@@ -14,6 +14,18 @@ export const RACES = {
   maintenance: { key: 'maintenance', name: 'Maintenance', swim: 0, bike: 0, run: 0, taperWeeks: 0, minWeeks: 4, maxWeeks: 52, noRace: true },
 };
 
+// Tune-up (B) races: real events raced inside a plan without being its goal —
+// a sprint six weeks out from an Olympic, a parkrun mid-block. durationMin is
+// a rough all-in estimate for the load model; the mini-taper into the race and
+// the recovery day after are shaped at generation. Tri kinds reuse the RACES
+// distances for their leg breakdown.
+export const B_RACES = {
+  sprint:  { key: 'sprint',  name: 'Sprint Triathlon',  discipline: 'brick', durationMin: 80 },
+  olympic: { key: 'olympic', name: 'Olympic Triathlon', discipline: 'brick', durationMin: 150 },
+  run5k:   { key: 'run5k',   name: '5k Run Race',       discipline: 'run',   durationMin: 30 },
+  run10k:  { key: 'run10k',  name: '10k Run Race',      discipline: 'run',   durationMin: 55 },
+};
+
 export const ZONES = {
   Z1: { name: 'Recovery',   rpe: 'RPE 1-2' },
   Z2: { name: 'Endurance',  rpe: 'RPE 3-4' },

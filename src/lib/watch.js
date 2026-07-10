@@ -129,7 +129,7 @@ export function buildWatchEvents({ plan, moves, easedOf, todayISO, days = WATCH_
   const events = [];
   for (const w of ((plan && plan.weeks) || []).flatMap(week => week.workouts)) {
     const type = WATCH_TYPES[w.discipline];
-    if (!type || w.race) continue;
+    if (!type || w.race || w.bRace) continue;
     const d = effDate(w, moves || {});
     if (d < todayISO || d > newest) continue;
     const e = eased(w);

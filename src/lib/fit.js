@@ -143,7 +143,7 @@ function build(w, pc) {
   return null;
 }
 function supports(w) {
-  return !!w && !w.race && SPORT[w.discipline] !== undefined && w.type !== 'Rest';
+  return !!w && !w.race && !w.bRace && SPORT[w.discipline] !== undefined && w.type !== 'Rest';
 }
 
 /* ---------- binary FIT encoder ---------- */

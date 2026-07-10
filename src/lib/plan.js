@@ -1,7 +1,7 @@
 /* Try — periodized plan generator + structured workout builder */
 import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
-import { RACES, FITNESS, ZONES } from './domain.js';
+import { RACES, B_RACES, FITNESS, ZONES } from './domain.js';
 
 /* ---- paces derived from the athlete's baselines ---- */
 function computePaces(profile) {
@@ -889,6 +889,62 @@ export const generatePlan = function (profile) {
 
     const totalMin = workouts.reduce((a, b) => a + (b.durationMin || 0), 0);
     weeks.push({ index: w, phase: phase, isRecovery: isRecovery, start: iso(addDays(weekStart0, w * 7)), totalMin: totalMin, workouts: workouts });
+  }
+
+  // Tune-up (B) races: drop each valid one onto its calendar day (replacing
+  // whatever was planned there — a rest day included; racing IS the session),
+  // then shape the approach and the exit: the two days before ease to the
+  // gentlest format at reduced volume (a mini-taper), the day after likewise
+  // (recovery). Validity: inside the plan, and — when there is a goal race —
+  // at least 10 days before it, so the real taper is never disturbed. Invalid
+  // entries are ignored rather than fatal. This pass runs across week
+  // boundaries, which is why it happens after the week loop.
+  const bValid = (Array.isArray(profile.bRaces) ? profile.bRaces : [])
+    .filter(b => b && b.date && B_RACES[b.kind])
+    .filter(b => b.date >= iso(weekStart0) && b.date <= iso(addDays(weekStart0, totalWeeks * 7 - 1)))
+    .filter(b => maintenance || daysBetween(b.date, iso(profile.raceDate)) >= 10);
+  if (bValid.length) {
+    const bByDate = {}, easeDates = new Set();
+    bValid.forEach(b => {
+      bByDate[b.date] = b;
+      [-2, -1, 1].forEach(o => easeDates.add(iso(addDays(b.date, o))));
+    });
+    weeks.forEach(wk => {
+      let touched = false;
+      wk.workouts = wk.workouts.map(wo => {
+        const b = bByDate[wo.date];
+        if (b && !wo.race && !wo.second) {
+          touched = true;
+          const spec = B_RACES[b.kind];
+          const legs = RACES[b.kind];
+          const segments = legs ? [
+            { label: 'Swim ' + legs.swim + ' km', detail: 'Race effort, but settle early — this is a rehearsal too' },
+            { label: 'Bike ' + legs.bike + ' km', detail: 'Race watts; practise fuelling exactly as you will on the day' },
+            { label: 'Run ' + legs.run + ' km', detail: 'Strong and controlled; note what the legs do off the bike' },
+          ] : [
+            { label: 'Warm-up', detail: '15 min easy + a few strides' },
+            { label: spec.name + ' — race it', detail: 'An honest benchmark; note your finish time' },
+            { label: 'Cool-down', detail: '10 min very easy' },
+          ];
+          return {
+            id: wo.id, week: wo.week, phase: wo.phase, date: wo.date, discipline: spec.discipline,
+            type: 'RACE', bRace: true, title: 'TUNE-UP — ' + spec.name,
+            durationMin: spec.durationMin, distance: null, unit: '', segments: segments, key: true,
+          };
+        }
+        if (b && wo.second) { touched = true; return null; } // no strength double on a race day
+        if (easeDates.has(wo.date) && !wo.race && !wo.bRace && !wo.test
+          && wo.discipline !== 'rest' && wo.discipline !== 'strength') {
+          touched = true;
+          const t = typeFor(wo.discipline, wo.role, wo.phase, true, fitness.intensity);
+          const dur = Math.max(20, round5(wo.durationMin * 0.6));
+          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed);
+          return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, unit: built.unit, segments: built.segments };
+        }
+        return wo;
+      }).filter(Boolean);
+      if (touched) wk.totalMin = wk.workouts.reduce((a, x) => a + (x.durationMin || 0), 0);
+    });
   }
 
   return {

@@ -36,7 +36,7 @@ export function matchActivities({ activities, plan, log, moves, todayISO }) {
   const eff = w => (moves && moves[w.id]) || w.date;
 
   const candidates = plan.weeks.flatMap(w => w.workouts).filter(w => {
-    if ((log || {})[w.id] || w.race) return false;
+    if ((log || {})[w.id] || w.race || w.bRace) return false;
     if (w.discipline !== 'run' && w.discipline !== 'bike' && w.discipline !== 'swim') return false;
     const d = eff(w);
     return d >= oldest && d <= today;

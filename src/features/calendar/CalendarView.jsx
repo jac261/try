@@ -93,7 +93,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                 {d && <div className="cd-num">{Number(d.slice(8))}</div>}
                 {d && <div className="cd-dots">
                   {ws.slice(0, 3).map(w => <i key={w.id} className={log[w.id] ? 'done' : ''}
-                    style={{ background: w.race ? '#facc15' : D[w.discipline].color }} />)}
+                    style={{ background: w.race || w.bRace ? '#facc15' : D[w.discipline].color }} />)}
                 </div>}
               </div>
             );
@@ -110,7 +110,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
               <div className="cal-row" key={w.id}>
                 {/* pointer-only grip, aria-hidden: the accessible reschedule path
                     is the detail sheet's day picker */}
-                {!w.race && <div className="drag-handle" aria-hidden="true"
+                {!w.race && !w.bRace && <div className="drag-handle" aria-hidden="true"
                   onPointerDown={e => startDrag(w, e)} onPointerMove={moveDrag}
                   onPointerUp={endDrag} onPointerCancel={endDrag}>
                   <Icon name="grip" size={17} /></div>}
@@ -118,7 +118,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                   moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />
               </div>
             ))}
-          {daySessions.some(w => !w.race) && <div className="cal-hint">Hold a session's grip and drag it onto a day above to reschedule</div>}
+          {daySessions.some(w => !w.race && !w.bRace) && <div className="cal-hint">Hold a session's grip and drag it onto a day above to reschedule</div>}
         </div>
       </>}
 

@@ -59,6 +59,20 @@ describe('toClientState', () => {
     expect(toClientState(null)).toBe(null);
   });
 
+  it('derives the tune-up flag: RACE-typed but not THE race → bRace', () => {
+    // The backend has no bRace column; the flag must survive hydrate by derivation.
+    const r = JSON.parse(JSON.stringify(resp));
+    r.weeks[0].workouts[0] = {
+      ...r.weeks[0].workouts[0],
+      type: 'RACE', title: 'TUNE-UP — Sprint Triathlon', race: false, log: undefined, move: undefined,
+    };
+    const { plan } = toClientState(r);
+    expect(plan.weeks[0].workouts[0].bRace).toBe(true);
+    // the goal race itself must never gain the flag
+    r.weeks[0].workouts[0].race = true;
+    expect(toClientState(r).plan.weeks[0].workouts[0].bRace).toBeUndefined();
+  });
+
   it('reconstructs the fields the server does not store: custom from role, seed from the week', () => {
     const r2 = JSON.parse(JSON.stringify(resp));
     r2.weeks[0].workouts[0].role = 'custom';
