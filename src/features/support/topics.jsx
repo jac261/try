@@ -30,6 +30,11 @@ export const TOPICS = [
         know the terms CTL and ATL). It is a simplification: it cannot see sleep, stress, heat or
         fuelling. That is why the app pairs it with your morning readiness signals rather than
         trusting it alone.</P>
+      <H>Without a connected account</H>
+      <P>No intervals.icu? The curves are estimated from the sessions you tick off in the app,
+        using the same model — the chart says "estimated" so you know which you are looking at.
+        Connect an account and measured data takes over automatically. The estimate only sees what
+        you log, so keeping your plan honest keeps the curves honest.</P>
     </>,
   },
   {

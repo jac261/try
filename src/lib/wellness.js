@@ -382,6 +382,9 @@ function snapshot(rec, base) {
       atl: round1(rec.atl ?? null),
       ctl: round1(rec.ctl ?? null),
       atlWeekAgo: round1(base.atlWeekAgo ?? null),
+      // Data lineage for the future fit: true when the load numbers were
+      // log-derived estimates rather than measured (no intervals.icu).
+      derivedLoad: rec.derived ? true : undefined,
     },
   };
 }

@@ -41,6 +41,8 @@ export function WellnessTrends({ wellness , onSupport }) {
         <div className="load-stats" style={{ marginBottom: 10 }}>
           <span><b style={{ color: 'var(--blue)' }}>{Math.round(last.ctl)}</b> Fitness (CTL){ctlD != null && <> <Signed v={ctlD} /></>}</span>
           <span><b style={{ color: 'var(--danger)' }}>{Math.round(last.atl)}</b> Fatigue (ATL)</span>
+          {loadRows.length > 0 && loadRows[loadRows.length - 1].derived &&
+            <span className="dim">estimated from your training log</span>}
         </div>
         {ctl.length >= 2 && <TrendChart height={120} axis series={[
           { values: ctl, color: 'var(--blue)', fill: true, width: 2.4 },

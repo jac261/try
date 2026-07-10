@@ -180,7 +180,7 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
           <div className="rd-trend">
             <div className="rd-trend-head">
               <span>Fitness &amp; Fatigue <InfoLink onOpen={onSupport} topic="fitness-fatigue" /></span>
-              <span>{load.length} days</span>
+              <span>{lastLoad.derived ? 'estimated · ' : ''}{load.length} days</span>
             </div>
             <div className="load-stats">
               <span><b style={{ color: 'var(--blue)' }}>{Math.round(lastLoad.ctl)}</b> Fitness</span>

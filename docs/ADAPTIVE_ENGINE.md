@@ -107,6 +107,32 @@ The race proposal takes the single structural-banner slot ahead of the week
 rules (inside the final fortnight the taper is the thing that matters); tests
 and the race itself are never candidates, and stale fitness data stays quiet.
 
+## The log-derived load model (no intervals.icu)
+
+Phases 2–4 need CTL/ATL/TSB. Accounts with no intervals.icu data get them
+**derived from the sessions they log**: each completed session's estimated load
+(`estimateTss`, the same per-type table the race projection uses) is fed
+through the same impulse-response recurrence (`CTL' = CTL + (TSS − CTL)/42`,
+`ATL' = ATL + (TSS − ATL)/7`), day by day from the plan's start. The seed is
+the plan's own week-1 load spread over 7 days with TSB 0 — the plan already
+asserts the athlete can absorb week 1, so no new constant is invented.
+
+Rules (`src/lib/loadmodel.js`):
+- **Read-time only.** The series is computed on render (`withLogLoad`, applied
+  in App next to the check-in merge) and never stored — the wellness store
+  stays server-shaped and the sync can never upload estimates as measurements.
+- **Measured data wins absolutely.** One real CTL anywhere in the store and
+  the derived model stays out; mixing scales would lie at the seam.
+- **Only logged sessions count**, on their effective (moved) dates, with the
+  adjustment overlay applied — identical accounting to `projectRaceForm`.
+- Records carry `derived: true`; the charts label themselves "estimated", and
+  calibration snapshots record `derivedLoad` so a future fit can separate the
+  two data lineages.
+
+Combined with the morning check-in this completes the sensor-less tier: feel
+supplies the acute subjective signal, the log supplies the chronic load signal,
+and every engine phase, chart and readiness factor runs on whichever is there.
+
 ## The workout library
 
 Every session type carries several classic formats of the same intensity
