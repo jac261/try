@@ -230,6 +230,19 @@ export function putPlannedEvents(getToken, body) {
 // clientWorkoutRef, so we rehydrate our exact in-memory shape without regenerating
 // from the profile. `refToId` maps our client ref ("0-0") → the server workout
 // GUID, which the log/move endpoints (api/workouts/{guid}/…) require.
+// The server stores our calibration note verbatim ("cal:" + JSON); it also
+// carries the session's recorded moving time, which we restore into the log
+// entry here so actual durations survive hydrate on any device with no
+// dedicated backend field.
+const actualFromNote = note => {
+  if (typeof note !== 'string' || !note.startsWith('cal:')) return undefined;
+  try { const v = JSON.parse(note.slice(4)).actualMin; return v == null ? undefined : v; } catch (e) { return undefined; }
+};
+const toLogEntry = l => ({
+  done: !!l.completed, at: l.completedAtUtc || null, feel: l.feel || undefined,
+  notes: l.notes || undefined, actualMin: actualFromNote(l.notes),
+});
+
 export function toClientState(resp) {
   if (!resp) return null;
   const log = {};
@@ -239,7 +252,7 @@ export function toClientState(resp) {
 
   const mapWorkout = (wo, week) => {
     refToId[wo.clientWorkoutRef] = wo.id;
-    if (wo.log) log[wo.clientWorkoutRef] = { done: !!wo.log.completed, at: wo.log.completedAtUtc || null, feel: wo.log.feel || undefined };
+    if (wo.log) log[wo.clientWorkoutRef] = toLogEntry(wo.log);
     if (wo.move) moves[wo.clientWorkoutRef] = wo.move.movedDate;
     if (wo.adjustment) {
       adjust[wo.clientWorkoutRef] = { kind: wo.adjustment.kind || 'ease', at: wo.adjustment.at || null };
@@ -284,7 +297,7 @@ export function toClientState(resp) {
 
   // Top-level logs[]/moves[] are also returned; merge them in case a workout row
   // was omitted (defensive — the embedded copies above are the primary source).
-  (resp.logs || []).forEach(l => { if (!log[l.clientWorkoutRef]) log[l.clientWorkoutRef] = { done: !!l.completed, at: l.completedAtUtc || null, feel: l.feel || undefined }; });
+  (resp.logs || []).forEach(l => { if (!log[l.clientWorkoutRef]) log[l.clientWorkoutRef] = toLogEntry(l); });
   (resp.moves || []).forEach(m => { if (!moves[m.clientWorkoutRef]) moves[m.clientWorkoutRef] = m.movedDate; });
 
   return { plan, log, moves, adjust, refToId };

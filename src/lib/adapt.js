@@ -261,13 +261,16 @@ const TYPE_IF = {
 };
 const DEFAULT_IF = 0.7;
 
-export function estimateTss(w, adj) {
+export function estimateTss(w, adj, actualMin) {
   let dur = w.durationMin || 0;
   let type = w.type;
   if (adj) {
     if (adj.kind === 'ease') { dur *= 0.65; type = 'Easy'; }
     else if (adj.factor) dur *= adj.factor;
   }
+  // A recorded moving time beats any planned/adjusted duration — it's what
+  // actually happened. The type (and an ease's intensity change) still applies.
+  if (actualMin != null) dur = actualMin;
   const f = TYPE_IF[type] != null ? TYPE_IF[type] : DEFAULT_IF;
   return (dur / 60) * f * f * 100;
 }

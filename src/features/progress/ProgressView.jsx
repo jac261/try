@@ -19,7 +19,9 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
   const bars = plan.weeks.map(w => {
     const sess = w.workouts.filter(x => x.discipline !== 'rest' && !x.race);
     const planned = sess.reduce((a, b) => a + T.estimateTss(b), 0);
-    const dn = sess.filter(x => log[x.id]).reduce((a, b) => a + T.estimateTss(b), 0);
+    // Completed load uses the recorded moving time where a watch activity
+    // matched (log[..].actualMin), so the done bar reflects what happened.
+    const dn = sess.filter(x => log[x.id]).reduce((a, b) => a + T.estimateTss(b, undefined, log[b.id].actualMin), 0);
     return { label: w.index % 2 === 0 ? (w.index + 1) : '', planned, done: dn, color: 'var(--accent)' };
   });
 

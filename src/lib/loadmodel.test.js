@@ -52,6 +52,15 @@ describe('loadmodel.deriveLoadRecords (log-derived CTL/ATL/TSB)', () => {
     expect(eased[1].atl).toBeLessThan(here[1].atl);
   });
 
+  it('a recorded moving time on the log entry replaces the planned duration', () => {
+    const plan = mkPlan([wo('0-0', 1, 'Threshold', 90)]);
+    const base = { plan, moves: {}, adjust: {}, todayISO: iso(addDays(START, 3)) };
+    const planned = deriveLoadRecords({ ...base, log: { '0-0': { done: true } } });
+    const actual = deriveLoadRecords({ ...base, log: { '0-0': { done: true, actualMin: 45 } } });
+    expect(actual[1].atl).toBeLessThan(planned[1].atl); // half the session, half the impulse
+    expect(actual[1].atl).toBeGreaterThan(0);
+  });
+
   it('returns nothing without a plan or before the plan starts', () => {
     expect(deriveLoadRecords({ plan: null, log: {}, todayISO: START })).toEqual([]);
     const plan = mkPlan([wo('0-0', 0, 'Easy', 40)]);

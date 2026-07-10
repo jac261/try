@@ -20,7 +20,7 @@ const NOTE_PREFIX = 'cal:'; // namespaces the notes payload so a future human-no
 
 // One observation for a completed session. `wellnessRecs` is the full records
 // list; the readiness inputs are taken from the session's own (effective) day.
-export function buildObservation({ workout, date, feel, eased, wellnessRecs, at }) {
+export function buildObservation({ workout, date, feel, eased, wellnessRecs, at, actualMin }) {
   const rec = (wellnessRecs || []).find(r => r.date === date) || null;
   const base = T.wellness.baseline(wellnessRecs || [], date);
   const snap = T.wellness.snapshot(rec, base);
@@ -37,6 +37,10 @@ export function buildObservation({ workout, date, feel, eased, wellnessRecs, at 
     eased: !!eased,
     feel: feel || null,
     at: at || null,
+    // Recorded moving time when a watch activity matched — planned vs actual is
+    // itself a calibration signal, and the synced note makes actualMin durable
+    // across devices (it's restored into the log at hydrate).
+    actualMin: actualMin ?? null,
   };
 }
 

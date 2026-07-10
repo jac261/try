@@ -51,7 +51,8 @@ export function deriveLoadRecords({ plan, log, moves, adjust, todayISO, seed }) 
   const days = daysBetween(start, today);
   for (let i = 0; i <= days; i++) {
     const d = iso(addDays(start, i));
-    const tss = (byDate[d] || []).reduce((s, w) => s + estimateTss(w, (adjust || {})[w.id]), 0);
+    const tss = (byDate[d] || []).reduce((s, w) =>
+      s + estimateTss(w, (adjust || {})[w.id], ((log || {})[w.id] || {}).actualMin), 0);
     ctl += (tss - ctl) / 42;
     atl += (tss - atl) / 7;
     out.push({ date: d, ctl: round2(ctl), atl: round2(atl), tsb: round2(ctl - atl), derived: true });

@@ -204,14 +204,22 @@ export function App({ storage, getToken, user }) {
   // Calibration capture: when a session is completed (and again when its feel is
   // rated), snapshot the readiness inputs for that day next to the outcome —
   // stored locally (append-only) and embedded in the synced log's notes field.
-  const observe = (id, feel, at) => {
+  const observe = (id, feel, at, actualMin) => {
     const w = plan.weeks.flatMap(wk => wk.workouts).find(x => x.id === id);
     if (!w || w.discipline === 'rest') return null;
     const obs = buildObservation({
-      workout: w, date: effDate(w, moves), feel, eased: !!adjust[id], wellnessRecs: recs, at,
+      workout: w, date: effDate(w, moves), feel, eased: !!adjust[id], wellnessRecs: recs, at, actualMin,
     });
     storage.upsertCalibration(obs);
     return toNote(obs);
+  };
+  // The recorded moving time for a session, when a matching watch activity
+  // exists — feeds the derived load model and the completed-load bars with what
+  // actually happened rather than what was planned. Rides along in the synced
+  // calibration note, so it survives hydrate on any device.
+  const actualFor = w => {
+    const a = w && T.activityFor({ workout: w, activities, moves });
+    return a ? Math.round(a.movingTimeSec / 60) : undefined;
   };
   const toggle = id => {
     if (log[id]) {
@@ -220,8 +228,10 @@ export function App({ storage, getToken, user }) {
       if (w) storage.removeCalibration(id, effDate(w, moves));
       if (gid(id)) sync.removeLog(gid(id));
     } else {
+      const w = plan.weeks.flatMap(wk => wk.workouts).find(x => x.id === id);
       const at = new Date().toISOString();
-      const entry = { done: true, at, notes: observe(id, null, at) };
+      const actualMin = actualFor(w);
+      const entry = { done: true, at, actualMin, notes: observe(id, null, at, actualMin) };
       setLog(l => ({ ...l, [id]: entry }));
       if (gid(id)) sync.saveLog(gid(id), entry);
     }
@@ -298,7 +308,9 @@ export function App({ storage, getToken, user }) {
     const at = new Date().toISOString();
     const entries = {};
     spotted.forEach(m => {
-      const entry = { done: true, at, feel: m.feel, notes: observe(m.workout.id, m.feel || null, at) };
+      const actualMin = m.activity && m.activity.movingTimeSec != null
+        ? Math.round(m.activity.movingTimeSec / 60) : undefined;
+      const entry = { done: true, at, feel: m.feel, actualMin, notes: observe(m.workout.id, m.feel || null, at, actualMin) };
       entries[m.workout.id] = entry;
       if (gid(m.workout.id)) sync.saveLog(gid(m.workout.id), entry);
     });

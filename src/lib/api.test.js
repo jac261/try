@@ -39,6 +39,22 @@ describe('toClientState', () => {
     expect(refToId).toEqual({ '0-0': 'guid-0-0', '0-1': 'guid-0-1' });
   });
 
+  it('restores the recorded moving time from the synced calibration note', () => {
+    // actualMin has no backend field of its own — it rides in the "cal:" note the
+    // server stores verbatim, and hydrate must recover it on any device.
+    const note = 'cal:' + JSON.stringify({ v: 4, score: 88, date: '2026-07-06', actualMin: 42 });
+    const r = JSON.parse(JSON.stringify(resp));
+    r.weeks[0].workouts[0].log = { completed: true, completedAtUtc: '2026-07-06T10:00:00Z', feel: 'hard', notes: note };
+    const { log } = toClientState(r);
+    expect(log['0-0'].actualMin).toBe(42);
+    expect(log['0-0'].notes).toBe(note);
+    // a human note (or garbage) never crashes the parse and yields no actualMin
+    r.weeks[0].workouts[0].log.notes = 'felt great out there';
+    expect(toClientState(r).log['0-0'].actualMin).toBeUndefined();
+    r.weeks[0].workouts[0].log.notes = 'cal:{broken json';
+    expect(toClientState(r).log['0-0'].actualMin).toBeUndefined();
+  });
+
   it('returns null for a null response', () => {
     expect(toClientState(null)).toBe(null);
   });

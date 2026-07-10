@@ -224,6 +224,13 @@ describe('adaptive engine — Phase 4 (race-day form targeting)', () => {
     expect(estimateTss(thr, { kind: 'ease' })).toBeCloseTo(0.65 * 0.65 * 0.65 * 100, 1); // easy type + 65% volume
   });
 
+  it('a recorded moving time beats the planned and adjusted duration, keeping the type', () => {
+    const thr = { type: 'Threshold', durationMin: 60 };
+    expect(estimateTss(thr, undefined, 40)).toBeCloseTo((40 / 60) * 0.95 * 0.95 * 100, 1);
+    // eased session actually done for 30 min: easy intensity, real duration
+    expect(estimateTss(thr, { kind: 'ease' }, 30)).toBeCloseTo(0.5 * 0.65 * 0.65 * 100, 1);
+  });
+
   it('projects race-morning TSB through the remaining plan', () => {
     const proj = projectRaceForm({ wellness: loadRecs(55, 45), plan: racePlan(7), log: {}, moves: {}, adjust: {}, todayISO: TODAY });
     expect(proj.daysToRace).toBe(7);
