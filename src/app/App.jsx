@@ -116,10 +116,13 @@ export function App({ storage, getToken, user }) {
     if (!hydrated || !plan || !watchSync) return;
     const body = T.buildWatchEvents({ plan, moves, easedOf, log, todayISO: T.iso(new Date()) });
     const hash = JSON.stringify(body);
-    if (storage.load('watchPushed', null) === hash) return;
+    if (storage.load('watchPushed', null) === hash) {
+      setWatchPush({ ok: true, upToDate: true, events: body.events.length });
+      return;
+    }
     const t = setTimeout(() => {
       sync.pushWatchEvents(body).then(r => {
-        if (!r) return; // not connected: nothing to report
+        if (!r) { setWatchPush({ ok: false, notSupported: true }); return; } // 404: no endpoint / not connected
         const ok = !r.failed;
         if (ok) storage.save('watchPushed', hash);
         setWatchPush({ at: new Date().toISOString(), ok, status: r.status || null, events: body.events.length });

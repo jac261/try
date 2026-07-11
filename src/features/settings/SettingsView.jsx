@@ -79,11 +79,13 @@ function IntervalsIcuCard({ onWellnessSynced, watchSync, onWatchSync, watchPush 
           </div>
           <input type="checkbox" checked={!!watchSync} onChange={e => onWatchSync && onWatchSync(e.target.checked)} />
         </label>
-        {watchSync && watchPush && (
-          <div className="authmeta" style={watchPush.ok ? {} : { color: '#f6b27a' }}>
-            {watchPush.ok
-              ? 'Last sync: ' + watchPush.events + ' session' + (watchPush.events === 1 ? '' : 's') + ' on the calendar.'
-              : 'Last sync FAILED (' + (watchPush.status || 'network') + ') — your sessions are not reaching the calendar. Tell Jack the planned-events endpoint is erroring.'}
+        {watchSync && (
+          <div className="authmeta" style={watchPush && !watchPush.ok ? { color: '#f6b27a' } : {}}>
+            {!watchPush ? 'Sync runs a moment after the app loads — reopen Settings to see the result.'
+              : watchPush.upToDate ? 'Up to date: ' + watchPush.events + ' session' + (watchPush.events === 1 ? '' : 's') + ' on the calendar.'
+                : watchPush.notSupported ? 'The backend is not accepting planned events (404) — sessions cannot reach the calendar. One for Jack.'
+                  : watchPush.ok ? 'Last sync: ' + watchPush.events + ' session' + (watchPush.events === 1 ? '' : 's') + ' sent to the calendar.'
+                    : 'Last sync FAILED (' + (watchPush.status || 'network') + ') — sessions are not reaching the calendar. Tell Jack the planned-events endpoint is erroring.'}
           </div>
         )}
       </div>
