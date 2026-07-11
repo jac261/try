@@ -8,6 +8,7 @@ import { downloadICS } from '@/lib/ics.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
+import { RecapSlides } from '@/features/recap/RecapSlides.jsx';
 import { AddWorkoutSheet } from '@/components/AddWorkoutSheet.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
 import { BuildingPlan } from '@/features/onboarding/BuildingPlan.jsx';
@@ -66,6 +67,7 @@ export function App({ storage, getToken, user }) {
   // catalog-drift incident proved that must never be silent again.
   const [planSyncFailed, setPlanSyncFailed] = useState(false);
   const [addOpen, setAddOpen] = useState(false);   // "Add a session" sheet (Today tab)
+  const [recap, setRecap] = useState(null);        // session recap slides (workout whose recording just landed)
   // Support library: which topic is open, and where to return to when leaving
   // (charts on any tab deep-link in via openSupport).
   const [supportTopic, setSupportTopic] = useState(null);
@@ -270,6 +272,7 @@ export function App({ storage, getToken, user }) {
       const entry = { done: true, at, actualMin, notes: observe(id, null, at, actualMin) };
       setLog(l => ({ ...l, [id]: entry }));
       if (gid(id)) sync.saveLog(gid(id), entry);
+      if (actualMin && w) setRecap(w); // a recording landed with the tick → celebrate + consequence
     }
   };
   const moveWorkout = (id, date) => {
@@ -346,6 +349,7 @@ export function App({ storage, getToken, user }) {
       if (gid(m.workout.id)) sync.saveLog(gid(m.workout.id), entry);
     });
     setLog(l => ({ ...l, ...entries }));
+    if (spotted.length) setRecap(spotted[0].workout); // recap the headline session
   };
   const applyWeekly = p => {
     if (!p) return;
@@ -486,6 +490,8 @@ export function App({ storage, getToken, user }) {
       {view === 'support' && <SupportView topic={supportTopic} onTopic={setSupportTopic}
         onBack={() => setView(supportReturn.current)} onReadinessInfo={() => setView('readinessInfo')} />}
 
+      {recap && <RecapSlides workout={recap} activity={recordingFor(recap)} plan={plan} log={log} moves={moves}
+        onLoadIntervals={sync.loadActivityIntervals} onClose={() => setRecap(null)} />}
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
 
       {editFitness && <FitnessEditor profile={plan.profile} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
