@@ -71,6 +71,7 @@ export function App({ storage, getToken, user }) {
   const [supportTopic, setSupportTopic] = useState(null);
   const supportReturn = useRef('settings');
   const [watchSync, setWatchSync] = useState(() => storage.load('watchSync', false));
+  const [watchPush, setWatchPush] = useState(null); // last reconcile result, for the Settings card
   const toggleWatchSync = on => {
     setWatchSync(on);
     storage.save('watchSync', on);
@@ -117,7 +118,11 @@ export function App({ storage, getToken, user }) {
     const hash = JSON.stringify(body);
     if (storage.load('watchPushed', null) === hash) return;
     const t = setTimeout(() => {
-      sync.pushWatchEvents(body).then(r => { if (r) storage.save('watchPushed', hash); });
+      sync.pushWatchEvents(body).then(r => {
+        const ok = !!r && !r.failed;
+        if (ok) storage.save('watchPushed', hash);
+        setWatchPush({ at: new Date().toISOString(), ok, status: (r && r.status) || null, events: body.events.length });
+      });
     }, 2000);
     return () => clearTimeout(t);
   }, [hydrated, plan, moves, adjust, log, watchSync, sync]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -448,7 +453,7 @@ export function App({ storage, getToken, user }) {
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)}
         onWellnessSynced={applyServerWellness} onSupportHub={() => openSupport(null)}
-        watchSync={watchSync} onWatchSync={toggleWatchSync}
+        watchSync={watchSync} onWatchSync={toggleWatchSync} watchPush={watchPush}
         onExportCalibration={() => downloadCalibration(storage)} calibrationCount={storage.loadCalibration().length} />}
       {view === 'readinessInfo' && <ReadinessInfo onBack={() => setView(supportReturn.current === 'settings' ? 'settings' : 'support')} />}
       {view === 'support' && <SupportView topic={supportTopic} onTopic={setSupportTopic}

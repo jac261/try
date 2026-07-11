@@ -121,7 +121,10 @@ export function makeSync(getToken) {
     // counts, or null when not connected, offline, or on an older backend.
     pushWatchEvents: async body => {
       const res = await putPlannedEvents(getToken, body);
-      return res.ok && res.body ? res.body : null;
+      if (res.ok && res.body) return res.body;
+      // Surface the failure instead of a bare null: a server write must never
+      // fail silently (the catalog-drift rule) — this was the last one that did.
+      return { failed: true, status: res.status || 0, message: res.message || null };
     },
 
     // Prefer the intervals.icu proxy: POST /api/wellness/sync pulls the athlete's

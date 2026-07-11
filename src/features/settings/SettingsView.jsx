@@ -13,7 +13,7 @@ import { APP_BASE_URL } from '@/config/env.js';
    backend (write-only there); once connected, readiness fills itself from the
    watch data instead of manual entry. onWellnessSynced hands the freshly synced
    records up so the Today readiness card updates without a reload. */
-function IntervalsIcuCard({ onWellnessSynced, watchSync, onWatchSync }) {
+function IntervalsIcuCard({ onWellnessSynced, watchSync, onWatchSync, watchPush }) {
   const { getToken, isLoaded } = useAuth();
   const [status, setStatus] = useState(null);   // null = loading; {connected, athleteId, lastSyncedAtUtc}
   const [athleteId, setAthleteId] = useState('');
@@ -79,6 +79,13 @@ function IntervalsIcuCard({ onWellnessSynced, watchSync, onWatchSync }) {
           </div>
           <input type="checkbox" checked={!!watchSync} onChange={e => onWatchSync && onWatchSync(e.target.checked)} />
         </label>
+        {watchSync && watchPush && (
+          <div className="authmeta" style={watchPush.ok ? {} : { color: '#f6b27a' }}>
+            {watchPush.ok
+              ? 'Last sync: ' + watchPush.events + ' session' + (watchPush.events === 1 ? '' : 's') + ' on the calendar.'
+              : 'Last sync FAILED (' + (watchPush.status || 'network') + ') — your sessions are not reaching the calendar. Tell Jack the planned-events endpoint is erroring.'}
+          </div>
+        )}
       </div>
     );
   }
@@ -146,7 +153,7 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, onSupportHub }) {
+export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
@@ -184,7 +191,7 @@ export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitn
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Connections</h2>
-        <IntervalsIcuCard onWellnessSynced={onWellnessSynced} watchSync={watchSync} onWatchSync={onWatchSync} />
+        <IntervalsIcuCard onWellnessSynced={onWellnessSynced} watchSync={watchSync} onWatchSync={onWatchSync} watchPush={watchPush} />
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Support</h2>
