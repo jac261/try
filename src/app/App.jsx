@@ -105,10 +105,14 @@ export function App({ storage, getToken, user }) {
   // the upcoming plan (moves and engine adjustments included). The pushed-hash
   // guard makes the reconcile idempotent across loads; the short delay
   // coalesces bursts of changes, e.g. accepting a weekly proposal. easedOf is
-  // declared below — safe here because the guard returns before it's touched
-  // whenever the component bails out early (no plan yet).
+  // declared below the early returns, so this effect MUST also gate on
+  // hydrated: on a refresh the cached plan exists while the component still
+  // renders the loading screen, and running then would touch easedOf before
+  // its initialization (the 2026-07-11 "something went wrong" on refresh with
+  // watch sync enabled). Waiting for hydration is also semantically right —
+  // never push a stale cached plan the server is about to correct.
   useEffect(() => {
-    if (!plan || !watchSync) return;
+    if (!hydrated || !plan || !watchSync) return;
     const body = T.buildWatchEvents({ plan, moves, easedOf, log, todayISO: T.iso(new Date()) });
     const hash = JSON.stringify(body);
     if (storage.load('watchPushed', null) === hash) return;
@@ -116,7 +120,7 @@ export function App({ storage, getToken, user }) {
       sync.pushWatchEvents(body).then(r => { if (r) storage.save('watchPushed', hash); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [plan, moves, adjust, log, watchSync, sync]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hydrated, plan, moves, adjust, log, watchSync, sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On mount (per user): pull the server's plan graph. The server is the source of
   // truth; localStorage is the offline fallback if it's unreachable.
