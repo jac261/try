@@ -90,7 +90,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           <div style={{ height: 10 }} />
           <button className="btn ghost" onClick={() => T.FIT.download(w, plan)}>
             <Icon name="watch" size={18} /> Send to watch (.FIT)</button>
-          <div className="fithint">Structured workout with {w.discipline === 'bike' ? (plan.paces.ftp ? 'power' : 'effort (RPE)') : 'pace'} targets — load onto a Garmin to follow it step by step.</div>
+          <div className="fithint">Structured workout with {w.discipline === 'bike' ? (plan.paces.ftp ? 'power' : 'effort (RPE)') : 'pace'} targets. Computer only: copy it into your watch's GARMIN/NewFiles folder over USB — opening it in the Garmin Connect app imports it as a course, not a workout. With intervals.icu connected, the watch sync in Settings sends your sessions automatically instead.</div>
         </>}
         {done && !w.race && onFeel && <div className="feel">
           <div className="feel-q">How did it feel?</div>

@@ -109,14 +109,14 @@ export function App({ storage, getToken, user }) {
   // whenever the component bails out early (no plan yet).
   useEffect(() => {
     if (!plan || !watchSync) return;
-    const body = T.buildWatchEvents({ plan, moves, easedOf, todayISO: T.iso(new Date()) });
+    const body = T.buildWatchEvents({ plan, moves, easedOf, log, todayISO: T.iso(new Date()) });
     const hash = JSON.stringify(body);
     if (storage.load('watchPushed', null) === hash) return;
     const t = setTimeout(() => {
       sync.pushWatchEvents(body).then(r => { if (r) storage.save('watchPushed', hash); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [plan, moves, adjust, watchSync, sync]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [plan, moves, adjust, log, watchSync, sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On mount (per user): pull the server's plan graph. The server is the source of
   // truth; localStorage is the offline fallback if it's unreachable.

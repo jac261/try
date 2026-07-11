@@ -43,6 +43,14 @@ describe('buildWatchEvents (workouts-to-watch)', () => {
   it('is quiet without a plan', () => {
     expect(buildWatchEvents({ plan: null, moves: {}, todayISO: TODAY }).events).toEqual([]);
   });
+
+  it('completed sessions drop out of the list, so ticking one clears it off the watch', () => {
+    // The wrist holds a rolling week of what is still TO DO (field spec,
+    // 2026-07-11): the backend reconciler deletes any event that leaves the
+    // list, so excluding done sessions here removes them from the watch.
+    const { events } = buildWatchEvents({ plan, moves: {}, log: { '0-0': { done: true } }, todayISO: TODAY });
+    expect(events.map(e => e.ref)).toEqual(['0-1', '0-3']);
+  });
 });
 
 describe('watchDescription', () => {

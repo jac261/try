@@ -121,15 +121,18 @@ function swimWatchSteps(w) {
 
 // The desired calendar for [todayISO .. todayISO+days): one event per upcoming
 // session at its effective (possibly moved) date, with adjusted volume via
-// easedOf. Race-day entries and rest days are skipped; the backend deletes any
-// previously pushed event that drops out of this list.
-export function buildWatchEvents({ plan, moves, easedOf, todayISO, days = WATCH_WINDOW_DAYS }) {
+// easedOf. Race-day entries, rest days and COMPLETED sessions are skipped; the
+// backend deletes any previously pushed event that drops out of this list, so
+// the wrist holds a rolling week of what is still to do — ticking a session
+// off clears it from the watch on the next reconcile.
+export function buildWatchEvents({ plan, moves, easedOf, log, todayISO, days = WATCH_WINDOW_DAYS }) {
   const newest = iso(addDays(todayISO, days - 1));
   const eased = easedOf || (w => w);
   const events = [];
   for (const w of ((plan && plan.weeks) || []).flatMap(week => week.workouts)) {
     const type = WATCH_TYPES[w.discipline];
     if (!type || w.race || w.bRace) continue;
+    if ((log || {})[w.id]) continue;
     const d = effDate(w, moves || {});
     if (d < todayISO || d > newest) continue;
     const e = eased(w);
