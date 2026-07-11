@@ -13,6 +13,15 @@ import { APP_BASE_URL } from '@/config/env.js';
    backend (write-only there); once connected, readiness fills itself from the
    watch data instead of manual entry. onWellnessSynced hands the freshly synced
    records up so the Today readiness card updates without a reload. */
+// When zero sessions went up, say where the week's sessions went instead —
+// each phrasing names a different code path, so the line is a remote diagnosis.
+function zeroWhy(p) {
+  if (p.events !== 0 || p.inWindow == null) return '';
+  if (p.inWindow === 0) return ' The plan has no sessions in the next 7 days.';
+  if (p.doneInWindow >= p.inWindow) return ' All ' + p.inWindow + ' of this week’s sessions are marked done.';
+  return ' Odd: ' + p.inWindow + ' planned, ' + p.doneInWindow + ' done, yet none were sendable — report this exact line.';
+}
+
 function IntervalsIcuCard({ onWellnessSynced, watchSync, onWatchSync, watchPush }) {
   const { getToken, isLoaded } = useAuth();
   const [status, setStatus] = useState(null);   // null = loading; {connected, athleteId, lastSyncedAtUtc}
@@ -82,9 +91,9 @@ function IntervalsIcuCard({ onWellnessSynced, watchSync, onWatchSync, watchPush 
         {watchSync && (
           <div className="authmeta" style={watchPush && !watchPush.ok ? { color: '#f6b27a' } : {}}>
             {!watchPush ? 'Sync runs a moment after the app loads — reopen Settings to see the result.'
-              : watchPush.upToDate ? 'Up to date: ' + watchPush.events + ' session' + (watchPush.events === 1 ? '' : 's') + ' on the calendar.'
+              : watchPush.upToDate ? 'Up to date: ' + watchPush.events + ' session' + (watchPush.events === 1 ? '' : 's') + ' on the calendar.' + zeroWhy(watchPush)
                 : watchPush.notSupported ? 'The backend is not accepting planned events (404) — sessions cannot reach the calendar. One for Jack.'
-                  : watchPush.ok ? 'Last sync: ' + watchPush.events + ' session' + (watchPush.events === 1 ? '' : 's') + ' sent to the calendar.'
+                  : watchPush.ok ? 'Last sync: ' + watchPush.events + ' session' + (watchPush.events === 1 ? '' : 's') + ' sent to the calendar.' + zeroWhy(watchPush)
                     : 'Last sync FAILED (' + (watchPush.status || 'network') + ') — sessions are not reaching the calendar. Tell Jack the planned-events endpoint is erroring.'}
           </div>
         )}

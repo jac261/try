@@ -117,7 +117,7 @@ export function App({ storage, getToken, user }) {
     const body = T.buildWatchEvents({ plan, moves, easedOf, log, todayISO: T.iso(new Date()) });
     const hash = JSON.stringify(body);
     if (storage.load('watchPushed', null) === hash) {
-      setWatchPush({ ok: true, upToDate: true, events: body.events.length });
+      setWatchPush({ ok: true, upToDate: true, events: body.events.length, inWindow: body.inWindow, doneInWindow: body.doneInWindow });
       return;
     }
     const t = setTimeout(() => {
@@ -125,7 +125,7 @@ export function App({ storage, getToken, user }) {
         if (!r) { setWatchPush({ ok: false, notSupported: true }); return; } // 404: no endpoint / not connected
         const ok = !r.failed;
         if (ok) storage.save('watchPushed', hash);
-        setWatchPush({ at: new Date().toISOString(), ok, status: r.status || null, events: body.events.length });
+        setWatchPush({ at: new Date().toISOString(), ok, status: r.status || null, events: body.events.length, inWindow: body.inWindow, doneInWindow: body.doneInWindow });
       });
     }, 2000);
     return () => clearTimeout(t);

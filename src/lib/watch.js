@@ -129,9 +129,17 @@ export function buildWatchEvents({ plan, moves, easedOf, log, todayISO, days = W
   const newest = iso(addDays(todayISO, days - 1));
   const eased = easedOf || (w => w);
   const events = [];
+  // Diagnostic counters, surfaced in the Settings status line: when the list
+  // is unexpectedly empty they name which filter consumed the window.
+  let inWindow = 0, doneInWindow = 0;
   for (const w of ((plan && plan.weeks) || []).flatMap(week => week.workouts)) {
     const type = WATCH_TYPES[w.discipline];
     if (!type || w.race || w.bRace) continue;
+    const dd = effDate(w, moves || {});
+    if (dd >= todayISO && dd <= newest) {
+      inWindow++;
+      if ((log || {})[w.id]) doneInWindow++;
+    }
     if ((log || {})[w.id]) continue;
     const d = effDate(w, moves || {});
     if (d < todayISO || d > newest) continue;
@@ -153,5 +161,5 @@ export function buildWatchEvents({ plan, moves, easedOf, log, todayISO, days = W
   // Deterministic order so an unchanged plan serialises to an unchanged
   // payload (the app skips the push when the JSON hash matches).
   events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.ref < b.ref ? -1 : 1));
-  return { oldest: todayISO, newest, events: events.slice(0, 100) };
+  return { oldest: todayISO, newest, events: events.slice(0, 100), inWindow, doneInWindow };
 }
