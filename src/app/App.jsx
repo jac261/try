@@ -498,7 +498,7 @@ export function App({ storage, getToken, user }) {
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}
         onLogResult={() => { setDetail(null); setEditFitness(true); }}
-        onRemove={detail.custom ? () => removeWorkout(detail.id) : null} onSupport={t => { setDetail(null); openSupport(t); }} />}
+        onRemove={detail.custom ? () => removeWorkout(detail.id) : null} onLoadIntervals={sync.loadActivityIntervals} onSupport={t => { setDetail(null); openSupport(t); }} />}
 
       {addOpen && <AddWorkoutSheet onAdd={addWorkout} onClose={() => setAddOpen(false)} />}
 

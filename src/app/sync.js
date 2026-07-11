@@ -10,7 +10,7 @@ import {
   getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan,
   putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
   putWorkoutAdjustment, deleteWorkoutAdjustment,
-  getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents, getIntervalsThresholds,
+  getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents, getIntervalsThresholds, getIntervalsActivityIntervals,
   toClientState, logToApi,
 } from '@/lib/api.js';
 
@@ -114,6 +114,14 @@ export function makeSync(getToken) {
     loadThresholds: async () => {
       const res = await getIntervalsThresholds(getToken);
       return res.ok && res.body ? res.body : null;
+    },
+
+    // The interval/lap rows for one recording (the rep table). null when not
+    // connected, offline, or on a backend that predates the endpoint — the
+    // review simply shows no table.
+    loadActivityIntervals: async activityId => {
+      const res = await getIntervalsActivityIntervals(getToken, activityId);
+      return res.ok && Array.isArray(res.body) ? res.body : null;
     },
 
     // Workouts-to-watch: reconcile the upcoming plan onto the athlete's

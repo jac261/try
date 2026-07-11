@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { useSheetFocus } from '@/utils/useSheetFocus.js';
@@ -32,7 +33,17 @@ const WHY_DISC = {
   'swim:Endurance': 'Build aerobic endurance in the water. Long, smooth and unhurried — hold relaxed form as the distance adds up.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onSupport }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport }) {
+  // The rep table: lazily fetch the recording's interval analysis once the
+  // session is done and matched. null → loading/none; [] handled by the lib.
+  const [reps, setReps] = useState(null);
+  const actId = done && activity ? activity.id : null;
+  useEffect(() => {
+    if (!actId || !onLoadIntervals) return;
+    let gone = false;
+    onLoadIntervals(actId).then(list => { if (!gone) setReps(list); });
+    return () => { gone = true; };
+  }, [actId, onLoadIntervals]);
   const canFit = T.FIT && T.FIT.supports(w);
   const disc = D[w.discipline];
   const why = !w.race && !w.test ? (WHY_DISC[w.discipline + ':' + w.type] || WHY[w.type]) : null;
@@ -116,6 +127,32 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
                   <span>{v.text}</span>
                 </div>
               ))}
+              {(() => {
+                // Rep-by-rep (or km splits): honest per-interval numbers, with
+                // verdict dots only where the session type defines a target.
+                const it = T.intervalRows({ workout: w, intervals: reps, paces: plan.paces });
+                if (!it) return null;
+                const toneCol = { good: 'var(--run)', warn: '#f6b27a', info: 'var(--muted)' };
+                return (
+                  <div className="rep-table">
+                    <div className="rd-trend-head" style={{ marginTop: 12 }}><span>{it.judged ? 'Reps' : 'Splits'}</span><span>{it.summary}</span></div>
+                    {it.rows.map(r => (
+                      <div className="seg" key={r.n} style={{ padding: '5px 0' }}>
+                        <div className="bar" style={{ background: r.tone ? toneCol[r.tone] : 'var(--chip)' }} />
+                        <div><div className="l">{(r.label || '#' + r.n)}</div>
+                          <div className="d">
+                            {T.fmtDuration(Math.round(r.timeSec / 60) || 1)}
+                            {r.distance ? ' · ' + (r.distance / 1000).toFixed(2) + ' km' : ''}
+                            {r.paceSec ? ' · ' + T.fmtPace(r.paceSec) + (w.discipline === 'swim' ? ' /100m' : ' /km') : ''}
+                            {r.watts != null ? ' · ' + r.watts + ' W' : ''}
+                            {r.hr != null ? ' · ' + r.hr + ' bpm' : ''}
+                          </div></div>
+                        {r.tone && <div className="m">{r.tone === 'good' ? 'on target' : r.tone === 'warn' ? 'hot' : 'under'}</div>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}

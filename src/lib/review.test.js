@@ -49,3 +49,44 @@ describe('reviewActivity (post-session analysis)', () => {
     expect(reviewActivity({ workout: w, activity: { id: 'x', date: 'd' }, paces })).toBe(null); // no moving time
   });
 });
+
+import { intervalRows } from './review.js';
+
+describe('intervalRows (the rep table)', () => {
+  const iv = (over = {}) => ({ type: 'WORK', movingTimeSec: 540, distance: 2000, avgSpeed: 3.51, avgHr: 165, avgWatts: 320, ...over });
+
+  it('judges run reps by pace, never by average_watts (running power)', () => {
+    const w = { discipline: 'run', type: 'Threshold' };
+    // avgSpeed 3.51 m/s = 285 s/km = exactly the threshold target
+    const it = intervalRows({ workout: w, intervals: [iv(), iv({ avgSpeed: 3.1 })], paces });
+    expect(it.rows[0].tone).toBe('good');
+    expect(it.rows[0].watts).toBe(null);       // watts suppressed for runs
+    expect(it.rows[1].tone).toBe('info');      // 322 s/km, slower than band
+    expect(it.summary).toBe('1 of 2 reps on target');
+  });
+
+  it('judges bike reps by watts against the FTP band', () => {
+    const w = { discipline: 'bike', type: 'Sweet Spot' };
+    const it = intervalRows({ workout: w, intervals: [
+      iv({ avgWatts: 192, avgSpeed: null }),   // 86% FTP → in band
+      iv({ avgWatts: 230, avgSpeed: null }),   // 104% → hot
+    ], paces });
+    expect(it.rows.map(r => r.tone)).toEqual(['good', 'warn']);
+  });
+
+  it('unstructured laps render as plain splits: no target, no verdicts', () => {
+    const w = { discipline: 'run', type: 'Easy' };
+    const it = intervalRows({ workout: w, intervals: [iv(), iv(), iv()], paces });
+    expect(it.judged).toBe(0);
+    expect(it.rows.every(r => !r.tone)).toBe(true);
+    expect(it.summary).toBe('3 splits');
+  });
+
+  it('drops sub-30-second lap-button stubs and returns null with nothing to show', () => {
+    const w = { discipline: 'run', type: 'Threshold' };
+    const it = intervalRows({ workout: w, intervals: [iv(), iv({ movingTimeSec: 7 })], paces });
+    expect(it.rows.length).toBe(1);
+    expect(intervalRows({ workout: w, intervals: [iv({ movingTimeSec: 7 })], paces })).toBe(null);
+    expect(intervalRows({ workout: w, intervals: null, paces })).toBe(null);
+  });
+});

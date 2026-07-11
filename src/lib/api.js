@@ -210,6 +210,13 @@ export function getIntervalsActivities(getToken, days) {
   return request('/api/integrations/intervals-icu/activities' + query, { getToken });
 }
 
+// The interval/lap analysis of one activity (compact rows: type, label,
+// groupId, startTimeSec, movingTimeSec, distance, avgSpeed, avgHr, maxHr,
+// avgWatts, intensity, zone). 404 → not connected or an older backend.
+export function getIntervalsActivityIntervals(getToken, activityId) {
+  return request('/api/integrations/intervals-icu/activities/' + encodeURIComponent(activityId) + '/intervals', { getToken });
+}
+
 // The athlete's per-sport thresholds as configured on intervals.icu
 // (bikeFtp watts; run/swim threshold paces in metres per second).
 export function getIntervalsThresholds(getToken) {

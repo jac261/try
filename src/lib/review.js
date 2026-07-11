@@ -100,3 +100,51 @@ function fmtDur(sec) {
   const m = Math.round(sec / 60);
   return m >= 60 ? Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm' : m + ' min';
 }
+
+/* ---- the rep table: per-interval rows with verdicts ----
+   Judged only where a rep target genuinely exists for the session type: runs
+   and swims by pace (never by average_watts, which is running power on runs),
+   rides by watts against an FTP band. Unstructured sessions arrive as auto
+   laps, which render as plain splits with no verdicts — a split has no target
+   to fail. Sub-30-second slivers (lap-button stubs) are dropped. */
+const REP_BANDS = {
+  run: { 'Threshold': ['threshold', 10], 'Tempo': ['tempo', 12], 'VO2 Intervals': ['interval', 10] },
+  swim: { 'CSS Intervals': ['css', 4], 'Race Pace': ['css', 4] },
+  bike: { 'Threshold': [0.95, 1.05], 'Sweet Spot': [0.84, 0.90], 'VO2 Intervals': [1.05, 1.25], 'Tempo': [0.83, 0.90] },
+};
+
+export function intervalRows({ workout, intervals, paces }) {
+  if (!workout || !Array.isArray(intervals)) return null;
+  const disc = workout.discipline;
+  const pc = paces || {};
+  const work = intervals.filter(i => i && i.type === 'WORK' && i.movingTimeSec >= 30);
+  if (!work.length) return null;
+  const band = (REP_BANDS[disc] || {})[workout.type] || null;
+  let judged = 0, onTarget = 0;
+  const rows = work.map((i, idx) => {
+    const row = {
+      n: idx + 1,
+      label: i.label || null,
+      timeSec: Math.round(i.movingTimeSec),
+      distance: i.distance || null,
+      hr: i.avgHr != null ? Math.round(i.avgHr) : null,
+      watts: disc === 'bike' && i.avgWatts != null ? Math.round(i.avgWatts) : null,
+      paceSec: disc !== 'bike' && i.avgSpeed ? (disc === 'swim' ? 100 : 1000) / i.avgSpeed : null,
+    };
+    if (band && disc === 'bike' && row.watts != null && pc.ftp) {
+      judged++;
+      const p = row.watts / pc.ftp;
+      row.tone = p > band[1] + 0.03 ? 'warn' : p < band[0] - 0.03 ? 'info' : 'good';
+    } else if (band && disc !== 'bike' && row.paceSec && pc[disc] && pc[disc][band[0]]) {
+      judged++;
+      const target = pc[disc][band[0]], tol = band[1];
+      row.tone = row.paceSec < target - tol ? 'warn' : row.paceSec > target + tol ? 'info' : 'good';
+    }
+    if (row.tone === 'good') onTarget++;
+    return row;
+  });
+  const summary = judged
+    ? onTarget + ' of ' + judged + ' rep' + (judged === 1 ? '' : 's') + ' on target'
+    : rows.length + ' split' + (rows.length === 1 ? '' : 's');
+  return { rows, summary, judged };
+}
