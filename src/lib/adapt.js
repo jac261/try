@@ -100,14 +100,16 @@ function windowAvg(ramps, fromISO, toISO) {
   return Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10;
 }
 
-// Week-level proposal from the ramp trend (R1-R3) and the form trend (F1-F3),
-// most urgent first: F1 > R2 > R1 > F3 > F2 > R3.
+// Week-level proposal from the ramp trend (R1-R2) and the form trend (F1-F3),
+// most urgent first: F1 > R2 > R1 > F3 > F2.
 //   F1 sustained high risk → { kind:'trim-week', factor:.6 } (recovery-depth week)
 //   R2 risky ramp          → { kind:'trim-week', factor:.7, ease:[quality] }
 //   R1 aggressive ×2       → { kind:'trim-week', factor:.8 }
-//   F3 transition in build → { kind:'restore-week' } (or catch-up when nothing to restore)
+//   F3 transition in build → { kind:'restore-week' }
 //   F2 grey all week       → { kind:'boost-week', factor:1.1 }
-//   R3 stalled build       → { kind:'catch-up' }
+// Missed sessions are never auto-rescheduled (field decision 2026-07-11: a
+// missed session stays missed unless the athlete moves it themselves — the
+// old catch-up redistribution stacked sessions onto already-loaded days).
 // Guardrails: recovery/taper/race weeks are never adjusted (the relief is
 // already scheduled); a week with any adjusted session is not re-proposed (G3).
 export function proposeWeek({ wellness, plan, log, moves, adjust, todayISO }) {
@@ -188,8 +190,8 @@ export function proposeWeek({ wellness, plan, log, moves, adjust, todayISO }) {
   }
 
   // F3 — form in transition mid-Base/Build: fitness is leaking. Restore any
-  // engine-adjusted upcoming sessions; with nothing to restore, point at the
-  // missed volume instead.
+  // engine-adjusted upcoming sessions; with nothing to restore, stay quiet
+  // (missed volume is the athlete's to reschedule, never the engine's).
   if (tsbNow != null && tsbNow > 25 && inBuild) {
     const byId = new Map(plan.weeks.flatMap(w => w.workouts).map(w => [w.id, w]));
     const restorable = Object.keys(adjust || {}).filter(id => {
@@ -201,13 +203,6 @@ export function proposeWeek({ wellness, plan, log, moves, adjust, todayISO }) {
         kind: 'restore-week', action: 'restoreWeek', targets: restorable,
         headline: 'Restore your full sessions',
         why: `Form ${fmtTsb(tsbNow)} is transition territory: so fresh that fitness is leaking. You're recovered enough to absorb the full planned load again.`,
-      };
-    }
-    if (missed.length) {
-      return {
-        kind: 'catch-up', action: 'catchUp',
-        headline: 'Fitness is leaking',
-        why: `Form ${fmtTsb(tsbNow)} means very fresh for a ${curWeek.phase} week, and ${missed.length} session${missed.length > 1 ? 's were' : ' was'} missed. Reschedule to keep the engine loaded.`,
       };
     }
   }
@@ -224,17 +219,6 @@ export function proposeWeek({ wellness, plan, log, moves, adjust, todayISO }) {
       targets: trimmable.map(w => w.id), ease: [],
       headline: 'Room to build',
       why: `Form has sat in the grey zone all week: recovered, but the load isn't quite enough to drive adaptation. Nudge next week's volume up 10%.`,
-    };
-  }
-
-  // R3 — the build has stalled: negative ramp in a Base/Build week with ≥2
-  // missed sessions → the existing catch-up redistribution, urgently framed.
-  const rampNow = ramps.length ? ramps[ramps.length - 1].ramp : null;
-  if (rampNow != null && rampNow < 0 && inBuild && missed.length >= 2) {
-    return {
-      kind: 'catch-up', action: 'catchUp',
-      headline: 'Your build has stalled',
-      why: `Fitness is drifting down (${fmtRamp(rampNow)}/wk) in a ${curWeek.phase} week with ${missed.length} sessions missed. Reschedule them onto your free days to restart the climb.`,
     };
   }
 

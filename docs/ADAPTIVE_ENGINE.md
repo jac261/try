@@ -55,7 +55,11 @@ Chronic, week-level. Signal: the ramp-rate chart (weekly CTL change; zones per
 |---|---|---|
 | R1 | Ramp > **+5/wk** (Aggressive) averaged across **2 consecutive weeks** | Trim next week's volume to **80%** (`trimWorkout`: same session type rebuilt shorter, key flag preserved) |
 | R2 | Ramp > **+8/wk** (Risky) averaged across the trailing week | Trim next week to **70%** + take the biggest quality session easy |
-| R3 | Ramp **negative during a Base/Build week** with ≥ 2 missed sessions | The catch-up redistribution (existing `catchUpMoves`) framed as "your build has stalled" |
+
+*(R3, the catch-up redistribution of missed sessions, was removed 2026-07-11
+by field decision: the "emptiest day" heuristic stacked a brick onto a day
+already holding a bike and a run. A missed session stays missed unless the
+athlete moves it themselves; the engine never reschedules on their behalf.)*
 
 Mechanics: `proposeWeek` renders as a banner on the Today tab; R2 outranks R1.
 A week's ramp is the mean of its daily ramp readings, and a window with fewer
@@ -74,11 +78,11 @@ thresholds: `FORM_RULES` in `src/lib/adapt.js`.
 |---|---|---|
 | F1 | Form in **High risk** (< −30) for **3+ consecutive days** | Convert next week to a recovery week: volume to **60%**, every quality session taken easy ("pull the recovery week forward", through the same adjustment overlay) |
 | F2 | Form stuck in the **Grey zone** for a full week (7 readings, never below −10) during Base/Build, with nothing missed | Load isn't sufficient to drive adaptation → **boost** next week's volume +10% (`boostWorkout`, `kind: "boost"`) |
-| F3 | Form in **Transition** (> +25) mid-Base/Build | Fitness is leaking → restore any engine-adjusted upcoming sessions; with nothing to restore, surface the missed volume (catch-up) |
+| F3 | Form in **Transition** (> +25) mid-Base/Build | Fitness is leaking → restore any engine-adjusted upcoming sessions; with nothing to restore, stay quiet (missed volume is the athlete's to reschedule) |
 
 The weekly banner shows ONE structural proposal, most urgent first:
-**F1 > R2 > R1 > F3 > F2 > R3**. F2 requires a clean week (no missed sessions) —
-grey form caused by skipped training needs the catch-up, not a bigger plan.
+**F1 > R2 > R1 > F3 > F2**. F2 requires a clean week (no missed sessions) —
+grey form caused by skipped training is not solved by a bigger plan.
 The same guardrails as Phase 2 apply: fresh data only, recovery/taper/race
 weeks untouched, no re-proposing an adjusted week.
 

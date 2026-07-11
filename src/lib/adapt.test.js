@@ -132,18 +132,12 @@ describe('adaptive engine — Phase 2 (ramp guardrail)', () => {
     expect(proposeWeek({ ...base, wellness: recsAt(1.3, 25, -5) })).toBe(null);
   });
 
-  it('R3: negative ramp in a Build week with ≥2 missed sessions → catch-up, urgently framed', () => {
+  it('missed sessions are never auto-rescheduled: a stalled build stays quiet (2026-07-11 field decision)', () => {
+    // The old R3 rule proposed redistributing missed sessions onto the
+    // "emptiest" days, which stacked a brick onto a day already holding a bike
+    // and a run. A missed session stays missed unless the athlete moves it.
     const p = proposeWeek({ ...base, wellness: recsAt(-0.3) }); // week 0 days 07-06..07-08 unlogged
-    expect(p.kind).toBe('catch-up');
-    expect(p.action).toBe('catchUp');
-    expect(p.headline).toMatch(/stalled/);
-    expect(p.why).toMatch(/3 sessions missed/);
-  });
-
-  it('R3 stays quiet outside Base/Build, or with the sessions logged', () => {
-    expect(proposeWeek({ ...base, plan: buildPlan({ phase0: 'Taper' }), wellness: recsAt(-0.3) })).toBe(null);
-    const logged = { '0-0': { done: true }, '0-1': { done: true }, '0-2': { done: true } };
-    expect(proposeWeek({ ...base, log: logged, wellness: recsAt(-0.3) })).toBe(null);
+    expect(p).toBe(null);
   });
 });
 
@@ -173,10 +167,9 @@ describe('adaptive engine — Phase 3 (form-aware blocks)', () => {
     expect(p.why).toMatch(/leaking/);
   });
 
-  it('F3: transition form with nothing to restore but missed sessions → catch-up, leak framing', () => {
+  it('F3 with nothing to restore stays quiet — missed volume is the athlete\'s call, never a proposal', () => {
     const p = proposeWeek({ ...base, wellness: recsAt(0.5, 25, 0, 28) }); // week 0's past days unlogged
-    expect(p.kind).toBe('catch-up');
-    expect(p.headline).toMatch(/leaking/i);
+    expect(p).toBe(null);
   });
 
   it('F2: a full grey week in Build with nothing missed → boost next week 10%', () => {

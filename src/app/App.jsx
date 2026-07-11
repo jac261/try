@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import * as T from '@/lib';
 import { makeSync, mergeOverlay, sweepStale } from '@/app/sync.js';
 import { buildObservation, toNote, downloadCalibration } from '@/app/calibration.js';
-import { effDate, catchUpMoves } from '@/lib/schedule.js';
+import { effDate } from '@/lib/schedule.js';
 import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
 import { downloadICS } from '@/lib/ics.js';
 import { tap } from '@/utils/a11y.js';
@@ -240,11 +240,6 @@ export function App({ storage, getToken, user }) {
     setMoves(m => { const n = { ...m }; if (date === null) delete n[id]; else n[id] = date; return n; });
     if (gid(id)) { if (date === null) sync.removeMove(gid(id)); else sync.saveMove(gid(id), date); }
   };
-  const catchUp = () => {
-    const next = catchUpMoves(plan, log, moves).next;
-    Object.keys(next).forEach(id => { if (next[id] !== moves[id] && gid(id)) sync.saveMove(gid(id), next[id]); });
-    setMoves(next);
-  };
   // Re-target the plan from updated fitness. Same level/days/race → identical
   // week/day IDs, so the log & moves overlays stay valid; only paces change.
   const retarget = fields => {
@@ -318,7 +313,6 @@ export function App({ storage, getToken, user }) {
   };
   const applyWeekly = p => {
     if (!p) return;
-    if (p.action === 'catchUp') return catchUp();
     if (p.action === 'restoreWeek') {
       setAdjust(a => { const n = { ...a }; p.targets.forEach(id => delete n[id]); return n; });
       p.targets.forEach(id => { if (adjust[id] && gid(id)) sync.removeAdjustment(gid(id)); });
@@ -439,7 +433,7 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onCatchUp={catchUp} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} onSupport={openSupport} />}

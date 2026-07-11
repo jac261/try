@@ -77,9 +77,8 @@ export const TOPICS = [
         upper guide marks where the odds of breaking down start beating the odds of adapting.</P>
       <H>What the engine does about it</H>
       <P>When your build runs hot, the engine proposes trimming the coming week back to a
-        sustainable level, easing the hardest work first. When the build stalls instead, with a
-        falling ramp and missed sessions, it proposes a catch-up: an interrupted build carries its
-        own cost.</P>
+        sustainable level, easing the hardest work first. Missed sessions it leaves entirely to
+        you: a missed session stays missed unless you move it yourself in the calendar.</P>
       <H>Reading it honestly</H>
       <P>A negative bar is not failure. Taper weeks, recovery weeks and life weeks are supposed to
         dip. What matters is the pattern across a phase, not any single bar.</P>
@@ -126,8 +125,8 @@ export const TOPICS = [
         rough morning moves a benchmark test rather than softening it, because a compromised test
         poisons your zones.</P>
       <H>This week</H>
-      <P>The ramp guardrail (see Ramp rate) trims building weeks that grow too fast, and offers a
-        catch-up when the build stalls.</P>
+      <P>The ramp guardrail (see Ramp rate) trims building weeks that grow too fast. Missed
+        sessions are never rescheduled for you — moving them is always your call.</P>
       <H>This block</H>
       <P>Sustained deep fatigue turns the coming week into a recovery week. Idling in the grey
         zone through a building phase, with a clean training log, proposes a gentle boost: you

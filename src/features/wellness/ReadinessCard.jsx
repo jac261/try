@@ -148,11 +148,12 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
             // "everything is normal" three different ways is noise. And with the
             // cumulative factors there can be five movers on a rough morning, so
             // the chips themselves sit behind one more tap.
-            const movers = rd.why.filter(w => Math.abs(w.points || 0) >= 1);
+            const movers = rd.why.filter(w => Math.abs(w.points || 0) >= 1)
+              .sort((a, b) => Math.abs(b.points) - Math.abs(a.points)); // biggest impact first
             if (!movers.length) return <span className="rd-chip">All signals around your baseline</span>;
             return <>
               <a className="rd-why-toggle" {...tap(() => setWhyOpen(o => !o))} role="button" aria-expanded={whyOpen}>
-                Why · {movers.length} signal{movers.length > 1 ? 's' : ''} moved this score
+                Why? · {movers.length} signal{movers.length > 1 ? 's' : ''} moved this score
                 <span aria-hidden="true">{whyOpen ? '▾' : '▸'}</span>
               </a>
               {whyOpen && movers.map((w, i) => <span key={i} className={'rd-chip' + (w.bad ? ' bad' : '')}>{w.t}</span>)}

@@ -68,13 +68,11 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
   const today = all.filter(w => effDate(w, moves) === todayISO);
-  const weekStart = weekRange(todayISO)[0];
-  const missed = sessions.filter(w => { const d = effDate(w, moves); return d < todayISO && d >= weekStart && !log[w.id]; });
   const suggestions = paceSuggestions(plan, log);
   const [coachIdx, setCoachIdx] = useState(0);
   const [reviewToday, setReviewToday] = useState(false);
@@ -88,7 +86,7 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
   // outrank everything: they decide what the plan even is next.
   if (planEdge) coach.push({ key: planEdge.key, cls: 'banner tune', icon: planEdge.icon, title: planEdge.title, sub: planEdge.sub, act: planEdge.act });
   if (weekly) {
-    const skin = { 'trim-week': ['banner ramp', 'trend'], 'boost-week': ['banner tune', 'flame'], 'restore-week': ['banner', 'bolt'], 'catch-up': ['banner', 'bolt'] };
+    const skin = { 'trim-week': ['banner ramp', 'trend'], 'boost-week': ['banner tune', 'flame'], 'restore-week': ['banner', 'bolt'] };
     const [cls, icon] = skin[weekly.kind] || ['banner', 'bolt'];
     coach.push({ key: 'weekly', cls, icon, title: weekly.headline, sub: weekly.why + ' Tap to apply →', act: () => onWeekly(weekly) });
   }
@@ -96,11 +94,6 @@ export function TodayView({ plan, log, moves, open, onCatchUp, onTune, wellness,
     key: 'spotted', cls: 'banner', icon: 'watch',
     title: spotted.length === 1 ? 'Session spotted on your watch' : spotted.length + ' sessions spotted on your watch',
     sub: spotted.map(m => m.workout.title).join(' · ') + ' — tap to log ' + (spotted.length === 1 ? 'it' : 'them') + ' →', act: onLogSpotted,
-  });
-  if (missed.length > 0 && (!weekly || weekly.kind !== 'catch-up')) coach.push({
-    key: 'missed', cls: 'banner', icon: 'bolt',
-    title: missed.length + ' session' + (missed.length > 1 ? 's' : '') + ' missed this week',
-    sub: 'Tap to reschedule onto your free days →', act: onCatchUp,
   });
   if (eftp) coach.push({ key: 'eftp', cls: eftp.up ? 'banner tune' : 'banner ramp', icon: 'trend', title: eftp.headline, sub: eftp.why + ' Tap to retarget →', act: onEftp });
   if (suggestions.length > 0) coach.push({

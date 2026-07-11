@@ -199,9 +199,14 @@ function encode(name, sport, steps) {
     else { u8(2); u32(0); u32(0); u32(0); }              // open target
   });
 
-  // 12-byte header: size, protocol 2.0, profile ver, data size, ".FIT"
-  const head = [12, 0x20, 0x34, 0x08, b.length & 0xff, (b.length >> 8) & 0xff,
+  // 14-byte header: size, protocol 2.0, profile ver, data size, ".FIT", header
+  // CRC. The legacy 12-byte header is spec-legal and Garmin's SDK accepts it,
+  // but every file Garmin itself writes uses this form — match it, since watch
+  // firmware ingestion can be stricter than the SDK.
+  const head = [14, 0x20, 0x34, 0x08, b.length & 0xff, (b.length >> 8) & 0xff,
     (b.length >> 16) & 0xff, (b.length >>> 24) & 0xff, 0x2E, 0x46, 0x49, 0x54];
+  const hc = crc16(head);
+  head.push(hc & 0xff, (hc >> 8) & 0xff);
   const all = head.concat(b);
   const c = crc16(all);
   all.push(c & 0xff, (c >> 8) & 0xff);
