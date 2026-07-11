@@ -84,3 +84,45 @@ describe('activityFor (link-out to the recording)', () => {
     expect(activityUrl({ id: 'i80852013' })).toBe('https://intervals.icu/activities/i80852013');
   });
 });
+
+import { brickPairFor } from './autolog.js';
+
+describe('strength and brick matching (2026-07-11 field decisions)', () => {
+  const brickPlan = { weeks: [{ index: 0, workouts: [
+    wk('1-0', 'brick', 'Brick', '2026-07-09', 90),
+    wk('1-1', 'strength', 'Strength', '2026-07-08', 40),
+  ] }] };
+  const b = { plan: brickPlan, log: {}, moves: {}, todayISO: TODAY };
+
+  it('WeightTraining recordings match strength sessions like any other sport', () => {
+    const m = matchActivities({ ...b, activities: [act('g1', 'WeightTraining', '2026-07-08', 35, { rpe: 5 })] });
+    expect(m.map(x => [x.workout.id, x.activity.id])).toEqual([['1-1', 'g1']]);
+  });
+
+  it('a brick matches one ride + one run whose combined time fits the window, feel from the harder leg', () => {
+    const m = matchActivities({ ...b, activities: [
+      act('r1', 'Ride', '2026-07-09', 60, { rpe: 4 }),
+      act('r2', 'Run', '2026-07-09', 25, { rpe: 8 }),
+    ] });
+    expect(m.length).toBe(1);
+    expect(m[0].workout.id).toBe('1-0');
+    expect(m[0].activity.id).toBe('r1');
+    expect(m[0].activityRun.id).toBe('r2');
+    expect(m[0].feel).toBe('hard'); // max rpe of the pair
+  });
+
+  it('two rides on the day is ambiguous: the brick never guesses', () => {
+    const m = matchActivities({ ...b, activities: [
+      act('r1', 'Ride', '2026-07-09', 60), act('r2', 'Ride', '2026-07-09', 55), act('r3', 'Run', '2026-07-09', 25),
+    ] });
+    expect(m.length).toBe(0);
+    expect(brickPairFor({ workout: brickPlan.weeks[0].workouts[0], activities: [act('r1', 'Ride', '2026-07-09', 60)], moves: {} })).toBe(null);
+  });
+
+  it('a combined time outside the window refuses the pair', () => {
+    const m = matchActivities({ ...b, activities: [
+      act('r1', 'Ride', '2026-07-09', 20), act('r2', 'Run', '2026-07-09', 10), // 30m vs planned 90m
+    ] });
+    expect(m.length).toBe(0);
+  });
+});

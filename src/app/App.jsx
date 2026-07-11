@@ -234,8 +234,27 @@ export function App({ storage, getToken, user }) {
   // exists — feeds the derived load model and the completed-load bars with what
   // actually happened rather than what was planned. Rides along in the synced
   // calibration note, so it survives hydrate on any device.
+  // Bricks resolve to a ride+run PAIR, folded into one combined recording (no
+  // distance — summing km across two sports would render a misleading pace);
+  // the link opens the ride leg. Everything else resolves to its single match.
+  const recordingFor = w => {
+    if (!w) return null;
+    if (w.discipline === 'brick') {
+      const pair = T.brickPairFor({ workout: w, activities, moves });
+      if (!pair) return null;
+      const rpes = [pair.ride.rpe, pair.run.rpe].filter(v => v != null);
+      const load = (pair.ride.trainingLoad != null || pair.run.trainingLoad != null)
+        ? (pair.ride.trainingLoad || 0) + (pair.run.trainingLoad || 0) : null;
+      return {
+        id: pair.ride.id, date: pair.ride.date, type: 'Ride', name: 'Brick — ride + run legs',
+        movingTimeSec: pair.ride.movingTimeSec + pair.run.movingTimeSec,
+        trainingLoad: load, rpe: rpes.length ? Math.max(...rpes) : null,
+      };
+    }
+    return T.activityFor({ workout: w, activities, moves });
+  };
   const actualFor = w => {
-    const a = w && T.activityFor({ workout: w, activities, moves });
+    const a = recordingFor(w);
     return a ? Math.round(a.movingTimeSec / 60) : undefined;
   };
   const toggle = id => {
@@ -320,8 +339,8 @@ export function App({ storage, getToken, user }) {
     const at = new Date().toISOString();
     const entries = {};
     spotted.forEach(m => {
-      const actualMin = m.activity && m.activity.movingTimeSec != null
-        ? Math.round(m.activity.movingTimeSec / 60) : undefined;
+      const secs = (m.activity && m.activity.movingTimeSec || 0) + (m.activityRun && m.activityRun.movingTimeSec || 0);
+      const actualMin = secs ? Math.round(secs / 60) : undefined;
       const entry = { done: true, at, feel: m.feel, actualMin, notes: observe(m.workout.id, m.feel || null, at, actualMin) };
       entries[m.workout.id] = entry;
       if (gid(m.workout.id)) sync.saveLog(gid(m.workout.id), entry);
@@ -474,7 +493,7 @@ export function App({ storage, getToken, user }) {
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} />}
 
       {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)}
-        activity={log[detail.id] ? T.activityFor({ workout: detail, activities, moves }) : null}
+        activity={log[detail.id] ? recordingFor(detail) : null}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}

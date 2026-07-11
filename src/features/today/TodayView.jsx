@@ -142,7 +142,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
         </div>}
         <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> Add a session</div>
       </div>
-      <RecordedActivities activities={activities} date={todayISO} />
+      <RecordedActivities activities={activities} date={todayISO} plan={plan} log={log} moves={moves} />
       <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout} />
     </>
   );

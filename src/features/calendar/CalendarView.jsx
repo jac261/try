@@ -121,7 +121,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
             ))}
           {daySessions.some(w => !w.race && !w.bRace) && <div className="cal-hint">Hold a session's grip and drag it onto a day above to reschedule</div>}
         </div>
-        <RecordedActivities activities={activities} date={selected} />
+        <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves} />
       </>}
 
       {drag && <div className="drag-ghost" style={{ left: drag.x, top: drag.y, borderColor: drag.color }}>{drag.title}</div>}

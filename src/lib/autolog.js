@@ -7,14 +7,34 @@
  */
 import { iso, addDays } from './date.js';
 
-// intervals.icu activity type → our discipline. Bricks and strength are left
-// out on purpose: a brick is two feed activities for one session, and gym
-// work rarely maps cleanly — mismatching is worse than not proposing.
-const DISCIPLINE = {
+// intervals.icu activity type → our discipline. Bricks have no single type —
+// they match as a ride+run PAIR (see brickPairFor); the old strength exclusion
+// predates keying on the WeightTraining type, which maps cleanly.
+export const DISCIPLINE = {
   Run: 'run', VirtualRun: 'run',
   Ride: 'bike', VirtualRide: 'bike',
   Swim: 'swim', OpenWaterSwim: 'swim',
+  WeightTraining: 'strength',
 };
+
+// A brick session's recording pair: same date, exactly ONE unclaimed ride and
+// ONE unclaimed run (two of either is ambiguous — never guess), combined
+// moving time inside the usual window of the planned duration. The feed
+// carries no start times, so ride-then-run order cannot be verified; the
+// one-of-each rule keeps this honest.
+export function brickPairFor({ workout, activities, moves, used }) {
+  if (!workout || workout.discipline !== 'brick' || !Array.isArray(activities)) return null;
+  const planned = workout.durationMin || 0;
+  if (!planned) return null;
+  const date = (moves && moves[workout.id]) || workout.date;
+  const on = disc => activities.filter(a => a && (!used || !used.has(a.id))
+    && DISCIPLINE[a.type] === disc && a.date === date && a.movingTimeSec != null);
+  const rides = on('bike'), runs = on('run');
+  if (rides.length !== 1 || runs.length !== 1) return null;
+  const min = (rides[0].movingTimeSec + runs[0].movingTimeSec) / 60;
+  if (min < planned * 0.5 || min > planned * 1.7) return null;
+  return { ride: rides[0], run: runs[0] };
+}
 
 // Log feel from the athlete's recorded RPE (0-10), when present. Conservative
 // bands; absent RPE leaves feel unset rather than guessing.
@@ -37,7 +57,8 @@ export function matchActivities({ activities, plan, log, moves, todayISO }) {
 
   const candidates = plan.weeks.flatMap(w => w.workouts).filter(w => {
     if ((log || {})[w.id] || w.race || w.bRace) return false;
-    if (w.discipline !== 'run' && w.discipline !== 'bike' && w.discipline !== 'swim') return false;
+    if (w.discipline !== 'run' && w.discipline !== 'bike' && w.discipline !== 'swim'
+      && w.discipline !== 'strength' && w.discipline !== 'brick') return false;
     const d = eff(w);
     return d >= oldest && d <= today;
   });
@@ -47,6 +68,15 @@ export function matchActivities({ activities, plan, log, moves, todayISO }) {
   candidates.forEach(w => {
     const planned = w.durationMin || 0;
     if (!planned) return;
+    if (w.discipline === 'brick') {
+      const pair = brickPairFor({ workout: w, activities, moves, used });
+      if (pair) {
+        used.add(pair.ride.id); used.add(pair.run.id);
+        const rpes = [pair.ride.rpe, pair.run.rpe].filter(v => v != null);
+        matches.push({ workout: w, activity: pair.ride, activityRun: pair.run, feel: rpes.length ? feelFromRpe(Math.max(...rpes)) : undefined });
+      }
+      return;
+    }
     const best = activities
       .filter(a => a && !used.has(a.id) && DISCIPLINE[a.type] === w.discipline
         && a.date === eff(w) && a.movingTimeSec != null)
