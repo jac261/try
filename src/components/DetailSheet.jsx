@@ -99,6 +99,26 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
               <button key={k} className={'feelbtn' + (feel === k ? ' on ' + k : '')} onClick={() => onFeel(w.id, k)}>{lab}</button>)}
           </div>
         </div>}
+        {done && activity && (() => {
+          // Post-session review: the recording's numbers next to the plan's
+          // intent, with verdicts only where an average can judge fairly.
+          const rv = T.reviewActivity({ workout: w, activity, paces: plan.paces, log: null });
+          if (!rv) return null;
+          return (
+            <div className="review">
+              <div className="section-title" style={{ margin: '14px 0 6px' }}>How it went</div>
+              <div className="rd-pmc" style={{ marginTop: 0, flexWrap: 'wrap' }}>
+                {rv.stats.slice(0, 4).map(([k, v]) => <div key={k}><b style={{ fontSize: 15 }}>{v}</b><span>{k}</span></div>)}
+              </div>
+              {rv.verdicts.map((v, i) => (
+                <div className="testnote" key={i} style={{ marginTop: 8 }}>
+                  <Icon name={v.tone === 'good' ? 'trophy' : v.tone === 'warn' ? 'heartrate' : 'trend'} size={18} />
+                  <span>{v.text}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         {activity && <a className="act-link" href={T.activityUrl(activity)} target="_blank" rel="noopener noreferrer">
           <Icon name="watch" size={15} /> See your recording on intervals.icu{activity.name ? ' · ' + activity.name : ''} ↗</a>}
         {(w.race || w.bRace) && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
