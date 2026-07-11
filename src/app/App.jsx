@@ -151,7 +151,11 @@ export function App({ storage, getToken, user }) {
         // locally — wholesale-replacing would silently lose it. The loading
         // screen blocks input until hydration, so the mount-time overlays
         // captured here are current.
-        setLog(mergeOverlay(result.log, log, ids, (g, e) => sync.saveLog(g, e)));
+        // Drop cached phantom entries (no done/feel/notes) before the merge, or
+        // the overlay would treat them as unsynced local logs and push them back.
+        const localLog = {};
+        Object.keys(log).forEach(k => { const e = log[k]; if (e && (e.done || e.feel || e.notes)) localLog[k] = e; });
+        setLog(mergeOverlay(result.log, localLog, ids, (g, e) => sync.saveLog(g, e)));
         setMoves(mergeOverlay(result.moves, moves, ids, (g, d) => sync.saveMove(g, d)));
         setRefToId(ids);
         // Adjustments sync only once the backend supports them; an empty result

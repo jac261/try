@@ -59,6 +59,20 @@ describe('toClientState', () => {
     expect(toClientState(null)).toBe(null);
   });
 
+  it('phantom log stubs (completed:false, no feel/notes) never become entries', () => {
+    // The 2026-07-11 incident: stub rows marked a whole upcoming week as done
+    // and emptied the watch push. Existence of an entry means "done" app-wide.
+    const r = JSON.parse(JSON.stringify(resp));
+    r.weeks[0].workouts[0].log = { completed: false, completedAtUtc: null, feel: null, notes: null };
+    r.logs = [{ clientWorkoutRef: '0-1', completed: false }];
+    const { log } = toClientState(r);
+    expect(log['0-0']).toBeUndefined();
+    expect(log['0-1']).toBeUndefined();
+    // a feel-only row is meaningful and survives
+    r.weeks[0].workouts[0].log = { completed: false, feel: 'hard' };
+    expect(toClientState(r).log['0-0'].feel).toBe('hard');
+  });
+
   it('derives the tune-up flag: RACE-typed but not THE race → bRace', () => {
     // The backend has no bRace column; the flag must survive hydrate by derivation.
     const r = JSON.parse(JSON.stringify(resp));

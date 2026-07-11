@@ -138,9 +138,9 @@ export function buildWatchEvents({ plan, moves, easedOf, log, todayISO, days = W
     const dd = effDate(w, moves || {});
     if (dd >= todayISO && dd <= newest) {
       inWindow++;
-      if ((log || {})[w.id]) doneInWindow++;
+      if (((log || {})[w.id] || {}).done) doneInWindow++;
     }
-    if ((log || {})[w.id]) continue;
+    if (((log || {})[w.id] || {}).done) continue;
     const d = effDate(w, moves || {});
     if (d < todayISO || d > newest) continue;
     const e = eased(w);

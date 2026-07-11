@@ -242,6 +242,11 @@ const toLogEntry = l => ({
   done: !!l.completed, at: l.completedAtUtc || null, feel: l.feel || undefined,
   notes: l.notes || undefined, actualMin: actualFromNote(l.notes),
 });
+// The server can return a log row for workouts that were never completed
+// (empty stubs from other write paths). An entry's EXISTENCE means "done"
+// throughout the app, so only meaningful rows may become entries — phantom
+// stubs once marked an entire upcoming week as done and emptied the watch push.
+const meaningfulLog = l => !!l && !!(l.completed || l.feel || l.notes);
 
 export function toClientState(resp) {
   if (!resp) return null;
@@ -252,7 +257,7 @@ export function toClientState(resp) {
 
   const mapWorkout = (wo, week) => {
     refToId[wo.clientWorkoutRef] = wo.id;
-    if (wo.log) log[wo.clientWorkoutRef] = toLogEntry(wo.log);
+    if (meaningfulLog(wo.log)) log[wo.clientWorkoutRef] = toLogEntry(wo.log);
     if (wo.move) moves[wo.clientWorkoutRef] = wo.move.movedDate;
     if (wo.adjustment) {
       adjust[wo.clientWorkoutRef] = { kind: wo.adjustment.kind || 'ease', at: wo.adjustment.at || null };
@@ -301,7 +306,7 @@ export function toClientState(resp) {
 
   // Top-level logs[]/moves[] are also returned; merge them in case a workout row
   // was omitted (defensive — the embedded copies above are the primary source).
-  (resp.logs || []).forEach(l => { if (!log[l.clientWorkoutRef]) log[l.clientWorkoutRef] = toLogEntry(l); });
+  (resp.logs || []).forEach(l => { if (!log[l.clientWorkoutRef] && meaningfulLog(l)) log[l.clientWorkoutRef] = toLogEntry(l); });
   (resp.moves || []).forEach(m => { if (!moves[m.clientWorkoutRef]) moves[m.clientWorkoutRef] = m.movedDate; });
 
   return { plan, log, moves, adjust, refToId };
