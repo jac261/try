@@ -122,7 +122,8 @@ export function makeSync(getToken) {
     pushWatchEvents: async body => {
       const res = await putPlannedEvents(getToken, body);
       if (res.ok && res.body) return res.body;
-      // Surface the failure instead of a bare null: a server write must never
+      if (res.status === 404) return null; // not connected / older backend: legitimately quiet
+      // Surface real failures instead of a bare null: a server write must never
       // fail silently (the catalog-drift rule) — this was the last one that did.
       return { failed: true, status: res.status || 0, message: res.message || null };
     },

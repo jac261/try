@@ -119,9 +119,10 @@ export function App({ storage, getToken, user }) {
     if (storage.load('watchPushed', null) === hash) return;
     const t = setTimeout(() => {
       sync.pushWatchEvents(body).then(r => {
-        const ok = !!r && !r.failed;
+        if (!r) return; // not connected: nothing to report
+        const ok = !r.failed;
         if (ok) storage.save('watchPushed', hash);
-        setWatchPush({ at: new Date().toISOString(), ok, status: (r && r.status) || null, events: body.events.length });
+        setWatchPush({ at: new Date().toISOString(), ok, status: r.status || null, events: body.events.length });
       });
     }, 2000);
     return () => clearTimeout(t);

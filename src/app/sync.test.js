@@ -151,6 +151,12 @@ describe('makeSync.pushWatchEvents', () => {
     api.putPlannedEvents.mockResolvedValue({ ok: false, status: 404 });
     expect(await makeSync(getToken).pushWatchEvents({ events: [] })).toBe(null);
   });
+  it('surfaces real failures instead of a silent null (the catalog-drift rule)', async () => {
+    api.putPlannedEvents.mockResolvedValue({ ok: false, status: 500, message: 'API returned 500.' });
+    const r = await makeSync(getToken).pushWatchEvents({ events: [] });
+    expect(r.failed).toBe(true);
+    expect(r.status).toBe(500);
+  });
 });
 
 describe('makeSync.refreshWellness', () => {
