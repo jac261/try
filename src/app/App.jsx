@@ -450,8 +450,8 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} />}
-      {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} />}
+      {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={activities} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} onSupport={openSupport} />}
       {view === 'settings' && <SettingsView plan={plan}

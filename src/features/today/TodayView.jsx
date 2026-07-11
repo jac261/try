@@ -6,6 +6,7 @@ import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { ReadinessCard } from '@/features/wellness/ReadinessCard.jsx';
+import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 const D = T.DISCIPLINES;
 
 // The user's expand/collapse choice for the week tab sticks across visits.
@@ -68,7 +69,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
@@ -141,6 +142,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
         </div>}
         <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> Add a session</div>
       </div>
+      <RecordedActivities activities={activities} date={todayISO} />
       <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout} />
     </>
   );

@@ -4,6 +4,7 @@ import { effDate, monthGrid, addMonths } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
+import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 const D = T.DISCIPLINES;
 
 /* A real calendar: one month at a time as a grid of days, sessions shown as
@@ -12,7 +13,7 @@ const D = T.DISCIPLINES;
    (writes the existing moves overlay, so it syncs and tags exactly like the
    detail sheet's reschedule — which remains the keyboard/screen-reader path).
    The week-by-week programme listing lives on the Plan tab now. */
-export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove }) {
+export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove, activities }) {
   const todayISO = T.iso(new Date());
   const planStart = plan.weeks[0].start;
   const planEnd = T.iso(T.addDays(plan.weeks[plan.weeks.length - 1].start, 6));
@@ -120,6 +121,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
             ))}
           {daySessions.some(w => !w.race && !w.bRace) && <div className="cal-hint">Hold a session's grip and drag it onto a day above to reschedule</div>}
         </div>
+        <RecordedActivities activities={activities} date={selected} />
       </>}
 
       {drag && <div className="drag-ghost" style={{ left: drag.x, top: drag.y, borderColor: drag.color }}>{drag.title}</div>}
