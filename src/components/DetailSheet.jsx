@@ -25,10 +25,17 @@ const WHY = {
   'Open Water': 'Rehearse race-day swimming. Practise sighting, drafting and holding a straight line without walls to push off.',
 };
 
+// Some types exist in more than one sport; where the shared wording would name
+// the wrong one, a discipline-specific entry wins (field report 2026-07-11: an
+// Endurance Swim explained itself as a bike session).
+const WHY_DISC = {
+  'swim:Endurance': 'Build aerobic endurance in the water. Long, smooth and unhurried — hold relaxed form as the distance adds up.',
+};
+
 export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onSupport }) {
   const canFit = T.FIT && T.FIT.supports(w);
   const disc = D[w.discipline];
-  const why = !w.race && !w.test ? WHY[w.type] : null;
+  const why = !w.race && !w.test ? (WHY_DISC[w.discipline + ':' + w.type] || WHY[w.type]) : null;
   const shown = eff || w.date;
   const moved = shown !== w.date;
   const days = weekRange(w.date);
