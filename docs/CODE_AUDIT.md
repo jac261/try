@@ -124,6 +124,33 @@ permanent simulated case for future audits and verifications:
 
 ## Audit log
 
+### 2026-07-12 — focused audit: reality-in-the-app cluster (recordings, review, rep table, recap)
+- 4 auditors (engine/model, sync/data-integrity, UI/a11y, imperfect-use
+  timelines), 16 raw findings, verified to 4 real fixes landed same-day:
+  the feel-rating path rebuilt the calibration note WITHOUT the entry's
+  actualMin, silently erasing the recorded duration on every other device
+  (the round's best catch — a one-argument omission at one call site of a
+  four-argument function); a stale watch-push promise could report over a
+  newer one after rapid toggle flips (now cancelled on effect re-run);
+  RecapSlides lacked the app's modal conventions (now on useSheetFocus:
+  Escape, focus trap, focus return); and applying that fix surfaced a latent
+  crash in useSheetFocus itself — it focused the ref unguarded, and the recap
+  is the first modal that can legitimately render null (guarded, plus the
+  recap only mounts with a live recording). Plus a defensive DISCIPLINES
+  guard on Recorded rows.
+- False positives named: "hooks-then-conditional-return is a violation" (it
+  is the standard legal pattern — the auditor's own clean-list contradicted
+  its top finding); tick→untick→retick "blank recap" (recap only fires when
+  a recording resolves; a vanished one renders nothing); slide remount on
+  index change (deliberate — it re-fires the entry animation).
+- Known limitations accepted and documented: a brick plus a same-date
+  standalone run is genuinely ambiguous without start times (the standalone
+  can claim the brick's run leg; proper fix = start times on the activities
+  passthrough); batch spotted-logging celebrates only the headline session;
+  the Tomorrow slide freezes if the recap stays open across midnight; the
+  steady-verdict tolerances are deliberately asymmetric (fast easy days warn,
+  slow ones stay gentle).
+
 ### 2026-07-10 — focused audit: sensor-less tier (readiness v3/v4, check-in, log-derived load)
 - 4 auditors (engine/model, sync/data-integrity, UI/a11y, imperfect-use
   timelines), 15 raw findings, verified to 4 real fixes landed same-day:

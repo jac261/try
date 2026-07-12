@@ -12,6 +12,7 @@ export function useSheetFocus(onClose) {
   close.current = onClose;
   useEffect(() => {
     const sheet = ref.current;
+    if (!sheet) return; // consumer rendered null (e.g. a recap whose recording vanished)
     const trigger = document.activeElement;
     sheet.focus();
     const onKey = e => {

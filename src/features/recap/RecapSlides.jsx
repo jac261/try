@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
+import { useSheetFocus } from '@/utils/useSheetFocus.js';
 import { Icon } from '@/components/Icon.jsx';
 
 /* Wrapped-style session recap: full-screen, one idea per slide, tap the right
@@ -10,6 +11,9 @@ import { Icon } from '@/components/Icon.jsx';
 export function RecapSlides({ workout, activity, plan, log, moves, onLoadIntervals, onClose }) {
   const [idx, setIdx] = useState(0);
   const [reps, setReps] = useState(null);
+  // Same modal conventions as every sheet: focus moves in, Tab is trapped,
+  // Escape closes, focus returns on exit (2026-07-12 audit finding).
+  const focusRef = useSheetFocus(onClose);
   const actId = activity && activity.id;
   useEffect(() => {
     if (!actId || !onLoadIntervals) return;
@@ -29,7 +33,7 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
   const back = () => setIdx(Math.max(0, i - 1));
 
   return (
-    <div className="recap" role="dialog" aria-modal="true" aria-label="Session recap">
+    <div className="recap" ref={focusRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Session recap">
       <div className="recap-dots" aria-hidden="true">
         {slides.map((_, n) => <i key={n} className={n === i ? 'on' : ''} />)}
       </div>

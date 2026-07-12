@@ -41,7 +41,9 @@ function Row({ disc, name, stat, tag, href }) {
 }
 
 export function RecordedActivities({ activities, date, plan, log, moves }) {
-  const day = (activities || []).filter(a => a && a.date === date && DISC[a.type] && a.movingTimeSec);
+  // The DISCIPLINES guard keeps a future drift between the activity-type map
+  // and the disciplines table from crashing the row render.
+  const day = (activities || []).filter(a => a && a.date === date && DISC[a.type] && T.DISCIPLINES[DISC[a.type]] && a.movingTimeSec);
   if (!day.length) return null;
   const sessions = plan && Array.isArray(plan.weeks)
     ? plan.weeks.flatMap(w => w.workouts).filter(w => effDate(w, moves) === date) : [];

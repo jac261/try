@@ -122,15 +122,17 @@ export function App({ storage, getToken, user }) {
       setWatchPush({ ok: true, upToDate: true, events: body.events.length, inWindow: body.inWindow, doneInWindow: body.doneInWindow });
       return;
     }
+    let stale = false; // a re-run supersedes this push's report (rapid toggle flips)
     const t = setTimeout(() => {
       sync.pushWatchEvents(body).then(r => {
+        if (stale) return;
         if (!r) { setWatchPush({ ok: false, notSupported: true }); return; } // 404: no endpoint / not connected
         const ok = !r.failed;
         if (ok) storage.save('watchPushed', hash);
         setWatchPush({ at: new Date().toISOString(), ok, status: r.status || null, events: body.events.length, inWindow: body.inWindow, doneInWindow: body.doneInWindow });
       });
     }, 2000);
-    return () => clearTimeout(t);
+    return () => { stale = true; clearTimeout(t); };
   }, [hydrated, plan, moves, adjust, log, watchSync, sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On mount (per user): pull the server's plan graph. The server is the source of
@@ -295,7 +297,10 @@ export function App({ storage, getToken, user }) {
   const applyTune = () => { const s = paceSuggestions(plan, log); if (s.length) retarget(tuneFields(plan.profile, s)); };
   const setFeel = (id, feel) => {
     const at = (log[id] && log[id].at) || new Date().toISOString();
-    const entry = Object.assign({}, log[id], { done: true, at, feel, notes: observe(id, feel, at) });
+    // Rebuilding the note must carry the entry's recorded duration forward —
+    // omitting it once wrote actualMin:null into the synced note and silently
+    // erased the measurement on every other device (2026-07-12 audit finding).
+    const entry = Object.assign({}, log[id], { done: true, at, feel, notes: observe(id, feel, at, (log[id] || {}).actualMin) });
     setLog(l => ({ ...l, [id]: entry }));
     if (gid(id)) sync.saveLog(gid(id), entry);
   };
@@ -490,8 +495,14 @@ export function App({ storage, getToken, user }) {
       {view === 'support' && <SupportView topic={supportTopic} onTopic={setSupportTopic}
         onBack={() => setView(supportReturn.current)} onReadinessInfo={() => setView('readinessInfo')} />}
 
-      {recap && <RecapSlides workout={recap} activity={recordingFor(recap)} plan={plan} log={log} moves={moves}
-        onLoadIntervals={sync.loadActivityIntervals} onClose={() => setRecap(null)} />}
+      {recap && (() => {
+        // Only mount with a live recording: activities can refetch under an
+        // open recap, and a null activity must degrade to nothing, not a
+        // focusless invisible dialog.
+        const a = recordingFor(recap);
+        return a ? <RecapSlides workout={recap} activity={a} plan={plan} log={log} moves={moves}
+          onLoadIntervals={sync.loadActivityIntervals} onClose={() => setRecap(null)} /> : null;
+      })()}
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
 
       {editFitness && <FitnessEditor profile={plan.profile} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
