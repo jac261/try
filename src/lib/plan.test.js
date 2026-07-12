@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout, upgradePlanSegments } from './plan.js';
+import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout, upgradePlanSegments, buildTrackerPlan } from './plan.js';
+import { RACES } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { iso, addDays } from './date.js';
 
@@ -7,6 +8,30 @@ const profile = (raceDate, startDate) => ({
   name: 'T', raceType: 'olympic', fitness: 'intermediate',
   trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5,
   raceDate, startDate,
+});
+
+describe('buildTrackerPlan (the no-plan sentinel)', () => {
+  it('keeps the profile, fitness history and paces, drops the weeks and race date', () => {
+    const plan = generatePlan(profile('2026-09-23', '2026-07-01'));
+    plan.profile.fitnessHistory = [{ date: '2026-01-01', fivekSec: 1200 }];
+    const t = buildTrackerPlan(plan, '2026-07-13T10:00:00.000Z');
+    expect(t.race).toBe('tracker');
+    expect(t.weeks).toEqual([]);
+    expect(t.totalWeeks).toBe(0);
+    expect(t.profile.raceDate).toBe(null);         // no stray countdown
+    expect(t.profile.raceType).toBe('olympic');    // retained so the next plan and fitness math work
+    expect(t.profile.fitnessHistory).toEqual(plan.profile.fitnessHistory); // trend preserved
+    expect(t.paces).toBe(plan.paces);
+    expect(t.createdAt).toBe(plan.createdAt);
+    expect(t.updatedAt).toBe('2026-07-13T10:00:00.000Z');
+  });
+
+  it('the tracker race is real but never a generatable/selectable race', () => {
+    expect(RACES.tracker).toBeTruthy();
+    expect(RACES.tracker.noRace).toBe(true);   // excluded from race pickers (they filter !noRace)
+    expect(RACES.tracker.tracker).toBe(true);
+    expect(Object.values(RACES).filter(r => !r.noRace).some(r => r.key === 'tracker')).toBe(false);
+  });
 });
 
 describe('generatePlan', () => {

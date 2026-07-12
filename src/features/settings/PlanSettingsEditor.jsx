@@ -14,7 +14,10 @@ export function PlanSettingsEditor({ profile, onClose, onSave }) {
     ? profile.longDay : (initDays.indexOf(5) >= 0 ? 5 : initDays[initDays.length - 1]);
   const [f, setF] = useState({
     raceType: profile.raceType,
-    raceDate: T.iso(profile.raceDate),
+    // Tracker mode nulls raceDate; default the picker to 12 weeks out rather
+    // than the epoch (T.iso(null) is 1970-01-01, which would build a broken
+    // past-dated plan if saved unchanged).
+    raceDate: profile.raceDate ? T.iso(profile.raceDate) : T.iso(T.addDays(new Date(), 12 * 7)),
     trainingDays: initDays,
     longDay: initLong,
   });

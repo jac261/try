@@ -8,6 +8,7 @@ import { InfoLink } from '@/components/InfoLink.jsx';
 const D = T.DISCIPLINES;
 
 export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport }) {
+  const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
   const done = all.filter(w => log[w.id]);
@@ -36,8 +37,9 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
   let streak = 0;
   for (let i = pastSessions.length - 1; i >= 0; i--) { if (log[pastSessions[i].id]) streak++; else break; }
 
-  const thisWeek = plan.weeks.find(w => w.workouts.some(x => x.date >= todayISO)) || plan.weeks[plan.weeks.length - 1];
-  const twSess = thisWeek.workouts.filter(x => x.discipline !== 'rest' && !x.race);
+  // thisWeek is undefined on an empty (tracker) plan, so guard before .workouts.
+  const thisWeek = tracker ? null : (plan.weeks.find(w => w.workouts.some(x => x.date >= todayISO)) || plan.weeks[plan.weeks.length - 1]);
+  const twSess = thisWeek ? thisWeek.workouts.filter(x => x.discipline !== 'rest' && !x.race) : [];
   const twDone = twSess.filter(x => log[x.id]).length;
 
   // fitness progression (from fitnessHistory snapshots + current baselines)
@@ -69,15 +71,17 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
     <>
       <AthleteStateStrip wellness={wellness} runLoad={runLoad} recovery={recovery} onSupport={onSupport} />
       <div className="section-title">Progress</div>
-      <div className="kpis">
-        <div className="kpi"><div className="v">{daysToRace}<small> days</small></div><div className="k">Until race day</div></div>
-        <div className="kpi"><div className="v">{pct}<small>%</small></div><div className="k">Sessions completed</div></div>
-        <div className="kpi"><div className="v">{done.length}<small>/{all.length}</small></div><div className="k">Workouts done</div></div>
-        <div className="kpi"><div className="v" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>{streak}<Icon name="flame" size={22} /></div><div className="k">Current streak</div></div>
-      </div>
+      {!tracker && <>
+        <div className="kpis">
+          <div className="kpi"><div className="v">{daysToRace}<small> days</small></div><div className="k">Until race day</div></div>
+          <div className="kpi"><div className="v">{pct}<small>%</small></div><div className="k">Sessions completed</div></div>
+          <div className="kpi"><div className="v">{done.length}<small>/{all.length}</small></div><div className="k">Workouts done</div></div>
+          <div className="kpi"><div className="v" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>{streak}<Icon name="flame" size={22} /></div><div className="k">Current streak</div></div>
+        </div>
 
-      <div className="section-title"><InfoLink onOpen={onSupport} topic="plan-structure" />Weekly load <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(planned vs completed)</span></div>
-      <div className="card"><BarChart data={bars} height={160} /></div>
+        <div className="section-title"><InfoLink onOpen={onSupport} topic="plan-structure" />Weekly load <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(planned vs completed)</span></div>
+        <div className="card"><BarChart data={bars} height={160} /></div>
+      </>}
 
       <div className="section-title"><InfoLink onOpen={onSupport} topic="zones" />Fitness progression</div>
       {trends.length === 0 ? (
@@ -96,10 +100,12 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
         </div>
       )}
 
-      {(() => {
+      {!tracker && (() => {
         // Weakest link: the three sports on one experience scale, and what the
         // plan does about the one lagging behind. Quiet claims only — with too
         // little data (no FTP or weight for the bike) it says so.
+        // Hidden in tracker mode: the share line keys on the retained raceType,
+        // so it would claim a race share with no plan (do not soften, hide).
         const w = [...(wellness || [])].reverse().find(r => r.weightKg);
         const wl = T.weakestLink({ profile: { ...plan.profile, weightKg: w ? w.weightKg : plan.profile.weightKg } });
         if (!wl) return null;
@@ -152,21 +158,23 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
         </>;
       })()}
 
-      <div className="section-title">This week</div>
-      <div className="card">
-        <div className="row"><div><h2 style={{ margin: 0 }}>{twDone} of {twSess.length} done</h2>
-          <div className="muted" style={{ fontSize: 12 }}>{thisWeek.phase} phase · week {thisWeek.index + 1}</div></div>
-          <div className="spacer" /><div style={{ fontSize: 26, fontWeight: 750 }}>{twSess.length ? Math.round(twDone / twSess.length * 100) : 0}%</div></div>
-        <div className="weekbar" style={{ height: 9 }}><span style={{ width: (twSess.length ? twDone / twSess.length * 100 : 0) + '%', background: 'var(--accent)' }} /></div>
-      </div>
-
-      <div className="section-title">Discipline balance</div>
-      <div className="card center">
-        <Donut segments={donut} size={170} />
-        <div className="legend" style={{ justifyContent: 'center' }}>
-          {donut.map(s => <div className="li" key={s.label}><i style={{ background: s.color }} />{s.label} · {Math.round(s.value)}h</div>)}
+      {!tracker && <>
+        <div className="section-title">This week</div>
+        <div className="card">
+          <div className="row"><div><h2 style={{ margin: 0 }}>{twDone} of {twSess.length} done</h2>
+            <div className="muted" style={{ fontSize: 12 }}>{thisWeek.phase} phase · week {thisWeek.index + 1}</div></div>
+            <div className="spacer" /><div style={{ fontSize: 26, fontWeight: 750 }}>{twSess.length ? Math.round(twDone / twSess.length * 100) : 0}%</div></div>
+          <div className="weekbar" style={{ height: 9 }}><span style={{ width: (twSess.length ? twDone / twSess.length * 100 : 0) + '%', background: 'var(--accent)' }} /></div>
         </div>
-      </div>
+
+        <div className="section-title">Discipline balance</div>
+        <div className="card center">
+          <Donut segments={donut} size={170} />
+          <div className="legend" style={{ justifyContent: 'center' }}>
+            {donut.map(s => <div className="li" key={s.label}><i style={{ background: s.color }} />{s.label} · {Math.round(s.value)}h</div>)}
+          </div>
+        </div>
+      </>}
 
       <WellnessTrends onSupport={onSupport} wellness={wellness} />
     </>

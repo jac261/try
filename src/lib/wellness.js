@@ -390,8 +390,15 @@ function snapshot(rec, base) {
 }
 
 // Session-aware recommendation: how readiness should shape today's workout.
+// With no session at all (tracker mode, or a plan-less day), advice speaks only
+// about the body, never prescribing a session that does not exist.
 function advice(band, isHard, sessionTitle) {
-  const s = sessionTitle || 'session';
+  if (!sessionTitle) {
+    if (band === 'green') return 'You are fresh today. A good day to train hard if you feel like it.';
+    if (band === 'amber') return 'A little down today. Keep anything you do controlled.';
+    return 'Recovery signals are high. Take it easy or rest today.';
+  }
+  const s = sessionTitle;
   if (band === 'green') return isHard ? `Green light — attack today's ${s} as planned.` : `Good to go — enjoy today's ${s}.`;
   if (band === 'amber') return isHard ? `A little down — keep the hard efforts controlled, or swap ${s} for an easy aerobic session.` : `Keep ${s} relaxed today.`;
   return isHard ? `Recovery first — swap today's ${s} for easy aerobic or rest.` : `Take it very easy today, or rest.`;

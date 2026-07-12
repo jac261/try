@@ -164,7 +164,7 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
+export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
@@ -173,11 +173,13 @@ export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitn
       <div className="section-title">Profile</div>
       <div className="card">
         <h2>{p.name}</h2>
-        <p className="lead">Training for the {T.RACES[p.raceType].name} on {T.fmtDate(T.iso(p.raceDate), { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+        <p className="lead">{tracker
+          ? 'No plan running. Just tracking your sessions.'
+          : <>Training for the {T.RACES[p.raceType].name} on {T.fmtDate(T.iso(p.raceDate), { month: 'long', day: 'numeric', year: 'numeric' })}</>}</p>
         <div className="statline">
           <div className="s"><b>{p.daysPerWeek}</b><span>days/week</span></div>
           <div className="s"><b style={{ textTransform: 'capitalize' }}>{p.fitness}</b><span>level</span></div>
-          <div className="s"><b>{plan.totalWeeks}</b><span>weeks</span></div>
+          {!tracker && <div className="s"><b>{plan.totalWeeks}</b><span>weeks</span></div>}
         </div>
         <div className="statline">
           <div className="s"><b>{p.fivekSec ? T.fmtPace(p.fivekSec / 5) : '~' + T.fmtPace((T.FITNESS[p.fitness] || T.FITNESS.intermediate).est5k / 5)}</b><span>{p.fivekSec ? '5k pace/km' : '5k pace · est'}</span></div>
@@ -185,21 +187,27 @@ export function SettingsView({ plan, onRegenerate, onReset, onExport, onEditFitn
           <div className="s"><b>{p.ftp || 'RPE'}</b><span>{p.ftp ? 'FTP watts' : 'bike by feel'}</span></div>
         </div>
         <div style={{ height: 12 }} />
-        <button className="btn primary" onClick={onEditFitness}><Icon name="trend" size={18} /> Update fitness &amp; re-target</button>
-        {plan.updatedAt && (() => {
-          const prev = (p.fitnessHistory || []).slice(-1)[0];
-          const delta = prev && prev.fivekSec && p.fivekSec
-            ? ' · 5k ' + T.fmtPace(prev.fivekSec) + ' → ' + T.fmtPace(p.fivekSec) : '';
-          return <p className="lead" style={{ margin: '10px 2px 0' }}>Paces re-targeted {T.fmtDate(T.iso(plan.updatedAt.slice(0, 10)), { month: 'short', day: 'numeric' })}{delta}</p>;
-        })()}
-        <div style={{ height: 10 }} />
-        <button className="btn ghost" onClick={onEditPlan}><Icon name="calendar" size={18} /> Edit race &amp; schedule</button>
+        {tracker
+          ? <button className="btn primary" onClick={onEditPlan}><Icon name="calendar" size={18} /> Start a plan</button>
+          : <>
+            <button className="btn primary" onClick={onEditFitness}><Icon name="trend" size={18} /> Update fitness &amp; re-target</button>
+            {plan.updatedAt && (() => {
+              const prev = (p.fitnessHistory || []).slice(-1)[0];
+              const delta = prev && prev.fivekSec && p.fivekSec
+                ? ' · 5k ' + T.fmtPace(prev.fivekSec) + ' → ' + T.fmtPace(p.fivekSec) : '';
+              return <p className="lead" style={{ margin: '10px 2px 0' }}>Paces re-targeted {T.fmtDate(T.iso(plan.updatedAt.slice(0, 10)), { month: 'short', day: 'numeric' })}{delta}</p>;
+            })()}
+            <div style={{ height: 10 }} />
+            <button className="btn ghost" onClick={onEditPlan}><Icon name="calendar" size={18} /> Edit race &amp; schedule</button>
+            <div style={{ height: 10 }} />
+            <button className="btn ghost" onClick={onEnterTracker}><Icon name="clipboard" size={18} /> End plan and just track</button>
+          </>}
       </div>
-      <div className="card">
+      {!tracker && <div className="card">
         <h2 style={{ marginBottom: 10 }}>Sync & export</h2>
         <button className="btn primary" onClick={onExport}><Icon name="download" size={18} /> Export plan to calendar (.ics)</button>
         <p className="lead" style={{ margin: '10px 2px 0' }}>Downloads every session as all-day events with the full workout in the notes — import into Apple Calendar, Google Calendar or Outlook.</p>
-      </div>
+      </div>}
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Connections</h2>
         <IntervalsIcuCard onWellnessSynced={onWellnessSynced} watchSync={watchSync} onWatchSync={onWatchSync} watchPush={watchPush} />

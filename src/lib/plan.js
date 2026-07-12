@@ -656,6 +656,23 @@ export const removeCustomWorkout = function (plan, id) {
   return Object.assign({}, plan, { weeks: weeks });
 };
 
+// The tracker sentinel: a plan with no weeks, carrying the athlete's profile
+// (fitness history, paces, dials) forward so the next plan and the progress
+// trend survive when they end this one. race:'tracker' is the sole predicate
+// for the app's no-plan / tracker-only mode; raceDate is nulled so nothing
+// counts down to a race that no longer exists.
+export const buildTrackerPlan = function (plan, nowISO) {
+  return {
+    profile: Object.assign({}, plan.profile, { raceDate: null }),
+    race: 'tracker',
+    createdAt: plan.createdAt,
+    updatedAt: nowISO,
+    totalWeeks: 0,
+    paces: plan.paces,
+    weeks: [],
+  };
+};
+
 // Bring a cached plan up to the current library schema: segments gained
 // zone/blocks data (workout profiles) after older plans were generated.
 // Pre-variant plans were built entirely from the canonical templates, so the

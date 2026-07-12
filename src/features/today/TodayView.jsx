@@ -69,7 +69,8 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, recovery, onOpenRecording }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker }) {
+  const tracker = plan.race === 'tracker';
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
@@ -83,21 +84,38 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   // most important first; a counter chip cycles through the rest. Applying a
   // suggestion clears its condition, so the queue drains itself.
   const coach = [];
+  // Tracker mode: the only card is the prompt to start the next plan. The
+  // engine cards below are all empty here (no weeks to reason about) but we
+  // build only this one to be certain.
+  if (tracker) coach.push({
+    key: 'no-plan', cls: 'banner tune', icon: 'clipboard',
+    title: 'Ready for your next plan?',
+    sub: 'You are in tracker mode. I am logging every session I spot on the right days. Tap to start your next plan.',
+    act: onEditPlan,
+  });
   // The plan's own edges (race just passed / maintenance block ending)
   // outrank everything: they decide what the plan even is next.
-  if (planEdge) coach.push({ key: planEdge.key, cls: 'banner tune', icon: planEdge.icon, title: planEdge.title, sub: planEdge.sub, act: planEdge.act });
-  if (weekly) {
+  if (!tracker && planEdge) coach.push({ key: planEdge.key, cls: 'banner tune', icon: planEdge.icon, title: planEdge.title, sub: planEdge.sub, act: planEdge.act });
+  // A maintenance block near its end can also just stop into tracker mode; offer
+  // it as a second card the athlete can cycle to.
+  if (!tracker && offerTracker) coach.push({
+    key: 'just-track', cls: 'banner', icon: 'clipboard',
+    title: 'Or just track for now',
+    sub: 'Stop the plan and let me log what you do. Your fitness history is kept. Tap to switch to tracker mode.',
+    act: onEnterTracker,
+  });
+  if (!tracker && weekly) {
     const skin = { 'trim-week': ['banner ramp', 'trend'], 'boost-week': ['banner tune', 'flame'], 'restore-week': ['banner', 'bolt'] };
     const [cls, icon] = skin[weekly.kind] || ['banner', 'bolt'];
     coach.push({ key: 'weekly', cls, icon, title: weekly.headline, sub: weekly.why + ' Tap to apply →', act: () => onWeekly(weekly) });
   }
-  if (spotted && spotted.length > 0) coach.push({
+  if (!tracker && spotted && spotted.length > 0) coach.push({
     key: 'spotted', cls: 'banner', icon: 'watch',
     title: spotted.length === 1 ? 'Session spotted on your watch' : spotted.length + ' sessions spotted on your watch',
     sub: spotted.map(m => m.workout.title).join(' · ') + ' — tap to log ' + (spotted.length === 1 ? 'it' : 'them') + ' →', act: onLogSpotted,
   });
-  if (eftp) coach.push({ key: 'eftp', cls: eftp.up ? 'banner tune' : 'banner ramp', icon: 'trend', title: eftp.headline, sub: eftp.why + ' Tap to retarget →', act: onEftp });
-  if (suggestions.length > 0) coach.push({
+  if (!tracker && eftp) coach.push({ key: 'eftp', cls: eftp.up ? 'banner tune' : 'banner ramp', icon: 'trend', title: eftp.headline, sub: eftp.why + ' Tap to retarget →', act: onEftp });
+  if (!tracker && suggestions.length > 0) coach.push({
     key: 'tune', cls: 'banner tune', icon: 'pace', title: 'Time to tune your paces',
     sub: suggestions.map(s => D[s.discipline].name + (s.direction === 'faster' ? ' feels easy' : ' feels hard')).join(' · ') + ' — tap to adjust →', act: onTune,
   });
@@ -114,7 +132,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   return (
     <>
       <div className="section-title">Today · {T.fmtDate(todayISO, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
-      <ReadinessCard wellness={wellness} today={today.map(w => ({ ...easedOf(w), done: !!log[w.id] }))}
+      <ReadinessCard wellness={wellness} today={today.map(w => ({ ...easedOf(w), done: !!log[w.id] }))} noPlan={tracker}
         onEdit={onEditWellness} onFeel={onFeel} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} onSupport={onSupport} recovery={recovery} />
       {slot && <div className={slot.cls} {...tap(slot.act)}>
         <div className="bi"><Icon name={slot.icon} size={20} /></div>
@@ -140,10 +158,10 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
           <Icon name="calendar" size={15} />
           <span>Next up · {T.fmtDate(effDate(next, moves), { weekday: 'long' })}: <b>{easedOf(next).title}</b> · {T.fmtDuration(easedOf(next).durationMin || 0)}</span>
         </div>}
-        <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> Add a session</div>
+        {!tracker && <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> Add a session</div>}
       </div>
       <RecordedActivities activities={activities} date={todayISO} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} />
-      <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout} />
+      {!tracker && <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout} />}
     </>
   );
 }

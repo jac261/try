@@ -12,6 +12,10 @@ export const RACES = {
   t100:    { key: 't100',    name: 'T100 (100k)',  swim: 2,    bike: 80,  run: 18,   taperWeeks: 2, minWeeks: 12, maxWeeks: 32 },
   full:    { key: 'full',    name: 'Full (140.6)', swim: 3.8,  bike: 180, run: 42.2, taperWeeks: 2, minWeeks: 16, maxWeeks: 40 },
   maintenance: { key: 'maintenance', name: 'Maintenance', swim: 0, bike: 0, run: 0, taperWeeks: 0, minWeeks: 4, maxWeeks: 52, noRace: true },
+  // The no-plan / tracker state: no race, no weeks. noRace keeps it out of the
+  // race pickers (which filter !noRace); tracker is the sole predicate for the
+  // app's tracker-only mode. Never passed to generatePlan.
+  tracker: { key: 'tracker', name: 'Tracker', swim: 0, bike: 0, run: 0, taperWeeks: 0, minWeeks: 0, maxWeeks: 0, noRace: true, tracker: true },
 };
 
 // Tune-up (B) races: real events raced inside a plan without being its goal —

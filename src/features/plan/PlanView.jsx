@@ -4,12 +4,29 @@ import { effDate } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
+import { Icon } from '@/components/Icon.jsx';
 const D = T.DISCIPLINES;
 
 /* The plan tab owns the whole programme: the phase overview, then every week
    as an expandable card (moved here from the old calendar tab, which is now a
    real month calendar). */
-export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onSupport }) {
+export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onSupport, onEditPlan, onStartMaintenance }) {
+  // Tracker mode: no programme to show, just the way back into one.
+  if (plan.race === 'tracker') return (
+    <>
+      <div className="section-title">Plan</div>
+      <div className="card" style={{ textAlign: 'center', padding: '26px 18px' }}>
+        <div className="empty" style={{ padding: 0, marginBottom: 14 }}>
+          <div className="big"><Icon name="clipboard" size={40} /></div>No plan running
+        </div>
+        <p style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.5, margin: '0 0 18px' }}>
+          You are just tracking right now. When you are ready, I will build your next plan around your fitness and your dates.
+        </p>
+        <button className="btn primary" onClick={onEditPlan}><Icon name="calendar" size={18} /> Start a plan</button>
+        <button className="btn ghost" style={{ marginTop: 10 }} onClick={onStartMaintenance}><Icon name="flame" size={18} /> Start a maintenance block</button>
+      </div>
+    </>
+  );
   const todayISO = T.iso(new Date());
   const firstFuture = plan.weeks.findIndex(w => w.workouts.some(x => x.date >= todayISO));
   const [openWeek, setOpenWeek] = useState(firstFuture < 0 ? 0 : firstFuture);

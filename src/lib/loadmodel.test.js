@@ -12,6 +12,11 @@ const mkPlan = workouts => ({
 });
 
 describe('loadmodel.deriveLoadRecords (log-derived CTL/ATL/TSB)', () => {
+  it('stands down entirely with no plan weeks (tracker mode seeds no fitness estimate)', () => {
+    const out = deriveLoadRecords({ plan: { weeks: [], profile: {} }, log: {}, moves: {}, adjust: {}, todayISO: iso(addDays(START, 6)) });
+    expect(out).toEqual([]);
+  });
+
   it('seeds from week-1 planned load, balanced, and decays with nothing logged', () => {
     const plan = mkPlan([wo('0-0', 0, 'Endurance', 70), wo('0-1', 3, 'Threshold', 60)]);
     const seed = (estimateTss(plan.weeks[0].workouts[0]) + estimateTss(plan.weeks[0].workouts[1])) / 7;

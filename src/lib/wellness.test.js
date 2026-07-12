@@ -1,6 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { wellness } from './wellness.js';
 
+describe('wellness.advice (no-session / tracker branch)', () => {
+  it('speaks only about the body when there is no session, naming none', () => {
+    for (const band of ['green', 'amber', 'red']) {
+      const a = wellness.advice(band, false, null);
+      expect(a).not.toMatch(/session|rest day|as planned|swap/i);
+    }
+    expect(wellness.advice('green', false, null)).toMatch(/fresh/i);
+    expect(wellness.advice('red', false, null)).toMatch(/easy or rest/i);
+  });
+  it('still names the session when one exists (unchanged behaviour)', () => {
+    expect(wellness.advice('green', true, 'Threshold run')).toMatch(/Threshold run/);
+  });
+});
+
 describe('wellness.baseline', () => {
   it('computes HRV/RHR means from prior records and defaults sd to 4 on zero variance', () => {
     const recs = [

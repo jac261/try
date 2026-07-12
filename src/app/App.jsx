@@ -426,6 +426,17 @@ export function App({ storage, getToken, user }) {
     // no longer exist, mirroring the local prune above.
     sync.replacePlan(np).then(adoptMap);
   };
+  // Drop to tracker mode: replace the plan with the no-weeks sentinel, keeping
+  // the profile and fitness history. Overlays prune to empty (no workout ids
+  // survive), exactly as reshapePlan does against a fresh graph.
+  const enterTracker = () => {
+    const np = T.buildTrackerPlan(plan, new Date().toISOString());
+    setLog({}); setMoves({}); setAdjust({});
+    setPlan(np);
+    setEditPlan(false);
+    sync.replacePlan(np).then(adoptMap);
+  };
+  const endPlanToTracker = () => { if (confirm('End your plan and just track? Your fitness history is kept.')) enterTracker(); };
   // User-added sessions: first-class plan workouts (flagged custom), persisted
   // through the same plan replace as retargets — server preserves logs by ref.
   const addWorkout = spec => {
@@ -453,6 +464,7 @@ export function App({ storage, getToken, user }) {
     setView('support');
   };
 
+  const tracker = plan.race === 'tracker';
   const race = T.RACES[plan.race];
   const rawDaysToRace = T.daysBetween(new Date(), plan.profile.raceDate);
   const daysToRace = Math.max(0, rawDaysToRace);
@@ -467,7 +479,7 @@ export function App({ storage, getToken, user }) {
     });
   };
   let planEdge = null;
-  if (plan.race !== 'maintenance' && rawDaysToRace < 0) planEdge = {
+  if (!tracker && plan.race !== 'maintenance' && rawDaysToRace < 0) planEdge = {
     key: 'post-race', icon: 'trophy',
     title: 'Race day is behind you — congratulations!',
     sub: 'Recover well, then keep the engine ticking. Tap to start a 12-week maintenance block →',
@@ -499,10 +511,12 @@ export function App({ storage, getToken, user }) {
           </button>
           <h1><Icon name="logo" size={26} /> Try</h1>
         </div>
-        <div className="sub">Hi {plan.profile.name} — let's get to the finish line</div>
-        <div className="race-chip">{race.noRace
-          ? <><span>Maintenance block</span><b>{Math.max(0, Math.ceil(rawDaysToRace / 7))}</b><span>weeks left</span></>
-          : <><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></>}</div>
+        <div className="sub">Hi {plan.profile.name}{tracker ? ', tracker mode' : " — let's get to the finish line"}</div>
+        <div className="race-chip">{tracker
+          ? <><span>Tracker mode</span><span>no plan running</span></>
+          : race.noRace
+            ? <><span>Maintenance block</span><b>{Math.max(0, Math.ceil(rawDaysToRace / 7))}</b><span>weeks left</span></>
+            : <><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></>}</div>
       </div>
 
       {planSyncFailed && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptMap))}>
@@ -510,13 +524,14 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} onOpenRecording={openRecording} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={activities} onOpenRecording={openRecording} />}
-      {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} />}
+      {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
+        onEnterTracker={endPlanToTracker} tracker={tracker}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) { storage.clear(); setLog({}); setMoves({}); setPlan(null); } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)}

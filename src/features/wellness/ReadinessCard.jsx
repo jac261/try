@@ -52,7 +52,7 @@ function ReadinessRing({ score, band }) {
   );
 }
 
-export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport, recovery }) {
+export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport, recovery, noPlan }) {
   const [loadChoice, setLoadChoice] = useState(loadPref);
   const [whyOpen, setWhyOpen] = useState(false);
   const todayISO = T.iso(new Date());
@@ -76,7 +76,10 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
   const eased = today.find(w => w.eased);
   const hard = today.find(w => INTENSITY_TYPES[w.type]);
   const sessTitle = (hard || eased || today.find(w => w.discipline !== 'rest') || {}).title;
-  const adv = T.wellness.advice(rd.band, !!hard, today.length && sessTitle ? sessTitle : 'rest day');
+  // No workouts today: a rest day inside a plan still reads as "rest day", but
+  // with no plan at all (tracker mode) pass null so advice speaks only about
+  // the body, not a session that does not exist.
+  const adv = T.wellness.advice(rd.band, !!hard, today.length ? (sessTitle || 'rest day') : (noPlan ? null : 'rest day'));
   const stale = rec.date !== todayISO;
   const proposal = stale ? null : T.proposeToday({ band: rd.band, score: rd.score, todays: today });
 

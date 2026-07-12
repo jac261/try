@@ -15,9 +15,12 @@ const D = T.DISCIPLINES;
    The week-by-week programme listing lives on the Plan tab now. */
 export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove, activities, onOpenRecording }) {
   const todayISO = T.iso(new Date());
-  const planStart = plan.weeks[0].start;
-  const planEnd = T.iso(T.addDays(plan.weeks[plan.weeks.length - 1].start, 6));
-  const raceISO = T.iso(plan.profile.raceDate);
+  // Tracker mode has no plan weeks: browse a rolling window around today so the
+  // month grid still works and detected activities land on their days.
+  const tracker = plan.race === 'tracker';
+  const planStart = tracker ? addMonths(todayISO, -6) : plan.weeks[0].start;
+  const planEnd = tracker ? addMonths(todayISO, 1) : T.iso(T.addDays(plan.weeks[plan.weeks.length - 1].start, 6));
+  const raceISO = tracker ? null : T.iso(plan.profile.raceDate);
   const clampDay = d => (d < planStart ? planStart : d > planEnd ? planEnd : d);
 
   const [anchor, setAnchor] = useState(() => clampDay(todayISO));
@@ -106,7 +109,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         <div className="section-title">{T.fmtDate(selected, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
         <div className="card">
           {daySessions.length === 0
-            ? <div className="empty" style={{ padding: '18px 8px' }}>Nothing planned — drop a session here, or rest.</div>
+            ? <div className="empty" style={{ padding: '18px 8px' }}>{tracker ? 'Nothing recorded.' : 'Nothing planned — drop a session here, or rest.'}</div>
             : daySessions.map(w => (
               <div className="cal-row" key={w.id}>
                 {/* pointer-only grip, aria-hidden: the accessible reschedule path
