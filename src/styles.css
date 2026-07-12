@@ -73,7 +73,6 @@ body {
 @keyframes build-stepin { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
   .build-tile, .build-tiles.done .build-tile, .build-step, .building { animation: none; }
-  .recap-body > *, .recap-bars .rb-bar i { animation: none; }
 }
 
 /* ---------- header (navy + royal-blue glow) ---------- */
@@ -278,6 +277,23 @@ body {
 /* Split/rep bars sweep out from the left, cascading down the set. */
 .recap-bars .rb-bar i { transform-origin: left center; animation: recap-bar .55s cubic-bezier(.22, .7, .2, 1) both; animation-delay: calc(.18s + var(--i, 0) * 80ms); }
 @keyframes recap-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* Headline number gets a touch more life: it rises in with a small pop (this
+   rule is as specific as .recap-body > *, and comes later, so it wins). */
+.recap-big { animation: recap-big-in .55s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes recap-big-in { from { opacity: 0; transform: translateY(16px) scale(.9); } to { opacity: 1; transform: none; } }
+/* Heart-rate trace: the red line draws itself in, the fill wells up after. */
+.recap-hr { display: block; width: 100%; max-width: 340px; margin: 16px auto 4px; overflow: visible; }
+.recap-hr-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: recap-hr-line 1.1s cubic-bezier(.3, .6, .2, 1) both; animation-delay: .2s; }
+.recap-hr-area { opacity: 0; animation: recap-fade .7s ease both; animation-delay: .7s; }
+@keyframes recap-hr-line { to { stroke-dashoffset: 0; } }
+@keyframes recap-fade { to { opacity: 1; } }
+/* Reduced-motion resets MUST follow the recap animation rules above: a media
+   query adds no specificity, so at equal specificity the later rule wins. */
+@media (prefers-reduced-motion: reduce) {
+  .recap-body > *, .recap-big, .recap-bars .rb-bar i { animation: none; }
+  .recap-hr-line { animation: none; stroke-dashoffset: 0; }
+  .recap-hr-area { animation: none; opacity: 1; }
+}
 .recap-kicker { font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--blue); }
 .recap-big { font-size: 42px; font-weight: 800; letter-spacing: -1.2px; margin: 14px 0 6px; }
 .recap-line { color: #c3ccdb; font-size: 15px; line-height: 1.55; margin: 10px 0 0; }

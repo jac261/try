@@ -50,6 +50,37 @@ describe('buildRecap (session recap slides)', () => {
     expect(buildRecap({ ...base, activity: null })).toBe(null);
   });
 
+  it('the headline carries a duration count spec so the clock can animate', () => {
+    const s = buildRecap(base);
+    expect(s[0].count).toEqual({ to: 3000, fmt: 'dur' }); // 3000s == the "50 min" big
+  });
+
+  it('heart rate builds a time-ordered series from the interval HRs, and skips it when too thin', () => {
+    const withReps = buildRecap({ ...base, activity: act({ averageHeartrate: 150, maxHeartrate: 178 }),
+      intervals: [iv({ movingTimeSec: 600, averageHeartrate: 130 }), iv({ movingTimeSec: 600, averageHeartrate: 165 }), iv({ movingTimeSec: 600, averageHeartrate: 148 })] });
+    const hr = withReps.find(x => x.kind === 'hr');
+    expect(hr.count).toEqual({ to: 150, fmt: 'bpm' });
+    expect(hr.hr.series.map(p => p.hr)).toEqual([130, 165, 148]);   // in time order
+    expect(hr.hr.series.map(p => p.t)).toEqual([300, 900, 1500]);   // cumulative midpoints (no start times)
+    expect(hr.hr.max).toBe(178);
+    // no intervals → number-only slide, no graph
+    const noReps = buildRecap({ ...base, activity: act({ averageHeartrate: 150 }) });
+    expect(noReps.find(x => x.kind === 'hr').hr).toBe(null);
+  });
+
+  it('the HR trace anchors to startTimeSec and sorts, so an out-of-order feed still reads left to right', () => {
+    const s = buildRecap({ ...base, activity: act({ averageHeartrate: 150, maxHeartrate: 170 }),
+      // deliberately out of array order; startTimeSec is the truth, and a paused
+      // gap (start 2000, not 1200) must be preserved rather than collapsed.
+      intervals: [
+        iv({ startTimeSec: 2000, movingTimeSec: 600, averageHeartrate: 160 }),
+        iv({ startTimeSec: 0, movingTimeSec: 600, averageHeartrate: 120 }),
+      ] });
+    const hr = s.find(x => x.kind === 'hr');
+    expect(hr.hr.series.map(p => p.t)).toEqual([300, 2300]);   // start + dur/2, sorted
+    expect(hr.hr.series.map(p => p.hr)).toEqual([120, 160]);
+  });
+
   it('an unplanned recording still builds a deck from an ad-hoc workout', () => {
     // What App synthesises when you tap an unmatched row in the Recorded card.
     const w = { id: 'adhoc-i9', adhoc: true, discipline: 'bike', title: 'Morning Ride', durationMin: 50 };

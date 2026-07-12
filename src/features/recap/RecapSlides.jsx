@@ -15,25 +15,27 @@ const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia
   && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// Slide kinds whose headline IS a single quantity worth counting up. Titles
-// ("The splits" summary, tomorrow's session name) are deliberately excluded so
-// an incidental number in a name never animates.
-const METRIC_KINDS = new Set(['headline', 'hr', 'effort']);
+// Duration formatter, matching lib/recap.js fmtMin so the counted headline
+// lands exactly on the slide's `big` string.
+const fmtDur = sec => {
+  const m = Math.round(sec / 60);
+  return m >= 60 ? Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm' : m + ' min';
+};
+const fmtBig = (n, fmt) => fmt === 'dur' ? fmtDur(n) : fmt === 'bpm' ? n + ' bpm' : fmt === 'load' ? 'Load ' + n : String(n);
 
-// Count a metric string up from zero (e.g. "154 bpm", "Load 45"), leaving the
-// surrounding text intact. Only fires when `enabled` (a metric slide) AND the
-// string holds EXACTLY ONE number — so "1h 05m" (two numbers) shows whole
-// rather than counting just the hours, and titles pass straight through. Resets
-// synchronously on a slide change (`key`) so a prior slide's number never
-// leaks into the next for a frame; honours reduced-motion by landing at once.
-function useCountUp(text, key, enabled) {
-  const matches = enabled && typeof text === 'string' ? text.match(/\d[\d,]*/g) : null;
-  const target = matches && matches.length === 1 ? parseInt(matches[0].replace(/,/g, ''), 10) : null;
+// Animate a headline number up from zero. The slide carries an explicit
+// { to, fmt } count spec (from buildRecap), so we animate a known integer and
+// format it deterministically — a duration counts as a growing clock, heart
+// rate and load as plain numbers, and anything without a spec (titles, split
+// summaries) never animates. Resets synchronously on a slide change (`key`) so
+// a prior slide's number never leaks into the next for a frame; honours
+// reduced-motion by landing on the value at once.
+function useCount(target, key) {
   const reduce = prefersReducedMotion();
-  const rest = target == null || reduce ? target : 0; // the value to sit at when not animating
+  const rest = target == null || reduce ? target : 0;
   const [n, setN] = useState(rest);
   const [seen, setSeen] = useState(key);
-  if (seen !== key) { setSeen(key); setN(rest); } // slide changed: reset in-render, no stale frame
+  if (seen !== key) { setSeen(key); setN(rest); }
   useEffect(() => {
     if (target == null || reduce) return;
     let raf, t0 = null;
@@ -46,8 +48,39 @@ function useCountUp(text, key, enabled) {
     raf = requestAnimationFrame(step);
     return () => raf && cancelAnimationFrame(raf);
   }, [key, target, reduce]);
-  if (target == null) return text;
-  return text.replace(/\d[\d,]*/, String(n));
+  return n;
+}
+
+// A red heart-rate trace: each segment's average HR plotted in time order, the
+// line drawing itself in left to right with a soft fill welling up beneath.
+// Straight segments (segment-average resolution — honest about what it is).
+function HrGraph({ hr }) {
+  const W = 320, H = 130, pad = 12;
+  const pts = hr.series;
+  const t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+  const hrs = pts.map(p => p.hr);
+  const lo = Math.min(...hrs), hi = Math.max(...hrs, hr.max || 0);
+  const span = Math.max(1, hi - lo);
+  const x = t => pad + (t1 > t0 ? (t - t0) / (t1 - t0) : 0) * (W - 2 * pad);
+  const y = v => pad + (1 - (v - lo) / span) * (H - 2 * pad);
+  const line = pts.map((p, n) => (n ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(p.hr).toFixed(1)).join(' ');
+  const area = 'M' + x(t0).toFixed(1) + ' ' + (H - pad) + ' '
+    + pts.map(p => 'L' + x(p.t).toFixed(1) + ' ' + y(p.hr).toFixed(1)).join(' ')
+    + ' L' + x(t1).toFixed(1) + ' ' + (H - pad) + ' Z';
+  return (
+    <svg className="recap-hr" viewBox={`0 0 ${W} ${H}`} role="img" style={{ '--i': 2 }}
+      aria-label={'Heart rate profile, average ' + hr.avg + ', peak ' + hr.max + ' bpm'}>
+      <defs>
+        <linearGradient id="recap-hr-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--danger)" stopOpacity="0.38" />
+          <stop offset="100%" stopColor="var(--danger)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path className="recap-hr-area" d={area} fill="url(#recap-hr-grad)" />
+      <path className="recap-hr-line" d={line} pathLength="1" fill="none"
+        stroke="var(--danger)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 export function RecapSlides({ workout, activity, plan, log, moves, onLoadIntervals, onClose }) {
@@ -75,11 +108,13 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
   const found = has && curKind ? slides.findIndex(x => x.kind === curKind) : -1;
   const i = has ? (found >= 0 ? found : 0) : 0;
   const s = has ? slides[i] : null;
-  const big = useCountUp(s && s.big, s && s.kind, !!(s && METRIC_KINDS.has(s.kind)));
+  const countN = useCount(s && s.count ? s.count.to : null, s && s.kind);
   if (!has) return null;
+  const big = s.count && countN != null ? fmtBig(countN, s.count.fmt) : s.big;
   const fwd = () => (i < slides.length - 1 ? setCurKind(slides[i + 1].kind) : onClose());
   const back = () => { if (i > 0) setCurKind(slides[i - 1].kind); };
   const L = (s.lines || []).length;
+  const gi = 2 + (s.hr ? 1 : 0); // lines/bars start after the optional HR graph
 
   return (
     <div className="recap" ref={focusRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Session recap">
@@ -92,9 +127,10 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
       <div className="recap-body" key={s.kind}>
         <div className="recap-kicker" style={{ '--i': 0 }}>{s.title}</div>
         {s.big && <div className="recap-big" style={{ '--i': 1 }}>{big}</div>}
-        {(s.lines || []).map((l, n) => <p className="recap-line" key={n} style={{ '--i': 2 + n }}>{l}</p>)}
+        {s.hr && <HrGraph hr={s.hr} />}
+        {(s.lines || []).map((l, n) => <p className="recap-line" key={n} style={{ '--i': gi + n }}>{l}</p>)}
         {s.rows && (
-          <div className="recap-bars" style={{ '--i': 2 + L }}>
+          <div className="recap-bars" style={{ '--i': gi + L }}>
             {s.rows.slice(0, 10).map((r, n) => (
               <div className="rb" key={n}>
                 <span className="rb-l">{r.label}</span>
@@ -109,7 +145,7 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
           </div>
         )}
         {i === slides.length - 1 && (
-          <button className="btn primary" style={{ marginTop: 22, '--i': 3 + L }} onClick={onClose}>
+          <button className="btn primary" style={{ marginTop: 22, '--i': gi + L + 1 }} onClick={onClose}>
             <Icon name="bolt" size={18} /> Done
           </button>
         )}
