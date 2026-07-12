@@ -54,17 +54,20 @@ export function weakestLink({ profile }) {
   const gap = bestOfRest - scores[low];
   const race = RACES[profile.raceType];
   // Rough race time share per sport (swim is slow per km, bike is fast).
+  // Only meaningful with a real race on the calendar — a maintenance block
+  // has no race for the limiter to be a share OF (field report 2026-07-12:
+  // "the swim is 33% of my race" on a plan with no race).
   const mins = race && !race.noRace
     ? { swim: race.swim * 20, bike: race.bike * 1.8, run: race.run * 5 }
-    : { swim: 1, bike: 1, run: 1 };
-  const total = mins.swim + mins.bike + mins.run;
+    : null;
+  const total = mins ? mins.swim + mins.bike + mins.run : 0;
 
   return {
     scores,
     missing,
     weakest: gap >= GAP ? low : null,
     gap: Math.round(gap * 10) / 10,
-    share: gap >= GAP ? Math.round(mins[low] / total * 100) : null,
+    share: gap >= GAP && mins ? Math.round(mins[low] / total * 100) : null,
   };
 }
 

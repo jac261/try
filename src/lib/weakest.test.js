@@ -12,6 +12,12 @@ describe('weakestLink (which sport is limiting)', () => {
     expect(wl.share).toBeLessThan(30);
   });
 
+  it('a maintenance block has no race, so the limiter carries no race share', () => {
+    const wl = weakestLink({ profile: { raceType: 'maintenance', fivekSec: 1218, css100Sec: 120, ftp: 222, weightKg: 64.3 } });
+    expect(wl.weakest).toBe('swim');
+    expect(wl.share).toBe(null); // never "33% of your race" when there is no race
+  });
+
   it('balanced athletes get no limiter — near-ties never name a weakest link', () => {
     const wl = weakestLink({ profile: { raceType: 'olympic', fivekSec: 1620, css100Sec: 120, ftp: 167, weightKg: 64.2 } });
     expect(wl.weakest).toBe(null); // all ≈ intermediate
