@@ -244,6 +244,16 @@ body {
 .rd-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 13px; font-size: 12px; color: var(--faint); font-weight: 600; }
 .rd-empty { cursor: pointer; }
 .rd-action { width: 100%; margin-top: 14px; }
+/* ---------- weakest link bars ---------- */
+.wl-bars { display: flex; flex-direction: column; gap: 8px; }
+.wl-bars .wlb { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.wl-bars .wlb-l { width: 42px; font-weight: 700; color: var(--muted); flex: none; }
+.wl-bars .wlb-bar { flex: 1; height: 12px; background: rgba(255,255,255,.06); border-radius: 7px; overflow: hidden; }
+.wl-bars .wlb-bar i { display: block; height: 100%; border-radius: 7px; }
+.wl-bars .wlb-tag { width: 58px; flex: none; text-align: right; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: var(--faint); }
+.wl-bars .wlb-tag.limit { color: #f6b27a; }
+.wl-bars .wlb-scale { display: flex; justify-content: space-between; margin: 2px 52px 0 52px; font-size: 9.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .4px; }
+
 /* ---------- session recap (full-screen slides) ---------- */
 .recap { position: fixed; inset: 0; z-index: 60; background: linear-gradient(160deg, #101725, #0e1217 60%); display: flex; align-items: center; justify-content: center; padding: 28px 22px; }
 .recap-body { max-width: 420px; width: 100%; text-align: center; animation: recap-in .35s ease; }
