@@ -362,24 +362,35 @@ export function projectRecovery({ wellness, plan, log, moves, adjust, todayISO }
   if (!recs.length) return null;
   const seed = recs[recs.length - 1];
   if (seed.date < iso(addDays(today, -RAMP_RULES.freshDays))) return null;
+  if (seed.date > today) return null; // a future-dated record (account-timezone skew) can't seed an honest projection
   const zone = wellnessLib.formZone(seed.ctl - seed.atl);
   if (!zone || zone.key !== 'highRisk') return null;
   const horizon = iso(addDays(today, RECOVERY_RULES.horizonDays));
   const all = plan.weeks.flatMap(w => w.workouts);
   const eff = w => (moves && moves[w.id]) || w.date;
-  if (all.some(w => w.race && eff(w) > today && eff(w) <= horizon)) return null;
+  // Race airspace covers today and the seed-to-today gap too: a race the model
+  // can't load must silence the sentence, not read as a rest day.
+  if (all.some(w => w.race && eff(w) > seed.date && eff(w) <= horizon)) return null;
 
+  // Sessions the walk must charge: future days take unlogged planned sessions;
+  // the seed-to-today gap takes what was actually DONE (with recorded moving
+  // time when a recording matched) — treating a logged 4 h ride as rest was
+  // the gauntlet's optimistic-bias finding.
   const byDate = {};
   all.forEach(w => {
-    if (w.race || w.discipline === 'rest' || (log || {})[w.id]) return;
+    if (w.race || w.discipline === 'rest') return;
     const d = eff(w);
-    if (d > seed.date && d <= horizon) (byDate[d] = byDate[d] || []).push(w);
+    if (d <= seed.date || d > horizon) return;
+    const entry = (log || {})[w.id];
+    if (d <= today ? entry && entry.done : !entry) {
+      (byDate[d] = byDate[d] || []).push({ w, actualMin: entry ? entry.actualMin : undefined });
+    }
   });
 
   let ctl = seed.ctl, atl = seed.atl;
   let lastRisk = null; // the last projected in-horizon day still in high risk
   for (let d = iso(addDays(seed.date, 1)); d <= horizon; d = iso(addDays(d, 1))) {
-    const tss = (byDate[d] || []).reduce((s, w) => s + estimateTss(w, (adjust || {})[w.id]), 0);
+    const tss = (byDate[d] || []).reduce((s, x) => s + estimateTss(x.w, (adjust || {})[x.w.id], x.actualMin), 0);
     ctl += (tss - ctl) / 42;
     atl += (tss - atl) / 7;
     const z = wellnessLib.formZone(ctl - atl);

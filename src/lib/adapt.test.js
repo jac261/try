@@ -324,3 +324,33 @@ describe('projectRecovery (recovery timeline)', () => {
     expect(RECOVERY_RULES.horizonDays).toBe(14);
   });
 });
+
+describe('projectRecovery — gauntlet fixes (2026-07-12)', () => {
+  const base = { log: {}, moves: {}, adjust: {}, todayISO: TODAY };
+  // Seed two days back: the freshness gate allows the gap, and what happened
+  // inside it must be charged, not simulated as rest.
+  const gapRecs = () => loadRecs(50, 85).map(r => ({ ...r, date: iso(addDays(r.date, -2)) }));
+
+  it('logged work in the seed-to-today gap is charged, not treated as rest', () => {
+    const plan = { weeks: [{ index: 0, phase: 'Build', start: TODAY, workouts: [{
+      id: 'gap-0', week: 0, phase: 'Build', date: iso(addDays(TODAY, -1)),
+      discipline: 'bike', type: 'Threshold', title: 'Big Ride', durationMin: 240,
+    }] }] };
+    const restGap = projectRecovery({ ...base, wellness: gapRecs(), plan: { weeks: [{ index: 0, phase: 'Build', start: TODAY, workouts: [] }] } });
+    const loadedGap = projectRecovery({ ...base, wellness: gapRecs(), plan, log: { 'gap-0': { done: true, actualMin: 240 } } });
+    expect(restGap.days).toBe(1); // empty gap: form decays out quickly
+    expect(loadedGap.days == null || loadedGap.days > restGap.days).toBe(true); // yesterday's 4h ride pushes the date out
+  });
+
+  it('a future-dated wellness record never seeds a projection', () => {
+    const future = loadRecs(50, 85).map(r => ({ ...r, date: iso(addDays(r.date, 1)) }));
+    expect(projectRecovery({ ...base, wellness: future, plan: racePlan(30, 'Recovery', 20) })).toBe(null);
+  });
+
+  it('a race dated today (or inside the gap) silences the timeline', () => {
+    expect(projectRecovery({ ...base, wellness: loadRecs(50, 85), plan: racePlan(0) })).toBe(null);
+    const gapRace = racePlan(30, 'Recovery', 20);
+    gapRace.weeks[0].workouts.push({ id: 'r-g', week: 0, phase: 'Taper', date: iso(addDays(TODAY, -1)), discipline: 'brick', type: 'RACE', title: 'RACE', race: true, durationMin: 0 });
+    expect(projectRecovery({ ...base, wellness: gapRecs(), plan: gapRace })).toBe(null);
+  });
+});
