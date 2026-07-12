@@ -369,8 +369,9 @@ export function projectRecovery({ wellness, plan, log, moves, adjust, todayISO }
   const all = plan.weeks.flatMap(w => w.workouts);
   const eff = w => (moves && moves[w.id]) || w.date;
   // Race airspace covers today and the seed-to-today gap too: a race the model
-  // can't load must silence the sentence, not read as a rest day.
-  if (all.some(w => w.race && eff(w) > seed.date && eff(w) <= horizon)) return null;
+  // can't load must silence the sentence, not read as a rest day. The explicit
+  // >= today clause matters when the seed is dated today itself.
+  if (all.some(w => w.race && eff(w) <= horizon && (eff(w) >= today || eff(w) > seed.date))) return null;
 
   // Sessions the walk must charge: future days take unlogged planned sessions;
   // the seed-to-today gap takes what was actually DONE (with recorded moving
