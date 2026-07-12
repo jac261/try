@@ -49,4 +49,16 @@ describe('buildRecap (session recap slides)', () => {
   it('returns null without a recording — no recap for a bare tick', () => {
     expect(buildRecap({ ...base, activity: null })).toBe(null);
   });
+
+  it('an unplanned recording still builds a deck from an ad-hoc workout', () => {
+    // What App synthesises when you tap an unmatched row in the Recorded card.
+    const w = { id: 'adhoc-i9', adhoc: true, discipline: 'bike', title: 'Morning Ride', durationMin: 50 };
+    const s = buildRecap({ ...base, workout: w,
+      activity: act({ id: 'i9', averageHeartrate: 148, trainingLoad: 60 }) });
+    expect(s[0].kind).toBe('headline');
+    expect(s[0].big).toBe('50 min');
+    expect(s[0].lines).not.toContain('Interval session'); // no plan-relative noise
+    expect(s.some(x => x.kind === 'hr')).toBe(true);       // still surfaces HR + load
+    expect(s[s.length - 1].kind).toBe('takeaway');
+  });
 });

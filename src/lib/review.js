@@ -76,16 +76,18 @@ export function reviewActivity({ workout, activity, paces, log }) {
   // Easy-intent with HR (needs the backend to pass averageHeartrate + a threshold HR to
   // judge against — until then this stays silent rather than guessing).
 
-  // Interval sessions: an average cannot see the reps.
-  if (!steadyKey && !EASY_INTENT[w.type] && (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim')) {
+  // Interval sessions: an average cannot see the reps. (Ad-hoc recordings have
+  // no planned intent to speak of, so this note would be noise — skip it.)
+  if (!w.adhoc && !steadyKey && !EASY_INTENT[w.type] && (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim')) {
     verdicts.push({ tone: 'info', text: 'Interval session — the average blurs work and recovery together, so no pace verdict here. The recording on intervals.icu shows it rep by rep.' });
   }
 
-  // Load vs plan.
-  const plannedTss = estimateTss(w, undefined, log && log.actualMin);
-  if (a.trainingLoad != null && plannedTss > 10) {
-    const r = a.trainingLoad / plannedTss;
-    if (r > 1.4) verdicts.push({ tone: 'warn', text: 'Training load came in well above the plan’s estimate for this session — a much bigger dose than intended.' });
+  // Load vs plan (meaningless for an unplanned session — there is no plan dose).
+  if (!w.adhoc && a.trainingLoad != null) {
+    const plannedTss = estimateTss(w, undefined, log && log.actualMin);
+    if (plannedTss > 10 && a.trainingLoad / plannedTss > 1.4) {
+      verdicts.push({ tone: 'warn', text: 'Training load came in well above the plan’s estimate for this session — a much bigger dose than intended.' });
+    }
   }
 
   // Perceived effort vs intent.

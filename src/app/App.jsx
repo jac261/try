@@ -274,8 +274,31 @@ export function App({ storage, getToken, user }) {
       const entry = { done: true, at, actualMin, notes: observe(id, null, at, actualMin) };
       setLog(l => ({ ...l, [id]: entry }));
       if (gid(id)) sync.saveLog(gid(id), entry);
-      if (actualMin && w) setRecap(w); // a recording landed with the tick → celebrate + consequence
+      if (actualMin && w) setRecap({ workout: w }); // a recording landed with the tick → celebrate + consequence
     }
+  };
+  // Tap a row in the Recorded card → open the in-app recap deck rather than
+  // bouncing out to intervals.icu. Matched recordings recap against their
+  // planned session; an unplanned activity gets a lightweight ad-hoc workout
+  // synthesised from itself, so the wrapped-style deck still shows what you did
+  // (no plan-relative verdicts — reviewActivity skips those when adhoc).
+  const openRecording = arg => {
+    if (!arg) return;
+    // Carry the tapped activity through when the row supplied one, so a matched
+    // recap opens the exact recording tapped rather than re-deriving the
+    // closest-to-plan match. Bricks pass no activity and re-build their pair.
+    if (arg.workout) { setRecap({ workout: arg.workout, activity: arg.activity || null }); return; }
+    const a = arg.activity;
+    if (!a || !a.movingTimeSec) return;
+    const disc = T.DISCIPLINE[a.type] || 'bike';
+    setRecap({
+      workout: {
+        id: 'adhoc-' + a.id, adhoc: true,
+        title: a.name || (T.DISCIPLINES[disc] && T.DISCIPLINES[disc].name) || 'Session',
+        discipline: disc, durationMin: Math.round(a.movingTimeSec / 60),
+      },
+      activity: a,
+    });
   };
   const moveWorkout = (id, date) => {
     setMoves(m => { const n = { ...m }; if (date === null) delete n[id]; else n[id] = date; return n; });
@@ -363,7 +386,7 @@ export function App({ storage, getToken, user }) {
       if (gid(m.workout.id)) sync.saveLog(gid(m.workout.id), entry);
     });
     setLog(l => ({ ...l, ...entries }));
-    if (spotted.length) setRecap(spotted[0].workout); // recap the headline session
+    if (spotted.length) setRecap({ workout: spotted[0].workout }); // recap the headline session
   };
   const applyWeekly = p => {
     if (!p) return;
@@ -487,8 +510,8 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} />}
-      {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={activities} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} onOpenRecording={openRecording} />}
+      {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={activities} onOpenRecording={openRecording} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} />}
       {view === 'settings' && <SettingsView plan={plan}
@@ -507,9 +530,11 @@ export function App({ storage, getToken, user }) {
       {recap && (() => {
         // Only mount with a live recording: activities can refetch under an
         // open recap, and a null activity must degrade to nothing, not a
-        // focusless invisible dialog.
-        const a = recordingFor(recap);
-        return a ? <RecapSlides workout={recap} activity={a} plan={plan} log={log} moves={moves}
+        // focusless invisible dialog. A matched/planned recap re-derives its
+        // activity (surviving refetch); an ad-hoc one carries it explicitly.
+        const w = recap.workout;
+        const a = recap.activity || recordingFor(w);
+        return a ? <RecapSlides workout={w} activity={a} plan={plan} log={log} moves={moves}
           onLoadIntervals={sync.loadActivityIntervals} onClose={() => setRecap(null)} /> : null;
       })()}
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}

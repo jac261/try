@@ -23,6 +23,15 @@ describe('reviewActivity (post-session analysis)', () => {
     expect(rv.verdicts.some(v => /in the band|quicker than/i.test(v.text))).toBe(false);
   });
 
+  it('an ad-hoc (unplanned) recording gets stats but no plan-relative verdicts', () => {
+    // Synthesised from the activity itself: durationMin == actual, no real type.
+    const w = { discipline: 'bike', adhoc: true, title: 'Morning Ride', durationMin: 50 };
+    const rv = reviewActivity({ workout: w, activity: act({ trainingLoad: 200, averageWatts: 210 }), paces });
+    expect(rv.stats.some(s => s[0] === 'Time')).toBe(true);   // still shows what you did
+    expect(rv.verdicts.some(v => /interval session|rep by rep/i.test(v.text))).toBe(false);
+    expect(rv.verdicts.some(v => /above the plan/i.test(v.text))).toBe(false);
+  });
+
   it('an easy ride with power is judged by intensity; without power it stays quiet', () => {
     const w = { discipline: 'bike', type: 'Endurance', durationMin: 60 };
     const hot = reviewActivity({ workout: w, activity: act({ averageWatts: 190, distance: 30000, movingTimeSec: 3600 }), paces });

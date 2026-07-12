@@ -1,5 +1,6 @@
 import * as T from '@/lib';
 import { effDate } from '@/lib/schedule.js';
+import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 
 /* What you actually DID on a day, as first-class rows: every watch recording
@@ -27,20 +28,20 @@ function statBits(a, disc) {
   return bits.join(' · ');
 }
 
-function Row({ disc, name, stat, tag, href }) {
+function Row({ disc, name, stat, tag, onOpen }) {
   return (
-    <a className="wk" href={href} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
+    <div className="wk" {...tap(onOpen)} aria-label={'Recap: ' + name}>
       <div className="dot" style={{ background: T.DISCIPLINES[disc].grad }}><Icon name={T.DISCIPLINES[disc].icon} size={22} /></div>
       <div className="meta">
         <div className="t">{name} {tag && <span className="tag key">{tag}</span>}</div>
         <div className="s">{stat}</div>
       </div>
-      <div className="right" aria-hidden="true">↗</div>
-    </a>
+      <div className="right" aria-hidden="true">›</div>
+    </div>
   );
 }
 
-export function RecordedActivities({ activities, date, plan, log, moves }) {
+export function RecordedActivities({ activities, date, plan, log, moves, onOpen }) {
   // The DISCIPLINES guard keeps a future drift between the activity-type map
   // and the disciplines table from crashing the row render.
   const day = (activities || []).filter(a => a && a.date === date && DISC[a.type] && T.DISCIPLINES[DISC[a.type]] && a.movingTimeSec);
@@ -58,7 +59,7 @@ export function RecordedActivities({ activities, date, plan, log, moves }) {
     const load = (pair.ride.trainingLoad != null || pair.run.trainingLoad != null)
       ? Math.round((pair.ride.trainingLoad || 0) + (pair.run.trainingLoad || 0)) : null;
     rows.push({
-      key: 'brick-' + w.id, disc: 'brick', name: w.title || 'Brick', href: T.activityUrl(pair.ride),
+      key: 'brick-' + w.id, disc: 'brick', name: w.title || 'Brick', open: { workout: w },
       tag: (log || {})[w.id] && log[w.id].done ? 'Matched' : null,
       stat: T.fmtDuration(Math.round(pair.ride.movingTimeSec / 60)) + ' ride + '
         + T.fmtDuration(Math.round(pair.run.movingTimeSec / 60)) + ' run'
@@ -73,7 +74,12 @@ export function RecordedActivities({ activities, date, plan, log, moves }) {
     const min = a.movingTimeSec / 60;
     const owner = sessions.find(w => w.discipline === disc && (log || {})[w.id] && log[w.id].done
       && w.durationMin && min >= w.durationMin * 0.5 && min <= w.durationMin * 1.7);
-    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc), tag: owner ? 'Matched' : null, href: T.activityUrl(a) });
+    // Always carry THIS activity, even when it matched a planned session:
+    // two same-discipline recordings on one day can both fall in one session's
+    // window, and re-deriving from the workout alone would resolve to the
+    // recording closest to the planned duration, not the one actually tapped.
+    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc), tag: owner ? 'Matched' : null,
+      open: owner ? { workout: owner, activity: a } : { activity: a } });
   });
 
   if (!rows.length) return null;
@@ -81,7 +87,7 @@ export function RecordedActivities({ activities, date, plan, log, moves }) {
     <>
       <div className="section-title" style={{ marginTop: 14 }}>Recorded</div>
       <div className="card">
-        {rows.map(r => <Row key={r.key} {...r} />)}
+        {rows.map(({ key, open, ...r }) => <Row key={key} {...r} onOpen={() => onOpen && onOpen(open)} />)}
       </div>
     </>
   );

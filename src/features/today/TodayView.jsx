@@ -69,7 +69,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, recovery }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, recovery, onOpenRecording }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
@@ -142,7 +142,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
         </div>}
         <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> Add a session</div>
       </div>
-      <RecordedActivities activities={activities} date={todayISO} plan={plan} log={log} moves={moves} />
+      <RecordedActivities activities={activities} date={todayISO} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} />
       <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout} />
     </>
   );
