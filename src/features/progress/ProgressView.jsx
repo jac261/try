@@ -103,6 +103,11 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
         if (!wl) return null;
         const NAME = { run: 'Run', bike: 'Bike', swim: 'Swim' };
         const ORDER = ['swim', 'bike', 'run'];
+        // Bars wear the colour of the BAND their score sits in (cool → hot,
+        // matching the axis labels), not the sport's colour — the row label
+        // already names the sport; the colour should answer "how good".
+        const BAND_COLORS = ['#5b8cff', '#2dd4bf', '#facc15', '#f472b6'];
+        const bandColor = s => BAND_COLORS[Math.min(3, Math.max(0, Math.floor(s)))];
         return <>
           <div className="section-title">Weakest link</div>
           <div className="card">
@@ -114,7 +119,7 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
                   <div className="wlb" key={d}>
                     <span className="wlb-l">{NAME[d]}</span>
                     <span className="wlb-bar">
-                      <i style={{ width: Math.round(frac * 100) + '%', background: s == null ? 'var(--track)' : D[d].color, opacity: wl.weakest && wl.weakest !== d ? 0.55 : 1 }} />
+                      <i style={{ width: Math.round(frac * 100) + '%', background: s == null ? 'var(--track)' : bandColor(s), opacity: wl.weakest && wl.weakest !== d ? 0.55 : 1 }} />
                     </span>
                     <span className={'wlb-tag' + (wl.weakest === d ? ' limit' : '')}>{s == null ? 'no data' : wl.weakest === d ? 'limiter' : ''}</span>
                   </div>
