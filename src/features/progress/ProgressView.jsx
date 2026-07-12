@@ -114,7 +114,13 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
             <div className="wl-bars">
               {ORDER.map(d => {
                 const s = wl.scores[d];
-                const frac = s == null ? 0 : Math.max(0.04, Math.min(1, s / 3));
+                // Bar geometry must match the axis: the labels are four equal
+                // cells, so each band owns a quarter of the track (a 2.49 run
+                // is mid-Advanced and must END mid-Advanced — with score/3 it
+                // reached 83% and read as Elite, the 2026-07-12 field report).
+                const band = s == null ? 0 : Math.min(3, Math.max(0, Math.floor(s)));
+                const within = s == null ? 0 : Math.min(1, Math.max(0, s - band));
+                const frac = s == null ? 0 : Math.max(0.04, (band + within) / 4);
                 return (
                   <div className="wlb" key={d}>
                     <span className="wlb-l">{NAME[d]}</span>
