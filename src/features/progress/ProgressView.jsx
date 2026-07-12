@@ -94,6 +94,25 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
         </div>
       )}
 
+      {(() => {
+        // Weakest link: the three sports on one experience scale, and what the
+        // plan does about the one lagging behind. Quiet claims only — with too
+        // little data (no FTP or weight for the bike) it says so.
+        const w = [...(wellness || [])].reverse().find(r => r.weight);
+        const wl = T.weakestLink({ profile: { ...plan.profile, weightKg: w ? w.weight : plan.profile.weightKg } });
+        if (!wl) return null;
+        const NAME = { run: 'run', bike: 'bike', swim: 'swim' };
+        return <>
+          <div className="section-title">Weakest link</div>
+          <div className="card">
+            {wl.weakest ? <>
+              <h2 style={{ margin: '0 0 6px' }}>Your {NAME[wl.weakest]} is the limiter</h2>
+              <p className="lead" style={{ margin: 0 }}>Measured on the same experience scale, your {NAME[wl.weakest]} sits clearly below your other sports{wl.share ? ' — and it makes up roughly ' + wl.share + '% of your race' : ''}. The plan is giving it extra time through the building phases; the next benchmark test will show whether the gap is closing.</p>
+            </> : <p className="lead" style={{ margin: 0 }}>No weakest link right now: your sports sit at a similar level{wl.missing.length ? ' (no reading yet for your ' + wl.missing.map(d => NAME[d]).join(' or ') + ')' : ''}, so the plan stays balanced.</p>}
+          </div>
+        </>;
+      })()}
+
       <div className="section-title">This week</div>
       <div className="card">
         <div className="row"><div><h2 style={{ margin: 0 }}>{twDone} of {twSess.length} done</h2>

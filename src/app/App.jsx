@@ -216,7 +216,7 @@ export function App({ storage, getToken, user }) {
       <div className="card"><p className="lead">Loading your plan…</p></div>
     </div>
   );
-  if (!plan) return <Onboarding onCreate={p => { const np = T.generatePlan(p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np).then(adoptMap); }} />;
+  if (!plan) return <Onboarding onCreate={p => { const w = [...recs].reverse().find(r => r.weight); const np = T.generatePlan(w ? { ...p, weightKg: Math.round(w.weight * 10) / 10 } : p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np).then(adoptMap); }} />;
   if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
 
   // Resolve our client ref → server workout GUID for the log/move endpoints; skip
@@ -283,10 +283,16 @@ export function App({ storage, getToken, user }) {
   };
   // Re-target the plan from updated fitness. Same level/days/race → identical
   // week/day IDs, so the log & moves overlays stay valid; only paces change.
+  // Latest synced weight rides into the profile at every (re)generation so the
+  // weakest-link bike score (W/kg) has something honest to stand on.
+  const withWeight = p => {
+    const w = [...recs].reverse().find(r => r.weight);
+    return w ? { ...p, weightKg: Math.round(w.weight * 10) / 10 } : p;
+  };
   const retarget = fields => {
     const old = plan.profile;
     const snapshot = { date: T.iso(new Date()), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness };
-    const profile = Object.assign({}, old, fields, { fitnessHistory: (old.fitnessHistory || []).concat([snapshot]) });
+    const profile = withWeight(Object.assign({}, old, fields, { fitnessHistory: (old.fitnessHistory || []).concat([snapshot]) }));
     const np = T.generatePlan(profile);
     np.createdAt = plan.createdAt;
     np.updatedAt = new Date().toISOString();
@@ -381,7 +387,7 @@ export function App({ storage, getToken, user }) {
   // Rebuild the plan after a race/schedule change. This reshapes the structure, so we
   // prune log & moves to the workout IDs that still exist (fitness/history carry over).
   const reshapePlan = fields => {
-    const profile = Object.assign({}, plan.profile, fields);
+    const profile = withWeight(Object.assign({}, plan.profile, fields));
     const np = T.generatePlan(profile);
     np.createdAt = plan.createdAt;
     if (plan.updatedAt) np.updatedAt = plan.updatedAt;

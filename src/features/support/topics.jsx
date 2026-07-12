@@ -171,6 +171,12 @@ export const TOPICS = [
         minimum and the plan becomes a sharpen-and-arrive: it works with the fitness you have
         rather than pretending to build more. Further than the maximum and the plan opens with a
         maintenance lead-in, holding fitness at moderate volume until the real build begins.</P>
+      <H>Your weakest link</H>
+      <P>Your three sports are placed on one experience scale using the same baselines that set
+        your paces. When one sits clearly behind the others, the Progress page names it and the
+        plan quietly gives that sport extra time through the building phases. Near-ties stay
+        balanced — a limiter is only declared when the gap is real, and missing data (no power
+        meter, say) removes a sport from the comparison rather than guessing.</P>
       <H>Tune-up races</H>
       <P>A real event raced mid-plan — a sprint before your Olympic, a parkrun in a base block —
         can be added from the plan settings. The plan drops it onto its day, eases the approach so

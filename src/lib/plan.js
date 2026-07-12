@@ -2,6 +2,7 @@
 import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { RACES, B_RACES, FITNESS, ZONES } from './domain.js';
+import { weakBias } from './weakest.js';
 
 /* ---- paces derived from the athlete's baselines ---- */
 function computePaces(profile) {
@@ -751,6 +752,11 @@ export const generatePlan = function (profile) {
     longDay = prefDays.indexOf(5) >= 0 ? 5 : (prefDays.indexOf(6) >= 0 ? 6 : prefDays[prefDays.length - 1]);
   }
 
+  // Weakest-link bias, derived deterministically from the profile's own
+  // baselines (see lib/weakest.js) — {} when the sports are balanced or the
+  // data can't say.
+  const bias = weakBias(profile);
+
   // phase position bookkeeping
   const phaseLen = {}, phasePos = {};
   phases.forEach(p => { phaseLen[p] = (phaseLen[p] || 0) + 1; });
@@ -827,7 +833,10 @@ export const generatePlan = function (profile) {
       const durBase = phase === 'Maintain' && !maintenance
         ? Math.min(raceScale, baseDuration(s.disc, s.role, 'maintenance'))
         : raceScale;
-      const dur = round5(durBase * load);
+      // Weakest-link bias: the limiting sport earns extra time while building;
+      // Peak and Taper keep their race-specific shape untouched.
+      const wb = (phase === 'Base' || phase === 'Build' || phase === 'Maintain') && bias[s.disc] ? bias[s.disc] : 1;
+      const dur = round5(durBase * load * wb);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
       const built = buildWorkout(s.disc, type, dur, pc, phase, seed);
