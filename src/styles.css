@@ -73,6 +73,7 @@ body {
 @keyframes build-stepin { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
   .build-tile, .build-tiles.done .build-tile, .build-step, .building { animation: none; }
+  .recap-body > *, .recap-bars .rb-bar i { animation: none; }
 }
 
 /* ---------- header (navy + royal-blue glow) ---------- */
@@ -269,8 +270,14 @@ body {
 
 /* ---------- session recap (full-screen slides) ---------- */
 .recap { position: fixed; inset: 0; z-index: 60; background: linear-gradient(160deg, #101725, #0e1217 60%); display: flex; align-items: center; justify-content: center; padding: 28px 22px; }
-.recap-body { max-width: 420px; width: 100%; text-align: center; animation: recap-in .35s ease; }
-@keyframes recap-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.recap-body { max-width: 420px; width: 100%; text-align: center; }
+/* Each piece rises in on its own beat (--i set per element in JSX), so the
+   slide assembles rather than appearing as one block. */
+.recap-body > * { animation: recap-rise .5s cubic-bezier(.22, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes recap-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+/* Split/rep bars sweep out from the left, cascading down the set. */
+.recap-bars .rb-bar i { transform-origin: left center; animation: recap-bar .55s cubic-bezier(.22, .7, .2, 1) both; animation-delay: calc(.18s + var(--i, 0) * 80ms); }
+@keyframes recap-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .recap-kicker { font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--blue); }
 .recap-big { font-size: 42px; font-weight: 800; letter-spacing: -1.2px; margin: 14px 0 6px; }
 .recap-line { color: #c3ccdb; font-size: 15px; line-height: 1.55; margin: 10px 0 0; }
