@@ -12,19 +12,29 @@ they must stay consistent because both read the same constants:
    needs no per-level onboarding estimate (FTP is optional at onboarding) but
    must be documented here alongside the others.
 
-## The rungs
+## The bands
 
-| Level | Run 5k | Swim CSS /100m | Bike W/kg | Reads as |
+Levels are RANGES, not points (field decision 2026-07-12: "27:00 is not
+intermediate" — right; 27:00 is the boundary where Intermediate *begins*).
+The stored constants are the band edges; the index interpolates between them,
+so a value just inside a band scores just inside it.
+
+| Band (colour) | Run 5k | Swim CSS /100m | Bike W/kg | Reads as |
 |---|---|---|---|---|
-| Beginner (0) | 34:00 (2040 s) | 2:20 (140 s) | 2.0 | New to multisport; finishing is the goal |
-| Intermediate (1) | 27:00 (1620 s) | 2:00 (120 s) | 2.6 | A few seasons in, training consistently |
-| Advanced (2) | 22:00 (1320 s) | 1:45 (105 s) | 3.2 | Experienced, chasing a result |
-| Elite (3) | 18:30 (1110 s) | 1:30 (90 s) | 4.0 | Front-of-pack age-grouper / semi-pro |
+| Beginner (blue) | slower than 27:00 | slower than 2:00 | under 2.6 | New to multisport; finishing is the goal |
+| Intermediate (teal) | 27:00–22:00 | 2:00–1:45 | 2.6–3.2 | A few seasons in, training consistently |
+| Advanced (amber) | 22:00–18:30 | 1:45–1:30 | 3.2–4.0 | Experienced, chasing a result |
+| Elite (pink) | 18:30 and under | 1:30 and under | 4.0+ | Front-of-pack age-grouper / semi-pro |
 
-The weakest-link index interpolates linearly between rungs (a 20:18 5k sits at
-~2.5, halfway between Advanced and Elite) and clamps half a level beyond each
-end. A limiter is only declared when one sport sits **0.5+ levels** below the
-best of the others.
+(Anchor constants: 34:00 / 27:00 / 22:00 / 18:30 for the run; 2:20 / 2:00 /
+1:45 / 1:30 for the swim; 2.0 / 2.6 / 3.2 / 4.0 W/kg for the bike. A 20:18 5k
+sits mid-Advanced at ~2.5.) A limiter is only declared when one sport sits
+**0.5+ levels** below the best of the others.
+
+**Bike data source:** W/kg needs a weight. The wellness passthrough does not
+carry weight yet (backend nicety, not requested), so weight comes from the
+fitness editor's optional field, and the latest synced weight is used
+automatically if it ever appears in the records.
 
 ## Calibration notes (honest ones)
 

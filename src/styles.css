@@ -252,7 +252,8 @@ body {
 .wl-bars .wlb-bar i { display: block; height: 100%; border-radius: 7px; }
 .wl-bars .wlb-tag { width: 58px; flex: none; text-align: right; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: var(--faint); }
 .wl-bars .wlb-tag.limit { color: #f6b27a; }
-.wl-bars .wlb-scale { display: flex; justify-content: space-between; gap: 8px; margin: 2px 52px 0 52px; font-size: 9.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .4px; }
+.wl-bars .wlb-scale { display: flex; gap: 8px; margin: 2px 68px 0 52px; font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; }
+.wl-bars .wlb-scale span { flex: 1; text-align: center; }
 
 /* ---------- session recap (full-screen slides) ---------- */
 .recap { position: fixed; inset: 0; z-index: 60; background: linear-gradient(160deg, #101725, #0e1217 60%); display: flex; align-items: center; justify-content: center; padding: 28px 22px; }

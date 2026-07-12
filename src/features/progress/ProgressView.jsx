@@ -120,10 +120,11 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
                   </div>
                 );
               })}
-              {/* Compact rung labels: the full words sum to the card's width on
-                  phones and space-between collapsed them into one string. */}
+              {/* Levels are BANDS, not points: each label owns a quarter of the
+                  axis, coloured cool → hot so Elite pops. */}
               <div className="wlb-scale" aria-hidden="true">
-                {['Beg', 'Int', 'Adv', 'Elite'].map(l => <span key={l}>{l}</span>)}
+                {[['Beg', '#5b8cff'], ['Int', '#2dd4bf'], ['Adv', '#facc15'], ['Elite', '#f472b6']]
+                  .map(([l, c]) => <span key={l} style={{ color: c }}>{l}</span>)}
               </div>
             </div>
             <p className="lead" style={{ margin: '10px 0 0' }}>

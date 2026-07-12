@@ -10,6 +10,7 @@ export function FitnessEditor({ profile, onClose, onSave }) {
     fivek: profile.fivekSec ? T.fmtPace(profile.fivekSec) : '',
     css100: profile.css100Sec ? T.fmtPace(profile.css100Sec) : '',
     ftp: profile.ftp || '',
+    weightKg: profile.weightKg || '',
   });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
   const sheetRef = useSheetFocus(onClose);
@@ -33,11 +34,14 @@ export function FitnessEditor({ profile, onClose, onSave }) {
           <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>
         <label className="field"><span className="lab">Cycling FTP <span className="hint">optional · watts</span></span>
           <input value={f.ftp} placeholder="e.g. 200" inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
+        <label className="field"><span className="lab">Weight <span className="hint">optional · kg — lets the bike join the weakest-link scale (W/kg)</span></span>
+          <input value={f.weightKg} placeholder="e.g. 70" inputMode="decimal" onChange={e => set('weightKg', e.target.value)} /></label>
         <button className="btn primary" onClick={() => onSave({
           fitness: f.fitness,
           fivekSec: T.parseTimeToSec(f.fivek),
           css100Sec: T.parseTimeToSec(f.css100),
           ftp: f.ftp ? Number(f.ftp) : null,
+          weightKg: f.weightKg ? Number(f.weightKg) : null,
         })}>Save &amp; re-target plan</button>
       </div>
     </div>
