@@ -21,8 +21,8 @@ function statBits(a, disc) {
     if (disc === 'swim') bits.push(T.fmtPace(a.movingTimeSec / (a.distance / 100)) + ' /100m');
     if (disc === 'bike') bits.push((a.distance / 1000 / (a.movingTimeSec / 3600)).toFixed(1) + ' km/h');
   }
-  if (a.avgWatts) bits.push(Math.round(a.avgWatts) + ' W avg');
-  if (a.avgHr) bits.push(Math.round(a.avgHr) + ' bpm avg');
+  if (a.averageWatts) bits.push(Math.round(a.averageWatts) + ' W avg');
+  if (a.averageHeartrate) bits.push(Math.round(a.averageHeartrate) + ' bpm avg');
   if (a.trainingLoad != null) bits.push('load ' + Math.round(a.trainingLoad));
   return bits.join(' · ');
 }

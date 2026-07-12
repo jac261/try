@@ -48,10 +48,10 @@ export function buildRecap({ workout, activity, intervals, paces, plan, log, mov
   }
 
   // 3 — heart rate (only once the backend passes averages through).
-  if (activity.avgHr) {
+  if (activity.averageHeartrate) {
     slides.push({
-      kind: 'hr', title: 'Heart rate', big: Math.round(activity.avgHr) + ' bpm',
-      lines: ['average across the session' + (activity.maxHr ? ', peaking at ' + Math.round(activity.maxHr) : '')],
+      kind: 'hr', title: 'Heart rate', big: Math.round(activity.averageHeartrate) + ' bpm',
+      lines: ['average across the session' + (activity.maxHeartrate ? ', peaking at ' + Math.round(activity.maxHeartrate) : '')],
     });
   }
 

@@ -37,8 +37,8 @@ export function reviewActivity({ workout, activity, paces, log }) {
   if (a.distance && w.discipline === 'run') stats.push(['Avg pace', fmtPace(secPerKm(a)) + ' /km']);
   if (a.distance && w.discipline === 'swim') stats.push(['Avg pace', fmtPace(secPer100(a)) + ' /100m']);
   if (a.distance && w.discipline === 'bike') stats.push(['Avg speed', (a.distance / 1000 / (a.movingTimeSec / 3600)).toFixed(1) + ' km/h']);
-  if (a.avgWatts) stats.push(['Avg power', Math.round(a.avgWatts) + ' W']);
-  if (a.avgHr) stats.push(['Avg HR', Math.round(a.avgHr) + ' bpm']);
+  if (a.averageWatts) stats.push(['Avg power', Math.round(a.averageWatts) + ' W']);
+  if (a.averageHeartrate) stats.push(['Avg HR', Math.round(a.averageHeartrate) + ' bpm']);
   if (a.trainingLoad != null) stats.push(['Load', Math.round(a.trainingLoad)]);
   if (a.rpe != null) stats.push(['RPE', Math.round(a.rpe) + '/10']);
 
@@ -68,12 +68,12 @@ export function reviewActivity({ workout, activity, paces, log }) {
   }
 
   // Easy-intent bike with power: intensity vs FTP is the honest check.
-  if (w.discipline === 'bike' && EASY_INTENT[w.type] && a.avgWatts && pc.ftp) {
-    const pct = a.avgWatts / pc.ftp;
+  if (w.discipline === 'bike' && EASY_INTENT[w.type] && a.averageWatts && pc.ftp) {
+    const pct = a.averageWatts / pc.ftp;
     if (pct > 0.78) verdicts.push({ tone: 'warn', text: 'Averaged ' + Math.round(pct * 100) + '% of FTP on a ride meant to be easy. Keeping easy rides genuinely easy is what lets the quality days be quality.' });
     else verdicts.push({ tone: 'good', text: 'Kept it easy: ' + Math.round(pct * 100) + '% of FTP on average. Textbook.' });
   }
-  // Easy-intent with HR (needs the backend to pass avgHr + a threshold HR to
+  // Easy-intent with HR (needs the backend to pass averageHeartrate + a threshold HR to
   // judge against — until then this stays silent rather than guessing).
 
   // Interval sessions: an average cannot see the reps.
@@ -127,9 +127,9 @@ export function intervalRows({ workout, intervals, paces }) {
       label: i.label || null,
       timeSec: Math.round(i.movingTimeSec),
       distance: i.distance || null,
-      hr: i.avgHr != null ? Math.round(i.avgHr) : null,
-      watts: disc === 'bike' && i.avgWatts != null ? Math.round(i.avgWatts) : null,
-      paceSec: disc !== 'bike' && i.avgSpeed ? (disc === 'swim' ? 100 : 1000) / i.avgSpeed : null,
+      hr: i.averageHeartrate != null ? Math.round(i.averageHeartrate) : null,
+      watts: disc === 'bike' && i.averageWatts != null ? Math.round(i.averageWatts) : null,
+      paceSec: disc !== 'bike' && i.averageSpeed ? (disc === 'swim' ? 100 : 1000) / i.averageSpeed : null,
     };
     if (band && disc === 'bike' && row.watts != null && pc.ftp) {
       judged++;

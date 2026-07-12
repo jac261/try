@@ -216,7 +216,7 @@ export function App({ storage, getToken, user }) {
       <div className="card"><p className="lead">Loading your plan…</p></div>
     </div>
   );
-  if (!plan) return <Onboarding onCreate={p => { const w = [...recs].reverse().find(r => r.weight); const np = T.generatePlan(w ? { ...p, weightKg: Math.round(w.weight * 10) / 10 } : p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np).then(adoptMap); }} />;
+  if (!plan) return <Onboarding onCreate={p => { const w = [...recs].reverse().find(r => r.weightKg); const np = T.generatePlan(w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np).then(adoptMap); }} />;
   if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
 
   // Resolve our client ref → server workout GUID for the log/move endpoints; skip
@@ -286,8 +286,8 @@ export function App({ storage, getToken, user }) {
   // Latest synced weight rides into the profile at every (re)generation so the
   // weakest-link bike score (W/kg) has something honest to stand on.
   const withWeight = p => {
-    const w = [...recs].reverse().find(r => r.weight);
-    return w ? { ...p, weightKg: Math.round(w.weight * 10) / 10 } : p;
+    const w = [...recs].reverse().find(r => r.weightKg);
+    return w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p;
   };
   const retarget = fields => {
     const old = plan.profile;

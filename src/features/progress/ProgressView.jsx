@@ -98,8 +98,8 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
         // Weakest link: the three sports on one experience scale, and what the
         // plan does about the one lagging behind. Quiet claims only — with too
         // little data (no FTP or weight for the bike) it says so.
-        const w = [...(wellness || [])].reverse().find(r => r.weight);
-        const wl = T.weakestLink({ profile: { ...plan.profile, weightKg: w ? w.weight : plan.profile.weightKg } });
+        const w = [...(wellness || [])].reverse().find(r => r.weightKg);
+        const wl = T.weakestLink({ profile: { ...plan.profile, weightKg: w ? w.weightKg : plan.profile.weightKg } });
         if (!wl) return null;
         const NAME = { run: 'Run', bike: 'Bike', swim: 'Swim' };
         const ORDER = ['swim', 'bike', 'run'];

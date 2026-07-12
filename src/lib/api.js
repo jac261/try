@@ -211,8 +211,8 @@ export function getIntervalsActivities(getToken, days) {
 }
 
 // The interval/lap analysis of one activity (compact rows: type, label,
-// groupId, startTimeSec, movingTimeSec, distance, avgSpeed, avgHr, maxHr,
-// avgWatts, intensity, zone). 404 → not connected or an older backend.
+// groupId, startTimeSec, movingTimeSec, distance, averageSpeed, averageHeartrate, maxHeartrate,
+// averageWatts, intensity, zone). 404 → not connected or an older backend.
 export function getIntervalsActivityIntervals(getToken, activityId) {
   return request('/api/integrations/intervals-icu/activities/' + encodeURIComponent(activityId) + '/intervals', { getToken });
 }

@@ -25,9 +25,9 @@ describe('reviewActivity (post-session analysis)', () => {
 
   it('an easy ride with power is judged by intensity; without power it stays quiet', () => {
     const w = { discipline: 'bike', type: 'Endurance', durationMin: 60 };
-    const hot = reviewActivity({ workout: w, activity: act({ avgWatts: 190, distance: 30000, movingTimeSec: 3600 }), paces });
+    const hot = reviewActivity({ workout: w, activity: act({ averageWatts: 190, distance: 30000, movingTimeSec: 3600 }), paces });
     expect(hot.verdicts.some(v => v.tone === 'warn' && /FTP/.test(v.text))).toBe(true);
-    const calm = reviewActivity({ workout: w, activity: act({ avgWatts: 150, distance: 30000, movingTimeSec: 3600 }), paces });
+    const calm = reviewActivity({ workout: w, activity: act({ averageWatts: 150, distance: 30000, movingTimeSec: 3600 }), paces });
     expect(calm.verdicts.some(v => v.tone === 'good' && /easy/i.test(v.text))).toBe(true);
     const noPower = reviewActivity({ workout: w, activity: act({ distance: 30000, movingTimeSec: 3600 }), paces });
     expect(noPower.verdicts.some(v => /FTP/.test(v.text))).toBe(false); // no data, no guess
@@ -53,12 +53,12 @@ describe('reviewActivity (post-session analysis)', () => {
 import { intervalRows } from './review.js';
 
 describe('intervalRows (the rep table)', () => {
-  const iv = (over = {}) => ({ type: 'WORK', movingTimeSec: 540, distance: 2000, avgSpeed: 3.51, avgHr: 165, avgWatts: 320, ...over });
+  const iv = (over = {}) => ({ type: 'WORK', movingTimeSec: 540, distance: 2000, averageSpeed: 3.51, averageHeartrate: 165, averageWatts: 320, ...over });
 
   it('judges run reps by pace, never by average_watts (running power)', () => {
     const w = { discipline: 'run', type: 'Threshold' };
-    // avgSpeed 3.51 m/s = 285 s/km = exactly the threshold target
-    const it = intervalRows({ workout: w, intervals: [iv(), iv({ avgSpeed: 3.1 })], paces });
+    // averageSpeed 3.51 m/s = 285 s/km = exactly the threshold target
+    const it = intervalRows({ workout: w, intervals: [iv(), iv({ averageSpeed: 3.1 })], paces });
     expect(it.rows[0].tone).toBe('good');
     expect(it.rows[0].watts).toBe(null);       // watts suppressed for runs
     expect(it.rows[1].tone).toBe('info');      // 322 s/km, slower than band
@@ -68,8 +68,8 @@ describe('intervalRows (the rep table)', () => {
   it('judges bike reps by watts against the FTP band', () => {
     const w = { discipline: 'bike', type: 'Sweet Spot' };
     const it = intervalRows({ workout: w, intervals: [
-      iv({ avgWatts: 192, avgSpeed: null }),   // 86% FTP → in band
-      iv({ avgWatts: 230, avgSpeed: null }),   // 104% → hot
+      iv({ averageWatts: 192, averageSpeed: null }),   // 86% FTP → in band
+      iv({ averageWatts: 230, averageSpeed: null }),   // 104% → hot
     ], paces });
     expect(it.rows.map(r => r.tone)).toEqual(['good', 'warn']);
   });
