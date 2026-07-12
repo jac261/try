@@ -3,10 +3,11 @@ import { Icon } from '@/components/Icon.jsx';
 import { BarChart, Donut, Sparkline } from '@/components/charts.jsx';
 import { fitnessSeries } from '@/features/progress/fitnessSeries.js';
 import { WellnessTrends } from '@/features/wellness/WellnessTrends.jsx';
+import { AthleteStateStrip } from '@/features/wellness/AthleteStateStrip.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, wellness , onSupport }) {
+export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
   const done = all.filter(w => log[w.id]);
@@ -66,6 +67,7 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
 
   return (
     <>
+      <AthleteStateStrip wellness={wellness} runLoad={runLoad} recovery={recovery} onSupport={onSupport} />
       <div className="section-title">Progress</div>
       <div className="kpis">
         <div className="kpi"><div className="v">{daysToRace}<small> days</small></div><div className="k">Until race day</div></div>
