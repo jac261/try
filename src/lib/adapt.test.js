@@ -354,3 +354,61 @@ describe('projectRecovery — gauntlet fixes (2026-07-12)', () => {
     expect(projectRecovery({ ...base, wellness: gapRecs(), plan: gapRace })).toBe(null);
   });
 });
+
+import { RUN_RAMP_RULES } from './adapt.js';
+
+describe('RUN1 — the run-specific ramp guardrail', () => {
+  // History: four steady baseline weeks, a controllable prior week and current
+  // week, all logged; next week holds the trim targets.
+  const runCase = (priorDaily, currentDaily) => {
+    const workouts = [];
+    const log = {};
+    for (let o = -34; o <= 0; o++) {
+      const daily = o >= -6 ? currentDaily : o >= -13 ? priorDaily : 60;
+      const id = 'h' + o;
+      workouts.push({ id, week: 0, phase: 'Build', date: iso(addDays(TODAY, o)), discipline: 'run', type: 'Easy', title: 'Run', durationMin: daily });
+      log[id] = { done: true };
+    }
+    const nextWeek = {
+      index: 1, phase: 'Build', isRecovery: false, start: iso(addDays(TODAY, 4)),
+      workouts: [
+        { id: 'n-0', week: 1, phase: 'Build', date: iso(addDays(TODAY, 4)), discipline: 'run', type: 'Easy', title: 'Easy Run', durationMin: 40 },
+        { id: 'n-1', week: 1, phase: 'Build', date: iso(addDays(TODAY, 5)), discipline: 'run', type: 'Threshold', title: 'Threshold Run', durationMin: 50 },
+        { id: 'n-2', week: 1, phase: 'Build', date: iso(addDays(TODAY, 6)), discipline: 'bike', type: 'Endurance', title: 'Ride', durationMin: 60 },
+      ],
+    };
+    return { plan: { weeks: [{ index: 0, phase: 'Build', isRecovery: false, start: iso(addDays(TODAY, -34)), workouts }, nextWeek] }, log };
+  };
+  const calm = recsAt(0.5); // aggregate ramp sustainable; form rules silent
+
+  it('fires in the blind spot: run minutes ramping hot while total load looks calm', () => {
+    const p = proposeWeek({ ...runCase(60, 120), moves: {}, adjust: {}, todayISO: TODAY, wellness: calm });
+    expect(p.kind).toBe('trim-week');
+    expect(p.factor).toBe(RUN_RAMP_RULES.trimRun);
+    expect(p.headline).toMatch(/running/i);
+    expect(p.ease).toEqual(['n-1']);      // the run quality session goes easy
+    expect(p.targets).toEqual(['n-0']);   // runs only — the ride is untouched
+  });
+
+  it('the aggregate rules outrank it: a hot total ramp wins the slot', () => {
+    const p = proposeWeek({ ...runCase(60, 120), moves: {}, adjust: {}, todayISO: TODAY, wellness: recsAt(1.3) });
+    expect(p.factor).toBe(RAMP_RULES.trimRisky); // R2, not RUN1
+  });
+
+  it('log-only by design: fires with no wellness records at all', () => {
+    const p = proposeWeek({ ...runCase(60, 120), moves: {}, adjust: {}, todayISO: TODAY, wellness: [] });
+    expect(p && p.headline).toMatch(/running/i);
+  });
+
+  it('two sustained building weeks trip the lower tier; one alone does not', () => {
+    const sustained = proposeWeek({ ...runCase(90, 95), moves: {}, adjust: {}, todayISO: TODAY, wellness: calm });
+    expect(sustained && sustained.headline).toMatch(/running/i);
+    const oneOff = proposeWeek({ ...runCase(60, 85), moves: {}, adjust: {}, todayISO: TODAY, wellness: calm });
+    expect(oneOff).toBe(null);
+  });
+
+  it('respects the no-stacking guard: an adjusted next-week run silences it', () => {
+    const p = proposeWeek({ ...runCase(60, 120), moves: {}, adjust: { 'n-0': { kind: 'trim', factor: 0.8 } }, todayISO: TODAY, wellness: calm });
+    expect(p).toBe(null);
+  });
+});

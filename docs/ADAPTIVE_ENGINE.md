@@ -81,7 +81,8 @@ thresholds: `FORM_RULES` in `src/lib/adapt.js`.
 | F3 | Form in **Transition** (> +25) mid-Base/Build | Fitness is leaking → restore any engine-adjusted upcoming sessions; with nothing to restore, stay quiet (missed volume is the athlete's to reschedule) |
 
 The weekly banner shows ONE structural proposal, most urgent first:
-**F1 > R2 > R1 > F3 > F2**. F2 requires a clean week (no missed sessions) —
+**F1 > R2 > R1 > RUN1 > F3 > F2** (RUN1, the run-specific ramp guardrail, has
+its own section below). F2 requires a clean week (no missed sessions) —
 grey form caused by skipped training is not solved by a bigger plan.
 The same guardrails as Phase 2 apply: fresh data only, recovery/taper/race
 weeks untouched, no re-proposing an adjusted week.
@@ -197,3 +198,42 @@ to be trained. Silent when: no plan, stale or missing fitness data, form not
 in high risk, or a race inside the horizon (the race projection owns that
 airspace). Still in risk at day 14 reads as "at least the next couple of
 weeks" — day 15 simply wasn't looked at.
+
+## RUN1 — the run-specific ramp guardrail
+
+The vision's sharpest ask: see run load ramping dangerously even when total
+load looks fine ("the cardiovascular system can handle more; the
+musculoskeletal system cannot"). The currency is **logged run minutes**, not
+TSS — IF²-weighted load is cardio-metabolic and rates a hard turbo above an
+easy run, the inverse of mechanical truth. The signal (`runLoadSignal`,
+`src/lib/runload.js`) is the acute 7-day run load as a percent ramp against an
+uncoupled trailing baseline (up to four complete prior weeks, clipped to plan
+history), so a big current week can't inflate its own denominator. Named
+constants in `RUN_RAMP_RULES`, deliberately looser than the folklore 10% rule
+(weak trial support; weekly run minutes are naturally jumpy) — presented as a
+ramp percent, never an ACWR verdict.
+
+| Rule | Fires when | Proposal |
+|---|---|---|
+| RUN1 | Acute 7-day run minutes **> +50%** above the trailing baseline in one week, or **> +30%** for two consecutive weeks | Trim next week's runs to **70%** (R2-shaped: biggest run quality session taken easy, other runs shortened); bike/swim untouched |
+
+Named thresholds: `RUN_RAMP_RULES` in `src/lib/runload.js` (riskPct 0.50,
+buildPct 0.30, minWeeklyMin 60, minBaselineWeeks 2, trimRun 0.7). The ramp
+percent is compared unrounded — rounding happens at display, never before a
+threshold test.
+
+RUN1 slots into the priority chain **F1 > R2 > R1 > RUN1 > F3 > F2**: the
+ordering IS the de-dup — it is only reachable when the aggregate rules stayed
+quiet, exactly the blind spot it exists for. It is **log-only**: no wellness
+freshness gate, so it protects sensor-less athletes and survives stale
+sensors. Thin history stays silent (minimum baseline weeks + a weekly-minutes
+floor that doubles as the divide-by-zero guard), and baseline weeks with zero
+logged run minutes are skipped as gaps rather than averaged in — an unlogged
+week is indistinguishable from an unrun one, and a deflated baseline would
+false-fire on a plain return to normal running. The proposal copy speaks only
+about run load versus the athlete's own recent norm: the signal makes no
+cross-discipline comparison, so neither does the copy. Brick run legs are excluded
+until segment-level actuals exist (undercount fails toward silence). Reserved
+fast-follow: a long-run jump rule (this week's Long run vs the recent longest
+completed run) as a distinct acute mechanism. `runLoadSignal.acute7d` is the
+designated input for the athlete state strip's injury-risk tile.

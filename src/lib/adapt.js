@@ -10,6 +10,8 @@
 import { INTENSITY_TYPES } from './tuning.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { wellness as wellnessLib } from './wellness.js';
+import { runLoadSignal, RUN_RAMP_RULES } from './runload.js';
+export { RUN_RAMP_RULES } from './runload.js';
 
 // A proposal: { kind, workout, headline, why, action }
 //   kind: 'ease' | 'restore' | 'move-test'
@@ -101,10 +103,11 @@ function windowAvg(ramps, fromISO, toISO) {
 }
 
 // Week-level proposal from the ramp trend (R1-R2) and the form trend (F1-F3),
-// most urgent first: F1 > R2 > R1 > F3 > F2.
+// most urgent first: F1 > R2 > R1 > RUN1 > F3 > F2.
 //   F1 sustained high risk → { kind:'trim-week', factor:.6 } (recovery-depth week)
 //   R2 risky ramp          → { kind:'trim-week', factor:.7, ease:[quality] }
 //   R1 aggressive ×2       → { kind:'trim-week', factor:.8 }
+//   RUN1 run ramp hot      → { kind:'trim-week', factor:.7, ease:[run quality], targets:[runs only] }
 //   F3 transition in build → { kind:'restore-week' }
 //   F2 grey all week       → { kind:'boost-week', factor:1.1 }
 // Missed sessions are never auto-rescheduled (field decision 2026-07-11: a
@@ -187,6 +190,32 @@ export function proposeWeek({ wellness, plan, log, moves, adjust, todayISO }) {
       headline: 'Ease off the ramp',
       why: `Two straight weeks above +${RAMP_RULES.aggressive}/wk fitness ramp (${fmtRamp(priorWk)}, then ${fmtRamp(thisWk)}). Sustainable building tops out around +${RAMP_RULES.aggressive} — trim next week 20% to consolidate.`,
     };
+  }
+
+  // RUN1 — the run-specific ramp guardrail: run minutes building much faster
+  // than the athlete's own recent norm. Only reachable when the aggregate
+  // rules above stayed quiet, which is exactly the blind spot it exists for:
+  // the cardiovascular system can handle more, the legs cannot. Log-only by
+  // design (no wellness freshness gate), so it protects sensor-less athletes
+  // and survives stale sensors. Fires on one hot week, or two sustained
+  // building weeks (a single big long-run week never trips the lower tier).
+  const runTrimmable = trimmable.filter(w => w.discipline === 'run');
+  if (runTrimmable.length && runTrimmable.every(w => !(adjust || {})[w.id])) {
+    const run = runLoadSignal({ plan, log, moves, adjust, todayISO: today });
+    const runPrior = run && runLoadSignal({ plan, log, moves, adjust, todayISO: iso(addDays(today, -7)) });
+    if (run && (run.rampPct > RUN_RAMP_RULES.riskPct
+      || (runPrior != null && run.rampPct > RUN_RAMP_RULES.buildPct && runPrior.rampPct > RUN_RAMP_RULES.buildPct))) {
+      const q = runTrimmable.filter(w => INTENSITY_TYPES[w.type])
+        .sort((a, b) => b.durationMin - a.durationMin)[0];
+      return {
+        kind: 'trim-week', action: 'trimWeek', week: next.index,
+        factor: RUN_RAMP_RULES.trimRun,
+        ease: q ? [q.id] : [],
+        targets: runTrimmable.filter(w => !q || w.id !== q.id).map(w => w.id),
+        headline: 'Ease your running next week',
+        why: 'Your run volume has jumped well above its recent normal. Running is the most impact-heavy discipline, so easing next week\'s runs gives your legs time to adapt while the rest of your training carries on as planned.',
+      };
+    }
   }
 
   // F3 — form in transition mid-Base/Build: fitness is leaking. Restore any
