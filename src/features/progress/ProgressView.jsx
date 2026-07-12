@@ -119,7 +119,10 @@ export function ProgressView({ plan, log, wellness , onSupport }) {
                   <div className="wlb" key={d}>
                     <span className="wlb-l">{NAME[d]}</span>
                     <span className="wlb-bar">
-                      <i style={{ width: Math.round(frac * 100) + '%', background: s == null ? 'var(--track)' : bandColor(s), opacity: wl.weakest && wl.weakest !== d ? 0.55 : 1 }} />
+                      {/* Full-strength band colours on every bar — the LIMITER
+                          tag does the pointing; dimming the others just made
+                          their level colour read wrong. */}
+                      <i style={{ width: Math.round(frac * 100) + '%', background: s == null ? 'var(--track)' : bandColor(s) }} />
                     </span>
                     <span className={'wlb-tag' + (wl.weakest === d ? ' limit' : '')}>{s == null ? 'no data' : wl.weakest === d ? 'limiter' : ''}</span>
                   </div>
