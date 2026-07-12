@@ -69,7 +69,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, recovery }) {
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
@@ -115,7 +115,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
     <>
       <div className="section-title">Today · {T.fmtDate(todayISO, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
       <ReadinessCard wellness={wellness} today={today.map(w => ({ ...easedOf(w), done: !!log[w.id] }))}
-        onEdit={onEditWellness} onFeel={onFeel} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} onSupport={onSupport} />
+        onEdit={onEditWellness} onFeel={onFeel} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} onSupport={onSupport} recovery={recovery} />
       {slot && <div className={slot.cls} {...tap(slot.act)}>
         <div className="bi"><Icon name={slot.icon} size={20} /></div>
         <div style={{ flex: 1 }}><div className="bt">{slot.title}</div>

@@ -52,7 +52,7 @@ function ReadinessRing({ score, band }) {
   );
 }
 
-export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport }) {
+export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport, recovery }) {
   const [loadChoice, setLoadChoice] = useState(loadPref);
   const [whyOpen, setWhyOpen] = useState(false);
   const todayISO = T.iso(new Date());
@@ -202,6 +202,16 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
             <TrendChart height={84} domain={{ min: -35, max: 32 }}
               zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
               series={[{ values: tsbSeries, color: 'var(--brick)', width: 2 }]} />
+            {/* Recovery timeline: only exists while form sits in high risk.
+                "should"/"around" are load-bearing; the beyond-horizon case is
+                never phrased as "never recovers" — day 15 wasn't looked at. */}
+            {recovery && <div className="rd-coach" style={{ marginTop: 8 }}>
+              {recovery.days == null
+                ? 'Following your plan as scheduled, form stays in high risk for at least the next couple of weeks.'
+                : recovery.days <= 1 ? 'Following your plan as scheduled, form should be out of high risk by tomorrow.'
+                  : recovery.days <= 7 ? 'Following your plan as scheduled, form should climb out of high risk around ' + T.fmtDate(recovery.readyDate, { weekday: 'short', day: 'numeric', month: 'short' }) + ' (about ' + recovery.days + ' days).'
+                    : 'Following your plan as scheduled, form should climb out of high risk in a week or two.'}
+            </div>}
           </div>
           {(() => {
             // Ramp rate as a histogram: one bar per week, coloured by its zone

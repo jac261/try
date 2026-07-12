@@ -181,3 +181,19 @@ band + `eased` flag + feel). Once enough accrue, the questions become answerable
 *did eased sessions on red days feel better? did un-eased amber days go badly?* — and
 the thresholds above graduate from stated policy to fitted values, exactly as planned
 for the readiness weights.
+
+## The recovery timeline
+
+When form sits in the **high-risk zone**, one sentence under the Form chart
+answers "when am I ready for quality again": the engine walks the plan AS
+SCHEDULED (accepted adjustments included, so accepting a trim visibly
+shortens the date) with the same impulse-response recurrence as the race
+projection, over a **14-day horizon** (`RECOVERY_RULES`), and reports the
+first day projected form exits high risk **and stays out** for the remainder
+of the horizon — a midweek dip-out that a big weekend undoes is never
+reported. Ready means clearing high risk into productive territory, not
+reaching positive TSB: carrying optimal-zone fatigue is how the plan intends
+to be trained. Silent when: no plan, stale or missing fitness data, form not
+in high risk, or a race inside the horizon (the race projection owns that
+airspace). Still in risk at day 14 reads as "at least the next couple of
+weeks" — day 15 simply wasn't looked at.

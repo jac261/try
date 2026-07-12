@@ -263,3 +263,64 @@ describe('maintenance plans and the race engine', () => {
     expect(proposeRace({ wellness: [], plan: { race: 'maintenance' }, log: {}, moves: {}, adjust: {}, todayISO: '2026-07-08' })).toBe(null);
   });
 });
+
+import { projectRecovery, RECOVERY_RULES } from './adapt.js';
+
+describe('projectRecovery (recovery timeline)', () => {
+  const deep = () => loadRecs(50, 85); // TSB −35: high risk
+  const base = { log: {}, moves: {}, adjust: {}, todayISO: TODAY };
+
+  it('stays silent outside high risk, without fresh data, a plan, or with a race inside the horizon', () => {
+    expect(projectRecovery({ ...base, wellness: loadRecs(55, 45), plan: racePlan(30) })).toBe(null);
+    const stale = deep().map(r => ({ ...r, date: iso(addDays(r.date, -5)) }));
+    expect(projectRecovery({ ...base, wellness: stale, plan: racePlan(30) })).toBe(null);
+    expect(projectRecovery({ ...base, wellness: deep(), plan: null })).toBe(null);
+    expect(projectRecovery({ ...base, wellness: deep(), plan: racePlan(7) })).toBe(null); // race airspace
+  });
+
+  it('a gentle week ahead projects a near recovery; a relentless one stays honestly unresolved', () => {
+    const gentle = projectRecovery({ ...base, wellness: deep(), plan: racePlan(30, 'Recovery', 20) });
+    expect(gentle.readyDate).toBeTruthy();
+    expect(gentle.days).toBeLessThanOrEqual(3);
+    // racePlan only fills six days; a genuinely relentless plan loads every
+    // day of the horizon (the first fixture "recovered" in its quiet week 2).
+    const grind = { weeks: [{ index: 0, phase: 'Build', start: TODAY,
+      workouts: Array.from({ length: RECOVERY_RULES.horizonDays }, (_, i) => ({
+        id: 'g-' + i, week: 0, phase: 'Build', date: iso(addDays(TODAY, i + 1)),
+        discipline: 'bike', type: 'Threshold', title: 'Grind', durationMin: 240,
+      })) }] };
+    const relentless = projectRecovery({ ...base, wellness: deep(), plan: grind });
+    expect(relentless).toEqual({ readyDate: null, days: null }); // in risk at the horizon — day 15 wasn't looked at
+  });
+
+  it('the sustained-crossing rule: a midweek exit that a big weekend undoes is never reported', () => {
+    // Nothing planned for 3 days (form climbs out), then two huge days (back
+    // into risk), then quiet — readyDate must postdate the relapse.
+    const plan = { weeks: [{ index: 0, phase: 'Build', start: TODAY, workouts: [4, 5].map(off => ({
+      id: 'w-' + off, week: 0, phase: 'Build', date: iso(addDays(TODAY, off)),
+      discipline: 'bike', type: 'Threshold', title: 'Big Ride', durationMin: 300,
+    })) }] };
+    const r = projectRecovery({ ...base, wellness: deep(), plan });
+    expect(r.readyDate > iso(addDays(TODAY, 5))).toBe(true);
+  });
+
+  it('accepting a trim visibly shortens the date — the plan is the recovery plan', () => {
+    const plan = racePlan(30, 'Threshold', 90);
+    const asPlanned = projectRecovery({ ...base, wellness: deep(), plan });
+    const adjust = {};
+    plan.weeks[0].workouts.forEach(w => { if (!w.race) adjust[w.id] = { kind: 'trim', factor: 0.4 }; });
+    const trimmed = projectRecovery({ ...base, wellness: deep(), plan, adjust });
+    expect(trimmed.readyDate).toBeTruthy();
+    expect(asPlanned.readyDate === null || trimmed.readyDate <= asPlanned.readyDate).toBe(true);
+  });
+
+  it('log-derived (sensor-less) records project identically to measured ones', () => {
+    const derived = deep().map(r => ({ ...r, derived: true }));
+    expect(projectRecovery({ ...base, wellness: derived, plan: racePlan(30, 'Recovery', 20) }))
+      .toEqual(projectRecovery({ ...base, wellness: deep(), plan: racePlan(30, 'Recovery', 20) }));
+  });
+
+  it('horizon is the stated two weeks', () => {
+    expect(RECOVERY_RULES.horizonDays).toBe(14);
+  });
+});

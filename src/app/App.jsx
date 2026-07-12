@@ -343,6 +343,8 @@ export function App({ storage, getToken, user }) {
   // in the same adjust overlay (and sync), so calendar, sheet and undo just work.
   const engineInputs = { wellness: recs, plan, log, moves, adjust, todayISO: T.iso(new Date()) };
   const weekly = T.proposeRace(engineInputs) || T.proposeWeek(engineInputs);
+  // Recovery timeline: speaks only from the high-risk form zone (null otherwise).
+  const recovery = T.projectRecovery(engineInputs);
   // Completed sessions spotted on the watch → one-tap logging (with the
   // athlete's recorded RPE as the feel, and a calibration observation each).
   const spotted = T.matchActivities({ activities, plan, log, moves, todayISO: T.iso(new Date()) });
@@ -484,7 +486,7 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={activities} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} onSupport={openSupport} />}

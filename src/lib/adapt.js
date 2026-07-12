@@ -340,3 +340,53 @@ export function proposeRace({ wellness, plan, log, moves, adjust, todayISO }) {
     why: `Projected race-morning form is ${fmtTsb(proj.tsb)}, past the +${RACE_RULES.freshHi} ceiling where fitness leaks. A touch more volume early in the taper brings you to ${fmtTsb(landed)} with the same freshness and more fitness.`,
   };
 }
+
+/* ---------------- Recovery timeline ---------------- */
+
+// Beyond two weeks a session-by-session projection is fiction — the same
+// honest reach as the race-form horizon.
+export const RECOVERY_RULES = { horizonDays: 14 };
+
+// When form sits in the high-risk zone: walk the plan AS SCHEDULED (accepted
+// adjustments included — accepting a trim visibly shortens the date) and
+// report the first day projected form climbs out of high risk and STAYS out
+// for the rest of the horizon, so a Thursday that dips back under Saturday's
+// big session is never reported. Silent (null) when: no plan, no or stale
+// fitness data, not currently in high risk, or a race inside the horizon
+// (projectRaceForm owns that airspace). readyDate null = still in high risk
+// at the horizon — day 15 simply wasn't looked at.
+export function projectRecovery({ wellness, plan, log, moves, adjust, todayISO }) {
+  if (!plan || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
+  const today = todayISO || iso(new Date());
+  const recs = (wellness || []).filter(r => r.ctl != null && r.atl != null);
+  if (!recs.length) return null;
+  const seed = recs[recs.length - 1];
+  if (seed.date < iso(addDays(today, -RAMP_RULES.freshDays))) return null;
+  const zone = wellnessLib.formZone(seed.ctl - seed.atl);
+  if (!zone || zone.key !== 'highRisk') return null;
+  const horizon = iso(addDays(today, RECOVERY_RULES.horizonDays));
+  const all = plan.weeks.flatMap(w => w.workouts);
+  const eff = w => (moves && moves[w.id]) || w.date;
+  if (all.some(w => w.race && eff(w) > today && eff(w) <= horizon)) return null;
+
+  const byDate = {};
+  all.forEach(w => {
+    if (w.race || w.discipline === 'rest' || (log || {})[w.id]) return;
+    const d = eff(w);
+    if (d > seed.date && d <= horizon) (byDate[d] = byDate[d] || []).push(w);
+  });
+
+  let ctl = seed.ctl, atl = seed.atl;
+  let lastRisk = null; // the last projected in-horizon day still in high risk
+  for (let d = iso(addDays(seed.date, 1)); d <= horizon; d = iso(addDays(d, 1))) {
+    const tss = (byDate[d] || []).reduce((s, w) => s + estimateTss(w, (adjust || {})[w.id]), 0);
+    ctl += (tss - ctl) / 42;
+    atl += (tss - atl) / 7;
+    const z = wellnessLib.formZone(ctl - atl);
+    if (d > today && z && z.key === 'highRisk') lastRisk = d;
+  }
+  if (lastRisk === null) return { readyDate: iso(addDays(today, 1)), days: 1 };
+  const readyDate = iso(addDays(lastRisk, 1));
+  if (readyDate > horizon) return { readyDate: null, days: null };
+  return { readyDate, days: daysBetween(today, readyDate) };
+}
