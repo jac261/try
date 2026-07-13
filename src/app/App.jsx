@@ -143,6 +143,25 @@ export function App({ storage, getToken, user }) {
     let cancelled = false;
     sync.hydrate().then(result => {
       if (cancelled) return;
+      // Tracker is a client-only state until the backend catalog accepts it
+      // (race 'tracker' + zero-week plans). Keep the local tracker plan
+      // authoritative over the server's STALE pre-tracker plan, but YIELD to a
+      // genuinely newer plan (a real plan started on another device, updatedAt
+      // beyond the tracker's) so this device is never stranded and — once the
+      // backend accepts tracker — a newer plan is never overwritten. Push
+      // silently so tracker syncs the moment the backend supports it. Once the
+      // server itself returns a tracker plan this whole branch is a no-op.
+      const sp = result && result.plan;
+      // Compare parsed epoch ms, not raw ISO strings: the backend may serialize
+      // updatedAt in a different ISO form (offset vs Z, fractional precision)
+      // than the tracker's new Date().toISOString(), and a lexicographic compare
+      // would misorder same-second stamps. Unparseable → NaN → keep local tracker.
+      const serverNewer = !!(sp && sp.updatedAt && plan && plan.updatedAt && Date.parse(sp.updatedAt) > Date.parse(plan.updatedAt));
+      if (plan && plan.race === 'tracker' && !(sp && sp.race === 'tracker') && !serverNewer) {
+        sync.replacePlan(plan).then(m => { if (m) adoptMap(m); });
+        setHydrated(true);
+        return;
+      }
       if (result === 'none') {
         // Signed in but no server plan: migrate a pre-backend local plan up, else
         // fall through to onboarding. adoptMap migrates the local overlays too.
@@ -434,7 +453,12 @@ export function App({ storage, getToken, user }) {
     setLog({}); setMoves({}); setAdjust({});
     setPlan(np);
     setEditPlan(false);
-    sync.replacePlan(np).then(adoptMap);
+    setPlanSyncFailed(false); // clear any prior real-plan alarm; tracker never raises it
+    // Silent push: the backend catalog rejects a zero-week 'tracker' plan until
+    // it ships support, so a failed save here is expected and must not raise the
+    // "didn't save" alarm. The plan lives locally; hydrate keeps it and retries
+    // the push on every load, so it syncs the moment the backend accepts it.
+    sync.replacePlan(np).then(m => { if (m) adoptMap(m); });
   };
   const endPlanToTracker = () => { if (confirm('End your plan and just track? Your fitness history is kept.')) enterTracker(); };
   // User-added sessions: first-class plan workouts (flagged custom), persisted
@@ -519,7 +543,7 @@ export function App({ storage, getToken, user }) {
             : <><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></>}</div>
       </div>
 
-      {planSyncFailed && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptMap))}>
+      {planSyncFailed && !tracker && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptMap))}>
         <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
