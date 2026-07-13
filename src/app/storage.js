@@ -29,7 +29,7 @@ export function storageForUser(userId) {
     save(k, v) { try { localStorage.setItem(ns + k, JSON.stringify(v)); } catch (e) {} },
     // Note: calibration deliberately survives clear() — it's an append-only
     // dataset spanning plans, not state tied to the current one.
-    clear() { ['plan', 'log', 'moves', 'adjust'].forEach(k => localStorage.removeItem(ns + k)); },
+    clear() { ['plan', 'log', 'moves', 'adjust', 'pendingMoves'].forEach(k => localStorage.removeItem(ns + k)); },
     loadWellness,
     upsertWellness(rec) {
       const a = loadWellness().filter(r => r.date !== rec.date);

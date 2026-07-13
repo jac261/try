@@ -45,6 +45,47 @@ export function mergeOverlay(server, local, refToId, push) {
   return merged;
 }
 
+// id → its SCHEDULED (un-moved) date. A pending move is stamped with its
+// workout's base date at record time; this is what a hydrated plan is checked
+// against. Per-workout, not plan-wide: a layout-only reshape (same race/dates
+// but different training days) moves a workout onto a new date, so its base
+// changes and a stale pending move is dropped — where a plan-wide fingerprint
+// would have collided. A retarget keeps the day slots, so bases (and legit
+// pending moves) survive it.
+export function baseDates(plan) {
+  const m = {};
+  (plan && plan.weeks || []).forEach(w => (w.workouts || []).forEach(x => { m[x.id] = x.date; }));
+  return m;
+}
+
+// Moves get stricter treatment than logs: a resurrected move silently corrupts
+// the plan (workout ids are REUSED across regenerations, so a stale cached move
+// applies cleanly to the wrong workout — the 2026-07-12 "workouts moved without
+// me" field report), while a lost offline move costs one re-drag. So the cache
+// is never authoritative: the server wins outright, and only this device's own
+// PENDING writes (made offline or while a plan push was in flight) are applied
+// and pushed. A pending entry is dropped when the server already reflects it
+// (confirmed), when its workout no longer resolves, or when the workout no
+// longer sits on the base date the move was recorded against — the structure
+// changed under it (possibly on another device) and the move must not cross.
+// Pending entries are { date, base } with date null for an un-move; baseOf is
+// the hydrated plan's id → base-date map. push(guid, dateOrNull) — the caller
+// routes null to the delete endpoint.
+export function mergeMoves(server, pending, refToId, push, baseOf) {
+  const moves = { ...(server || {}) };
+  const still = {};
+  Object.keys(pending || {}).forEach(id => {
+    const e = pending[id];
+    if (!e || !refToId[id] || (baseOf || {})[id] !== e.base) return;
+    const synced = e.date === null ? moves[id] === undefined : moves[id] === e.date;
+    if (synced) return;
+    if (e.date === null) delete moves[id]; else moves[id] = e.date;
+    still[id] = e;
+    push(refToId[id], e.date);
+  });
+  return { moves, pending: still };
+}
+
 // After a plan create/replace resolves with a fresh ref→GUID map, push the
 // overlay entries the old map couldn't resolve but the new one can. There is no
 // synced flag, so an entry that did sync in the meantime may be pushed again —

@@ -21,7 +21,7 @@ vi.mock('@/lib/api.js', () => ({
 }));
 
 import * as api from '@/lib/api.js';
-import { makeSync, mergeOverlay, sweepStale } from './sync.js';
+import { makeSync, mergeOverlay, mergeMoves, baseDates, sweepStale } from './sync.js';
 
 const getToken = async () => 'tok';
 beforeEach(() => { vi.clearAllMocks(); });
@@ -206,6 +206,78 @@ describe('mergeOverlay (hydrate: server wins per workout, local-only entries sur
     const merged = mergeOverlay(undefined, { '0-0': { done: true } }, ids, push);
     expect(merged['0-0']).toEqual({ done: true });
     expect(push).toHaveBeenCalledWith('g00', { done: true });
+  });
+});
+
+describe('mergeMoves (hydrate: server wins; only this device\'s stamped pending writes push)', () => {
+  const ids = { '0-0': 'g00', '0-1': 'g01', '5-2': 'g52' };
+  // The hydrated plan's id → scheduled (base) date. A pending move is valid only
+  // if its workout still sits on the base it was recorded against.
+  const base = { '0-0': '2026-07-06', '0-1': '2026-07-08', '5-2': '2026-08-06' };
+  const pend = (date, b = base['5-2']) => ({ date, base: b });
+
+  it('a stale cached move never resurrects: no pending means the server copy verbatim', () => {
+    // The 2026-07-12 field report: ids are reused across plan regenerations, so
+    // a cached move from an OLD plan resolves cleanly and used to be pushed up.
+    const push = vi.fn();
+    const r = mergeMoves({ '0-0': '2026-07-15' }, {}, ids, push, base);
+    expect(r.moves).toEqual({ '0-0': '2026-07-15' });
+    expect(r.pending).toEqual({});
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('applies and re-pushes a pending move the server has not seen', () => {
+    const push = vi.fn();
+    const r = mergeMoves({}, { '5-2': pend('2026-07-20') }, ids, push, base);
+    expect(r.moves).toEqual({ '5-2': '2026-07-20' });
+    expect(r.pending).toEqual({ '5-2': pend('2026-07-20') }); // stays pending until confirmed
+    expect(push).toHaveBeenCalledWith('g52', '2026-07-20');
+  });
+
+  it('confirms and drops a pending move the server already reflects', () => {
+    const push = vi.fn();
+    const r = mergeMoves({ '5-2': '2026-07-20' }, { '5-2': pend('2026-07-20') }, ids, push, base);
+    expect(r.pending).toEqual({});
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('a pending un-move deletes the server copy and pushes null', () => {
+    const push = vi.fn();
+    const r = mergeMoves({ '0-1': '2026-07-18' }, { '0-1': { date: null, base: base['0-1'] } }, ids, push, base);
+    expect(r.moves).toEqual({});
+    expect(r.pending).toEqual({ '0-1': { date: null, base: base['0-1'] } });
+    expect(push).toHaveBeenCalledWith('g01', null);
+    // and once the server no longer has it, the pending un-move is confirmed
+    const done = mergeMoves({}, { '0-1': { date: null, base: base['0-1'] } }, ids, vi.fn(), base);
+    expect(done.pending).toEqual({});
+  });
+
+  it('drops a pending move whose workout left the plan', () => {
+    const push = vi.fn();
+    const r = mergeMoves({}, { '9-9': pend('2026-07-20') }, ids, push, base);
+    expect(r.moves).toEqual({});
+    expect(r.pending).toEqual({});
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('drops a pending move whose workout now sits on a different base date (layout reshape)', () => {
+    // Offline device moved '5-2'; another device did a layout-only reshape
+    // (same race/dates) so '5-2' now lands on a different day. Per-workout base
+    // catches what a plan-wide fingerprint would collide on.
+    const push = vi.fn();
+    const r = mergeMoves({}, { '5-2': pend('2026-07-20', '2026-08-04') }, ids, push, base);
+    expect(r.moves).toEqual({});
+    expect(r.pending).toEqual({});
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('baseDates maps every workout id to its scheduled date', () => {
+    const plan = { weeks: [
+      { workouts: [{ id: '0-0', date: '2026-07-06' }, { id: '0-1', date: '2026-07-08' }] },
+      { workouts: [{ id: '1-0', date: '2026-07-13' }] },
+    ] };
+    expect(baseDates(plan)).toEqual({ '0-0': '2026-07-06', '0-1': '2026-07-08', '1-0': '2026-07-13' });
+    expect(baseDates(null)).toEqual({});
   });
 });
 
