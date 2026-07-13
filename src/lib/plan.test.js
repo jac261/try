@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout, upgradePlanSegments, buildTrackerPlan } from './plan.js';
+import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout, upgradePlanSegments, buildTrackerPlan, applyTrackerFitness } from './plan.js';
 import { RACES } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { iso, addDays } from './date.js';
@@ -24,6 +24,28 @@ describe('buildTrackerPlan (the no-plan sentinel)', () => {
     expect(t.paces).toBe(plan.paces);
     expect(t.createdAt).toBe(plan.createdAt);
     expect(t.updatedAt).toBe('2026-07-13T10:00:00.000Z');
+  });
+
+  it('a tracker fitness update snapshots history and refreshes paces without a plan', () => {
+    const real = generatePlan({ ...profile('2026-09-23', '2026-07-01'), fivekSec: 1500 });
+    const t = buildTrackerPlan(real, '2026-07-13T10:00:00.000Z');
+    const up = applyTrackerFitness(t, { fivekSec: 1320 }, '2026-08-01T09:00:00.000Z');
+    // still the sentinel: no plan appears from a fitness update
+    expect(up.race).toBe('tracker');
+    expect(up.weeks).toEqual([]);
+    expect(up.createdAt).toBe(real.createdAt);
+    expect(up.updatedAt).toBe('2026-08-01T09:00:00.000Z');
+    // the OLD baseline lands in history, the new one is live
+    const snap = up.profile.fitnessHistory[up.profile.fitnessHistory.length - 1];
+    expect(snap.fivekSec).toBe(1500);
+    expect(snap.date).toBe('2026-08-01');
+    expect(up.profile.fivekSec).toBe(1320);
+    // paces recompute so recap/review verdicts judge against the new numbers
+    expect(up.paces.run.easy).toBeLessThan(t.paces.run.easy);
+    // the update stamps its own marker; mere tracker ENTRY must not (the
+    // Settings "Fitness updated" note gates on this, not on plan.updatedAt)
+    expect(up.profile.fitnessUpdatedAt).toBe('2026-08-01T09:00:00.000Z');
+    expect(t.profile.fitnessUpdatedAt).toBeUndefined();
   });
 
   it('the tracker race is real but never a generatable/selectable race', () => {

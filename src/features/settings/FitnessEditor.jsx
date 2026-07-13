@@ -3,7 +3,7 @@ import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { useSheetFocus } from '@/utils/useSheetFocus.js';
 
-export function FitnessEditor({ profile, onClose, onSave }) {
+export function FitnessEditor({ profile, onClose, onSave, noPlan }) {
   const lvl0 = T.FITNESS[profile.fitness] ? profile.fitness : 'intermediate';
   const [f, setF] = useState({
     fitness: lvl0,
@@ -20,7 +20,9 @@ export function FitnessEditor({ profile, onClose, onSave }) {
         aria-label="Update fitness" onClick={e => e.stopPropagation()}>
         <div className="grab" />
         <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 800 }}>Update fitness</h2>
-        <p className="lead">Logged a test, race or just got fitter? Update your numbers and every <b>upcoming</b> session re-targets to the new paces. Completed sessions and reschedules stay put.</p>
+        <p className="lead">{noPlan
+          ? <>Logged a test, race or just got fitter? Update your numbers and they carry into your fitness history, ready for your next plan.</>
+          : <>Logged a test, race or just got fitter? Update your numbers and every <b>upcoming</b> session re-targets to the new paces. Completed sessions and reschedules stay put.</>}</p>
         <label className="field"><span className="lab">Experience level</span></label>
         <div className="choice">
           {Object.values(T.FITNESS).map(l => (
@@ -42,7 +44,7 @@ export function FitnessEditor({ profile, onClose, onSave }) {
           css100Sec: T.parseTimeToSec(f.css100),
           ftp: f.ftp ? Number(f.ftp) : null,
           weightKg: f.weightKg ? Number(f.weightKg) : null,
-        })}>Save &amp; re-target plan</button>
+        })}>{noPlan ? 'Save to fitness history' : 'Save & re-target plan'}</button>
       </div>
     </div>
   );

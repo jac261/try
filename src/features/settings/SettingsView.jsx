@@ -188,7 +188,22 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
         </div>
         <div style={{ height: 12 }} />
         {tracker
-          ? <button className="btn primary" onClick={onEditPlan}><Icon name="calendar" size={18} /> Start a plan</button>
+          ? <>
+            <button className="btn primary" onClick={onEditPlan}><Icon name="calendar" size={18} /> Start a plan</button>
+            <div style={{ height: 10 }} />
+            {/* Tracker-safe: records a between-plans benchmark (a parkrun is a
+                5k test) into fitness history without generating a plan. */}
+            <button className="btn ghost" onClick={onEditFitness}><Icon name="trend" size={18} /> Update fitness</button>
+            {/* Gate on the profile's own fitness-update stamp, NOT plan.updatedAt:
+                merely entering tracker moves updatedAt, and this note must never
+                claim an update that did not happen. */}
+            {p.fitnessUpdatedAt && (() => {
+              const prev = (p.fitnessHistory || []).slice(-1)[0];
+              const delta = prev && prev.fivekSec && p.fivekSec
+                ? ' · 5k ' + T.fmtPace(prev.fivekSec) + ' → ' + T.fmtPace(p.fivekSec) : '';
+              return <p className="lead" style={{ margin: '10px 2px 0' }}>Fitness updated {T.fmtDate(T.iso(p.fitnessUpdatedAt.slice(0, 10)), { month: 'short', day: 'numeric' })}{delta}</p>;
+            })()}
+          </>
           : <>
             <button className="btn primary" onClick={onEditFitness}><Icon name="trend" size={18} /> Update fitness &amp; re-target</button>
             {plan.updatedAt && (() => {

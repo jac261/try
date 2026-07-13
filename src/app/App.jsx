@@ -24,6 +24,11 @@ import { PlanView } from '@/features/plan/PlanView.jsx';
 import { ProgressView } from '@/features/progress/ProgressView.jsx';
 import { WurmReveal } from '@/features/easter-egg/WurmReveal.jsx';
 
+// The tracker calendar browses back to the FIRST of the month six months ago
+// (addMonths snaps to the 1st), which is at most 213 days (Dec 31 → Jun 1);
+// one more covers the fence. Well inside the server's 365-day cap.
+const TRACKER_FEED_DAYS = 214;
+
 export function App({ storage, getToken, user }) {
   // upgradePlanSegments backfills profile data (zones/blocks) into plans
   // cached before the workout-profile release; a no-op on current plans.
@@ -62,6 +67,14 @@ export function App({ storage, getToken, user }) {
     { plan, log, moves, adjust, todayISO: T.iso(new Date()) }),
     [wellness, feels, plan, log, moves, adjust]);
   const [activities, setActivities] = useState(null); // recent watch activities (null until loaded / not connected)
+  // Activity fetches are guarded by a sequence counter: the shallow mount fetch
+  // and a deep tracker fetch can race, and last-write-wins would let a late
+  // 10-day response clobber the 6-month diary.
+  const actSeq = useRef(0);
+  const fetchActivities = days => {
+    const seq = ++actSeq.current;
+    sync.loadActivities(days).then(a => { if (a && seq === actSeq.current) setActivities(a); });
+  };
   const [thresholds, setThresholds] = useState(null); // intervals.icu per-sport thresholds (fitness watcher)
   // A failed plan write means this device and the account have diverged — the
   // catalog-drift incident proved that must never be silent again.
@@ -169,6 +182,10 @@ export function App({ storage, getToken, user }) {
       } else if (result) {
         const ids = result.refToId || {};
         setPlan(T.upgradePlanSegments(result.plan));
+        // A tracker plan adopted FROM the server (entered on another device)
+        // arrives after the mount fetch already ran shallow — deepen the feed
+        // to the diary window it is about to browse.
+        if (result.plan.race === 'tracker') fetchActivities(TRACKER_FEED_DAYS);
         // Merge, don't replace: an entry created while a plan push was still in
         // flight (stale gid → its own push was skipped) or offline exists only
         // locally — wholesale-replacing would silently lose it. The loading
@@ -209,10 +226,14 @@ export function App({ storage, getToken, user }) {
       }
     });
     // Recent watch activities → the "spotted on your watch" one-tap logging.
-    sync.loadActivities().then(a => { if (!cancelled && a) setActivities(a); });
+    // Tracker mode is a diary, so fetch as far back as its calendar browses
+    // instead of the spotting window — otherwise the calendar shows months of
+    // false blanks. (Sequence-guarded via fetchActivities against the deep
+    // refetch that entering tracker fires.)
+    fetchActivities(plan && plan.race === 'tracker' ? TRACKER_FEED_DAYS : undefined);
     sync.loadThresholds().then(t => { if (!cancelled && t) setThresholds(t); });
     return () => { cancelled = true; };
-  }, [sync]);
+  }, [sync]); // eslint-disable-line react-hooks/exhaustive-deps -- didHydrate-guarded: runs once
 
   // Fold a server wellness list into local state + the offline cache (server wins
   // per date; local-only days are pushed up). Also called when the Settings page
@@ -341,7 +362,18 @@ export function App({ storage, getToken, user }) {
     setPlan(np);
     sync.replacePlan(np).then(adoptMap);
   };
-  const updateFitness = fields => { retarget(fields); setEditFitness(false); };
+  // In tracker mode a fitness update must NOT generate a plan: it snapshots
+  // history, refreshes the numbers and paces, and the sentinel stays a
+  // sentinel (Phase 0 of docs/NO_PLAN_WORKFLOW.md — the benchmark window).
+  const updateFitness = fields => {
+    if (plan.race === 'tracker') {
+      const np = T.applyTrackerFitness(plan, fields, new Date().toISOString());
+      np.profile = withWeight(np.profile);
+      setPlan(np);
+      sync.replacePlan(np).then(m => { if (m) adoptMap(m); }); // silent, like enterTracker
+    } else retarget(fields);
+    setEditFitness(false);
+  };
   const applyTune = () => { const s = paceSuggestions(plan, log); if (s.length) retarget(tuneFields(plan.profile, s)); };
   const setFeel = (id, feel) => {
     const at = (log[id] && log[id].at) || new Date().toISOString();
@@ -454,6 +486,9 @@ export function App({ storage, getToken, user }) {
     setPlan(np);
     setEditPlan(false);
     setPlanSyncFailed(false); // clear any prior real-plan alarm; tracker never raises it
+    // The diary needs depth the spotting window doesn't: refetch the feed to
+    // match the tracker calendar's browsable range.
+    fetchActivities(TRACKER_FEED_DAYS);
     // Silent push: the backend catalog rejects a zero-week 'tracker' plan until
     // it ships support, so a failed save here is expected and must not raise the
     // "didn't save" alarm. The plan lives locally; hydrate keeps it and retries
@@ -578,7 +613,7 @@ export function App({ storage, getToken, user }) {
       })()}
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
 
-      {editFitness && <FitnessEditor profile={plan.profile} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
+      {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} />}
 

@@ -86,11 +86,15 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   const coach = [];
   // Tracker mode: the only card is the prompt to start the next plan. The
   // engine cards below are all empty here (no weeks to reason about) but we
-  // build only this one to be certain.
+  // build only this one to be certain. Copy is honest per connection state:
+  // without a feed, nothing is being "spotted" and the card must not claim it.
+  const connected = !!activities;
   if (tracker) coach.push({
     key: 'no-plan', cls: 'banner tune', icon: 'clipboard',
     title: 'Ready for your next plan?',
-    sub: 'You are in tracker mode. I am logging every session I spot on the right days. Tap to start your next plan.',
+    sub: connected
+      ? 'You are in tracker mode. Sessions from your watch land below and on your calendar. Tap to start your next plan.'
+      : 'You are in tracker mode. When you are ready for structure again, tap to start your next plan.',
     act: onEditPlan,
   });
   // The plan's own edges (race just passed / maintenance block ending)
@@ -101,7 +105,10 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   if (!tracker && offerTracker) coach.push({
     key: 'just-track', cls: 'banner', icon: 'clipboard',
     title: 'Or just track for now',
-    sub: 'Stop the plan and let me log what you do. Your fitness history is kept. Tap to switch to tracker mode.',
+    sub: (connected
+      ? 'Stop the plan and take a break from structure. Sessions from your watch still land on your calendar.'
+      : 'Stop the plan and take a break from structure.')
+      + ' Your fitness history is kept. Tap to switch to tracker mode.',
     act: onEnterTracker,
   });
   if (!tracker && weekly) {
@@ -151,7 +158,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
             <a className="reset" {...tap(() => setReviewToday(true))}>Review</a>
           </div>
           : today.length === 0
-            ? <div className="empty"><div className="big"><Icon name="rest" size={40} /></div>No session scheduled today.</div>
+            ? <div className="empty"><div className="big"><Icon name="rest" size={40} /></div>{tracker ? 'No plan running.' : 'No session scheduled today.'}</div>
             : today.map(row)}
         {(allDone || restDay) && next && <div className="tmrw" {...tap(() => open(next))}
           aria-label={'Next up, ' + T.fmtDate(effDate(next, moves), { weekday: 'long' }) + ': ' + easedOf(next).title + '. Open details'}>

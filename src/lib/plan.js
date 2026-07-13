@@ -673,6 +673,27 @@ export const buildTrackerPlan = function (plan, nowISO) {
   };
 };
 
+// Tracker-safe fitness update: a benchmark between plans (a parkrun IS a 5k
+// test) must be recordable without generating a plan. Same contract as a
+// retarget — snapshot the OLD baselines into fitnessHistory, merge the new
+// fields, recompute paces so recap/review verdicts judge against the new
+// numbers — but the sentinel stays a sentinel: race 'tracker', zero weeks.
+export const applyTrackerFitness = function (plan, fields, nowISO) {
+  const old = plan.profile;
+  // Local calendar day, matching retarget's snapshot convention (iso(), not the
+  // UTC slice of the timestamp — they differ around midnight).
+  const snapshot = { date: iso(new Date(nowISO)), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness };
+  // fitnessUpdatedAt lives on the PROFILE (stored verbatim as ProfileJson, so it
+  // survives the server round-trip; a top-level plan field would be dropped by
+  // toClientState). It exists so Settings can attribute "Fitness updated" to a
+  // real update — plan.updatedAt also moves on mere tracker entry.
+  const profile = Object.assign({}, old, fields, {
+    fitnessHistory: (old.fitnessHistory || []).concat([snapshot]),
+    fitnessUpdatedAt: nowISO,
+  });
+  return Object.assign({}, plan, { profile: profile, paces: computePaces(profile), updatedAt: nowISO });
+};
+
 // Bring a cached plan up to the current library schema: segments gained
 // zone/blocks data (workout profiles) after older plans were generated.
 // Pre-variant plans were built entirely from the canonical templates, so the
