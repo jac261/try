@@ -776,19 +776,19 @@ export const removeCustomWorkout = function (plan, id) {
 // (docs/NO_PLAN_FLOW.md): a finished plan ends into tracker mode unless the
 // user starts a new one. Deterministic from the plan itself — every device
 // reaches the same answer without coordination — and false while ANY plan day
-// remains. Race plans linger a full recovery week past their final week
-// (Jon, 2026-07-14: the week after race day belongs to the plan — recover
-// first, decide later), which also gives the post-race congratulations banner
-// and its one-tap recovery-week maintenance offer a real window even when
-// race day IS the last plan day — a Sunday race, the common case.
-// Maintenance needs none: its banner runs for the two weeks before the
-// horizon.
+// remains. Race plans generated since 2026-07-14 END with a scheduled
+// recovery week (Jon: the week after race day belongs to the plan — recover
+// first, decide later), so once that week is over the plan is over: no grace.
+// LEGACY race plans (cached before the scheduled week existed — their last
+// week is race week, not a recovery week) keep a seven-day grace so the
+// post-race congratulations banner still gets its window. Maintenance needs
+// none: its banner runs for the two weeks before the horizon.
 const POST_RACE_GRACE_DAYS = 7;
 export const planEnded = function (plan, todayISO) {
   if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return false;
   const race = RACES[plan.race];
-  const grace = race && !race.noRace ? POST_RACE_GRACE_DAYS : 0;
   const lastWeek = plan.weeks[plan.weeks.length - 1];
+  const grace = race && !race.noRace && !lastWeek.isRecovery ? POST_RACE_GRACE_DAYS : 0;
   return todayISO > iso(addDays(lastWeek.start, 6 + grace));
 };
 
@@ -926,9 +926,26 @@ export const generatePlan = function (profile) {
     shortRunway = totalWeeks < race.minWeeks;
   }
 
+  // Every race plan ends with a SCHEDULED recovery week after race week (Jon,
+  // 2026-07-14): a week of short easy sessions, then the plan is over and the
+  // app defaults to tracker mode. buildWeeks = the build-through-race portion;
+  // the recovery week is appended after it. Phase is 'Maintain' (the backend's
+  // phase catalog has no 'Recovery') with isRecovery carrying the semantics.
+  // Appended only while the total stays inside the backend's 40-week cap (a
+  // 40-week build previously saved fine and must keep saving); past that the
+  // plan behaves like a legacy one — planEnded's post-race grace covers the
+  // recovery window instead. The 41..52-week band was ALREADY rejected by the
+  // backend before this feature (frontend clamps at 52, the server at 40) — a
+  // pre-existing gap, tracked for the backend, not widened here.
+  const buildWeeks = totalWeeks;
+  const raceRecovery = !maintenance && buildWeeks < 40;
+  if (raceRecovery) totalWeeks = buildWeeks + 1;
+
   const phases = maintenance
     ? Array.from({ length: totalWeeks }, () => 'Maintain')
-    : Array.from({ length: leadIn }, () => 'Maintain').concat(computePhases(totalWeeks - leadIn, race.taperWeeks));
+    : Array.from({ length: leadIn }, () => 'Maintain')
+      .concat(computePhases(buildWeeks - leadIn, race.taperWeeks))
+      .concat(raceRecovery ? ['Maintain'] : []);
   // Scheduling preference: explicit training weekdays (0=Mon..6=Sun) + a long-session
   // day. Falls back to the legacy fixed layout when a profile predates the preference.
   const prefDays = (profile.trainingDays && profile.trainingDays.length >= 3)
@@ -952,9 +969,12 @@ export const generatePlan = function (profile) {
   // Place up to 3 benchmark tests (run → bike → swim) spread across the Base/Build
   // weeks — never on recovery / Peak / Taper — so paces recalibrate as fitness grows.
   const eligibleTestWeeks = [];
-  for (let w = 0; w < totalWeeks; w++) {
+  for (let w = 0; w < buildWeeks; w++) { // never in the post-race recovery week
     const ph = phases[w];
-    const rec = ((w + 1) % fitness.recoveryEvery === 0) && ph !== 'Taper' && w < totalWeeks - 2;
+    // buildWeeks, NOT totalWeeks: the appended recovery week inflated the
+    // boundary by one and let the periodic step-back land on the final Peak
+    // week, silently deloading the sharpening week (re-verify catch).
+    const rec = ((w + 1) % fitness.recoveryEvery === 0) && ph !== 'Taper' && w < buildWeeks - 2;
     if ((ph === 'Base' || ph === 'Build' || ph === 'Maintain') && !rec && w >= 1) eligibleTestWeeks.push(w);
   }
   const testByWeek = {};
@@ -968,18 +988,32 @@ export const generatePlan = function (profile) {
   const weeks = [];
   for (let w = 0; w < totalWeeks; w++) {
     const phase = phases[w];
+    // The appended post-race recovery week: everything easy, race-week legs.
+    const postRaceWeek = raceRecovery && w === buildWeeks;
     phasePos[phase] = phasePos[phase] === undefined ? 0 : phasePos[phase] + 1;
-    const isRecovery = (profile.postRace && w === 0)
-      || (((w + 1) % fitness.recoveryEvery === 0) && phase !== 'Taper' && w < totalWeeks - 2);
+    const isRecovery = postRaceWeek || (profile.postRace && w === 0)
+      || (((w + 1) % fitness.recoveryEvery === 0) && phase !== 'Taper' && w < buildWeeks - 2); // buildWeeks: see the eligibleTestWeeks note
     let load = loadFactor(phase, phasePos[phase], phaseLen[phase]) * fitness.factor;
     if (isRecovery) load *= fitness.recoveryDepth;
+    // Post-race legs want less than a mid-plan step-back: flat recovery volume,
+    // off the periodization curve entirely.
+    if (postRaceWeek) load = fitness.factor * fitness.recoveryDepth * 0.8;
 
     const testKind = testByWeek[w] || null;
 
-    // split template into weekend (long/brick) vs weekday slots
+    // split template into weekend (long/brick) vs weekday slots. The post-race
+    // week keeps the athlete's weekly rhythm but every slot becomes an easy
+    // session: no longs, no bricks, no quality — just moving again. Slots go
+    // through role 'quality' because typeFor's recovery branch maps that to
+    // the gentle type per discipline (Technique/Endurance/Easy) — role 'easy'
+    // would hand the bike a type buildBike has no branch for.
     const longs = [], mids = [];
     template.forEach(tok => {
       const [disc, role] = tok.split(':');
+      if (postRaceWeek) {
+        mids.push({ disc: disc === 'brick' ? 'bike' : disc, role: 'quality' });
+        return;
+      }
       (role === 'long' || role === 'brick' ? longs : mids).push({ disc, role });
     });
 
@@ -1023,7 +1057,9 @@ export const generatePlan = function (profile) {
         : raceScale;
       // Weakest-link bias: the limiting sport earns extra time while building;
       // Peak and Taper keep their race-specific shape untouched.
-      const wb = (phase === 'Base' || phase === 'Build' || phase === 'Maintain') && bias[s.disc] ? bias[s.disc] : 1;
+      // No weakest-link bias in the post-race recovery week: recovery is even
+      // by definition — the limiter gets its extra time while building.
+      const wb = !postRaceWeek && (phase === 'Base' || phase === 'Build' || phase === 'Maintain') && bias[s.disc] ? bias[s.disc] : 1;
       const dur = round5(durBase * load * wb);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;

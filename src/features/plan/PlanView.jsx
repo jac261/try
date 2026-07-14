@@ -31,24 +31,30 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
   const firstFuture = plan.weeks.findIndex(w => w.workouts.some(x => x.date >= todayISO));
   const [openWeek, setOpenWeek] = useState(firstFuture < 0 ? 0 : firstFuture);
 
+  const race = T.RACES[plan.race];
+  // The scheduled post-race recovery week (always the last week, isRecovery,
+  // race plans only) displays as its own 'Recovery' group and is excluded from
+  // the "N-week build" headline — the build is the build.
+  const hasRecoveryWeek = !race.noRace && plan.weeks.length > 0 && plan.weeks[plan.weeks.length - 1].isRecovery;
+  const buildLen = plan.totalWeeks - (hasRecoveryWeek ? 1 : 0);
   const phaseGroups = useMemo(() => {
     const g = [];
     plan.weeks.forEach(w => {
+      const disp = hasRecoveryWeek && w.index === plan.weeks.length - 1 ? 'Recovery' : w.phase;
       const last = g[g.length - 1];
-      if (last && last.phase === w.phase) { last.weeks++; last.min += w.totalMin; }
-      else g.push({ phase: w.phase, weeks: 1, min: w.totalMin, start: w.index });
+      if (last && last.phase === disp) { last.weeks++; last.min += w.totalMin; }
+      else g.push({ phase: disp, weeks: 1, min: w.totalMin, start: w.index });
     });
     return g;
-  }, [plan]);
+  }, [plan, hasRecoveryWeek]);
   const totalHrs = Math.round(plan.weeks.reduce((a, b) => a + b.totalMin, 0) / 60);
-  const race = T.RACES[plan.race];
 
   return (
     <>
       <div className="section-title"><InfoLink onOpen={onSupport} topic="plan-structure" />Plan overview</div>
       <div className="card">
         <h2>{race.noRace ? 'Maintenance block' : race.name + ' Triathlon'}</h2>
-        <p className="lead">{plan.totalWeeks}-week {race.noRace ? 'block' : 'build'} · {totalHrs} total training hours · {plan.profile.daysPerWeek} days/week</p>
+        <p className="lead">{buildLen}-week {race.noRace ? 'block' : 'build'}{hasRecoveryWeek ? ' + recovery week' : ''} · {totalHrs} total training hours · {plan.profile.daysPerWeek} days/week</p>
         {plan.shortRunway && <p className="lead" style={{ color: '#fde68a', fontSize: 13 }}>
           Short runway: fewer weeks than the recommended minimum for this distance, so this plan sharpens what you have rather than building from scratch.</p>}
         {plan.leadIn > 0 && <p className="lead" style={{ color: '#9ab8ff', fontSize: 13 }}>

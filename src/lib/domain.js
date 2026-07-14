@@ -58,4 +58,7 @@ export const PHASE_INFO = {
   Peak:  { color: '#f87171', blurb: 'Sharpen at race pace' },
   Taper: { color: '#c084fc', blurb: 'Rest, recover & arrive fresh' },
   Maintain: { color: '#2dd4bf', blurb: 'Stay fit & keep the engine ticking' },
+  // Display-only label for the scheduled post-race week (stored phase stays
+  // 'Maintain' — the backend's phase catalog has no 'Recovery').
+  Recovery: { color: '#34d399', blurb: 'Easy week after race day — soak it in' },
 };

@@ -13,24 +13,84 @@ const profile = (raceDate, startDate) => ({
 describe('planEnded (the default-to-no-plan rule)', () => {
   const p = generatePlan(profile('2026-09-23', '2026-07-01'));
   const lastDay = iso(addDays(p.weeks[p.weeks.length - 1].start, 6));
-  const GRACE = 7; // race plans linger a full recovery week past race week
+  const GRACE = 7; // legacy race plans (no scheduled recovery week) linger this long
 
-  it('a race plan ends after its last day plus the post-race grace', () => {
-    expect(planEnded(p, '2026-07-15')).toBe(false);                     // mid-plan
-    expect(planEnded(p, lastDay)).toBe(false);                          // last plan day
-    expect(planEnded(p, iso(addDays(lastDay, GRACE)))).toBe(false);     // grace: banner window
-    expect(planEnded(p, iso(addDays(lastDay, GRACE + 1)))).toBe(true);  // the morning after
+  it('a race plan ends the morning after its scheduled recovery week, no extra grace', () => {
+    // The generated plan's last week IS the recovery week now, so lastDay is
+    // the recovery week's Sunday.
+    expect(p.weeks[p.weeks.length - 1].isRecovery).toBe(true);
+    expect(planEnded(p, '2026-07-15')).toBe(false);            // mid-plan
+    expect(planEnded(p, lastDay)).toBe(false);                 // recovery week's last day
+    expect(planEnded(p, iso(addDays(lastDay, 1)))).toBe(true); // the morning after
   });
 
-  it('a Sunday race (race day == last plan day) still gets its banner window', () => {
-    // 2026-09-20 is a Sunday, so race day lands on the final plan day — the
-    // case where the first cut auto-transitioned the same morning the
-    // congratulations banner would first appear (2026-07-13 gauntlet catch).
+  it('a LEGACY race plan (last week is race week, no recovery week) keeps the 7-day grace', () => {
+    // Simulate a plan cached before the scheduled recovery week existed.
+    const legacy = { ...p, weeks: p.weeks.slice(0, -1) };
+    const legacyLast = iso(addDays(legacy.weeks[legacy.weeks.length - 1].start, 6));
+    expect(legacy.weeks[legacy.weeks.length - 1].isRecovery).toBe(false);
+    expect(planEnded(legacy, iso(addDays(legacyLast, GRACE)))).toBe(false);     // banner window
+    expect(planEnded(legacy, iso(addDays(legacyLast, GRACE + 1)))).toBe(true);  // then default
+  });
+
+  it('a Sunday race still gets its banner window: the recovery week follows race day', () => {
+    // 2026-09-20 is a Sunday — race day is the last day of the BUILD portion;
+    // the scheduled recovery week follows it, so the post-race banner has a
+    // full week before the default kicks in.
     const sun = generatePlan(profile('2026-09-20', '2026-07-01'));
-    const sunLast = iso(addDays(sun.weeks[sun.weeks.length - 1].start, 6));
-    expect(sun.weeks.flatMap(w => w.workouts).find(w => w.race).date).toBe(sunLast);
-    expect(planEnded(sun, iso(addDays(sunLast, 1)))).toBe(false); // banner shows post-race
-    expect(planEnded(sun, iso(addDays(sunLast, GRACE + 1)))).toBe(true);
+    const raceDay = sun.weeks.flatMap(w => w.workouts).find(w => w.race).date;
+    const recWeek = sun.weeks[sun.weeks.length - 1];
+    expect(recWeek.isRecovery).toBe(true);
+    expect(recWeek.start).toBe(iso(addDays(raceDay, 1))); // Monday after the Sunday race
+    expect(planEnded(sun, iso(addDays(raceDay, 1)))).toBe(false); // banner + recovery week
+    expect(planEnded(sun, iso(addDays(recWeek.start, 7)))).toBe(true); // morning after it ends
+  });
+
+  it('the recovery week is all easy sessions: no longs, bricks, quality or strength', () => {
+    const rec = p.weeks[p.weeks.length - 1];
+    const sessions = rec.workouts.filter(w => w.discipline !== 'rest');
+    expect(sessions.length).toBeGreaterThan(0);
+    sessions.forEach(w => {
+      expect(['Easy', 'Technique', 'Endurance'], w.id + ' ' + w.type).toContain(w.type);
+      expect(w.discipline, w.id).not.toBe('brick');
+      expect(w.discipline, w.id).not.toBe('strength');
+      expect(w.test, w.id).toBeFalsy();
+      expect(w.durationMin, w.id).toBeLessThanOrEqual(60);
+      // BUILT content, not just the type label: the first cut typed the bikes
+      // "Easy", which buildBike has no branch for — they fell into its
+      // Threshold else-branch and carried tempo blocks under an easy name.
+      // Swims allow Z3: the canonical Technique format's steady 100s are
+      // Z3-tagged in every recovery week today (pre-existing, gentle in
+      // absolute stress); run and bike stay strictly Z1/Z2.
+      expect(w.title, w.id).not.toMatch(/threshold|sweet spot|vo2|tempo/i);
+      const okZones = w.discipline === 'swim' ? ['Z1', 'Z2', 'Z3'] : ['Z1', 'Z2'];
+      w.segments.forEach(s => {
+        if (s.zone) expect(okZones, w.id + ' ' + s.label).toContain(s.zone);
+        (s.blocks || []).forEach(b => expect(okZones, w.id + ' block').toContain(b.zone));
+      });
+    });
+  });
+
+  it('the appended week never deloads the final Peak week (boundary reads buildWeeks)', () => {
+    // Re-verify catch: `w < totalWeeks - 2` loosened by the appended week let
+    // the periodic step-back land on the last Peak (sharpening) week — sprint,
+    // intermediate, 9-week build flips week index 7 when the boundary is wrong.
+    const p = generatePlan({ ...profile('2026-09-13', '2026-07-13'), raceType: 'sprint' });
+    const peakWeeks = p.weeks.filter(w => w.phase === 'Peak');
+    expect(peakWeeks.length).toBeGreaterThan(0);
+    expect(peakWeeks[peakWeeks.length - 1].isRecovery).toBe(false); // the sharpening week stays sharp
+    // and its quality is real quality, not recovery types
+    const lastPeak = peakWeeks[peakWeeks.length - 1];
+    expect(lastPeak.workouts.some(w => ['Threshold', 'VO2 Intervals', 'Race Pace', 'Sweet Spot', 'Open Water', 'Tempo'].includes(w.type))).toBe(true);
+  });
+
+  it('a race exactly 40 build-weeks out still saves: no recovery week appended past the backend cap', () => {
+    const far = generatePlan({ ...profile(iso(addDays('2026-07-06', 40 * 7 - 1)), '2026-07-06'), raceType: 'full' });
+    expect(far.totalWeeks).toBeLessThanOrEqual(40);       // backend MaxWeeks: previously savable stays savable
+    expect(far.weeks.length).toBe(far.totalWeeks);        // backend requires the counts to match
+    expect(far.weeks[far.weeks.length - 1].isRecovery).toBe(false); // legacy shape → planEnded grace covers post-race
+    expect(planEnded(far, iso(addDays(addDays(far.weeks[far.weeks.length - 1].start, 6), 7)))).toBe(false); // grace holds
+    expect(planEnded(far, iso(addDays(addDays(far.weeks[far.weeks.length - 1].start, 6), 8)))).toBe(true);
   });
 
   it('never fires for tracker, empty or missing plans', () => {
@@ -272,11 +332,11 @@ describe('generatePlan', () => {
     }
   });
 
-  it('clamps very short and very long horizons', () => {
+  it('clamps very short and very long horizons (build + the appended recovery week)', () => {
     const short = generatePlan(profile(iso(addDays('2026-07-01', 10)), '2026-07-01'));
-    expect(short.totalWeeks).toBe(4);
+    expect(short.totalWeeks).toBe(5); // 4-week build floor + the post-race recovery week
     const long = generatePlan(profile(iso(addDays('2026-07-01', 500)), '2026-07-01'));
-    expect(long.totalWeeks).toBe(52); // a year+ of runway caps at 52 (onboarding blocks beyond)
+    expect(long.totalWeeks).toBe(52); // 51-build cap + recovery week keeps the 52 ceiling
   });
 
   it('lead-in long sessions hold at maintenance scale, not race scale', () => {
@@ -291,7 +351,7 @@ describe('generatePlan', () => {
 
   it('opens with a Maintain lead-in when the race is beyond the build window', () => {
     const p = generatePlan(profile(iso(addDays('2026-07-01', 30 * 7)), '2026-07-01')); // 30 weeks, olympic max 24
-    expect(p.leadIn).toBe(p.totalWeeks - 24);
+    expect(p.leadIn).toBe(p.totalWeeks - 1 - 24); // totalWeeks includes the appended recovery week
     p.weeks.slice(0, p.leadIn).forEach(w => expect(w.phase).toBe('Maintain'));
     expect(p.weeks[p.leadIn].phase).toBe('Base'); // the build starts after
     const raceDay = p.weeks.flatMap(w => w.workouts).find(w => w.race);

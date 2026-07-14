@@ -179,7 +179,7 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
         <div className="statline">
           <div className="s"><b>{p.daysPerWeek}</b><span>days/week</span></div>
           <div className="s"><b style={{ textTransform: 'capitalize' }}>{p.fitness}</b><span>level</span></div>
-          {!tracker && <div className="s"><b>{plan.totalWeeks}</b><span>weeks</span></div>}
+          {!tracker && <div className="s"><b>{plan.totalWeeks - (plan.weeks.length && plan.weeks[plan.weeks.length - 1].isRecovery && !T.RACES[plan.race].noRace ? 1 : 0)}</b><span>build weeks</span></div>}
         </div>
         <div className="statline">
           <div className="s"><b>{p.fivekSec ? T.fmtPace(p.fivekSec / 5) : '~' + T.fmtPace((T.FITNESS[p.fitness] || T.FITNESS.intermediate).est5k / 5)}</b><span>{p.fivekSec ? '5k pace/km' : '5k pace · est'}</span></div>

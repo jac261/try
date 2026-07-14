@@ -53,10 +53,12 @@ describe('generatePlan weakest-link bias', () => {
     expect(mins(biased, 'run')).toBe(mins(plain, 'run')); // only the limiter moves
   });
 
-  it('taper keeps its race-specific shape: no bias applied', () => {
+  it('taper and the post-race recovery week keep their shape: no bias applied', () => {
     const biased = generatePlan({ ...base, fivekSec: 1218, css100Sec: 120, ftp: 222, weightKg: 64.3 });
     const plain = generatePlan(base);
-    const taperSwim = p => p.weeks[p.weeks.length - 1].workouts.filter(w => w.discipline === 'swim' && !w.race);
-    expect(taperSwim(biased).map(w => w.durationMin)).toEqual(taperSwim(plain).map(w => w.durationMin));
+    // last week = the post-race recovery week; the week before = race/taper week
+    const swimAt = (p, fromEnd) => p.weeks[p.weeks.length - fromEnd].workouts.filter(w => w.discipline === 'swim' && !w.race);
+    [1, 2].forEach(fromEnd =>
+      expect(swimAt(biased, fromEnd).map(w => w.durationMin)).toEqual(swimAt(plain, fromEnd).map(w => w.durationMin)));
   });
 });
