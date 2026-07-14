@@ -76,22 +76,30 @@ function swimRep(pc, key, zone, n, repM, restSec) {
   };
 }
 
-function buildRun(type, dur, pc, seed, phase) {
+function buildRun(type, dur, pc, seed, phase, intensity = 0) {
   const v = n => (seed || 0) % n;
   // Durability: intervals on tired legs at the end of the long session build
-  // fatigue resistance — a Build/Peak tool, never Base or recovery weeks.
-  const durability = phase === 'Build' || phase === 'Peak';
+  // fatigue resistance — a Build/Peak tool, never Base or recovery weeks, and
+  // never for a beginner (intensity < 0): threshold reps on already-tired legs
+  // are a poor risk/reward at that level. The dur floor keeps the steady lead-in
+  // (dur − 25) positive when a Long is trimmed small.
+  // Gate on phase + level only — NOT dur. Both are stable across an ease/trim
+  // rebuild (the workout keeps its phase, the athlete keeps their level), so the
+  // variant-menu size v(durability ? 3 : 2) stays constant and a rebuilt session
+  // keeps its format. Short durations are handled by clamping the lead-ins, not
+  // by shrinking the menu (which would flip the variant on a trim across 45).
+  const durability = (phase === 'Build' || phase === 'Peak') && intensity >= 0;
   let segs = [], title = 'Run';
   if (type === 'Long') {
     title = 'Long Run';
     segs = [
       [{ label: 'Steady aerobic', min: dur, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' }],
       [
-        { label: 'Steady aerobic', min: dur - 15, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+        { label: 'Steady aerobic', min: Math.max(5, dur - 15), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
         { label: 'Fast finish', min: 15, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
       ],
       [
-        { label: 'Steady aerobic', min: dur - 25, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+        { label: 'Steady aerobic', min: Math.max(5, dur - 25), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
         { label: '4 × (3 min threshold / 2 min easy) — on tired legs', min: 20, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(4, 3, 'Z4', 2, 'Z2') },
         { label: 'Ease home', min: 5, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
@@ -207,24 +215,27 @@ function buildRun(type, dur, pc, seed, phase) {
   return { title: title, segments: segs, distance: dist, unit: 'km' };
 }
 
-function buildBike(type, dur, pc, seed, phase) {
+function buildBike(type, dur, pc, seed, phase, intensity = 0) {
   const v = n => (seed || 0) % n;
-  // Durability: see buildRun — interval finishes are a Build/Peak tool only.
-  const durability = phase === 'Build' || phase === 'Peak';
+  // Durability: see buildRun — a Build/Peak tool, never for a beginner, and only
+  // when the ride is long enough to carry the tired-legs finish (dur − 32 > 0).
+  // See buildRun: gated on phase + level only (both stable across a rebuild), so
+  // the variant menu never resizes on a trim; lead-ins are clamped, not the menu.
+  const durability = (phase === 'Build' || phase === 'Peak') && intensity >= 0;
   let segs = [], title = 'Bike';
   if (type === 'Long') {
     title = 'Long Ride';
     segs = [
       [
-        { label: 'Endurance', min: dur - 20, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+        { label: 'Endurance', min: Math.max(5, dur - 20), detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
         { label: '2 × 6 min tempo surges', min: 20, detail: bikeDetail(pc, 0.83, 0.9, 'Z3'), zone: 'Z3', blocks: rep(2, 6, 'Z3', 4, 'Z2') },
       ],
       [
-        { label: 'Endurance', min: dur - 25, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
-        { label: '2 × 10 min sweet spot / 5 min easy', min: 25, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3', blocks: rep(2, 10, 'Z3', 2.5, 'Z1') },
+        { label: 'Endurance', min: Math.max(5, dur - 25), detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+        { label: '2 × 10 min sweet spot / 2.5 min easy', min: 25, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3', blocks: rep(2, 10, 'Z3', 2.5, 'Z1') },
       ],
       [
-        { label: 'Endurance', min: dur - 32, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+        { label: 'Endurance', min: Math.max(5, dur - 32), detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
         { label: '3 × (5 min at threshold / 3 min easy) — on tired legs', min: 24, detail: bikeDetail(pc, 0.95, 1.05, 'Z4'), zone: 'Z4', blocks: rep(3, 5, 'Z4', 3, 'Z1') },
         { label: 'Ease home', min: 8, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
@@ -234,11 +245,11 @@ function buildBike(type, dur, pc, seed, phase) {
     segs = [
       [{ label: 'Steady', min: dur, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' }],
       [
-        { label: 'Steady', min: dur - 18, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+        { label: 'Steady', min: Math.max(5, dur - 18), detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
         { label: '3 × 6 min high cadence (95–105 rpm)', min: 18, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
       ],
       [
-        { label: 'Steady', min: dur - 24, detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+        { label: 'Steady', min: Math.max(5, dur - 24), detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
         { label: '3 × 8 min low cadence (60–65 rpm), seated', min: 24, detail: bikeDetail(pc, 0.72, 0.8, 'Z3'), zone: 'Z3' },
       ],
     ][v(3)];
@@ -301,7 +312,7 @@ function buildBike(type, dur, pc, seed, phase) {
       ],
       [
         { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
-        { label: sets + ' × 12 × (30 s hard / 30 s easy) · 4 min between sets', min: sets * 14, detail: bikeDetail(pc, 1.06, 1.2, 'Z5'), zone: 'Z5', blocks: thirties },
+        { label: sets + ' × 12 × (30 s hard / 30 s easy) · 2 min between sets', min: sets * 14, detail: bikeDetail(pc, 1.06, 1.2, 'Z5'), zone: 'Z5', blocks: thirties },
         { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
@@ -315,8 +326,12 @@ function buildBike(type, dur, pc, seed, phase) {
     const reps = clamp(Math.round((dur - 25) / 12), 3, 5);
     const overs = clamp(Math.round((dur - 25) / 12), 2, 4);
     const shorts = clamp(Math.round((dur - 25) / 8), 3, 6);
+    // Over-under: the "under" legs sit just below threshold (high tempo, Z3) and
+    // the "over" legs just above (threshold, Z4) — NOT Z5. Tagging the overs Z5
+    // sent the watch a tempo-to-VO2 swing (106-120% FTP) that contradicted the
+    // ~90/~105% the card promised and the "over-under" name.
     const ou = Array.from({ length: overs }).flatMap(() =>
-      [{ min: 2, zone: 'Z3' }, { min: 1, zone: 'Z5' }, { min: 2, zone: 'Z3' }, { min: 1, zone: 'Z5' }, { min: 2, zone: 'Z3' }, { min: 1, zone: 'Z5' }, { min: 3, zone: 'Z1' }]);
+      [{ min: 2, zone: 'Z3' }, { min: 1, zone: 'Z4' }, { min: 2, zone: 'Z3' }, { min: 1, zone: 'Z4' }, { min: 2, zone: 'Z3' }, { min: 1, zone: 'Z4' }, { min: 3, zone: 'Z1' }]);
     segs = [
       [
         { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
@@ -325,7 +340,7 @@ function buildBike(type, dur, pc, seed, phase) {
       ],
       [
         { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
-        { label: overs + ' × (9 min over-unders: 2 min low / 1 min high / 3 min easy)', min: overs * 12, detail: bikeDetail(pc, 0.92, 1.06, 'Z4'), zone: 'Z4', blocks: ou },
+        { label: overs + ' × (9 min over-unders: 2 min low / 1 min high / 3 min easy)', min: overs * 12, detail: bikeDetail(pc, 0.9, 1.05, 'Z4'), zone: 'Z4', blocks: ou },
         { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
@@ -560,9 +575,15 @@ function baseDuration(discipline, role, race) {
   return 40;
 }
 
-function buildWorkout(discipline, type, dur, pc, phase, seed) {
-  if (discipline === 'run') return buildRun(type, dur, pc, seed, phase);
-  if (discipline === 'bike') return buildBike(type, dur, pc, seed, phase);
+// intensity (the athlete's fitness-level dial, −1 beginner … +2 elite) gates the
+// durability finish; derive it from the profile at every call site so a rebuilt
+// session keeps the same variant as the one it replaces.
+function intensityOf(profile) {
+  return (FITNESS[profile && profile.fitness] || FITNESS.intermediate).intensity;
+}
+function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0) {
+  if (discipline === 'run') return buildRun(type, dur, pc, seed, phase, intensity);
+  if (discipline === 'bike') return buildBike(type, dur, pc, seed, phase, intensity);
   if (discipline === 'swim') return buildSwim(type, dur, pc, seed);
   if (discipline === 'brick') return buildBrick(dur, pc, phase, seed);
   if (discipline === 'strength') return buildStrength(phase);
@@ -576,7 +597,7 @@ export const easeWorkout = function (w, plan) {
   if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
   const easyType = disc === 'swim' ? 'Technique' : (disc === 'bike' ? 'Endurance' : 'Easy');
   const dur = Math.max(25, round5(w.durationMin * 0.65));
-  const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week);
+  const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile));
   return Object.assign({}, w, {
     type: easyType, title: built.title, durationMin: dur,
     distance: built.distance, unit: built.unit, segments: built.segments,
@@ -593,7 +614,7 @@ export const trimWorkout = function (w, plan, factor) {
   if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
   const dur = Math.max(20, round5(w.durationMin * factor));
   if (dur >= w.durationMin) return w;
-  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week);
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile));
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
     distance: built.distance, unit: built.unit, segments: built.segments,
@@ -608,7 +629,7 @@ export const boostWorkout = function (w, plan, factor) {
   if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
   const dur = round5(w.durationMin * factor);
   if (dur <= w.durationMin) return w;
-  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week);
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile));
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
     distance: built.distance, unit: built.unit, segments: built.segments,
@@ -626,7 +647,7 @@ export const addCustomWorkout = function (plan, { discipline, type, durationMin,
   const wk = plan.weeks.find(w => dateISO >= w.start && dateISO <= iso(addDays(w.start, 6)))
     || plan.weeks[plan.weeks.length - 1];
   const seed = wk.isRecovery ? 0 : wk.index;
-  const built = buildWorkout(discipline, type, durationMin, plan.paces, wk.phase, seed);
+  const built = buildWorkout(discipline, type, durationMin, plan.paces, wk.phase, seed, intensityOf(plan.profile));
   const dur = built.durationMin || durationMin; // strength fixes its own length
   const key = 'x-' + dateISO.split('-').join('');
   const taken = new Set(wk.workouts.map(x => x.id));
@@ -710,7 +731,7 @@ export const upgradePlanSegments = function (plan) {
       const current = segsNow.some(s => s.zone || s.blocks)
         && !(w.discipline === 'swim' && segsNow.some(s => s.blocks && !s.swim));
       if (current) return w;
-      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0);
+      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile));
       if (!(built.segments || []).some(s => s.zone || s.blocks)) return w; // swims/strength stay as they are
       changed = true;
       return Object.assign({}, w, { segments: built.segments });
@@ -877,7 +898,7 @@ export const generatePlan = function (profile) {
       const dur = round5(durBase * load * wb);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
-      const built = buildWorkout(s.disc, type, dur, pc, phase, seed);
+      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity);
       workouts.push({
         id: w + '-' + d, week: w, phase: phase, date: date, seed: seed,
         discipline: s.disc, role: s.role, type: type, title: built.title,
@@ -985,7 +1006,7 @@ export const generatePlan = function (profile) {
           touched = true;
           const t = typeFor(wo.discipline, wo.role, wo.phase, true, fitness.intensity);
           const dur = Math.max(20, round5(wo.durationMin * 0.6));
-          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed);
+          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity);
           return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, unit: built.unit, segments: built.segments };
         }
         return wo;

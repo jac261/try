@@ -56,6 +56,72 @@ describe('buildTrackerPlan (the no-plan sentinel)', () => {
   });
 });
 
+describe('workout library — Tranche 1 audit fixes', () => {
+  const forLevel = f => generatePlan({ ...profile('2026-09-23', '2026-07-01'), fitness: f });
+  const allSegs = p => p.weeks.flatMap(w => w.workouts).flatMap(w => (w.segments || []).map(s => ({ ...s, w })));
+
+  it('a beginner never gets a threshold "on tired legs" durability finish (E)', () => {
+    const beg = forLevel('beginner');
+    expect(allSegs(beg).some(s => /on tired legs/i.test(s.label || ''))).toBe(false);
+    // intermediate keeps it available (gate is level-aware, not a blanket removal)
+    const int = forLevel('intermediate');
+    expect(allSegs(int).some(s => /on tired legs/i.test(s.label || ''))).toBe(true);
+  });
+
+  it('the bike over-under is delivered around threshold, never VO2/Z5 (B)', () => {
+    // advanced bike quality in Build reaches the Threshold rung; a half plan has
+    // enough Build weeks to land the over-under variant (seed % 3 === 1).
+    const half = generatePlan({ ...profile('2027-03-01', '2026-09-01'), raceType: 'half', fitness: 'advanced' });
+    const ous = allSegs(half).filter(s => /over-under/i.test(s.label || '') && s.blocks);
+    expect(ous.length).toBeGreaterThan(0);
+    ous.forEach(s => s.blocks.forEach(b => expect(['Z1', 'Z3', 'Z4']).toContain(b.zone)));
+  });
+
+  it('no builder yields a negative or zero-length segment at short durations (A-guard)', () => {
+    const p = forLevel('intermediate');
+    // trim EVERY Long (both disciplines, all seeds/variants) to the floor so the
+    // offset variants — where the dur-15/dur-25/dur-32 clamps actually bite — are
+    // exercised, not just the first Long's variant 0.
+    const longs = p.weeks.flatMap(w => w.workouts).filter(w => w.type === 'Long');
+    expect(longs.some(w => w.discipline === 'run')).toBe(true);
+    longs.forEach(long => {
+      const trimmed = trimWorkout(long, p, 0.1);
+      trimmed.segments.forEach(s => { if (s.min != null) expect(s.min, long.discipline + ' ' + long.id + ' ' + s.label).toBeGreaterThan(0); });
+    });
+    // custom short Endurance bike (the dur-18 / dur-24 lead-ins the first cut missed)
+    for (let wk = 0; wk < p.weeks.length; wk++) {
+      const r = addCustomWorkout(p, { discipline: 'bike', type: 'Endurance', durationMin: 20, dateISO: p.weeks[wk].start });
+      r.workout.segments.forEach(s => { if (s.min != null) expect(s.min, 'custom endurance wk ' + wk).toBeGreaterThan(0); });
+    }
+  });
+
+  it('trimming a Long across the 45 min mark keeps its variant (rebuild-format invariant)', () => {
+    const p = forLevel('intermediate');
+    const long = p.weeks.flatMap(w => w.workouts)
+      .find(w => w.type === 'Long' && w.discipline === 'run' && w.durationMin > 45 && (w.phase === 'Build' || w.phase === 'Peak'));
+    expect(long).toBeTruthy();
+    const trimmed = trimWorkout(long, p, 0.6); // 70 -> 42, crosses 45
+    expect(trimmed.durationMin).toBeLessThan(45);
+    // the durability menu no longer resizes on dur, so the same seed picks the
+    // same variant: the segment labels (the variant's identity) are unchanged
+    expect(trimmed.segments.map(s => s.label)).toEqual(long.segments.map(s => s.label));
+  });
+
+  it('interval "between sets" labels match the recovery the blocks encode (C)', () => {
+    const segs = allSegs(forLevel('elite')).concat(allSegs(forLevel('advanced')));
+    // the bike VO2 30/30 set-rest is 2 min; the label must say 2, not 4
+    expect(segs.some(s => /30 s easy\) · 4 min between sets/.test(s.label || ''))).toBe(false);
+    expect(segs.some(s => /30 s easy\) · 2 min between sets/.test(s.label || ''))).toBe(true);
+  });
+
+  it('interval labels match the recoveries their blocks actually encode (C)', () => {
+    const segs = allSegs(forLevel('intermediate'));
+    // the "sweet spot" long-ride label states its true 2.5 min recovery, not 5
+    expect(segs.some(s => /sweet spot \/ 5 min easy/i.test(s.label || ''))).toBe(false);
+    expect(segs.some(s => /sweet spot \/ 2\.5 min easy/i.test(s.label || ''))).toBe(true);
+  });
+});
+
 describe('generatePlan', () => {
   it('produces weeks, paces and a clamped week count', () => {
     const p = generatePlan(profile('2026-09-23', '2026-07-01'));
