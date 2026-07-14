@@ -772,6 +772,24 @@ export const removeCustomWorkout = function (plan, id) {
   return Object.assign({}, plan, { weeks: weeks });
 };
 
+// Has this plan run past its last day? The default-to-no-plan rule
+// (docs/NO_PLAN_FLOW.md): a finished plan ends into tracker mode unless the
+// user starts a new one. Deterministic from the plan itself — every device
+// reaches the same answer without coordination — and false while ANY plan day
+// remains. Race plans linger a few grace days past their final week so the
+// post-race congratulations banner (and its one-tap recovery-week maintenance
+// offer) gets a window even when race day IS the last plan day — a Sunday
+// race, the common case. Maintenance needs none: its banner runs for the two
+// weeks before the horizon.
+const POST_RACE_GRACE_DAYS = 3;
+export const planEnded = function (plan, todayISO) {
+  if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return false;
+  const race = RACES[plan.race];
+  const grace = race && !race.noRace ? POST_RACE_GRACE_DAYS : 0;
+  const lastWeek = plan.weeks[plan.weeks.length - 1];
+  return todayISO > iso(addDays(lastWeek.start, 6 + grace));
+};
+
 // The tracker sentinel: a plan with no weeks, carrying the athlete's profile
 // (fitness history, paces, dials) forward so the next plan and the progress
 // trend survive when they end this one. race:'tracker' is the sole predicate

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout, upgradePlanSegments, buildTrackerPlan, applyTrackerFitness, segMinutes } from './plan.js';
+import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout, upgradePlanSegments, buildTrackerPlan, applyTrackerFitness, segMinutes, planEnded } from './plan.js';
 import { RACES } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { iso, addDays } from './date.js';
@@ -8,6 +8,43 @@ const profile = (raceDate, startDate) => ({
   name: 'T', raceType: 'olympic', fitness: 'intermediate',
   trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5,
   raceDate, startDate,
+});
+
+describe('planEnded (the default-to-no-plan rule)', () => {
+  const p = generatePlan(profile('2026-09-23', '2026-07-01'));
+  const lastDay = iso(addDays(p.weeks[p.weeks.length - 1].start, 6));
+  const GRACE = 3; // race plans linger so the post-race banner gets a window
+
+  it('a race plan ends after its last day plus the post-race grace', () => {
+    expect(planEnded(p, '2026-07-15')).toBe(false);                     // mid-plan
+    expect(planEnded(p, lastDay)).toBe(false);                          // last plan day
+    expect(planEnded(p, iso(addDays(lastDay, GRACE)))).toBe(false);     // grace: banner window
+    expect(planEnded(p, iso(addDays(lastDay, GRACE + 1)))).toBe(true);  // the morning after
+  });
+
+  it('a Sunday race (race day == last plan day) still gets its banner window', () => {
+    // 2026-09-20 is a Sunday, so race day lands on the final plan day — the
+    // case where the first cut auto-transitioned the same morning the
+    // congratulations banner would first appear (2026-07-13 gauntlet catch).
+    const sun = generatePlan(profile('2026-09-20', '2026-07-01'));
+    const sunLast = iso(addDays(sun.weeks[sun.weeks.length - 1].start, 6));
+    expect(sun.weeks.flatMap(w => w.workouts).find(w => w.race).date).toBe(sunLast);
+    expect(planEnded(sun, iso(addDays(sunLast, 1)))).toBe(false); // banner shows post-race
+    expect(planEnded(sun, iso(addDays(sunLast, GRACE + 1)))).toBe(true);
+  });
+
+  it('never fires for tracker, empty or missing plans', () => {
+    expect(planEnded(buildTrackerPlan(p, '2026-07-13T10:00:00.000Z'), '2099-01-01')).toBe(false);
+    expect(planEnded({ race: 'olympic', weeks: [] }, '2099-01-01')).toBe(false);
+    expect(planEnded(null, '2099-01-01')).toBe(false);
+  });
+
+  it('a maintenance block ends the morning after its horizon, no grace', () => {
+    const m = generatePlan({ ...profile('2026-09-23', '2026-07-01'), raceType: 'maintenance', horizonWeeks: 12 });
+    const mLast = iso(addDays(m.weeks[m.weeks.length - 1].start, 6));
+    expect(planEnded(m, mLast)).toBe(false);
+    expect(planEnded(m, iso(addDays(mLast, 1)))).toBe(true);
+  });
 });
 
 describe('buildTrackerPlan (the no-plan sentinel)', () => {

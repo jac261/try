@@ -73,7 +73,7 @@ from.
 | No-plan state exists; nothing scheduled; honest per-tab degradation | Shipped (tracker mode) |
 | Exit via the "Start a new plan" card on Today | Shipped (the tracker card opens the race and dates picker) |
 | Explicit early exit from a live plan (Settings) | Shipped |
-| **Default to no plan when a plan ends** | Pending. Today the end-of-plan banners offer maintenance or just-track and wait for a tap; nothing auto-transitions. Needs a deliberate transition when race day or the maintenance horizon passes without user action. |
+| **Default to no plan when a plan ends** | Shipped. `planEnded` (plan.js): once the plan's last day has passed, the app enters tracker mode on the next load (hydration-gated so a stale cache never outruns the server view). The post-race and maintenance-horizon banners keep their window while plan days remain. |
 | Wellness feeding the engine constantly, both states | Shipped (wellness store is plan-independent; readiness works in tracker) |
 | Recorded workouts captured and displayed in both states | Shipped (watch feed on Today and Calendar, recap on tap, deep diary window) |
 | **Recorded workouts feeding the engine in the no-plan state** | Pending (Phase 3 of docs/NO_PLAN_WORKFLOW.md: the sessions resource, manual quick-log, and next-plan seeding from trailing weekly minutes per discipline). Today the engine's run-load and derived-load signals read plan logs only, so they stand down in tracker mode. |

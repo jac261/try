@@ -273,6 +273,40 @@ export function App({ storage, getToken, user }) {
     setWellness(merged);
   };
 
+  // Drop to tracker mode: replace the plan with the no-weeks sentinel, keeping
+  // the profile and fitness history. Overlays prune to empty (no workout ids
+  // survive), exactly as reshapePlan does against a fresh graph. Defined HERE,
+  // above the early returns, because the default-to-no-plan effect below must
+  // be an unconditional hook — declaring it after the loading/onboarding
+  // returns changed the hook count between renders and crashed the app (the
+  // 2026-07-13 gauntlet catch on this feature's first cut).
+  const enterTracker = () => {
+    const np = T.buildTrackerPlan(plan, new Date().toISOString());
+    setLog({}); setMoves({}); setPendingMoves({}); setAdjust({});
+    setPlan(np);
+    setEditPlan(false);
+    setPlanSyncFailed(false); // clear any prior real-plan alarm; tracker never raises it
+    // The diary needs depth the spotting window doesn't: refetch the feed to
+    // match the tracker calendar's browsable range.
+    fetchActivities(TRACKER_FEED_DAYS);
+    // Silent push: the backend catalog rejects a zero-week 'tracker' plan until
+    // it ships support, so a failed save here is expected and must not raise the
+    // "didn't save" alarm. The plan lives locally; hydrate keeps it and retries
+    // the push on every load, so it syncs the moment the backend accepts it.
+    sync.replacePlan(np).then(m => { if (m) adoptMap(m); });
+  };
+  // Default-to-no-plan (docs/NO_PLAN_FLOW.md): a plan whose last day has passed
+  // ends into tracker mode unless the user already started a new one. Gated on
+  // hydration so a stale cached plan never transitions before the server view
+  // arrives (the server may hold a newer plan from another device); after the
+  // transition plan.race is 'tracker', so the re-run is a no-op. The banners
+  // (post-race, maintenance horizon) keep their window: planEnded stays false
+  // through the race plan's post-race grace days.
+  useEffect(() => {
+    if (!hydrated || !plan) return;
+    if (T.planEnded(plan, T.iso(new Date()))) enterTracker();
+  }, [hydrated, plan]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!hydrated) return (
     <div className="app">
       <div className="topbar"><h1><Icon name="logo" size={26} /> Try</h1></div>
@@ -507,24 +541,6 @@ export function App({ storage, getToken, user }) {
     // PUT replaces the plan graph; the server prunes logs/moves for workouts that
     // no longer exist, mirroring the local prune above.
     sync.replacePlan(np).then(adoptMap);
-  };
-  // Drop to tracker mode: replace the plan with the no-weeks sentinel, keeping
-  // the profile and fitness history. Overlays prune to empty (no workout ids
-  // survive), exactly as reshapePlan does against a fresh graph.
-  const enterTracker = () => {
-    const np = T.buildTrackerPlan(plan, new Date().toISOString());
-    setLog({}); setMoves({}); setPendingMoves({}); setAdjust({});
-    setPlan(np);
-    setEditPlan(false);
-    setPlanSyncFailed(false); // clear any prior real-plan alarm; tracker never raises it
-    // The diary needs depth the spotting window doesn't: refetch the feed to
-    // match the tracker calendar's browsable range.
-    fetchActivities(TRACKER_FEED_DAYS);
-    // Silent push: the backend catalog rejects a zero-week 'tracker' plan until
-    // it ships support, so a failed save here is expected and must not raise the
-    // "didn't save" alarm. The plan lives locally; hydrate keeps it and retries
-    // the push on every load, so it syncs the moment the backend accepts it.
-    sync.replacePlan(np).then(m => { if (m) adoptMap(m); });
   };
   const endPlanToTracker = () => { if (confirm('End your plan and just track? Your fitness history is kept.')) enterTracker(); };
   // User-added sessions: first-class plan workouts (flagged custom), persisted
