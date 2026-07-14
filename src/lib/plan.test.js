@@ -13,7 +13,7 @@ const profile = (raceDate, startDate) => ({
 describe('planEnded (the default-to-no-plan rule)', () => {
   const p = generatePlan(profile('2026-09-23', '2026-07-01'));
   const lastDay = iso(addDays(p.weeks[p.weeks.length - 1].start, 6));
-  const GRACE = 3; // race plans linger so the post-race banner gets a window
+  const GRACE = 7; // race plans linger a full recovery week past race week
 
   it('a race plan ends after its last day plus the post-race grace', () => {
     expect(planEnded(p, '2026-07-15')).toBe(false);                     // mid-plan

@@ -776,12 +776,14 @@ export const removeCustomWorkout = function (plan, id) {
 // (docs/NO_PLAN_FLOW.md): a finished plan ends into tracker mode unless the
 // user starts a new one. Deterministic from the plan itself — every device
 // reaches the same answer without coordination — and false while ANY plan day
-// remains. Race plans linger a few grace days past their final week so the
-// post-race congratulations banner (and its one-tap recovery-week maintenance
-// offer) gets a window even when race day IS the last plan day — a Sunday
-// race, the common case. Maintenance needs none: its banner runs for the two
-// weeks before the horizon.
-const POST_RACE_GRACE_DAYS = 3;
+// remains. Race plans linger a full recovery week past their final week
+// (Jon, 2026-07-14: the week after race day belongs to the plan — recover
+// first, decide later), which also gives the post-race congratulations banner
+// and its one-tap recovery-week maintenance offer a real window even when
+// race day IS the last plan day — a Sunday race, the common case.
+// Maintenance needs none: its banner runs for the two weeks before the
+// horizon.
+const POST_RACE_GRACE_DAYS = 7;
 export const planEnded = function (plan, todayISO) {
   if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return false;
   const race = RACES[plan.race];
