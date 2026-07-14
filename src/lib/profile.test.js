@@ -13,7 +13,7 @@ describe('workoutBlocks (interval profile)', () => {
     const blocks = workoutBlocks(w);
     expect(blocks[0]).toEqual({ min: 15, zone: 'Z2' });                       // warm-up
     expect(blocks.filter(b => b.zone === 'Z4').map(b => b.min)).toEqual([9, 9, 9]); // 3 × 9 min
-    expect(blocks[blocks.length - 1]).toEqual({ min: 10, zone: 'Z1' });      // cool-down
+    expect(blocks[blocks.length - 1]).toEqual({ min: 9, zone: 'Z1' });       // cool-down (flexed so the session sums to durationMin 60)
   });
 
   it('draws the pyramid fartlek sized to the session', () => {

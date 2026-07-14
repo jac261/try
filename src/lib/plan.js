@@ -58,6 +58,68 @@ function rep(n, on, onZone, off, offZone) {
   return blocks;
 }
 
+/* ---- sizing: make a variant's segments sum to exactly its durationMin ----
+
+   The one quantity the card breakdown, the fit and the watch push all sum: a
+   segment's effective minutes are its block total when structured, else its own
+   `min`. (watch.js sums the same thing, so card == watch by construction.) */
+export function segMinutes(seg) {
+  return seg.blocks ? seg.blocks.reduce((a, b) => a + (b.min || 0), 0) : (seg.min || 0);
+}
+function sumMinutes(segs) {
+  return segs.reduce((a, s) => a + segMinutes(s), 0);
+}
+
+// Fit a selected variant to exactly `dur`: canonicalise each structured
+// segment's `min` to its block total, then flex the aerobic buffers around the
+// fixed quality work so the segments sum to dur without touching the reps or
+// their labels.
+//   'lead' formats (Long/Endurance): the steady lead-in (first segment) soaks
+//     everything after it.
+//   'tail' formats (warm-up + quality + cool-down): the cool-down soaks the
+//     residual; on a short session where the quality no longer leaves room, the
+//     WARM-UP shrinks toward a floor first (a shorter session wants a shorter
+//     warm-up), and only when even that will not fit does the whole thing
+//     collapse to a single continuous block of the session's own character
+//     (`fb`) — the degrade floor. Deterministic and pure: only minutes move,
+//     never the variant, its blocks or its labels.
+// Distance from the session's real pace mix, not a flat easy-pace anchor: each
+// block covers ground at its own zone's pace, so quality km read longer and
+// long-run km shorter — both honest. Swim distance is the summed prescribed
+// metres (exact, no estimate). Bike stays a ~30 km/h guess.
+const ZONE_PACE = { Z1: 'recovery', Z2: 'easy', Z3: 'tempo', Z4: 'threshold', Z5: 'interval' };
+function runDistance(segs, pc) {
+  let km = 0;
+  const add = (min, zone) => { km += (min || 0) * 60 / (pc.run[ZONE_PACE[zone]] || pc.run.easy); };
+  segs.forEach(s => { if (s.blocks) s.blocks.forEach(b => add(b.min, b.zone)); else add(s.min, s.zone); });
+  return Math.round(km * 10) / 10;
+}
+function swimDistance(segs) {
+  let m = 0;
+  segs.forEach(s => { if (s.swim) m += s.swim.distM != null ? s.swim.distM : (s.swim.n || 0) * (s.swim.repM || 0); });
+  return Math.round(m / 100) / 10;
+}
+
+const FIT_FLOOR = 3;
+const WARM_FLOOR = 6;
+function fitFlex(segs, dur, pos, fb) {
+  segs.forEach(s => { if (s.blocks) s.min = segMinutes(s); });
+  const fallback = () => [{ label: fb.label, min: dur, detail: fb.detail, zone: fb.zone }];
+  if (pos === 'lead' || segs.length < 3) {
+    const lead = dur - segs.slice(1).reduce((a, s) => a + segMinutes(s), 0);
+    if (lead >= FIT_FLOOR) { segs[0].min = lead; return segs; }
+    return fallback();
+  }
+  const warm = segs[0], cool = segs[segs.length - 1];
+  const midFixed = segs.slice(1, -1).reduce((a, s) => a + segMinutes(s), 0);
+  let coolMin = dur - segMinutes(warm) - midFixed;
+  if (coolMin >= FIT_FLOOR) { cool.min = coolMin; return segs; } // long/normal: cool absorbs
+  const newWarm = dur - midFixed - FIT_FLOOR;                    // short: pull the warm-up in
+  coolMin = dur - newWarm - midFixed;
+  if (newWarm >= WARM_FLOOR && coolMin >= FIT_FLOOR) { warm.min = newWarm; cool.min = coolMin; return segs; }
+  return fallback();
+}
+
 // Swim segments are distance-based, so profile blocks estimate their minutes
 // from the CSS-anchored paces: one steady block for continuous swimming, or
 // work/rest alternation for interval sets (rest drawn as Z1). Each helper is
@@ -184,7 +246,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
       ],
       [
         { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
-        { label: 'Surges by feel · 8–12 × 30–60 s quick on rolling terrain', min: dur - 18, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
+        { label: 'Surges by feel · 8–12 × 30–60 s quick on rolling terrain', min: Math.max(12, dur - 18), detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
         { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
@@ -211,8 +273,20 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
       ],
     ][v(3)];
   }
-  const dist = +(dur * 60 / pc.run.easy).toFixed(1);
-  return { title: title, segments: segs, distance: dist, unit: 'km' };
+  // Fit the chosen variant to exactly dur: Long/Easy flex their steady lead-in,
+  // the quality formats flex their cool-down; a hard-trimmed session that can't
+  // carry the structure collapses to a single steady block of the right colour.
+  const FB = {
+    Long: { label: 'Steady aerobic', detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+    Easy: { label: 'Relaxed', detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+    Tempo: { label: 'Tempo', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
+    Fartlek: { label: 'Fartlek by feel', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
+    'VO2 Intervals': { label: 'Hard aerobic effort', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
+    Threshold: { label: 'Threshold effort', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
+  };
+  segs = fitFlex(segs, dur, (type === 'Long' || type === 'Easy') ? 'lead' : 'tail', FB[type] || FB.Tempo);
+  const dist = runDistance(segs, pc);
+  return { title: title, segments: segs, distance: dist, unit: 'km', distEst: pc.runEstimated };
 }
 
 function buildBike(type, dur, pc, seed, phase, intensity = 0) {
@@ -350,8 +424,17 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
       ],
     ][v(3)];
   }
-  const dist = Math.round(dur / 60 * 30); // ~30 km/h estimate
-  return { title: title, segments: segs, distance: dist, unit: 'km' };
+  const FB = {
+    Long: { label: 'Endurance', detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+    Endurance: { label: 'Steady', detail: bikeDetail(pc, 0.6, 0.75, 'Z2'), zone: 'Z2' },
+    'Sweet Spot': { label: 'Sweet spot', detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3' },
+    Tempo: { label: 'Tempo', detail: bikeDetail(pc, 0.76, 0.85, 'Z3'), zone: 'Z3' },
+    'VO2 Intervals': { label: 'Hard aerobic effort', detail: bikeDetail(pc, 0.76, 0.85, 'Z3'), zone: 'Z3' },
+    Threshold: { label: 'Threshold effort', detail: bikeDetail(pc, 0.83, 0.9, 'Z3'), zone: 'Z3' },
+  };
+  segs = fitFlex(segs, dur, (type === 'Long' || type === 'Endurance') ? 'lead' : 'tail', FB[type] || FB.Tempo);
+  const dist = Math.round(dur / 60 * 30); // ~30 km/h estimate (no power-to-speed model)
+  return { title: title, segments: segs, distance: dist, unit: 'km', distEst: true };
 }
 
 function buildSwim(type, dur, pc, seed) {
@@ -422,11 +505,20 @@ function buildSwim(type, dur, pc, seed) {
       ];
     if (type === 'Endurance' && v(2) === 1) main = third * 3;
   }
-  const dist = +((900 + main) / 1000).toFixed(1);
+  const dist = swimDistance(segs); // exact: summed prescribed metres, not a flat overhead guess
   return { title: title, segments: segs, distance: dist, unit: 'km' };
 }
 
-function buildBrick(dur, pc, phase, seed) {
+// The peak run-off-the-bike anchor scales to the race: sprint/olympic race runs
+// sit near threshold, half/t100 at tempo, an Ironman run is aerobic — threshold
+// off the bike on a long-course peak brick is the over-fatigue risk the audit
+// flagged, and "race pace" now means it at every distance.
+const RACE_RUN_ANCHOR = {
+  sprint: { key: 'threshold', zone: 'Z4' }, olympic: { key: 'threshold', zone: 'Z4' },
+  half: { key: 'tempo', zone: 'Z3' }, t100: { key: 'tempo', zone: 'Z3' },
+  full: { key: 'long', zone: 'Z2' }, maintenance: { key: 'tempo', zone: 'Z3' },
+};
+function buildBrick(dur, pc, phase, seed, raceType) {
   const v = (seed || 0) % 3;
   const base = phase === 'Base' || phase === 'Maintain', peak = phase === 'Peak';
   const bikeMin = Math.round(dur * (peak ? 0.62 : 0.7));   // more run off the bike at peak
@@ -458,8 +550,11 @@ function buildBrick(dur, pc, phase, seed) {
       { label: base ? 'Bike — steady aerobic' : 'Bike — build to race effort', min: bikeMin,
         detail: bikeDetail(pc, base ? 0.6 : 0.72, base ? 0.75 : 0.88, base ? 'Z2' : 'Z3'), zone: base ? 'Z2' : 'Z3' },
       t2,
-      { label: base ? 'Run off the bike — easy' : (peak ? 'Run off the bike — race pace' : 'Run off the bike — tempo'), min: runMin,
-        detail: runDetail(pc, base ? 'easy' : (peak ? 'threshold' : 'tempo'), base ? 'Z2' : (peak ? 'Z4' : 'Z3')), zone: base ? 'Z2' : (peak ? 'Z4' : 'Z3') },
+      base
+        ? { label: 'Run off the bike — easy', min: runMin, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' }
+        : peak
+          ? (a => ({ label: 'Run off the bike — race pace', min: runMin, detail: runDetail(pc, a.key, a.zone), zone: a.zone }))(RACE_RUN_ANCHOR[raceType] || RACE_RUN_ANCHOR.olympic)
+          : { label: 'Run off the bike — tempo', min: runMin, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
     ];
   }
   return { title: 'Brick', segments: segs, distance: null, unit: 'km' };
@@ -581,11 +676,11 @@ function baseDuration(discipline, role, race) {
 function intensityOf(profile) {
   return (FITNESS[profile && profile.fitness] || FITNESS.intermediate).intensity;
 }
-function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0) {
+function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0, raceType) {
   if (discipline === 'run') return buildRun(type, dur, pc, seed, phase, intensity);
   if (discipline === 'bike') return buildBike(type, dur, pc, seed, phase, intensity);
   if (discipline === 'swim') return buildSwim(type, dur, pc, seed);
-  if (discipline === 'brick') return buildBrick(dur, pc, phase, seed);
+  if (discipline === 'brick') return buildBrick(dur, pc, phase, seed, raceType);
   if (discipline === 'strength') return buildStrength(phase);
   return { title: 'Session', segments: [], distance: null, unit: '' };
 }
@@ -647,7 +742,7 @@ export const addCustomWorkout = function (plan, { discipline, type, durationMin,
   const wk = plan.weeks.find(w => dateISO >= w.start && dateISO <= iso(addDays(w.start, 6)))
     || plan.weeks[plan.weeks.length - 1];
   const seed = wk.isRecovery ? 0 : wk.index;
-  const built = buildWorkout(discipline, type, durationMin, plan.paces, wk.phase, seed, intensityOf(plan.profile));
+  const built = buildWorkout(discipline, type, durationMin, plan.paces, wk.phase, seed, intensityOf(plan.profile), plan.profile.raceType);
   const dur = built.durationMin || durationMin; // strength fixes its own length
   const key = 'x-' + dateISO.split('-').join('');
   const taken = new Set(wk.workouts.map(x => x.id));
@@ -728,13 +823,27 @@ export const upgradePlanSegments = function (plan) {
     const workouts = week.workouts.map(w => {
       if (w.race || w.test || w.discipline === 'rest' || !w.durationMin) return w;
       const segsNow = w.segments || [];
+      // Staleness signal (no schema field): a run/bike session whose segments
+      // do not sum to its durationMin drifted under the old sizing, so re-derive
+      // it — the fitted rebuild sums to durationMin (repairing the card/watch
+      // disagreement and any trim the old builder silently defeated). Swim time
+      // is a metre-derived estimate, so it is exempt.
+      const driftsRunBike = (w.discipline === 'run' || w.discipline === 'bike')
+        && Math.abs(sumMinutes(segsNow) - w.durationMin) > 1.01;
+      // A brick always sums (it is a dur split), so it needs its own staleness
+      // check: a Peak brick built before the race-scaled anchor still runs its
+      // "race pace" leg at the old zone. Re-derive it to the current anchor.
+      const brickStale = w.discipline === 'brick' && w.phase === 'Peak'
+        && segsNow.some(s => /race pace/i.test(s.label || '')
+          && s.zone !== (RACE_RUN_ANCHOR[plan.profile.raceType] || RACE_RUN_ANCHOR.olympic).zone);
       const current = segsNow.some(s => s.zone || s.blocks)
-        && !(w.discipline === 'swim' && segsNow.some(s => s.blocks && !s.swim));
+        && !(w.discipline === 'swim' && segsNow.some(s => s.blocks && !s.swim))
+        && !driftsRunBike && !brickStale;
       if (current) return w;
-      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile));
+      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType);
       if (!(built.segments || []).some(s => s.zone || s.blocks)) return w; // swims/strength stay as they are
       changed = true;
-      return Object.assign({}, w, { segments: built.segments });
+      return Object.assign({}, w, { segments: built.segments, distance: built.distance });
     });
     return Object.assign({}, week, { workouts: workouts });
   });
@@ -898,7 +1007,7 @@ export const generatePlan = function (profile) {
       const dur = round5(durBase * load * wb);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
-      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity);
+      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType);
       workouts.push({
         id: w + '-' + d, week: w, phase: phase, date: date, seed: seed,
         discipline: s.disc, role: s.role, type: type, title: built.title,
@@ -1006,7 +1115,7 @@ export const generatePlan = function (profile) {
           touched = true;
           const t = typeFor(wo.discipline, wo.role, wo.phase, true, fitness.intensity);
           const dur = Math.max(20, round5(wo.durationMin * 0.6));
-          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity);
+          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity, profile.raceType);
           return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, unit: built.unit, segments: built.segments };
         }
         return wo;

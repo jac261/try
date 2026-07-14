@@ -75,8 +75,8 @@ describe('watchSteps (structured DSL, v2)', () => {
 
   it('emits verified DSL for a run: Warmup/Cooldown headers, Nx repeats, Pace zones', () => {
     const { dsl, seconds } = watchSteps(custom('Threshold', 60)); // canonical 3 × (9m Z4 / 3m Z2)
-    expect(dsl).toBe('Warmup\n- 15m Z2 Pace\n\n3x\n- 9m Z4 Pace\n- 3m Z2 Pace\n\nCooldown\n- 10m Z1 Pace');
-    expect(seconds).toBe((15 + 3 * 12 + 10) * 60);
+    expect(dsl).toBe('Warmup\n- 15m Z2 Pace\n\n3x\n- 9m Z4 Pace\n- 3m Z2 Pace\n\nCooldown\n- 9m Z1 Pace'); // cool-down fits the session to durationMin
+    expect(seconds).toBe(60 * 60); // == durationMin (15 + 36 + 9)
   });
 
   it('bike zones stay bare (power is the DSL default)', () => {
@@ -127,7 +127,7 @@ describe('buildWatchEvents v2 integration', () => {
     expect(ev.description).toContain('3x');
     expect(ev.description).toContain('\n\nTrimmed by the adaptive engine.');
     expect(ev.description).not.toContain('•');
-    expect(ev.movingTimeSec).toBe((15 + 36 + 10) * 60); // step total, not durationMin
+    expect(ev.movingTimeSec).toBe(workout.durationMin * 60); // step total now equals durationMin (Tranche 2 fit: 15 + 36 + 9)
   });
 
   it('structured swims assert no moving time; open water keeps bullets and its duration', () => {

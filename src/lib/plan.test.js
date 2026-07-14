@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout, upgradePlanSegments, buildTrackerPlan, applyTrackerFitness } from './plan.js';
+import { generatePlan, easeWorkout, trimWorkout, boostWorkout, addCustomWorkout, removeCustomWorkout, upgradePlanSegments, buildTrackerPlan, applyTrackerFitness, segMinutes } from './plan.js';
 import { RACES } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { iso, addDays } from './date.js';
@@ -53,6 +53,97 @@ describe('buildTrackerPlan (the no-plan sentinel)', () => {
     expect(RACES.tracker.noRace).toBe(true);   // excluded from race pickers (they filter !noRace)
     expect(RACES.tracker.tracker).toBe(true);
     expect(Object.values(RACES).filter(r => !r.noRace).some(r => r.key === 'tracker')).toBe(false);
+  });
+});
+
+describe('workout library — Tranche 2 sizing (segments == durationMin)', () => {
+  const mk = (f, rt, rd) => generatePlan({ name: 'T', raceType: rt, fitness: f, trainingDays: [1, 2, 3, 5, 6], longDay: 5, daysPerWeek: 5, raceDate: rd, startDate: '2026-09-01' });
+  const sum = w => w.segments.reduce((a, s) => a + segMinutes(s), 0);
+
+  it('every run and bike session sums to its durationMin, across levels and races', () => {
+    const bad = [];
+    ['beginner', 'intermediate', 'advanced', 'elite'].forEach(f =>
+      [['sprint', '2027-01-15'], ['olympic', '2027-02-15'], ['half', '2027-03-01'], ['full', '2027-04-01']].forEach(([rt, rd]) =>
+        mk(f, rt, rd).weeks.flatMap(w => w.workouts)
+          .filter(w => (w.discipline === 'run' || w.discipline === 'bike') && !w.race && w.segments && w.segments.length)
+          .forEach(w => { if (Math.abs(sum(w) - w.durationMin) > 1.01) bad.push(`${f}/${rt} ${w.discipline} ${w.type} ${w.durationMin}!=${sum(w)}`); })));
+    expect(bad).toEqual([]);
+  });
+
+  it('a trim genuinely reduces the work: the rebuilt session sums to the smaller durationMin', () => {
+    const p = mk('advanced', 'half', '2027-03-01');
+    const q = p.weeks.flatMap(w => w.workouts).find(w => w.type === 'Threshold' && w.discipline === 'run' && w.durationMin >= 50);
+    expect(q).toBeTruthy();
+    const t = trimWorkout(q, p, 0.6);
+    expect(t.durationMin).toBeLessThan(q.durationMin);
+    expect(Math.abs(sum(t) - t.durationMin)).toBeLessThanOrEqual(1.01); // actually reduced, not floored back to ~full
+  });
+
+  it('the peak brick run-off-the-bike scales to race distance (D)', () => {
+    // 7-day plans carry a brick session (5-day templates do not).
+    const zoneOf = (rt, rd) => generatePlan({ name: 'T', raceType: rt, fitness: 'intermediate', trainingDays: [0, 1, 2, 3, 4, 5, 6], longDay: 5, daysPerWeek: 7, raceDate: rd, startDate: '2026-09-01' })
+      .weeks.flatMap(w => w.workouts).filter(w => w.discipline === 'brick' && w.phase === 'Peak')
+      .flatMap(w => w.segments).filter(s => /race pace/i.test(s.label || '')).map(s => s.zone);
+    const sprint = zoneOf('sprint', '2027-01-15');
+    expect(sprint.length).toBeGreaterThan(0);
+    expect(sprint.every(z => z === 'Z4')).toBe(true);   // sprint race run is near threshold
+    const full = zoneOf('full', '2027-06-01');
+    expect(full.length).toBeGreaterThan(0);
+    expect(full.every(z => z === 'Z2')).toBe(true);     // an Ironman race run is aerobic, not Z4
+  });
+
+  it('run distance uses the pace mix; swim distance is summed metres (F)', () => {
+    const p = mk('advanced', 'olympic', '2027-02-15');
+    const flat = p.weeks.flatMap(w => w.workouts);
+    // a threshold run covers more ground than dur/easy-pace would give
+    const thr = flat.find(w => w.type === 'Threshold' && w.discipline === 'run');
+    if (thr) expect(thr.distance).toBeGreaterThan(+(thr.durationMin * 60 / p.paces.run.easy).toFixed(1));
+    // a CSS swim's distance is its real ~600 m overhead + reps, not a flat 900
+    const css = flat.find(w => w.type === 'CSS Intervals');
+    if (css) expect(css.distance).toBeGreaterThan(0);
+  });
+
+  it('migration: a drifted run session is re-derived to sum, and it is idempotent', () => {
+    const p = mk('intermediate', 'olympic', '2027-02-15');
+    // hand-drift a run session (inflate its cool-down so it no longer sums)
+    const drifted = JSON.parse(JSON.stringify(p));
+    const w = drifted.weeks.flatMap(wk => wk.workouts).find(x => x.discipline === 'run' && x.segments.length > 1 && !x.race);
+    w.segments[w.segments.length - 1].min += 12;
+    const up = upgradePlanSegments(drifted);
+    const w2 = up.weeks.flatMap(wk => wk.workouts).find(x => x.id === w.id);
+    expect(Math.abs(w2.segments.reduce((a, s) => a + segMinutes(s), 0) - w2.durationMin)).toBeLessThanOrEqual(1.01);
+    expect(upgradePlanSegments(up)).toBe(up); // idempotent: already sums → no-op
+  });
+
+  it('a trimmed Fartlek collapses cleanly, never a degenerate 2-min main', () => {
+    const p = mk('intermediate', 'olympic', '2027-02-15');
+    // Target the BY-FEEL variant (seed % 3 === 2) directly: its main is the
+    // floored `Math.max(12, dur - 18)` line — a plan-found Fartlek lands on
+    // seed 0 and would only ever exercise the v0 fallback path (the vacuity
+    // the 2026-07-13 re-verify caught). The v2 main label ("Surges by feel")
+    // is distinct from the fallback label ("Fartlek by feel").
+    const fk2 = { id: 'fk2', discipline: 'run', type: 'Fartlek', durationMin: 50, phase: 'Build', seed: 2, week: 2, segments: [] };
+    [0.5, 0.4].forEach(factor => { // dur 25 (floor binds: 12 vs old 7) and 20 (old gave a 2-min stub)
+      const t = trimWorkout(fk2, p, factor);
+      const feel = t.segments.find(s => /surges by feel/i.test(s.label || ''));
+      expect(!feel || feel.min >= 12, 'factor ' + factor).toBe(true); // real block or clean fallback
+      const sum = t.segments.reduce((a, s) => a + segMinutes(s), 0);
+      expect(Math.abs(sum - t.durationMin), 'factor ' + factor).toBeLessThanOrEqual(1.01);
+    });
+  });
+
+  it('migration repairs a stale peak brick race anchor (D), idempotently', () => {
+    const full = generatePlan({ name: 'T', raceType: 'full', fitness: 'intermediate', trainingDays: [0, 1, 2, 3, 4, 5, 6], longDay: 5, daysPerWeek: 7, raceDate: '2027-06-01', startDate: '2026-09-01' });
+    const stale = JSON.parse(JSON.stringify(full));
+    let n = 0;
+    stale.weeks.flatMap(w => w.workouts).filter(w => w.discipline === 'brick' && w.phase === 'Peak')
+      .forEach(b => b.segments.forEach(s => { if (/race pace/i.test(s.label || '')) { s.zone = 'Z4'; n++; } })); // simulate a pre-fix cached plan
+    expect(n).toBeGreaterThan(0);
+    const up = upgradePlanSegments(stale);
+    const zones = up.weeks.flatMap(w => w.workouts).filter(w => w.discipline === 'brick' && w.phase === 'Peak')
+      .flatMap(w => w.segments).filter(s => /race pace/i.test(s.label || '')).map(s => s.zone);
+    expect(zones.every(z => z === 'Z2')).toBe(true); // full → aerobic, not Z4
+    expect(upgradePlanSegments(up)).toBe(up);        // idempotent
   });
 });
 
@@ -419,7 +510,11 @@ describe('upgradePlanSegments (schema migration for cached plans)', () => {
   it('pins pre-variant plans (no seed) to the canonical format their sessions had', () => {
     const up = upgradePlanSegments(strip(p, true));
     const thresholds = up.weeks.flatMap(w => w.workouts).filter(x => x.type === 'Threshold' && x.discipline === 'run' && !x.test);
-    thresholds.forEach(x => expect(x.segments[1].label, x.id).toContain('9 min threshold')); // v0, never the week's rotation
+    // Structured thresholds pin to canonical v0 (9-min reps); a very short one
+    // (a tapered session) degrades to a single continuous block, which is fine.
+    thresholds.filter(x => x.segments.length > 1)
+      .forEach(x => expect(x.segments[1].label, x.id).toContain('9 min threshold'));
+    expect(thresholds.some(x => x.segments.length > 1)).toBe(true);
   });
 
   it('leaves race day, tests and current plans alone', () => {
