@@ -307,10 +307,12 @@ export function App({ storage, getToken, user }) {
     if (T.planEnded(plan, T.iso(new Date()))) enterTracker();
   }, [hydrated, plan]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Splash while hydrating: just the mark and the name, centred — no chrome,
+  // no "loading" copy (Jon, 2026-07-14).
   if (!hydrated) return (
-    <div className="app">
-      <div className="topbar"><h1><Icon name="logo" size={26} /> Try</h1></div>
-      <div className="card"><p className="lead">Loading your plan…</p></div>
+    <div className="splash" role="status" aria-label="Try is loading">
+      <Icon name="logo" size={64} />
+      <h1>Try</h1>
     </div>
   );
   if (!plan) return <Onboarding onCreate={p => { const w = [...recs].reverse().find(r => r.weightKg); const np = T.generatePlan(w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np).then(adoptMap); }} />;
