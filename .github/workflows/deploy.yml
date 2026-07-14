@@ -36,6 +36,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # A deploy must never outrun the suite: the 2026-07-13 moves-fix review
+      # proved a full revert of a shipped fix would deploy green because this
+      # workflow only built. Tests gate the deploy from here on.
+      - name: Test
+        run: npx vitest run
+
       - name: Build
         run: npm run build
 

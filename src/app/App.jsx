@@ -102,7 +102,7 @@ export function App({ storage, getToken, user }) {
   // Overlays as the async plan-response handlers must see them — a .then()
   // closure only holds the render it was created in.
   const live = useRef(null);
-  live.current = { log, moves, adjust, pendingMoves, refToId };
+  live.current = { log, moves, adjust, pendingMoves, refToId, plan };
   // Adopt the fresh ref→GUID map from a plan create/replace response, then push
   // any overlay entries created while the old map was stale — their optimistic
   // sync was skipped (gid() was undefined), so the server never saw them and
@@ -113,9 +113,19 @@ export function App({ storage, getToken, user }) {
     const cur = live.current;
     sweepStale(cur.log, cur.refToId, map, (g, e) => sync.saveLog(g, e));
     // Moves: only this device's pending writes are swept — the moves cache is
-    // never authoritative (see mergeMoves). Entries are { date, stamp }; a null
-    // date routes to the delete endpoint.
-    sweepStale(cur.pendingMoves, cur.refToId, map, (g, e) => (e && e.date === null ? sync.removeMove(g) : sync.saveMove(g, e && e.date)));
+    // never authoritative (see mergeMoves). Entries are { date, base }; a null
+    // date routes to the delete endpoint. The same base-date guard mergeMoves
+    // enforces applies here too: a pending write whose workout no longer sits
+    // on its recorded base must not ride a plan replace by id alone (every
+    // current replace path clears pending first, but the guard keeps a future
+    // path from re-opening the id-reuse hole).
+    const baseOf = baseDates(cur.plan);
+    const validPending = {};
+    Object.keys(cur.pendingMoves || {}).forEach(id => {
+      const e = cur.pendingMoves[id];
+      if (e && baseOf[id] === e.base) validPending[id] = e;
+    });
+    sweepStale(validPending, cur.refToId, map, (g, e) => (e && e.date === null ? sync.removeMove(g) : sync.saveMove(g, e && e.date)));
     sweepStale(cur.adjust, cur.refToId, map, (g, a) => sync.saveAdjustment(g, a));
     setRefToId(map);
   };
@@ -209,9 +219,7 @@ export function App({ storage, getToken, user }) {
         // applied and re-pushed. The old mergeOverlay path pushed ANY cached
         // local-only move back up, and because workout ids are reused across
         // plan regenerations those stale moves landed on the wrong workouts.
-        const mm = mergeMoves(result.moves, pendingMoves, ids, (g, d) => (d === null ? sync.removeMove(g) : sync.saveMove(g, d)), baseDates(result.plan));
-        setMoves(mm.moves);
-        setPendingMoves(mm.pending);
+        setMoves(mergeOverlay(result.moves, moves, ids, (g, d) => sync.saveMove(g, d)));
         setRefToId(ids);
         // Adjustments sync only once the backend supports them; an empty result
         // means "unknown", so the local overlay is kept rather than wiped.
@@ -357,12 +365,6 @@ export function App({ storage, getToken, user }) {
   };
   const moveWorkout = (id, date) => {
     setMoves(m => { const n = { ...m }; if (date === null) delete n[id]; else n[id] = date; return n; });
-    // Record the intent as pending until a hydrate shows the server reflecting
-    // it — the only moves ever pushed from cache are this device's own writes,
-    // stamped with the workout's scheduled date so a move can never cross onto
-    // a structure where that workout sits somewhere else.
-    const w = plan.weeks.flatMap(wk => wk.workouts).find(x => x.id === id);
-    if (w) setPendingMoves(p => ({ ...p, [id]: { date, base: w.date } }));
     if (gid(id)) { if (date === null) sync.removeMove(gid(id)); else sync.saveMove(gid(id), date); }
   };
   // Re-target the plan from updated fitness. Same level/days/race → identical
@@ -499,7 +501,6 @@ export function App({ storage, getToken, user }) {
     // plan's different workouts (the "workouts moved without me" report).
     // Clear them wholesale; completions above stay, per the documented intent.
     setMoves({});
-    setPendingMoves({});
     setAdjust({});
     setPlan(np);
     setEditPlan(false);
@@ -542,9 +543,6 @@ export function App({ storage, getToken, user }) {
     setDetail(null);
     setLog(l => { const n = { ...l }; delete n[id]; return n; });
     setMoves(m => { const n = { ...m }; delete n[id]; return n; });
-    // Custom ids are reused (lowest free x-YYYYMMDD-n), so a pending move left
-    // behind here would land on the next session added to the same date.
-    setPendingMoves(p => { const n = { ...p }; delete n[id]; return n; });
     setAdjust(a => { const n = { ...a }; delete n[id]; return n; });
     sync.replacePlan(np).then(adoptMap);
   };
@@ -629,7 +627,7 @@ export function App({ storage, getToken, user }) {
           // inside App), so EVERY overlay must be reset in state, not just in
           // storage — leftover in-memory pending moves or adjustments would
           // resurrect onto the new plan through the reused workout ids.
-          storage.clear(); setLog({}); setMoves({}); setPendingMoves({}); setAdjust({}); setRefToId({}); setPlan(null);
+          storage.clear(); setLog({}); setMoves({}); setAdjust({}); setRefToId({}); setPlan(null);
         } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)}
