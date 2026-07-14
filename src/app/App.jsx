@@ -7,6 +7,7 @@ import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
 import { downloadICS } from '@/lib/ics.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
+import { Splash } from '@/components/Splash.jsx';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
 import { RecapSlides } from '@/features/recap/RecapSlides.jsx';
 import { AddWorkoutSheet } from '@/components/AddWorkoutSheet.jsx';
@@ -317,14 +318,9 @@ export function App({ storage, getToken, user }) {
     if (T.planEnded(plan, T.iso(new Date()))) enterTracker();
   }, [hydrated, plan]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Splash while hydrating: just the mark and the name, centred — no chrome,
-  // no "loading" copy (Jon, 2026-07-14). Held for at least one pulse.
-  if (!hydrated || splashHeld) return (
-    <div className="splash" role="status" aria-label="Try is loading">
-      <Icon name="logo" size={64} />
-      <h1>Try</h1>
-    </div>
-  );
+  // Splash while hydrating: the same shared screen the auth gate shows while
+  // the session loads, so startup is ONE screen. Held for at least one pulse.
+  if (!hydrated || splashHeld) return <Splash />;
   if (!plan) return <Onboarding onCreate={p => { const w = [...recs].reverse().find(r => r.weightKg); const np = T.generatePlan(w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np).then(adoptMap); }} />;
   if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
 

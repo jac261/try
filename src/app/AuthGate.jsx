@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useAuth, useUser, SignInButton } from '@clerk/react';
 import { storageForUser } from '@/app/storage.js';
 import { Icon } from '@/components/Icon.jsx';
+import { Splash } from '@/components/Splash.jsx';
 import { APP_BASE_URL } from '@/config/env.js';
 import { App } from './App.jsx';
 
@@ -25,8 +26,10 @@ export function AuthGate() {
   const { user } = useUser();
   const storage = useMemo(() => (user ? storageForUser(user.id) : null), [user?.id]);
 
+  // Session loading shows THE startup splash — the same screen App shows while
+  // hydrating, so startup reads as one continuous screen, not a gate sequence.
   if (!isLoaded) {
-    return <GateShell title="Checking your session" message="Loading your Try account…" />;
+    return <Splash />;
   }
   if (!isSignedIn || !user || !storage) {
     return (
