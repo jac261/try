@@ -84,7 +84,7 @@ body {
 }
 .splash h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.8px; }
 .splash svg { color: var(--blue); }
-.splash > * { animation: splash-pulse 1.8s ease-in-out infinite; }
+.splash > * { animation: splash-pulse 1.15s ease-in-out infinite; } /* one full pulse inside the 1.2s minimum hold */
 @keyframes splash-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 /* Reduced-motion reset AFTER the animation rule it cancels — a media query
    adds no specificity, so source order decides (the recap cascade lesson). */

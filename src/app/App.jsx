@@ -42,6 +42,16 @@ export function App({ storage, getToken, user }) {
   const [pendingMoves, setPendingMoves] = useState(() => storage.load('pendingMoves', {}));
   const sync = useMemo(() => makeSync(getToken), [getToken]);
   const [hydrated, setHydrated] = useState(false);
+  // Hold the splash for one full pulse even when hydration is instant (a
+  // cached plan resolves in milliseconds and the mark just flashed). The app
+  // shows once BOTH are true, so a slow load still gets the splash for as
+  // long as it genuinely needs. Declared here with the other hooks — never
+  // after the early returns (the default-to-no-plan hooks lesson).
+  const [splashHeld, setSplashHeld] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setSplashHeld(false), 1200);
+    return () => clearTimeout(t);
+  }, []);
   const didHydrate = useRef(false);
   // client workout ref ("0-0") → server workout GUID; the log/move endpoints key on
   // the GUID. Populated from every plan response (hydrate / create / replace).
@@ -308,8 +318,8 @@ export function App({ storage, getToken, user }) {
   }, [hydrated, plan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Splash while hydrating: just the mark and the name, centred — no chrome,
-  // no "loading" copy (Jon, 2026-07-14).
-  if (!hydrated) return (
+  // no "loading" copy (Jon, 2026-07-14). Held for at least one pulse.
+  if (!hydrated || splashHeld) return (
     <div className="splash" role="status" aria-label="Try is loading">
       <Icon name="logo" size={64} />
       <h1>Try</h1>
