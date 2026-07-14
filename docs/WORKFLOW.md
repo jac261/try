@@ -36,6 +36,14 @@ each with one job and no other loyalties (fan out one read-only subagent per
 reviewer, as in docs/CODE_AUDIT.md — do not self-review all four lenses in
 one pass):
 
+> **Holding rule (2026-07-13 incident):** work awaiting its gauntlet is
+> parked on a BRANCH, never as local commits on main — a "held" commit on
+> main silently ships as an ancestor of the next push of anything. Before
+> claiming anything is unpushed, verify:
+> `git merge-base --is-ancestor <sha> origin/main`. A failed or
+> partially-failed gauntlet run (agents dying on rate limits) is NOT a pass;
+> the work stays parked until a complete run returns clean.
+
 - **Security:** secrets or health data headed for the public repo;
   third-party strings reaching dangerous sinks; injection into intervals.icu
   payloads (a pushed description line must not start with `- `, which the API
