@@ -147,16 +147,28 @@ export function App({ storage, getToken, user }) {
   useEffect(() => { storage.save('pendingMoves', pendingMoves); }, [pendingMoves, storage]);
   useEffect(() => { storage.save('adjust', adjust); }, [adjust, storage]);
 
+  // Engine-adjustments overlay: session ids → their eased (readiness), trimmed
+  // (ramp guardrail) or boosted (build nudge) version. The name predates the
+  // extra kinds; it applies them all. Declared ABOVE every effect and early
+  // return on purpose: an effect that fires on a render which returned early
+  // (splash, onboarding, building) finds any const below that return still in
+  // its temporal dead zone and throws — the 2026-07-11 and 2026-07-15
+  // "something went wrong" field crashes were both exactly that, via this
+  // binding. Anything an above-the-returns hook closes over must live up here.
+  const easedOf = w => {
+    const a = w && adjust[w.id];
+    if (!a) return w;
+    if (a.kind === 'trim') return T.trimWorkout(w, plan, a.factor || 0.8);
+    if (a.kind === 'boost') return T.boostWorkout(w, plan, a.factor || 1.1);
+    return T.easeWorkout(w, plan);
+  };
+
   // Workouts-to-watch: while enabled, keep the intervals.icu calendar equal to
   // the upcoming plan (moves and engine adjustments included). The pushed-hash
   // guard makes the reconcile idempotent across loads; the short delay
-  // coalesces bursts of changes, e.g. accepting a weekly proposal. easedOf is
-  // declared below the early returns, so this effect MUST also gate on
-  // hydrated: on a refresh the cached plan exists while the component still
-  // renders the loading screen, and running then would touch easedOf before
-  // its initialization (the 2026-07-11 "something went wrong" on refresh with
-  // watch sync enabled). Waiting for hydration is also semantically right —
-  // never push a stale cached plan the server is about to correct.
+  // coalesces bursts of changes, e.g. accepting a weekly proposal. The
+  // hydrated gate is semantic: never push a stale cached plan the server is
+  // about to correct.
   useEffect(() => {
     if (!hydrated || !plan || !watchSync) return;
     const body = T.buildWatchEvents({ plan, moves, easedOf, log, todayISO: T.iso(new Date()) });
@@ -448,16 +460,6 @@ export function App({ storage, getToken, user }) {
     const entry = Object.assign({}, log[id], { done: true, at, feel, notes: observe(id, feel, at, (log[id] || {}).actualMin) });
     setLog(l => ({ ...l, [id]: entry }));
     if (gid(id)) sync.saveLog(gid(id), entry);
-  };
-  // Engine-adjustments overlay: session ids → their eased (readiness), trimmed
-  // (ramp guardrail) or boosted (build nudge) version. The name predates the
-  // extra kinds; it applies them all.
-  const easedOf = w => {
-    const a = w && adjust[w.id];
-    if (!a) return w;
-    if (a.kind === 'trim') return T.trimWorkout(w, plan, a.factor || 0.8);
-    if (a.kind === 'boost') return T.boostWorkout(w, plan, a.factor || 1.1);
-    return T.easeWorkout(w, plan);
   };
   const todaysHard = () => { const t = T.iso(new Date()); return plan.weeks.flatMap(wk => wk.workouts).filter(w => effDate(w, moves) === t && INTENSITY_TYPES[w.type] && !w.race); };
   const easeToday = () => {
