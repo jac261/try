@@ -672,7 +672,8 @@ export function App({ storage, getToken, user }) {
         const w = recap.workout;
         const a = recap.activity || recordingFor(w);
         return a ? <RecapSlides workout={w} activity={a} plan={plan} log={log} moves={moves}
-          onLoadIntervals={sync.loadActivityIntervals} onLoadRoute={sync.loadActivityRoute} onClose={() => setRecap(null)} /> : null;
+          onLoadIntervals={sync.loadActivityIntervals} onLoadRoute={sync.loadActivityRoute} onClose={() => setRecap(null)}
+          onDetails={w.adhoc ? null : () => { setRecap(null); setDetail(w); }} /> : null;
       })()}
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
 

@@ -340,6 +340,13 @@ body {
 .recap-dots i { width: 22px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.18); }
 .recap-dots i.on { background: #fff; }
 .recap-close { position: absolute; top: 30px; right: 22px; z-index: 62; color: var(--muted); font-size: 18px; padding: 10px; cursor: pointer; }
+/* Real buttons must sit ABOVE the tap zones, like .recap-close does: the
+   zones are positioned at z-index 61 and paint over the static body, so an
+   unraised button's taps land on the zone instead (the "Session overview"
+   button was unreachable by touch; Done only appeared to work because its
+   handler matched the right zone's close). Taps outside buttons still hit
+   the zones, keeping tap-to-advance intact. */
+.recap-body .btn { position: relative; z-index: 62; }
 .recap-tap { position: absolute; top: 0; bottom: 0; width: 38%; z-index: 61; cursor: pointer; }
 .recap-tap.left { left: 0; }
 .recap-tap.right { right: 0; width: 62%; }

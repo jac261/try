@@ -116,7 +116,7 @@ function RouteMap({ route, discipline }) {
   );
 }
 
-export function RecapSlides({ workout, activity, plan, log, moves, onLoadIntervals, onLoadRoute, onClose }) {
+export function RecapSlides({ workout, activity, plan, log, moves, onLoadIntervals, onLoadRoute, onClose, onDetails }) {
   const [curKind, setCurKind] = useState(null); // track the slide by kind, not
   const [reps, setReps] = useState(null);       // position — the deck grows when reps load
   // Same modal conventions as every sheet: focus moves in, Tab is trapped,
@@ -189,9 +189,20 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
           </div>
         )}
         {i === slides.length - 1 && (
-          <button className="btn primary" style={{ marginTop: 22, '--i': gi + L + 1 }} onClick={onClose}>
-            <Icon name="bolt" size={18} /> Done
-          </button>
+          <>
+            <button className="btn primary" style={{ marginTop: 22, '--i': gi + L + 1 }} onClick={onClose}>
+              <Icon name="bolt" size={18} /> Done
+            </button>
+            {/* The recap must not be a dead end: the overview underneath holds
+                the feel rating and the full session review (Jon, 2026-07-15).
+                Only offered when a plan session backs the recording — an
+                ad-hoc recap has no overview to open. */}
+            {onDetails && (
+              <button className="btn ghost" style={{ marginTop: 10, '--i': gi + L + 2 }} onClick={onDetails}>
+                Session overview
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

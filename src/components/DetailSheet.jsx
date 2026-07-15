@@ -60,6 +60,19 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           <div className="dot" style={{ background: disc.grad }}><Icon name={disc.icon} size={26} /></div>
           <div><h2>{w.title}</h2><div className="s">{T.fmtDate(shown, { weekday: 'long', month: 'long', day: 'numeric' })} · {w.phase} phase</div></div>
         </div>
+        {/* The one thing a finished session asks of the athlete comes first,
+            not buried under the workout structure (Jon, 2026-07-15). */}
+        {/* Both margins inline: .feel only sets margin-top in the stylesheet
+            (its old home borrowed its bottom gap from the review section's
+            title), and the eased/trimmed/boosted notes below carry no top
+            margin of their own. */}
+        {done && !w.race && onFeel && <div className="feel" style={{ marginTop: 4, marginBottom: 14 }}>
+          <div className="feel-q">How did it feel?</div>
+          <div className="feel-row">
+            {[['easy', 'Easy'], ['right', 'Just right'], ['hard', 'Hard']].map(([k, lab]) =>
+              <button key={k} className={'feelbtn' + (feel === k ? ' on ' + k : '')} onClick={() => onFeel(w.id, k)}>{lab}</button>)}
+          </div>
+        </div>}
         {w.eased && <div className="testnote"><Icon name="heartrate" size={18} /><span>Eased from your planned {w.easedFrom} session for recovery. {onRestore && <a className="reset" {...tap(onRestore)}>Restore the hard session</a>}</span></div>}
         {w.trimmed && <div className="testnote"><Icon name="trend" size={18} /><span>Trimmed from {T.fmtDuration(w.trimmedFrom)} by the adaptive engine to protect you from overload. {onRestore && <a className="reset" {...tap(onRestore)}>Restore full volume</a>}</span></div>}
         {w.boosted && <div className="testnote"><Icon name="flame" size={18} /><span>Extended from {T.fmtDuration(w.boostedFrom)} — your form showed room to absorb more load. {onRestore && <a className="reset" {...tap(onRestore)}>Back to the planned volume</a>}</span></div>}
@@ -103,13 +116,6 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             <Icon name="watch" size={18} /> Send to watch (.FIT)</button>
           <div className="fithint">Structured workout with {w.discipline === 'bike' ? (plan.paces.ftp ? 'power' : 'effort (RPE)') : 'pace'} targets. Computer only: copy it into your watch's GARMIN/NewFiles folder over USB — opening it in the Garmin Connect app imports it as a course, not a workout. With intervals.icu connected, the watch sync in Settings sends your sessions automatically instead.</div>
         </>}
-        {done && !w.race && onFeel && <div className="feel">
-          <div className="feel-q">How did it feel?</div>
-          <div className="feel-row">
-            {[['easy', 'Easy'], ['right', 'Just right'], ['hard', 'Hard']].map(([k, lab]) =>
-              <button key={k} className={'feelbtn' + (feel === k ? ' on ' + k : '')} onClick={() => onFeel(w.id, k)}>{lab}</button>)}
-          </div>
-        </div>}
         {done && activity && (() => {
           // Post-session review: the recording's numbers next to the plan's
           // intent, with verdicts only where an average can judge fairly.
