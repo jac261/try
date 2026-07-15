@@ -41,6 +41,11 @@ export function App({ storage, getToken, user }) {
   // authoritative, so stale cached moves can no longer resurrect (the
   // 2026-07-12 "workouts moved without me" field report).
   const [pendingMoves, setPendingMoves] = useState(() => storage.load('pendingMoves', {}));
+  // Accept-time record of engine proposals, quoted verbatim by the weekly
+  // digest. Append-only and capped: the adjust overlay is current-state (a
+  // restore deletes its entries), so the week's story has to be written down
+  // the moment it happens or it is gone.
+  const [adjustLog, setAdjustLog] = useState(() => storage.load('adjustLog', []));
   const sync = useMemo(() => makeSync(getToken), [getToken]);
   const [hydrated, setHydrated] = useState(false);
   // Hold the splash for one full pulse even when hydration is instant (a
@@ -146,6 +151,7 @@ export function App({ storage, getToken, user }) {
   useEffect(() => { storage.save('moves', moves); }, [moves, storage]);
   useEffect(() => { storage.save('pendingMoves', pendingMoves); }, [pendingMoves, storage]);
   useEffect(() => { storage.save('adjust', adjust); }, [adjust, storage]);
+  useEffect(() => { storage.save('adjustLog', adjustLog); }, [adjustLog, storage]);
 
   // Engine-adjustments overlay: session ids → their eased (readiness), trimmed
   // (ramp guardrail) or boosted (build nudge) version. The name predates the
@@ -506,14 +512,24 @@ export function App({ storage, getToken, user }) {
     setLog(l => ({ ...l, ...entries }));
     if (spotted.length) setRecap({ workout: spotted[0].workout }); // recap the headline session
   };
+  // Every accepted proposal is journalled with the exact headline and why
+  // the athlete tapped, so the weekly digest can quote — never re-derive —
+  // the reasoning later. Capped so the key can't grow without bound.
+  // The SAME timestamp goes on the journal entry and the overlay entries it
+  // produced: the digest dedupes overlay rows against journal rows by `at`,
+  // and two separate Date constructions would differ by milliseconds and
+  // render an accepted proposal twice (quoted AND generic).
+  const journalProposal = (p, at) => setAdjustLog(l =>
+    [...l, { at, kind: p.kind, headline: p.headline, why: p.why }].slice(-40));
   const applyWeekly = p => {
     if (!p) return;
+    const at = new Date().toISOString();
+    journalProposal(p, at);
     if (p.action === 'restoreWeek') {
       setAdjust(a => { const n = { ...a }; p.targets.forEach(id => delete n[id]); return n; });
       p.targets.forEach(id => { if (adjust[id] && gid(id)) sync.removeAdjustment(gid(id)); });
       return;
     }
-    const at = new Date().toISOString();
     const all = plan.weeks.flatMap(wk => wk.workouts);
     const kind = p.action === 'boostWeek' ? 'boost' : 'trim';
     setAdjust(a => {
@@ -640,7 +656,7 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={activities} onOpenRecording={openRecording} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} />}

@@ -7,6 +7,7 @@ import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { ReadinessCard } from '@/features/wellness/ReadinessCard.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
+import { WeeklyDigest } from '@/features/today/WeeklyDigest.jsx';
 const D = T.DISCIPLINES;
 
 // The user's expand/collapse choice for the week tab sticks across visits.
@@ -69,7 +70,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, storage }) {
   const tracker = plan.race === 'tracker';
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
@@ -168,6 +169,8 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
         {!tracker && <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> Add a session</div>}
       </div>
       <RecordedActivities activities={activities} date={todayISO} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} />
+      {storage && <WeeklyDigest plan={plan} log={log} moves={moves} adjust={adjust} adjustLog={adjustLog}
+        wellness={wellness} activities={activities} storage={storage} todayISO={todayISO} />}
       {!tracker && <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout} />}
     </>
   );
