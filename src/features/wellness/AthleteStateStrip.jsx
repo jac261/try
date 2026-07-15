@@ -1,17 +1,19 @@
 import { athleteState } from '@/features/wellness/athleteState.js';
-import { Signed } from '@/components/Signed.jsx';
 
 /* The four-tile "where you stand" header on the Progress tab: a two-second
- * read of Fitness / Fatigue / Recovery / Run load, capping the trend charts
- * that back each one. Presentational only — all banding lives in
- * athleteState(). Tapping a live tile opens the matching support topic; the
- * charts it summarises are already on screen just below. */
-function ariaFor(t) {
+ * read of Fitness / Fatigue / Recovery / Run load. The tiles lead with words
+ * ("Rising", "Fresh"), not numbers — the raw figures headline the charts
+ * lower on the tab, and this strip is their interpretation, not a restatement
+ * (see athleteState.js). Presentational only — all banding lives in
+ * athleteState(). Tapping a live tile opens the matching support topic. */
+/* exported for tests: two aria bugs (a spoken "·", a doubled "high risk")
+ * shipped through this function unasserted (2026-07-15 gauntlet) */
+export function ariaFor(t) {
   if (t.empty) return t.label + ', ' + (t.emptyWord || 'not enough data yet') + '.';
-  if (t.key === 'fitness') return 'Fitness ' + t.value + ', ' + (t.word || '') + '. Open the fitness and fatigue explainer.';
-  if (t.key === 'fatigue') return 'Fatigue ' + t.value + ', ' + (t.word || '') + '. Open the fitness and fatigue explainer.';
-  if (t.key === 'recovery') return 'Recovery, form ' + Math.round(t.value) + ', ' + (t.word || '') + '. Open the form explainer.';
-  return 'Run load ' + (t.word || '') + ', ' + t.value + ' in the last seven days. Open the ramp explainer.';
+  if (t.key === 'fitness' || t.key === 'fatigue') return t.label + ' ' + (t.word || '').toLowerCase() + '. Open the fitness and fatigue explainer.';
+  if (t.key === 'recovery') return 'Recovery, ' + (t.word || '').toLowerCase() + (t.sub ? ', ' + t.sub : '') + '. Open the form explainer.';
+  // the sub's "·" is a visual separator; spoken it is garbage, so say a comma
+  return 'Run load ' + (t.word || '').toLowerCase() + ', ' + String(t.sub || '').replace(' · ', ', ') + '. Open the ramp explainer.';
 }
 
 export function AthleteStateStrip({ wellness, runLoad, recovery, onSupport }) {
@@ -28,17 +30,18 @@ export function AthleteStateStrip({ wellness, runLoad, recovery, onSupport }) {
             {t.empty
               ? <b className="ass-empty">{t.emptyWord || 'Not enough data yet'}</b>
               : <>
-                  <b style={t.color ? { color: t.color } : undefined}>
-                    {t.signed ? <Signed v={t.value} /> : t.value}
+                  <b className="ass-word" style={t.color ? { color: t.color } : undefined}>
+                    {t.word}
                     {t.arrow && <span className="ass-arrow">{t.arrow}</span>}
                   </b>
-                  {t.word && <em className="ass-word" style={t.color ? { color: t.color } : undefined}>{t.word}</em>}
                   {t.sub && <i className="ass-sub">{t.sub}</i>}
                 </>}
             <span>{t.label}</span>
           </button>
         ))}
       </div>
+      {/* "estimated", matching WellnessTrends and ReadinessCard word for word:
+          derived load is modelled from the log, not read off a device */}
       {s.derived && <div className="ass-note">Fitness, Fatigue and Recovery are estimated from your training log</div>}
     </>
   );

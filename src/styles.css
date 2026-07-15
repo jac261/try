@@ -266,7 +266,7 @@ body {
    and label. */
 .ass-tile { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; background: var(--chip); border: 1px solid var(--line); border-radius: 12px; padding: 9px 4px; cursor: pointer; font: inherit; color: inherit; text-align: center; }
 .ass-tile[disabled] { cursor: default; opacity: .85; }
-.ass-tile .ass-word { font-size: 12px; font-weight: 800; font-style: normal; }
+.ass-tile .ass-word { font-size: 13.5px; font-weight: 800; font-style: normal; line-height: 1.25; letter-spacing: -.2px; }
 .ass-tile .ass-sub { font-size: 10px; font-style: normal; color: var(--muted); line-height: 1.25; }
 .ass-tile .ass-arrow { font-size: 11px; margin-left: 3px; }
 .ass-tile .ass-empty { font-size: 11px; font-weight: 700; color: var(--muted); }

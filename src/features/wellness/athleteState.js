@@ -14,8 +14,15 @@
  *   - Run load reads runLoadSignal (logged run minutes ramp), which is
  *     log-only, so a sensor-less athlete gets an identical tile.
  *
+ * The tiles lead with WORDS, not numbers (Jon, 2026-07-15): the raw CTL/ATL/
+ * TSB figures are the headline stats of the Fitness & Fatigue and Form cards
+ * lower on the same tab, and repeating them here read as redundant. The strip
+ * is the interpretation layer — "Rising", "Dropping", "Fresh" — and the charts
+ * below are the evidence. The one number kept is the run tile's acute minutes,
+ * which appears nowhere else on the tab.
+ *
  * Honesty rules baked in: thin data shows an explicit "not enough" state per
- * tile, never a fabricated number; if NEITHER load nor run history exists the
+ * tile, never a fabricated word; if NEITHER load nor run history exists the
  * whole strip hides (show:false) and the trend charts' own empty state speaks;
  * the run-load tile is labelled "Run load", never "Injury risk", and never
  * prints the ramp percent (which invites the ACWR misreading runLoadSignal's
@@ -61,9 +68,12 @@ export function athleteState({ wellness, runLoad, recovery } = {}) {
   // projection window, so it is an unbounded floor ("at least"), never a
   // bounded "a week or two". Only 2..7 days earns a day count; past that the
   // card softens to "a week or two" and so must this.
+  // The beyond-horizon branch drops the readiness card's "high risk" prefix:
+  // here the sub sits directly under a headline that already says High risk,
+  // so repeating it read twice over, on screen and in the aria label alike.
   let recSub = null;
   if (fz && fz.key === 'highRisk' && recovery) {
-    recSub = recovery.days == null ? 'high risk at least another week or two'
+    recSub = recovery.days == null ? 'at least another week or two'
       : recovery.days <= 1 ? 'clear by tomorrow'
         : recovery.days <= 7 ? 'recovers in about ' + recovery.days + ' days'
           : 'clears in a week or two';
@@ -84,25 +94,21 @@ export function athleteState({ wellness, runLoad, recovery } = {}) {
     {
       key: 'fitness', label: 'Fitness', topic: 'fitness-fatigue',
       empty: !hasLoad,
-      value: hasLoad ? Math.round(last.ctl) : null,
-      word: trend(ctlD, 'rising', 'holding', 'easing'),
+      word: trend(ctlD, 'Rising', 'Holding', 'Easing'),
       arrow: arrow(ctlD),
       color: 'var(--blue)',
     },
     {
       key: 'fatigue', label: 'Fatigue', topic: 'fitness-fatigue',
       empty: !hasLoad,
-      value: hasLoad ? Math.round(last.atl) : null,
-      word: trend(atlD, 'climbing', 'steady', 'dropping'),
+      word: trend(atlD, 'Climbing', 'Steady', 'Dropping'),
       arrow: arrow(atlD),
       color: 'var(--danger)',
     },
     {
       key: 'recovery', label: 'Recovery', topic: 'form',
       empty: tsbNow == null,
-      value: tsbNow == null ? null : tsbNow,      // rendered via <Signed>
-      signed: true,
-      word: fz ? fz.label : null,
+      word: fz ? fz.label : null,   // the form-zone label VERBATIM (chart legend)
       sub: recSub,
       color: fz ? fz.color : null,
     },
@@ -110,10 +116,13 @@ export function athleteState({ wellness, runLoad, recovery } = {}) {
       key: 'runload', label: 'Run load', topic: 'ramp-rate',
       empty: !runOk,
       emptyWord: 'Not enough runs yet',
-      value: runOk ? runLoad.acute7d + ' min' : null,
       word: runWord,
-      sub: runOk ? 'run load, last 7 days' : null,
-      arrow: runOk ? arrow(runLoad.rampPct) : null,
+      // the acute minutes stay: the only number on the strip, because no card
+      // below carries it (the Ramp rate chart tracks overall load, not runs)
+      sub: runOk ? runLoad.acute7d + ' min · last 7 days' : null,
+      // zero logged minutes forces rampPct to -1, and "No runs logged ▼" would
+      // dress an absolute stopped state as a trend still in decline — no arrow
+      arrow: runOk && runLoad.acute7d !== 0 ? arrow(runLoad.rampPct) : null,
       color: runColor,
     },
   ];

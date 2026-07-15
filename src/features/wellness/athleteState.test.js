@@ -15,6 +15,11 @@ const loadSeries = (c0, a0, c1, a1, n = 30, derived = false) => {
 const tileFor = (s, key) => s.tiles.find(t => t.key === key);
 
 describe('athleteState (the strip mapper)', () => {
+  it('tiles are word-led: no raw CTL/ATL/TSB values duplicate the charts below', () => {
+    const s = athleteState({ wellness: loadSeries(50, 40, 60, 45), runLoad: { acute7d: 40, rampPct: 0.1 } });
+    s.tiles.forEach(t => expect(t.value).toBeUndefined());
+  });
+
   it('brand-new athlete: no load, no runs → whole strip hidden', () => {
     const s = athleteState({ wellness: [], runLoad: null, recovery: null });
     expect(s.show).toBe(false);
@@ -29,7 +34,7 @@ describe('athleteState (the strip mapper)', () => {
     const rl = tileFor(s, 'runload');
     expect(rl.empty).toBe(false);
     expect(rl.word).toBe('Steady');
-    expect(rl.value).toBe('45 min');
+    expect(rl.sub).toBe('45 min · last 7 days'); // the strip's one number
   });
 
   it('only load history → load tiles populated, run-load empty with its own word', () => {
@@ -46,25 +51,28 @@ describe('athleteState (the strip mapper)', () => {
     const derived = athleteState({ wellness: loadSeries(50, 40, 60, 45, 30, true), runLoad: null, recovery: null });
     expect(derived.derived).toBe(true);
     expect(measured.derived).toBe(false);
-    expect(tileFor(derived, 'fitness').value).toBe(tileFor(measured, 'fitness').value);
+    expect(tileFor(derived, 'fitness').word).toBe(tileFor(measured, 'fitness').word);
     expect(tileFor(derived, 'recovery').word).toBe(tileFor(measured, 'recovery').word);
   });
 
   it('fitness trend words track the CTL direction over the window', () => {
     const up = tileFor(athleteState({ wellness: loadSeries(50, 40, 62, 45) }), 'fitness');
-    expect(up.word).toBe('rising'); expect(up.arrow).toBe('▲'); expect(up.value).toBe(62);
+    expect(up.word).toBe('Rising'); expect(up.arrow).toBe('▲');
     const down = tileFor(athleteState({ wellness: loadSeries(62, 40, 50, 45) }), 'fitness');
-    expect(down.word).toBe('easing'); expect(down.arrow).toBe('▼');
+    expect(down.word).toBe('Easing'); expect(down.arrow).toBe('▼');
     const flat = tileFor(athleteState({ wellness: loadSeries(55, 40, 55, 45) }), 'fitness');
-    expect(flat.word).toBe('holding'); expect(flat.arrow).toBe('–');
+    expect(flat.word).toBe('Holding'); expect(flat.arrow).toBe('–');
   });
 
   it('fatigue reads ATL directly, not through TSB', () => {
+    // ctl flat, atl rising: through TSB this would read as recovery falling —
+    // the tile must say fatigue is climbing, its own axis.
     const climb = tileFor(athleteState({ wellness: loadSeries(55, 30, 55, 50) }), 'fatigue');
-    expect(climb.value).toBe(50);           // == round(last.atl), not a tsb figure
-    expect(climb.word).toBe('climbing'); expect(climb.arrow).toBe('▲');
+    expect(climb.word).toBe('Climbing'); expect(climb.arrow).toBe('▲');
     const drop = tileFor(athleteState({ wellness: loadSeries(55, 50, 55, 30) }), 'fatigue');
-    expect(drop.word).toBe('dropping');
+    expect(drop.word).toBe('Dropping');
+    const flat = tileFor(athleteState({ wellness: loadSeries(55, 40, 55, 40) }), 'fatigue');
+    expect(flat.word).toBe('Steady'); expect(flat.arrow).toBe('–');
   });
 
   it('recovery word is the form-zone label verbatim, with the zone colour', () => {
@@ -84,8 +92,9 @@ describe('athleteState (the strip mapper)', () => {
     expect(sub({ readyDate: 'x', days: 5 })).toBe('recovers in about 5 days');   // 2..7 gets a day count
     expect(sub({ days: 1 })).toBe('clear by tomorrow');
     expect(sub({ readyDate: 'x', days: 12 })).toBe('clears in a week or two');   // 8..14 softened, no false precision
-    // beyond-horizon: unbounded floor, keeps "at least", never a bounded cap
-    expect(sub({ readyDate: null, days: null })).toBe('high risk at least another week or two');
+    // beyond-horizon: unbounded floor, keeps "at least" — but NOT the card's
+    // "high risk" prefix, which would double the headline word above it
+    expect(sub({ readyDate: null, days: null })).toBe('at least another week or two');
     // not high risk → no sub even if a projection is passed
     const optimal = loadSeries(60, 60, 60, 80);
     expect(tileFor(athleteState({ wellness: optimal, recovery: { days: 5 } }), 'recovery').sub).toBe(null);
@@ -94,9 +103,11 @@ describe('athleteState (the strip mapper)', () => {
   it('stopped running reads as "No runs logged", not a reassuring green Steady', () => {
     const t = tileFor(athleteState({ wellness: [], runLoad: { acute7d: 0, baselineWeekly: 60, rampPct: -1 } }), 'runload');
     expect(t.empty).toBe(false);
-    expect(t.value).toBe('0 min');
+    expect(t.sub).toBe('0 min · last 7 days');
     expect(t.word).toBe('No runs logged');
     expect(t.color).toBe('var(--muted)');
+    // an absolute stopped state is not a trend: no "No runs logged \u25bc"
+    expect(t.arrow).toBe(null);
   });
 
   it('recovery empty when there is no load at all', () => {
@@ -119,7 +130,7 @@ describe('athleteState (the strip mapper)', () => {
     // rampPct present but no acute7d must not render "undefined min"
     const noMin = tileFor(athleteState({ wellness: loadSeries(50, 40, 60, 45), runLoad: { rampPct: 0.4 } }), 'runload');
     expect(noMin.empty).toBe(true);
-    expect(noMin.value).toBe(null);
+    expect(noMin.sub).toBe(null);
   });
 
   it('a single load reading is too thin to trend: load tiles empty, no strip on its own', () => {
