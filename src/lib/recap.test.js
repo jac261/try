@@ -46,6 +46,27 @@ describe('buildRecap (session recap slides)', () => {
     expect(splits.rows[0].frac).toBeGreaterThan(splits.rows[1].frac); // faster rep, longer bar
   });
 
+  it('a GPS track becomes the route slide, right after the headline', () => {
+    const route = [[51.4592, -2.5938], [51.4601, -2.5951], [51.4622, -2.5972]];
+    const s = buildRecap({ ...base, route });
+    const r = s.find(x => x.kind === 'route');
+    expect(s[1]).toBe(r); // the shape of the session comes second
+    expect(r.big).toBe('8.0 km');
+    expect(r.count).toEqual({ to: 80, fmt: 'km1' }); // tenths of a km, counted up
+    expect(r.route).toBe(route);
+  });
+
+  it('no route slide without a drawable track: null, one point, or a treadmill blip', () => {
+    expect(buildRecap(base).some(x => x.kind === 'route')).toBe(false);
+    expect(buildRecap({ ...base, route: [[51.4592, -2.5938]] }).some(x => x.kind === 'route')).toBe(false);
+    // two samples pinned to one coordinate is not a shape
+    const blip = [[51.4592, -2.5938], [51.4592, -2.5938]];
+    expect(buildRecap({ ...base, route: blip }).some(x => x.kind === 'route')).toBe(false);
+    // no distance to headline the slide with
+    const route = [[51.4592, -2.5938], [51.4601, -2.5951]];
+    expect(buildRecap({ ...base, activity: act({ distance: null }), route }).some(x => x.kind === 'route')).toBe(false);
+  });
+
   it('returns null without a recording — no recap for a bare tick', () => {
     expect(buildRecap({ ...base, activity: null })).toBe(null);
   });

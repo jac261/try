@@ -21,7 +21,8 @@ const fmtDur = sec => {
   const m = Math.round(sec / 60);
   return m >= 60 ? Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm' : m + ' min';
 };
-const fmtBig = (n, fmt) => fmt === 'dur' ? fmtDur(n) : fmt === 'bpm' ? n + ' bpm' : fmt === 'load' ? 'Load ' + n : String(n);
+const fmtBig = (n, fmt) => fmt === 'dur' ? fmtDur(n) : fmt === 'bpm' ? n + ' bpm' : fmt === 'load' ? 'Load ' + n
+  : fmt === 'km1' ? (n / 10).toFixed(1) + ' km' : String(n); // km1 counts tenths of a km
 
 // Animate a headline number up from zero. The slide carries an explicit
 // { to, fmt } count spec (from buildRecap), so we animate a known integer and
@@ -83,12 +84,45 @@ function HrGraph({ hr }) {
   );
 }
 
-export function RecapSlides({ workout, activity, plan, log, moves, onLoadIntervals, onClose }) {
+// The route, drawn as the GPS track alone — no map tiles. A base map would
+// drag in an external tile service (network, attribution, visual noise); the
+// wrapped aesthetic wants the shape of the effort, not the street names. The
+// track projects equirectangularly (x scaled by cos of the mid-latitude so
+// shapes keep their proportions), draws itself start to finish, and a dot
+// rides the line via offset-path. Browsers without offset-path support (or
+// reduced motion) simply show the drawn route — the dot is decoration.
+const ROUTE_COLOR = { run: 'var(--run)', bike: 'var(--bike)', brick: 'var(--brick)', swim: 'var(--swim)' };
+function RouteMap({ route, discipline }) {
+  const W = 320, H = 230, pad = 16;
+  // projection lives in lib/route.js (pure, tested — incl. the antimeridian
+  // unwrap that keeps a Fiji loop from smearing across the whole viewBox)
+  const pts = T.projectRoute(route, W, H, pad);
+  const d = pts.map(([x, y], n) => (n ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1)).join(' ');
+  const [sx, sy] = pts[0];
+  const [ex, ey] = pts[pts.length - 1];
+  const color = ROUTE_COLOR[discipline] || 'var(--accent)';
+  return (
+    <svg className="recap-route" viewBox={`0 0 ${W} ${H}`} role="img" style={{ '--i': 2 }}
+      aria-label="Map of the route taken, drawn from the recording's GPS track">
+      <path className="recap-route-ghost" d={d} fill="none"
+        stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      <path className="recap-route-line" d={d} pathLength="1" fill="none"
+        stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      <circle className="recap-route-start" cx={sx} cy={sy} r="4.5" fill="var(--bg, #0e1217)"
+        stroke={color} strokeWidth="2.5" />
+      <circle className="recap-route-end" cx={ex} cy={ey} r="4.5" fill={color} />
+      <circle className="recap-route-dot" r="5" fill={color} style={{ offsetPath: `path("${d}")` }} />
+    </svg>
+  );
+}
+
+export function RecapSlides({ workout, activity, plan, log, moves, onLoadIntervals, onLoadRoute, onClose }) {
   const [curKind, setCurKind] = useState(null); // track the slide by kind, not
   const [reps, setReps] = useState(null);       // position — the deck grows when reps load
   // Same modal conventions as every sheet: focus moves in, Tab is trapped,
   // Escape closes, focus returns on exit (2026-07-12 audit finding).
   const focusRef = useSheetFocus(onClose);
+  const [route, setRoute] = useState(null);
   const actId = activity && activity.id;
   useEffect(() => {
     if (!actId || !onLoadIntervals) return;
@@ -96,9 +130,18 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
     onLoadIntervals(actId).then(list => { if (!gone) setReps(list); });
     return () => { gone = true; };
   }, [actId, onLoadIntervals]);
+  // The GPS track arrives lazily exactly like the reps: the deck re-resolves
+  // the current slide by kind, so a route slide appearing mid-view never
+  // shifts the slide under the user's finger.
+  useEffect(() => {
+    if (!actId || !onLoadRoute) return;
+    let gone = false;
+    onLoadRoute(actId).then(r => { if (!gone) setRoute(r); });
+    return () => { gone = true; };
+  }, [actId, onLoadRoute]);
 
   const slides = T.buildRecap({
-    workout, activity, intervals: reps, paces: plan.paces,
+    workout, activity, intervals: reps, route, paces: plan.paces,
     plan, log, moves, todayISO: T.iso(new Date()),
   });
   // Resolve the current slide by its kind (stable across a lazy reps insertion
@@ -114,7 +157,7 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
   const fwd = () => (i < slides.length - 1 ? setCurKind(slides[i + 1].kind) : onClose());
   const back = () => { if (i > 0) setCurKind(slides[i - 1].kind); };
   const L = (s.lines || []).length;
-  const gi = 2 + (s.hr ? 1 : 0); // lines/bars start after the optional HR graph
+  const gi = 2 + (s.hr || s.route ? 1 : 0); // lines/bars start after the optional graph/map
 
   return (
     <div className="recap" ref={focusRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Session recap">
@@ -128,6 +171,7 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
         <div className="recap-kicker" style={{ '--i': 0 }}>{s.title}</div>
         {s.big && <div className="recap-big" style={{ '--i': 1 }}>{big}</div>}
         {s.hr && <HrGraph hr={s.hr} />}
+        {s.route && <RouteMap route={s.route} discipline={workout.discipline} />}
         {(s.lines || []).map((l, n) => <p className="recap-line" key={n} style={{ '--i': gi + n }}>{l}</p>)}
         {s.rows && (
           <div className="recap-bars" style={{ '--i': gi + L }}>

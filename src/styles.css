@@ -306,12 +306,32 @@ body {
 .recap-hr-area { opacity: 0; animation: recap-fade 1.1s ease both; animation-delay: 1.4s; }
 @keyframes recap-hr-line { to { stroke-dashoffset: 0; } }
 @keyframes recap-fade { to { opacity: 1; } }
+/* Route map: the track draws itself start to finish over a faint ghost of the
+   full shape, a dot rides the line (offset-path; browsers without it just
+   never paint the dot on the path, and it starts hidden), and the finish
+   marker lands as the draw completes. */
+.recap-route { display: block; width: 100%; max-width: 340px; margin: 16px auto 4px; overflow: visible; }
+.recap-route-ghost { opacity: .16; }
+.recap-route-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: recap-hr-line 3.2s cubic-bezier(.35, .5, .25, 1) both .25s; }
+/* The dot only animates where offset-path exists: without the gate a browser
+   lacking it would still run the opacity keyframes and paint the dot stuck
+   at the SVG origin instead of riding the line. */
+.recap-route-dot { opacity: 0; }
+@supports (offset-distance: 0%) {
+  .recap-route-dot { offset-rotate: 0deg; animation: recap-route-dot 3.2s cubic-bezier(.35, .5, .25, 1) both .25s; }
+}
+.recap-route-start { opacity: 0; animation: recap-fade .4s ease both .25s; }
+.recap-route-end { opacity: 0; animation: recap-fade .5s ease both 3.35s; }
+@keyframes recap-route-dot { 0% { offset-distance: 0%; opacity: 1; } 96% { opacity: 1; } 100% { offset-distance: 100%; opacity: 0; } }
 /* Reduced-motion resets MUST follow the recap animation rules above: a media
    query adds no specificity, so at equal specificity the later rule wins. */
 @media (prefers-reduced-motion: reduce) {
   .recap-body > *, .recap-big, .recap-bars .rb-bar i { animation: none; }
   .recap-hr-line { animation: none; stroke-dashoffset: 0; }
   .recap-hr-area { animation: none; opacity: 1; }
+  .recap-route-line { animation: none; stroke-dashoffset: 0; }
+  .recap-route-dot { animation: none; opacity: 0; }
+  .recap-route-start, .recap-route-end { animation: none; opacity: 1; }
 }
 .recap-kicker { font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--blue); }
 .recap-big { font-size: 42px; font-weight: 800; letter-spacing: -1.2px; margin: 14px 0 6px; }

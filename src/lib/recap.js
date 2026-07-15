@@ -1,6 +1,6 @@
 /* Try — session recap: the slide deck shown when a session completes with a
  * matched recording. Pure assembly (component renders the descriptors):
- * headline → splits/reps → heart rate → effort → the takeaway. Slides only
+ * headline → route → splits/reps → heart rate → effort → the takeaway. Slides only
  * exist when their data does — no filler, no fake precision. The closing
  * slide is the point: celebration plus consequence, what this session means
  * for tomorrow (decisions over dashboards, even in confetti form).
@@ -14,7 +14,7 @@ const fmtMin = sec => {
   return m >= 60 ? Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm' : m + ' min';
 };
 
-export function buildRecap({ workout, activity, intervals, paces, plan, log, moves, todayISO }) {
+export function buildRecap({ workout, activity, intervals, route, paces, plan, log, moves, todayISO }) {
   if (!workout || !activity || !activity.movingTimeSec) return null;
   const rv = reviewActivity({ workout, activity, paces }) || { stats: [], verdicts: [] };
   const it = intervalRows({ workout, intervals, paces });
@@ -32,7 +32,24 @@ export function buildRecap({ workout, activity, intervals, paces, plan, log, mov
     ].filter(Boolean),
   });
 
-  // 2 — reps or splits, with the summary as the headline number.
+  // 2 — the route, when the recording carried GPS (arrives lazily like the
+  // reps; the deck re-resolves by kind). The distance counts up while the
+  // track draws itself. A track needs at least two DISTINCT points to be a
+  // shape — a treadmill blip pinned to one coordinate is not a route.
+  const distinct = (route || []).some(p => p[0] !== route[0][0] || p[1] !== route[0][1]);
+  if (route && route.length >= 2 && distinct && activity.distance) {
+    slides.push({
+      kind: 'route', title: 'The route',
+      // one rounding for both: big is the counted value's own final frame,
+      // so the exported string can never disagree with the animated one
+      big: (Math.round(activity.distance / 100) / 10).toFixed(1) + ' km',
+      count: { to: Math.round(activity.distance / 100), fmt: 'km1' }, // tenths of a km
+      route,
+      lines: ['start to finish, as the ground saw it'],
+    });
+  }
+
+  // 3 — reps or splits, with the summary as the headline number.
   if (it && it.rows.length >= 2) {
     slides.push({
       kind: 'splits', title: it.judged ? 'The reps' : 'The splits', big: it.summary,
@@ -48,7 +65,7 @@ export function buildRecap({ workout, activity, intervals, paces, plan, log, mov
     });
   }
 
-  // 3 — heart rate (only once the backend passes averages through). When the
+  // 4 — heart rate (only once the backend passes averages through). When the
   // interval/lap breakdown is available, each segment's average HR is plotted
   // in time order as an honest rise-and-fall profile across the session — this
   // is segment-average resolution, not a raw beat stream (we do not fetch one).
@@ -78,7 +95,7 @@ export function buildRecap({ workout, activity, intervals, paces, plan, log, mov
     });
   }
 
-  // 4 — effort and load.
+  // 5 — effort and load.
   const effortLines = [];
   if (activity.rpe != null) effortLines.push('You rated it ' + Math.round(activity.rpe) + '/10.');
   const warn = rv.verdicts.find(v => v.tone === 'warn');
@@ -91,7 +108,7 @@ export function buildRecap({ workout, activity, intervals, paces, plan, log, mov
     });
   }
 
-  // 5 — the takeaway: what tomorrow holds because of today.
+  // 6 — the takeaway: what tomorrow holds because of today.
   const tomorrow = todayISO ? iso(addDaysISO(todayISO, 1)) : null;
   const next = plan && tomorrow
     ? plan.weeks.flatMap(w => w.workouts).filter(w =>

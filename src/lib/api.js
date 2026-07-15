@@ -217,6 +217,13 @@ export function getIntervalsActivityIntervals(getToken, activityId) {
   return request('/api/integrations/intervals-icu/activities/' + encodeURIComponent(activityId) + '/intervals', { getToken });
 }
 
+// The GPS track of one activity, decimated server-side ({ points: [{lat,
+// lng}] }). Empty points → recorded without GPS (pool, trainer). 404 → not
+// connected or a backend that predates the endpoint.
+export function getIntervalsActivityRoute(getToken, activityId) {
+  return request('/api/integrations/intervals-icu/activities/' + encodeURIComponent(activityId) + '/route', { getToken });
+}
+
 // The athlete's per-sport thresholds as configured on intervals.icu
 // (bikeFtp watts; run/swim threshold paces in metres per second).
 export function getIntervalsThresholds(getToken) {

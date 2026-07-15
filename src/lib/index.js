@@ -13,6 +13,7 @@ export * from './adapt.js';
 export * from './loadmodel.js';
 export * from './review.js';
 export * from './recap.js';
+export * from './route.js';
 export * from './weakest.js';
 export * from './autolog.js';
 export * from './watch.js';

@@ -10,7 +10,7 @@ import {
   getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan,
   putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
   putWorkoutAdjustment, deleteWorkoutAdjustment,
-  getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents, getIntervalsThresholds, getIntervalsActivityIntervals,
+  getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents, getIntervalsThresholds, getIntervalsActivityIntervals, getIntervalsActivityRoute,
   toClientState, logToApi,
 } from '@/lib/api.js';
 
@@ -163,6 +163,21 @@ export function makeSync(getToken) {
     loadActivityIntervals: async activityId => {
       const res = await getIntervalsActivityIntervals(getToken, activityId);
       return res.ok && Array.isArray(res.body) ? res.body : null;
+    },
+
+    // The GPS track for one recording, as [lat, lng] pairs for the recap's
+    // route map. null when there is no drawable route for ANY reason — not
+    // connected, offline, a backend predating the endpoint, an indoor session
+    // with no GPS, or a track too short to draw — the recap simply has no
+    // route slide.
+    loadActivityRoute: async activityId => {
+      const res = await getIntervalsActivityRoute(getToken, activityId);
+      const pts = res.ok && res.body && Array.isArray(res.body.points) ? res.body.points : null;
+      if (!pts) return null;
+      const route = pts
+        .filter(p => p && typeof p.lat === 'number' && typeof p.lng === 'number')
+        .map(p => [p.lat, p.lng]);
+      return route.length >= 2 ? route : null;
     },
 
     // Workouts-to-watch: reconcile the upcoming plan onto the athlete's

@@ -15,6 +15,8 @@ vi.mock('@/lib/api.js', () => ({
   getIntervalsActivities: vi.fn(),
   putPlannedEvents: vi.fn(),
   getIntervalsThresholds: vi.fn(),
+  getIntervalsActivityIntervals: vi.fn(),
+  getIntervalsActivityRoute: vi.fn(),
   putWellness: vi.fn(),
   toClientState: vi.fn(),
   logToApi: e => ({ completed: !!(e && e.done), completedAtUtc: e && e.at, feel: (e && e.feel) || null, notes: null }),
@@ -25,6 +27,30 @@ import { makeSync, mergeOverlay, mergeMoves, baseDates, sweepStale } from './syn
 
 const getToken = async () => 'tok';
 beforeEach(() => { vi.clearAllMocks(); });
+
+describe('makeSync.loadActivityRoute', () => {
+  it('maps the points to [lat, lng] pairs', async () => {
+    api.getIntervalsActivityRoute.mockResolvedValue({ ok: true, body: { points: [
+      { lat: 51.4592, lng: -2.5938 }, { lat: 51.4601, lng: -2.5951 },
+    ] } });
+    const r = await makeSync(getToken).loadActivityRoute('i1');
+    expect(api.getIntervalsActivityRoute).toHaveBeenCalledWith(getToken, 'i1');
+    expect(r).toEqual([[51.4592, -2.5938], [51.4601, -2.5951]]);
+  });
+  it('null whenever there is nothing drawable: 404, empty, one point, or junk entries', async () => {
+    const sync = makeSync(getToken);
+    api.getIntervalsActivityRoute.mockResolvedValue({ ok: false, status: 404 });
+    expect(await sync.loadActivityRoute('i1')).toBe(null);       // older backend / not connected
+    api.getIntervalsActivityRoute.mockResolvedValue({ ok: true, body: { points: [] } });
+    expect(await sync.loadActivityRoute('i1')).toBe(null);       // indoor: no GPS
+    api.getIntervalsActivityRoute.mockResolvedValue({ ok: true, body: { points: [{ lat: 51.4, lng: -2.5 }] } });
+    expect(await sync.loadActivityRoute('i1')).toBe(null);       // one point is not a route
+    api.getIntervalsActivityRoute.mockResolvedValue({ ok: true, body: { points: [
+      { lat: 51.4, lng: -2.5 }, { lat: null, lng: -2.6 }, { lat: 'x', lng: -2.7 },
+    ] } });
+    expect(await sync.loadActivityRoute('i1')).toBe(null);       // junk filtered, too few remain
+  });
+});
 
 describe('makeSync.hydrate', () => {
   it('maps a server plan through toClientState', async () => {
