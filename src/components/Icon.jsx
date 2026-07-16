@@ -34,10 +34,12 @@ const ICON_PATHS = {
   settings: '<path d="M4 8h9"/><path d="M18 8h2"/><circle cx="15.5" cy="8" r="2.5"/><path d="M4 16h3"/><path d="M12 16h8"/><circle cx="9.5" cy="16" r="2.5"/>',
   // Open book — the support library of explainers ("the science behind Try").
   book: '<path d="M12 6.8C10.4 5.6 7.8 5 4.5 5.2V17.6C7.8 17.4 10.4 18 12 19.2"/><path d="M12 6.8C13.6 5.6 16.2 5 19.5 5.2V17.6C16.2 17.4 13.6 18 12 19.2"/>',
-  // The tri-mark with a plus — "your next Try plan starts here". Drawn for the
-  // no-plan empty states (Jon, 2026-07-16); replaces the never-drawn
-  // "clipboard" name those call sites pointed at (which rendered nothing).
-  nextplan: '<path d="M12 3 21 19.5 3 19.5Z"/><path d="M12 10.2v5.6"/><path d="M9.2 13h5.6"/>',
+  // The compass — pick your next direction. Drawn for the no-plan empty
+  // states (Jon chose it over the tri-mark plus, 2026-07-16); replaces the
+  // never-drawn "clipboard" name those call sites pointed at (which rendered
+  // nothing). The needle sways like a real compass settling: .compass-needle
+  // in styles.css, gated behind prefers-reduced-motion.
+  nextplan: '<circle cx="12" cy="12" r="8.6"/><path class="compass-needle" d="M15.6 8.4 13.3 13.3 8.4 15.6 10.7 10.7Z"/>',
 };
 // New triathlon set is drawn for a uniform stroke-width of 2 (the app default);
 // no per-icon weight overrides needed.

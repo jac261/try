@@ -373,7 +373,7 @@ describe('wellness.rampHistory & rampZone', () => {
   it('coachLine: one sentence from form + ramp, most urgent first', () => {
     const c = wellness.coachLine;
     expect(c(-35, 3)).toMatch(/Recovery is the training/);      // high risk trumps everything
-    expect(c(-20, 9)).toMatch(/pull back/i);                    // risky ramp
+    expect(c(-20, 9)).toMatch(/pulling back/i);                 // risky ramp (hedged, not definite)
     expect(c(-20, 6)).toMatch(/hot build/i);                    // aggressive
     expect(c(30, 1)).toMatch(/too fresh/i);                     // transition
     expect(c(-20, 3)).toMatch(/Hold this rhythm/);              // building + optimal

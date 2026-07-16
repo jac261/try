@@ -303,7 +303,10 @@ function coachLine(tsb, ramp) {
   const f = formZone(tsb), r = rampZone(ramp);
   if (!f && !r) return null;
   if (f && f.key === 'highRisk') return 'Deep fatigue territory. Recovery is the training right now.';
-  if (r && r.key === 'risky') return 'Fitness is climbing faster than your body can absorb. Time to pull back.';
+  // Hedged, not definite: a ramp this steep RISKS outrunning absorption, but
+  // whether it actually does varies by athlete and we cannot know without
+  // richer profile data (Jon, 2026-07-16).
+  if (r && r.key === 'risky') return 'Fitness may be climbing faster than your body can absorb. Worth pulling back.';
   if (r && r.key === 'aggressive') return 'A hot build. Big gains, but keep a close eye on recovery.';
   if (f && f.key === 'transition') return 'Very fresh, maybe too fresh. Fitness leaks without regular load.';
   if (r && r.key === 'building') {
