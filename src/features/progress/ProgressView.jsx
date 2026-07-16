@@ -7,7 +7,7 @@ import { AthleteStateStrip } from '@/features/wellness/AthleteStateStrip.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport }) {
+export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport, onWhatIf }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -176,7 +176,7 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
         </div>
       </>}
 
-      <WellnessTrends onSupport={onSupport} wellness={wellness} />
+      <WellnessTrends onSupport={onSupport} wellness={wellness} onWhatIf={onWhatIf} />
     </>
   );
 }

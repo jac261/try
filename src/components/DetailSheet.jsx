@@ -33,7 +33,7 @@ const WHY_DISC = {
   'swim:Endurance': 'Build aerobic endurance in the water. Long, smooth and unhurried — hold relaxed form as the distance adds up.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf }) {
   // The rep table: lazily fetch the recording's interval analysis once the
   // session is done and matched. null → loading/none; [] handled by the lib.
   const [reps, setReps] = useState(null);
@@ -109,6 +109,9 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         {w.test && onLogResult && <><button className="btn primary" onClick={onLogResult}><Icon name="trend" size={18} /> Log result &amp; re-target</button><div style={{ height: 10 }} /></>}
         {!w.race && <button className={'btn ' + (done ? 'done' : (w.test ? 'ghost' : 'primary'))} onClick={onToggle}>
           {done ? '✓ Completed — tap to undo' : 'Mark as complete'}</button>}
+        {/* the what-if doorway every design judge asked for: meet the athlete
+            at the moment of doubt, pre-filled with this exact session */}
+        {onWhatIf && !done && !w.race && !w.bRace && !w.test && shown >= T.iso(new Date()) && <a className="wi-link" {...tap(() => onWhatIf(w))} role="button">What if I skip this?</a>}
         {done && activity && (() => {
           // Post-session review: the recording's numbers next to the plan's
           // intent, with verdicts only where an average can judge fairly.

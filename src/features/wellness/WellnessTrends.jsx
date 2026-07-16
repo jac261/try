@@ -1,10 +1,11 @@
 import * as T from '@/lib';
+import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { Signed } from '@/components/Signed.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 import { TrendChart } from '@/components/charts.jsx';
 
-export function WellnessTrends({ wellness , onSupport }) {
+export function WellnessTrends({ wellness , onSupport, onWhatIf }) {
   // After a history backfill the store can hold a year+; the charts stay
   // readable on the trailing 120 days (the "last N days" labels follow).
   const w = wellness.filter(r => r.ctl != null || r.hrv != null).slice(-120);
@@ -62,6 +63,7 @@ export function WellnessTrends({ wellness , onSupport }) {
         {tsbSeries.length >= 2 && <TrendChart height={120} domain={{ min: -35, max: 32 }}
           zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
           series={[{ values: tsbSeries, color: 'var(--brick)', width: 2.2 }]} />}
+        {onWhatIf && <a className="wi-link" {...tap(onWhatIf)} role="button">Try a what-if →</a>}
       </div>
 
       {(() => {

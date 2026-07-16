@@ -9,6 +9,7 @@ import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { Splash } from '@/components/Splash.jsx';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
+import { WhatIfSheet } from '@/features/wellness/WhatIfSheet.jsx';
 import { RecapSlides } from '@/features/recap/RecapSlides.jsx';
 import { AddWorkoutSheet } from '@/components/AddWorkoutSheet.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
@@ -64,6 +65,9 @@ export function App({ storage, getToken, user }) {
   const [refToId, setRefToId] = useState({});
   const [view, setView] = useState('today');
   const [detail, setDetail] = useState(null);
+  // The what-if simulator sheet: null, {} (generic, from Progress), or
+  // { initial: { tab, skipIds, skipLabel } } from a workout's own sheet.
+  const [whatIf, setWhatIf] = useState(null);
   const [editFitness, setEditFitness] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
   const [building, setBuilding] = useState(false);
@@ -659,7 +663,7 @@ export function App({ storage, getToken, user }) {
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={activities} onOpenRecording={openRecording} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
@@ -692,6 +696,8 @@ export function App({ storage, getToken, user }) {
           onDetails={w.adhoc ? null : () => { setRecap(null); setDetail(w); }} /> : null;
       })()}
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
+      {whatIf && <WhatIfSheet plan={plan} log={log} moves={moves} adjust={adjust} wellness={recs}
+        todayISO={T.iso(new Date())} initial={whatIf.initial} onClose={() => setWhatIf(null)} />}
 
       {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
@@ -703,7 +709,8 @@ export function App({ storage, getToken, user }) {
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}
         onLogResult={() => { setDetail(null); setEditFitness(true); }}
-        onRemove={detail.custom ? () => removeWorkout(detail.id) : null} onLoadIntervals={sync.loadActivityIntervals} onSupport={t => { setDetail(null); openSupport(t); }} />}
+        onRemove={detail.custom ? () => removeWorkout(detail.id) : null} onLoadIntervals={sync.loadActivityIntervals} onSupport={t => { setDetail(null); openSupport(t); }}
+        onWhatIf={tracker ? null : w => { setDetail(null); setWhatIf({ initial: { tab: 'miss', skipIds: [w.id], skipLabel: w.title || w.type } }); }} />}
 
       {addOpen && <AddWorkoutSheet onAdd={addWorkout} onClose={() => setAddOpen(false)} />}
 
