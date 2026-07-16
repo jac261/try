@@ -10,9 +10,9 @@ import { TrendChart } from '@/components/charts.jsx';
 // Everything analytical lives behind one "Details" fold: driver chips, the
 // readiness trend and the training-load charts. The default card is for the
 // athlete who just wants the answer (ring + advice + coach line); the fold is
-// for the one who wants the evidence. A stored choice wins; with no choice yet
-// the fold opens itself only when a zone needs attention (management by
-// exception, same philosophy as the engine: quiet when everything is fine).
+// for the one who wants the evidence. The fold starts closed on every load —
+// only the athlete's stored choice opens it (Jon, 2026-07-16); alarm states
+// speak through the headline, the coach line and the toggle row's chip colours.
 const LOAD_PREF = 'try.showLoad';
 const loadPref = () => { try { return localStorage.getItem(LOAD_PREF); } catch (e) { return null; } };
 const saveLoadPref = v => { try { localStorage.setItem(LOAD_PREF, v ? '1' : '0'); } catch (e) { /* private mode */ } };
@@ -112,9 +112,12 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
   const coach = hasLoad ? T.wellness.coachLine(tsbNow, ramp) : null;
   const hist = T.wellness.history(wellness, 14);
 
-  const alarm = (rZone && (rZone.key === 'aggressive' || rZone.key === 'risky'))
-    || (zone && zone.key === 'highRisk');
-  const open = loadChoice != null ? loadChoice === '1' : alarm;
+  // Folded on load, even in an alarm state: every panel starts tidy and the
+  // athlete reveals details (Jon, 2026-07-16). The alarm still shows without
+  // expanding — the toggle row's stat chips wear the zone colours, and the
+  // headline, coach line and any proposal carry the message. Only a stored
+  // choice opens it.
+  const open = loadChoice === '1';
   const toggle = () => { saveLoadPref(!open); setLoadChoice(open ? '0' : '1'); };
 
   return (

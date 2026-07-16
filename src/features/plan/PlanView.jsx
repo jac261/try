@@ -27,9 +27,9 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
       </div>
     </>
   );
-  const todayISO = T.iso(new Date());
-  const firstFuture = plan.weeks.findIndex(w => w.workouts.some(x => x.date >= todayISO));
-  const [openWeek, setOpenWeek] = useState(firstFuture < 0 ? 0 : firstFuture);
+  // Every week card starts folded: the tab loads tidy and the athlete opens
+  // what they want to read (Jon, 2026-07-16).
+  const [openWeek, setOpenWeek] = useState(-1);
 
   const race = T.RACES[plan.race];
   // The scheduled post-race recovery week (always the last week, isRecovery,
