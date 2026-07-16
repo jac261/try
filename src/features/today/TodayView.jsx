@@ -100,7 +100,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   // without a feed, nothing is being "spotted" and the card must not claim it.
   const connected = !!activities;
   if (tracker) coach.push({
-    key: 'no-plan', cls: 'banner tune', icon: 'clipboard',
+    key: 'no-plan', cls: 'banner tune', icon: 'nextplan',
     title: 'Ready for your next plan?',
     sub: connected
       ? 'Sessions from your watch land below and on your calendar. Tap to start your next plan.'
@@ -113,7 +113,9 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   // A maintenance block near its end can also just stop into tracker mode; offer
   // it as a second card the athlete can cycle to.
   if (!tracker && offerTracker) coach.push({
-    key: 'just-track', cls: 'banner', icon: 'clipboard',
+    // 'watch', not 'rest': a scheduled rest day's row wears the crescent on
+    // this same screen, and one glyph must not mean two things at once
+    key: 'just-track', cls: 'banner', icon: 'watch',
     title: 'Or just track for now',
     sub: (connected
       ? 'Stop the plan and take a break from structure. Sessions from your watch still land on your calendar.'

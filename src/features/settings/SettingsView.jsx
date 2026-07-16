@@ -215,7 +215,7 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
             <div style={{ height: 10 }} />
             <button className="btn ghost" onClick={onEditPlan}><Icon name="calendar" size={18} /> Edit race &amp; schedule</button>
             <div style={{ height: 10 }} />
-            <button className="btn ghost" onClick={onEnterTracker}><Icon name="clipboard" size={18} /> End plan and just track</button>
+            <button className="btn ghost" onClick={onEnterTracker}><Icon name="watch" size={18} /> End plan and just track</button>
           </>}
       </div>
       {!tracker && <div className="card">
