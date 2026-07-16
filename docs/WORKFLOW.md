@@ -90,3 +90,24 @@ the conventions pass before the PR opens.
 docs/CODE_AUDIT.md and standing rules in memory — and, where the code path is
 testable, a regression test that fails without the fix, so "tests green" in
 stage 5 actually covers the class of miss.
+
+## Verify the tree you push, not the tree you tested
+
+When held work shares files with a commit, a green working-tree suite proves
+nothing about the pushed tree: the 2026-07-16 staging leak committed a barrel
+export whose module only existed unstaged, and local vitest passed while CI
+failed. Before pushing any commit made from a working tree that still holds
+unshipped changes, verify the COMMITTED tree itself:
+
+    git worktree add <scratch>/headcheck HEAD
+    ln -s <repo>/node_modules <scratch>/headcheck/node_modules
+    (cd <scratch>/headcheck && npx vitest run)
+    git worktree remove <scratch>/headcheck --force
+
+## Gauntlet agents never touch the shared working tree
+
+Review agents are READ-ONLY in the maintainer's checkout: no git checkout,
+stash, commit, or file edits (a 2026-07-13 verify agent checked out a branch
+mid-session and stranded in-progress edits). Cross-branch review reads via
+`git show branch:path` and `git diff a...b`; anything needing a mutable tree
+gets its own isolated worktree.

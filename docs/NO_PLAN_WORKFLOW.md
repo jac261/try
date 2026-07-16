@@ -215,24 +215,32 @@ Phase 4 — cleanup and polish. LATER:
     /api/export; optional plan history (needs replace-semantics rework);
     updatedAt concurrency guard on profile.
 
-## Open questions (Jon)
+## Decisions (Jon, 2026-07-16)
 
-1. Is the sensor-less athlete a real near-term persona or a placeholder?
-   Decides whether manual session logging jumps from Phase 3 into Phase 0–2.
-2. Should the next plan's starting load be seeded from tracker-period
-   training, and does a manual quick-log count with the same weight as a
-   detected activity? Fixes the /api/sessions field set and the plan-request
-   interface.
-3. When a benchmark happens mid-tracker, should it update baselines
-   immediately via the tracker-safe update, or queue as a proposal confirmed
-   at next-plan creation? Decides the Phase 0 fitness-update UX.
-4. Should the profile snapshot embedded in a plan at creation be immutable
-   for reproducibility, with the live profile as the between-plans source of
-   truth? (Recommended yes.)
-5. Do ended plans need to be reviewable anywhere (a plan history)? Today
-   replace reuses the DB row, so none exists; supporting it is a repo rework.
-6. How should the app greet the lapsed athlete after weeks away: quiet
-   surfaces, or a light welcome-back naming what the feed saw?
-7. (For Jack) Profile as /api/me/profile (recommended) vs a standalone
-   /api/profile; and profile_json on user_preferences vs a new user_profiles
-   table. Either satisfies the model.
+The six open questions are settled; only Q7 remains, and it is Jack's.
+
+1. **Sensor-less athlete: placeholder for now.** Manual session logging
+   stays in Phase 3, built when a real sensor-less user exists or Jon wants
+   quick-logging himself.
+2. **Next-plan seeding: seed from tracker-period training, equal weight.**
+   The engine treats tracked training as real training regardless of how it
+   was recorded; a manual quick-log counts the same as a detected activity.
+   Fixes the /api/sessions field set: no per-source confidence field needed.
+3. **Mid-tracker benchmarks update baselines immediately** through the
+   tracker-safe fitness update. No proposal queue; the profile stays current
+   and the next plan is built from it.
+4. **Plan-creation profile snapshots are immutable.** A plan records the
+   fitness it was built from and never rewrites history; mid-plan retargets
+   append a new fitnessHistory entry. The live profile is the between-plans
+   source of truth.
+5. **No plan history yet.** Replace keeps reusing the row; the weekly digest
+   and fitness history carry the training story. Revisit only if the lack is
+   actually felt (then it joins the Phase 4 list, where it already sits as
+   optional).
+6. **Lapsed return: a light welcome-back.** One quiet, dismissible card
+   naming what the feed saw during the gap (sessions landed, fitness drift)
+   and offering the next step. Never guilt-toned, shown once per return.
+
+7. (For Jack, still open) Profile as /api/me/profile (recommended) vs a
+   standalone /api/profile; and profile_json on user_preferences vs a new
+   user_profiles table. Either satisfies the model.
