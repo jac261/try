@@ -1,7 +1,9 @@
 /* ---------------- minimalist line icons ----------------
    Monoline (stroke = currentColor) so they inherit text colour. */
 const ICON_PATHS = {
-  logo: '<path d="M12 3.2 20.4 18.6 3.6 18.6Z"/><circle cx="12" cy="13.4" r="1.6" fill="currentColor" stroke="none"/>',
+  // The tri-mark (Jon's new set, 2026-07-16): an outlined triangle split into
+  // three segments by a central Y whose lower arms sweep to the base corners.
+  logo: '<path d="M12 2.8 L21.2 20 L2.8 20 Z"/><path d="M12 2.8 L12 12.4"/><path d="M2.8 20 C7.2 17.6 10.4 15.2 12 12.4"/><path d="M21.2 20 C16.8 17.6 13.6 15.2 12 12.4"/>',
   swim: '<circle cx="8.2" cy="7" r="2"/><path d="M10 7.6l2.8-2.5 3.4.8"/><path d="M3 10.9c1.2.9 2.4.9 3.6 0s2.4-.9 3.6 0 2.4.9 3.6 0 2.4-.9 3.6 0"/><path d="M3 14.3c1.2.9 2.4.9 3.6 0s2.4-.9 3.6 0 2.4.9 3.6 0 2.4-.9 3.6 0"/>',
   bike: '<circle cx="5.6" cy="16.4" r="3"/><circle cx="18.4" cy="16.4" r="3"/><path d="M5.6 16.4L9 9.6h7"/><path d="M9 9.6l2 6.8 5-7.4"/><path d="M16 9l2.4 7.4"/><path d="M7.7 9.3h2.5"/><path d="M14.7 8h2.7"/>',
   run: '<circle cx="15" cy="3.6" r="2.4" fill="currentColor" stroke="none"/><path fill="none" d="M14.3 7.2L11.4 13.6"/><path fill="none" d="M14.2 7.9l3.2 1l2.4-.4"/><path fill="none" d="M13.6 8L10 8.4l.8 3"/><path fill="none" d="M11.4 13.6l3 2v4.4"/><path fill="none" d="M11.4 13.6l-2 2.6-3 1.6"/><path fill="none" stroke-width="1.6" d="M5.4 8.2H2.6"/><path fill="none" stroke-width="1.6" d="M5 11.4H1.4"/><path fill="none" stroke-width="1.6" d="M5.6 14.4H3.2"/>',
