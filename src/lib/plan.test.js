@@ -189,6 +189,20 @@ describe('workout library — Tranche 2 sizing (segments == durationMin)', () =>
     expect(full.every(z => z === 'Z2')).toBe(true);     // an Ironman race run is aerobic, not Z4
   });
 
+  it('brick durations track LONG_BRICK per race distance, not a flat 60-min base', () => {
+    // Same race date → same plan shape and load factors, so brick durations
+    // across race types should differ only by the LONG_BRICK table
+    // (sprint 70 / olympic 95 / full 165), not collapse to a shared 60-min base.
+    const brickOf = rt => generatePlan({ name: 'T', raceType: rt, fitness: 'intermediate', trainingDays: [0, 1, 2, 3, 4, 5, 6], longDay: 5, daysPerWeek: 7, raceDate: '2027-06-01', startDate: '2026-09-01' })
+      .weeks.flatMap(w => w.workouts).find(w => w.discipline === 'brick' && w.phase === 'Base' && !w.race);
+    const sprint = brickOf('sprint'), oly = brickOf('olympic'), full = brickOf('full');
+    expect(oly.type).toBe('Brick'); // not 'Long' — TSS factor and copy key off the type
+    expect(oly.durationMin).toBeGreaterThan(60); // flat-60 base would land at/below 60 in Base
+    expect(sprint.durationMin).toBeLessThan(oly.durationMin);
+    expect(oly.durationMin).toBeLessThan(full.durationMin);
+    expect(full.durationMin / oly.durationMin).toBeCloseTo(165 / 95, 1); // pure table ratio, same load
+  });
+
   it('run distance uses the pace mix; swim distance is summed metres (F)', () => {
     const p = mk('advanced', 'olympic', '2027-02-15');
     const flat = p.weeks.flatMap(w => w.workouts);

@@ -648,8 +648,10 @@ const INTENSITY_LADDER = {
 // straight to hard reps, elites top out at VO2 on the bike too.
 const LADDER_ANCHOR = { Base: 0, Build: 2, Peak: 3, Maintain: 1 };
 function typeFor(discipline, role, phase, isRecovery, intensity) {
+  // Templates encode bricks as 'brick:long' — the discipline, not the role,
+  // is the brick signal, so it must win before the generic long check.
+  if (discipline === 'brick') return 'Brick';
   if (role === 'long') return 'Long';
-  if (role === 'brick') return 'Brick';
   // Peak swims become race-specific open-water sessions (any role, but not recovery weeks).
   if (discipline === 'swim' && phase === 'Peak' && !isRecovery) return 'Open Water';
   if (role === 'easy') return discipline === 'swim' ? 'Technique' : 'Easy';
@@ -662,7 +664,7 @@ function typeFor(discipline, role, phase, isRecovery, intensity) {
 }
 
 function baseDuration(discipline, role, race) {
-  if (role === 'brick') return LONG_BRICK[race];
+  if (discipline === 'brick') return LONG_BRICK[race];
   if (role === 'long') return discipline === 'bike' ? LONG_BIKE[race] : (discipline === 'run' ? LONG_RUN[race] : 60);
   if (discipline === 'swim') return role === 'easy' ? 35 : 45;
   if (discipline === 'run') return 50;
