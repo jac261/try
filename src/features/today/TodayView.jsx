@@ -113,7 +113,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
     act: onEnterTracker,
   });
   if (!tracker && weekly) {
-    const skin = { 'trim-week': ['banner ramp', 'trend'], 'boost-week': ['banner tune', 'flame'], 'restore-week': ['banner', 'bolt'] };
+    const skin = { 'trim-week': ['banner ramp', 'trend'], 'trim-long-run': ['banner ramp', 'trend'], 'boost-week': ['banner tune', 'flame'], 'restore-week': ['banner', 'bolt'] };
     const [cls, icon] = skin[weekly.kind] || ['banner', 'bolt'];
     coach.push({ key: 'weekly', cls, icon, title: weekly.headline, sub: weekly.why + ' Tap to apply →', act: () => onWeekly(weekly) });
   }

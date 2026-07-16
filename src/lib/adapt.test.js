@@ -355,7 +355,7 @@ describe('projectRecovery — gauntlet fixes (2026-07-12)', () => {
   });
 });
 
-import { RUN_RAMP_RULES } from './adapt.js';
+import { RUN_RAMP_RULES, LONG_RUN_RULES } from './adapt.js';
 
 describe('RUN1 — the run-specific ramp guardrail', () => {
   // History: four steady baseline weeks, a controllable prior week and current
@@ -410,5 +410,62 @@ describe('RUN1 — the run-specific ramp guardrail', () => {
   it('respects the no-stacking guard: an adjusted next-week run silences it', () => {
     const p = proposeWeek({ ...runCase(60, 120), moves: {}, adjust: { 'n-0': { kind: 'trim', factor: 0.8 } }, todayISO: TODAY, wellness: calm });
     expect(p).toBe(null);
+  });
+});
+
+
+describe('RUN2 — the long-run jump guardrail', () => {
+  // 28 days of logged 55-minute runs (weekly volume flat, so RUN1 is calm),
+  // plus one scheduled long run in `inDays` days at `upMin` minutes.
+  const jumpCase = (upMin, { inDays = 3, weekOver = {}, extraWorkouts = [] } = {}) => {
+    const workouts = [];
+    const log = {};
+    for (let o = -28; o <= 0; o++) {
+      const id = 'h' + o;
+      workouts.push({ id, week: 0, phase: 'Build', date: iso(addDays(TODAY, o)), discipline: 'run', type: 'Easy', title: 'Run', durationMin: 55 });
+      log[id] = { done: true };
+    }
+    const up = { id: 'up', week: 1, phase: 'Build', date: iso(addDays(TODAY, inDays)), discipline: 'run', type: 'Long', title: 'Long Run', durationMin: upMin };
+    const wk1 = { index: 1, phase: 'Build', isRecovery: false, start: iso(addDays(TODAY, 1)), workouts: [up, ...extraWorkouts], ...weekOver };
+    return { plan: { weeks: [{ index: 0, phase: 'Build', isRecovery: false, start: iso(addDays(TODAY, -28)), workouts }, wk1] }, log };
+  };
+  const calm = recsAt(0.5);
+
+  it('fires on a lone leap the weekly signals cannot see, capping that one session', () => {
+    const p = proposeWeek({ ...jumpCase(100), moves: {}, adjust: {}, todayISO: TODAY, wellness: calm });
+    expect(p.kind).toBe('trim-long-run');
+    expect(p.targets).toEqual(['up']);
+    expect(p.ease).toEqual([]);
+    // the cap lands at the athlete's own longest plus the step, per case
+    expect(p.factor).toBeCloseTo(Math.round(55 * (1 + LONG_RUN_RULES.capPct) / 100 * 100) / 100, 5);
+    expect(p.why).toContain('55 minutes');
+    expect(p.why).toContain('100');
+    // engine parameters stay out of the copy
+    expect(p.why).not.toMatch(/0\.4|0\.25|jumpPct|factor/);
+  });
+
+  it('a modest step stays silent', () => {
+    expect(proposeWeek({ ...jumpCase(70), moves: {}, adjust: {}, todayISO: TODAY, wellness: calm })).toBe(null);
+  });
+
+  it('the floor keeps a huge leap from being gutted', () => {
+    const p = proposeWeek({ ...jumpCase(200), moves: {}, adjust: {}, todayISO: TODAY, wellness: calm });
+    expect(p.factor).toBe(LONG_RUN_RULES.minFactor);
+  });
+
+  it('taper, recovery and race weeks keep their scheduled shape', () => {
+    expect(proposeWeek({ ...jumpCase(100, { weekOver: { phase: 'Taper' } }), moves: {}, adjust: {}, todayISO: TODAY, wellness: calm })).toBe(null);
+    expect(proposeWeek({ ...jumpCase(100, { weekOver: { isRecovery: true } }), moves: {}, adjust: {}, todayISO: TODAY, wellness: calm })).toBe(null);
+    const raceWeek = jumpCase(100, { extraWorkouts: [{ id: 'race', week: 1, phase: 'Peak', date: iso(addDays(TODAY, 6)), discipline: 'run', race: true, title: 'Race', durationMin: 0 }] });
+    expect(proposeWeek({ ...raceWeek, moves: {}, adjust: {}, todayISO: TODAY, wellness: calm })).toBe(null);
+  });
+
+  it('RUN1 outranks it when the whole week is hot', () => {
+    // current week doubled: RUN1's weekly ramp fires before the jump rule
+    const c = jumpCase(100);
+    c.plan.weeks[0].workouts.forEach(w => { if (w.date > iso(addDays(TODAY, -7))) w.durationMin = 120; });
+    c.plan.weeks[1].workouts.push({ id: 'n-run', week: 1, phase: 'Build', date: iso(addDays(TODAY, 5)), discipline: 'run', type: 'Easy', title: 'Easy Run', durationMin: 40 });
+    const p = proposeWeek({ ...c, moves: {}, adjust: {}, todayISO: TODAY, wellness: calm });
+    expect(p.kind).toBe('trim-week'); // RUN1's shape, not the jump rule
   });
 });

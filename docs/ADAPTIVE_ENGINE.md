@@ -81,7 +81,7 @@ thresholds: `FORM_RULES` in `src/lib/adapt.js`.
 | F3 | Form in **Transition** (> +25) mid-Base/Build | Fitness is leaking → restore any engine-adjusted upcoming sessions; with nothing to restore, stay quiet (missed volume is the athlete's to reschedule) |
 
 The weekly banner shows ONE structural proposal, most urgent first:
-**F1 > R2 > R1 > RUN1 > F3 > F2** (RUN1, the run-specific ramp guardrail, has
+**F1 > R2 > R1 > RUN1 > RUN2 > F3 > F2** (RUN1, the run-specific ramp guardrail, has
 its own section below). F2 requires a clean week (no missed sessions) —
 grey form caused by skipped training is not solved by a bigger plan.
 The same guardrails as Phase 2 apply: fresh data only, recovery/taper/race
@@ -222,7 +222,7 @@ buildPct 0.30, minWeeklyMin 60, minBaselineWeeks 2, trimRun 0.7). The ramp
 percent is compared unrounded — rounding happens at display, never before a
 threshold test.
 
-RUN1 slots into the priority chain **F1 > R2 > R1 > RUN1 > F3 > F2**: the
+RUN1 slots into the priority chain **F1 > R2 > R1 > RUN1 > RUN2 > F3 > F2**: the
 ordering IS the de-dup — it is only reachable when the aggregate rules stayed
 quiet, exactly the blind spot it exists for. It is **log-only**: no wellness
 freshness gate, so it protects sensor-less athletes and survives stale
@@ -233,7 +233,40 @@ week is indistinguishable from an unrun one, and a deflated baseline would
 false-fire on a plain return to normal running. The proposal copy speaks only
 about run load versus the athlete's own recent norm: the signal makes no
 cross-discipline comparison, so neither does the copy. Brick run legs are excluded
-until segment-level actuals exist (undercount fails toward silence). Reserved
-fast-follow: a long-run jump rule (this week's Long run vs the recent longest
-completed run) as a distinct acute mechanism. `runLoadSignal.acute7d` is the
+until segment-level actuals exist (undercount fails toward silence). `runLoadSignal.acute7d` is the
 designated input for the athlete state strip's injury-risk tile.
+
+## RUN2 — the long-run jump guardrail
+
+The single-session sibling of RUN1 (shipped 2026-07-15, formerly the reserved
+fast-follow above). Weekly volume can look calm while one scheduled run leaps
+far past anything the legs have actually done: a lone big session barely moves
+a 7-day sum, which is exactly why RUN1 cannot see it. The signal
+(`longRunJumpSignal`, `src/lib/runload.js`) compares the biggest run scheduled
+in the **next 7 days** against the **longest logged run of the trailing 28
+days** (recorded time beating planned, adjustment overlay applied, brick legs
+and races excluded exactly as `runLoadSignal` excludes them).
+
+| Rule | Fires when | Proposal |
+|---|---|---|
+| RUN2 | The upcoming run exceeds the recent longest by **> +40%** | Trim **that one session** to land at the recent longest **+25%** — a computed per-case factor, floored at **0.6** so a session is stepped down, never gutted |
+
+Named thresholds: `LONG_RUN_RULES` in `src/lib/runload.js` (jumpPct 0.40,
+capPct 0.25, lookbackDays 28, minRuns 2, minLongestMin 40, minFactor 0.6).
+Nielsen's work points at large single-step jumps, not gentle weekly drift, as
+the injury signal — hence a generous fire threshold with a modest landing cap.
+
+Guardrails mirror the week rules: taper, recovery and race weeks keep their
+scheduled shape; logged or already-adjusted sessions are never candidates
+(G3); fitness tests and tune-up races count as pounding in the history but
+are never trim candidates (G2: a test is moved, never softened); thin
+history (fewer than 2 logged runs in the window) and small bases (longest
+under 40 min) stay silent; and the whole signal stays silent until the
+28-day lookback fits fully inside the plan's own history, because the
+plan-scoped log cannot see the long runs an athlete did before the plan
+existed and week-one plans would otherwise false-fire. Log-only like RUN1. It sits after RUN1 in
+the priority chain, so a hot whole week is handled as a week and the jump rule
+only speaks when the leap is the sole anomaly. The proposal copy quotes the
+athlete's own minutes (longest recent vs scheduled) and never the thresholds.
+The proposal kind is `trim-long-run`; accepting it routes through the same
+`trimWeek` overlay machinery with the single session as its only target.

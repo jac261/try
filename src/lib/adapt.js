@@ -10,8 +10,8 @@
 import { INTENSITY_TYPES } from './tuning.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { wellness as wellnessLib } from './wellness.js';
-import { runLoadSignal, RUN_RAMP_RULES } from './runload.js';
-export { RUN_RAMP_RULES, runLoadSignal } from './runload.js';
+import { runLoadSignal, longRunJumpSignal, RUN_RAMP_RULES, LONG_RUN_RULES } from './runload.js';
+export { RUN_RAMP_RULES, LONG_RUN_RULES, runLoadSignal, longRunJumpSignal } from './runload.js';
 
 // A proposal: { kind, workout, headline, why, action }
 //   kind: 'ease' | 'restore' | 'move-test'
@@ -103,11 +103,12 @@ function windowAvg(ramps, fromISO, toISO) {
 }
 
 // Week-level proposal from the ramp trend (R1-R2) and the form trend (F1-F3),
-// most urgent first: F1 > R2 > R1 > RUN1 > F3 > F2.
+// most urgent first: F1 > R2 > R1 > RUN1 > RUN2 > F3 > F2.
 //   F1 sustained high risk → { kind:'trim-week', factor:.6 } (recovery-depth week)
 //   R2 risky ramp          → { kind:'trim-week', factor:.7, ease:[quality] }
 //   R1 aggressive ×2       → { kind:'trim-week', factor:.8 }
 //   RUN1 run ramp hot      → { kind:'trim-week', factor:.7, ease:[run quality], targets:[runs only] }
+//   RUN2 long-run jump      → { kind:'trim-long-run', computed factor, targets:[that run] }
 //   F3 transition in build → { kind:'restore-week' }
 //   F2 grey all week       → { kind:'boost-week', factor:1.1 }
 // Missed sessions are never auto-rescheduled (field decision 2026-07-11: a
@@ -215,6 +216,35 @@ export function proposeWeek({ wellness, plan, log, moves, adjust, todayISO }) {
         headline: 'Ease your running next week',
         why: 'Your run volume has jumped well above its recent normal. Running is the most impact-heavy discipline, so easing next week\'s runs gives your legs time to adapt while the rest of your training carries on as planned.',
       };
+    }
+  }
+
+  // RUN2 — the single-session jump guardrail: one scheduled run leaping far
+  // past the longest the legs have actually done in the last month, while
+  // every weekly signal above stayed calm (a lone big session barely moves a
+  // 7-day sum). Proposes capping THAT session at a modest step above the
+  // athlete's own recent longest — computed per case, floored so a session
+  // is stepped down, never gutted. Taper, recovery and race weeks keep their
+  // scheduled shape (the same guardrail every week rule honours), and the
+  // signal itself skips logged or already-adjusted sessions (G3).
+  {
+    const jump = longRunJumpSignal({ plan, log, moves, adjust, todayISO: today });
+    if (jump && jump.jumpPct > LONG_RUN_RULES.jumpPct) {
+      const upWeek = plan.weeks.find(w2 => w2.workouts.some(x => x.id === jump.upcoming.id));
+      const protectedWeek = !upWeek || upWeek.isRecovery || upWeek.phase === 'Taper'
+        || upWeek.workouts.some(x => x.race);
+      if (!protectedWeek) {
+        const factor = Math.max(LONG_RUN_RULES.minFactor,
+          Math.round((jump.longestMin * (1 + LONG_RUN_RULES.capPct)) / jump.upcoming.min * 100) / 100);
+        if (factor < 1) {
+          return {
+            kind: 'trim-long-run', action: 'trimWeek', week: upWeek.index,
+            factor, targets: [jump.upcoming.id], ease: [],
+            headline: 'Soften your longest run',
+            why: `Your longest run in the last four weeks was ${jump.longestMin} minutes, and ${jump.upcoming.title} is scheduled for ${jump.upcoming.min} minutes. Legs adapt to gradual steps, not leaps. Capping it keeps the buildup safe while the rest of the week stands.`,
+          };
+        }
+      }
     }
   }
 

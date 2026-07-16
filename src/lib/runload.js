@@ -36,6 +36,79 @@ export const RUN_RAMP_RULES = {
   trimRun: 0.7,        // the proposed run trim, mirroring the aggregate rules
 };
 
+// The single-session sibling of the ramp rules: weekly volume can look calm
+// while one scheduled long run leaps far past anything the legs have done
+// lately — the classic overuse vector (Nielsen's work points at large
+// single-step jumps, not gentle weekly drift). Same conservative-guardrail
+// stance as RUN_RAMP_RULES: floors kill small-base noise, thin history stays
+// silent, and the proposed cap steps the session up rather than gutting it.
+export const LONG_RUN_RULES = {
+  jumpPct: 0.4,       // an upcoming run this far above the recent longest fires
+  capPct: 0.25,       // the proposed trim lands at longest recent + this step
+  lookbackDays: 28,   // "recent longest" means the trailing four weeks
+  minRuns: 2,         // fewer logged runs than this in the window judge nothing
+  minLongestMin: 40,  // a longest run under this floor judges nothing
+  minFactor: 0.6,     // never propose cutting a session below this share
+};
+
+// → { upcoming: {id, date, min, title}, longestMin, jumpPct } or null.
+// Measurement only — week-phase policy (taper, recovery, race) lives with the
+// rule in adapt.js. Candidates must be unlogged and unadjusted (an accepted
+// adjustment is the athlete's call and is never re-proposed over, G3);
+// history minutes prefer the recorded time exactly like runLoadSignal.
+export function longRunJumpSignal({ plan, log, moves, adjust, todayISO }) {
+  if (!plan || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
+  const today = todayISO || iso(new Date());
+  // The log is plan-scoped, so a young plan has no visibility of what the
+  // legs did before it existed: an athlete who ran 90-minute longs for years
+  // would read as jumping in week one. Until the lookback window fits fully
+  // inside the plan's own history, the signal cannot judge and stays silent
+  // (the generator's early progression is trusted by design).
+  const planStart = plan.weeks[0].start;
+  if (!planStart) return null;
+  const from = iso(addDays(today, -LONG_RUN_RULES.lookbackDays));
+  if (from < planStart) return null;
+  const eff = w => (moves && moves[w.id]) || w.date;
+  const runs = plan.weeks.flatMap(wk => wk.workouts)
+    .filter(w => w.discipline === 'run' && !w.race);
+  let longestMin = 0, logged = 0;
+  runs.forEach(w => {
+    const entry = (log || {})[w.id];
+    if (!entry || !entry.done) return;
+    const d = eff(w);
+    if (d < from || d > today) return;
+    logged++;
+    let m = entry.actualMin != null ? entry.actualMin : (w.durationMin || 0);
+    if (entry.actualMin == null) {
+      const adj = (adjust || {})[w.id];
+      if (adj) m *= adj.kind === 'ease' ? 0.65 : (adj.factor || 1);
+    }
+    if (m > longestMin) longestMin = m;
+  });
+  if (logged < LONG_RUN_RULES.minRuns || longestMin < LONG_RUN_RULES.minLongestMin) return null;
+
+  const horizon = iso(addDays(today, 7));
+  let upcoming = null;
+  runs.forEach(w => {
+    // Tests and tune-up races count as pounding in the history above, but
+    // are never trim CANDIDATES: G2 says a test is moved, never softened,
+    // and a scheduled race effort is the athlete's to run as planned.
+    if (w.test || w.bRace) return;
+    if ((log || {})[w.id] || (adjust || {})[w.id]) return;
+    const d = eff(w);
+    if (d < today || d > horizon) return;
+    const m = w.durationMin || 0;
+    if (!upcoming || m > upcoming.min) upcoming = { id: w.id, date: d, min: m, title: w.title || w.type };
+  });
+  if (!upcoming) return null;
+
+  return {
+    upcoming, longestMin: Math.round(longestMin),
+    // unrounded, same reasoning as rampPct: thresholds compare on this live
+    jumpPct: upcoming.min / longestMin - 1,
+  };
+}
+
 // → { acute7d, baselineWeekly, rampPct } or null when history is too thin.
 // acute7d is deliberately display-ready: it is the future injury-risk tile's
 // input on the athlete state strip.
