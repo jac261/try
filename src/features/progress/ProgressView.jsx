@@ -102,14 +102,17 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
         </div>
       )}
 
-      {!tracker && (() => {
+      {(() => {
         // Weakest link: the three sports on one experience scale, and what the
         // plan does about the one lagging behind. Quiet claims only — with too
         // little data (no FTP or weight for the bike) it says so.
-        // Hidden in tracker mode: the share line keys on the retained raceType,
-        // so it would claim a race share with no plan (do not soften, hide).
+        // Shown in tracker mode too (Jon, 2026-07-16): the scores are pure
+        // profile data and stay valid without a plan. Honesty guards: the
+        // retained raceType is nulled so the lib never claims a share of a
+        // race that is not scheduled, and the action line speaks about the
+        // NEXT plan instead of one that does not exist.
         const w = [...(wellness || [])].reverse().find(r => r.weightKg);
-        const wl = T.weakestLink({ profile: { ...plan.profile, weightKg: w ? w.weightKg : plan.profile.weightKg } });
+        const wl = T.weakestLink({ profile: { ...plan.profile, raceType: tracker ? null : plan.profile.raceType, weightKg: w ? w.weightKg : plan.profile.weightKg } });
         if (!wl) return null;
         const NAME = { run: 'Run', bike: 'Bike', swim: 'Swim' };
         // An excluded sport (injured state) gets a plain sentence, not a bar:
@@ -154,12 +157,17 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
               </div>
             </div>
             {wl.excludedSport && <p className="lead" style={{ margin: '10px 0 0' }}>
-              {NAME[wl.excludedSport]} is paused while you manage an injury. {ORDER.map(d => NAME[d]).join(' and ')} keep building.
+              {NAME[wl.excludedSport]} is paused while you manage an injury{tracker
+                ? ', so it is not scored here.'
+                : <>. {ORDER.map(d => NAME[d]).join(' and ')} keep building.</>}
             </p>}
             <p className="lead" style={{ margin: '10px 0 0' }}>
               {wl.weakest
-                ? 'Your ' + NAME[wl.weakest].toLowerCase() + ' sits clearly behind' + (wl.share ? ' and is roughly ' + wl.share + '% of your race' : '') + ' — the plan gives it extra time while you build.'
-                : 'Balanced across sports' + (wl.missing.length ? ' (no reading yet for your ' + wl.missing.map(d => NAME[d].toLowerCase()).join(' or ') + ')' : '') + ' — the plan stays even.'}
+                ? (tracker
+                  ? 'Your ' + NAME[wl.weakest].toLowerCase() + ' sits clearly behind. Your next plan will give it extra time while you build.'
+                  : 'Your ' + NAME[wl.weakest].toLowerCase() + ' sits clearly behind' + (wl.share ? ' and is roughly ' + wl.share + '% of your race' : '') + ' — the plan gives it extra time while you build.')
+                : 'Balanced across sports' + (wl.missing.length ? ' (no reading yet for your ' + wl.missing.map(d => NAME[d].toLowerCase()).join(' or ') + ')' : '')
+                  + (tracker ? '. A solid base to start your next plan from.' : ' — the plan stays even.')}
             </p>
           </div>
         </>;
