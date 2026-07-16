@@ -288,8 +288,18 @@ body {
 .wl-bars { display: flex; flex-direction: column; gap: 8px; }
 .wl-bars .wlb { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
 .wl-bars .wlb-l { width: 42px; font-weight: 700; color: var(--muted); flex: none; }
-.wl-bars .wlb-bar { flex: 1; height: 12px; background: rgba(255,255,255,.06); border-radius: 7px; overflow: hidden; }
+.wl-bars .wlb-bar { flex: 1; height: 12px; background: rgba(255,255,255,.06); border-radius: 7px; overflow: hidden; position: relative; }
 .wl-bars .wlb-bar i { display: block; height: 100%; border-radius: 7px; }
+/* Band boundaries at each quarter, overlaid ABOVE the fill so a bar ending
+   between two ticks reads as "about halfway through Advanced" — each label
+   below already owns exactly one quarter of the track (Jon, 2026-07-16). */
+.wl-bars .wlb-bar::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent calc(25% - 1px), var(--bg) calc(25% - 1px) calc(25% + 1px), transparent calc(25% + 1px)),
+    linear-gradient(90deg, transparent calc(50% - 1px), var(--bg) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(90deg, transparent calc(75% - 1px), var(--bg) calc(75% - 1px) calc(75% + 1px), transparent calc(75% + 1px));
+}
 .wl-bars .wlb-tag { width: 58px; flex: none; text-align: right; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: var(--faint); }
 .wl-bars .wlb-tag.limit { color: #f6b27a; }
 .wl-bars .wlb-scale { display: flex; gap: 8px; margin: 2px 68px 0 52px; font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; }
