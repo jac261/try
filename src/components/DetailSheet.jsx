@@ -44,7 +44,6 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
     onLoadIntervals(actId).then(list => { if (!gone) setReps(list); });
     return () => { gone = true; };
   }, [actId, onLoadIntervals]);
-  const canFit = T.FIT && T.FIT.supports(w);
   const disc = D[w.discipline];
   const why = !w.race && !w.test ? (WHY_DISC[w.discipline + ':' + w.type] || WHY[w.type]) : null;
   const shown = eff || w.date;
@@ -110,12 +109,6 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         {w.test && onLogResult && <><button className="btn primary" onClick={onLogResult}><Icon name="trend" size={18} /> Log result &amp; re-target</button><div style={{ height: 10 }} /></>}
         {!w.race && <button className={'btn ' + (done ? 'done' : (w.test ? 'ghost' : 'primary'))} onClick={onToggle}>
           {done ? '✓ Completed — tap to undo' : 'Mark as complete'}</button>}
-        {canFit && <>
-          <div style={{ height: 10 }} />
-          <button className="btn ghost" onClick={() => T.FIT.download(w, plan)}>
-            <Icon name="watch" size={18} /> Send to watch (.FIT)</button>
-          <div className="fithint">Structured workout with {w.discipline === 'bike' ? (plan.paces.ftp ? 'power' : 'effort (RPE)') : 'pace'} targets. Computer only: copy it into your watch's GARMIN/NewFiles folder over USB — opening it in the Garmin Connect app imports it as a course, not a workout. With intervals.icu connected, the watch sync in Settings sends your sessions automatically instead.</div>
-        </>}
         {done && activity && (() => {
           // Post-session review: the recording's numbers next to the plan's
           // intent, with verdicts only where an average can judge fairly.
