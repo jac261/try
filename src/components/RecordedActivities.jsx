@@ -24,13 +24,15 @@ function statBits(a, disc) {
   }
   if (a.averageWatts) bits.push(Math.round(a.averageWatts) + ' W avg');
   if (a.averageHeartrate) bits.push(Math.round(a.averageHeartrate) + ' bpm avg');
-  if (a.trainingLoad != null) bits.push('load ' + Math.round(a.trainingLoad));
+  if (a.trainingLoad != null) bits.push((a.estimated ? '~load ' : 'load ') + Math.round(a.trainingLoad));
   return bits.join(' · ');
 }
 
-function Row({ disc, name, stat, tag, onOpen }) {
+function Row({ disc, name, stat, tag, onOpen, manual }) {
   return (
-    <div className="wk" {...tap(onOpen)} aria-label={'Recap: ' + name}>
+    // A manual row's first tap celebrates, later taps edit — the accessible
+    // name stays neutral so it is never wrong about which one comes next.
+    <div className="wk" {...tap(onOpen)} aria-label={(manual ? 'Open ' : 'Recap: ') + name}>
       <div className="dot" style={{ background: T.DISCIPLINES[disc].grad }}><Icon name={T.DISCIPLINES[disc].icon} size={22} /></div>
       <div className="meta">
         <div className="t">{name} {tag && <span className="tag key">{tag}</span>}</div>
@@ -49,11 +51,14 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
   const sessions = plan && Array.isArray(plan.weeks)
     ? plan.weeks.flatMap(w => w.workouts).filter(w => effDate(w, moves) === date) : [];
 
-  // Fold each brick session's recording pair into one combined row.
+  // Fold each brick session's recording pair into one combined row. The
+  // matcher sees REAL recordings only: a hand-logged diary entry must never
+  // be folded into a brick's Matched row as if it were a measured leg.
+  const feedActs = (activities || []).filter(a => a && !a.manual);
   const rows = [];
   const claimed = new Set();
   sessions.filter(w => w.discipline === 'brick').forEach(w => {
-    const pair = T.brickPairFor({ workout: w, activities, moves, used: claimed });
+    const pair = T.brickPairFor({ workout: w, activities: feedActs, moves, used: claimed });
     if (!pair) return;
     claimed.add(pair.ride.id); claimed.add(pair.run.id);
     const load = (pair.ride.trainingLoad != null || pair.run.trainingLoad != null)
@@ -72,13 +77,17 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
   day.filter(a => !claimed.has(a.id)).forEach(a => {
     const disc = DISC[a.type];
     const min = a.movingTimeSec / 60;
-    const owner = sessions.find(w => w.discipline === disc && (log || {})[w.id] && log[w.id].done
-      && w.durationMin && min >= w.durationMin * 0.5 && min <= w.durationMin * 1.7);
+    // A manual entry never claims a plan workout: routing it through the
+    // matched branch would hijack its edit sheet and lend it plan-relative
+    // verdicts it has no data for (gauntlet catch).
+    const owner = a.manual ? null : sessions.find(w => w.discipline === disc && (log || {})[w.id] && log[w.id].done
+      && w.durationMin && min >= w.durationMin * T.MATCH_WINDOW.lo && min <= w.durationMin * T.MATCH_WINDOW.hi);
     // Always carry THIS activity, even when it matched a planned session:
     // two same-discipline recordings on one day can both fall in one session's
     // window, and re-deriving from the workout alone would resolve to the
     // recording closest to the planned duration, not the one actually tapped.
-    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc), tag: owner ? 'Matched' : null,
+    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc), manual: !!a.manual,
+      tag: a.manual ? 'Logged' : owner ? 'Matched' : null,
       open: owner ? { workout: owner, activity: a } : { activity: a } });
   });
 

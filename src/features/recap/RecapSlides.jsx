@@ -123,7 +123,9 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
   // Escape closes, focus returns on exit (2026-07-12 audit finding).
   const focusRef = useSheetFocus(onClose);
   const [route, setRoute] = useState(null);
-  const actId = activity && activity.id;
+  // A manual entry's synthetic id is not a real recording id, so neither lazy
+  // fetch may fire for it — there are no reps or GPS track to find.
+  const actId = activity && !activity.manual ? activity.id : null;
   useEffect(() => {
     if (!actId || !onLoadIntervals) return;
     let gone = false;

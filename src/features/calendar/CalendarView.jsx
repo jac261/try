@@ -178,6 +178,27 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         </>;
       })()}
 
+      {/* Tracker's sibling of the add cards: log a DONE session into the
+          diary on the selected day. Same three cards, App routes by mode. */}
+      {tracker && onAddWorkout && (() => {
+        const logTarget = selected || todayISO;
+        return <>
+          <div className="section-title">Log a session</div>
+          <div className="cal-add">
+            {['run', 'bike', 'swim'].map(k => (
+              <div key={k} className="card cal-add-card"
+                {...tap(() => onAddWorkout(k, logTarget))}
+                aria-label={'Log a ' + D[k].name.toLowerCase() + ' session on '
+                  + T.fmtDate(logTarget, { weekday: 'long', month: 'long', day: 'numeric' })}>
+                <div className="dot" style={{ background: D[k].grad }}><Icon name={D[k].icon} size={22} /></div>
+                <span className="cal-add-name">{D[k].name}</span>
+                <span className="cal-add-hint">+ Log</span>
+              </div>
+            ))}
+          </div>
+        </>;
+      })()}
+
       {drag && <div className="drag-ghost" style={{ left: drag.x, top: drag.y, borderColor: drag.color }}>{drag.title}</div>}
     </>
   );

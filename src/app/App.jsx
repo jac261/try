@@ -88,10 +88,16 @@ export function App({ storage, getToken, user }) {
   // readiness factors and engine phases work without intervals.icu. Neither
   // overlay is ever stored or synced. Memoised because the derivation walks
   // the whole plan; renders happen on state change, so staleness matches deps.
-  const recs = useMemo(() => T.withLogLoad(T.wellness.mergeFeel(wellness, feels),
-    { plan, log, moves, adjust, todayISO: T.iso(new Date()) }),
-    [wellness, feels, plan, log, moves, adjust]);
   const [activities, setActivities] = useState(null); // recent watch activities (null until loaded / not connected)
+  // Manually logged sessions (the tracker diary): stored per device, merged
+  // into the feed SHAPE for display and load, never into `activities` itself —
+  // the raw feed alone drives connected/spotted/eFTP/brick matching, so a
+  // manual entry can never claim to be watch data.
+  const [manualActs, setManualActs] = useState(() => storage.loadManualActivities());
+  const displayActivities = useMemo(() => T.mergeActivities(activities, manualActs), [activities, manualActs]);
+  const recs = useMemo(() => T.withLogLoad(T.wellness.mergeFeel(wellness, feels),
+    { plan, log, moves, adjust, activities: displayActivities, todayISO: T.iso(new Date()) }),
+    [wellness, feels, plan, log, moves, adjust, displayActivities]);
   // Activity fetches are guarded by a sequence counter: the shallow mount fetch
   // and a deep tracker fetch can race, and last-write-wins would let a late
   // 10-day response clobber the 6-month diary.
@@ -104,7 +110,8 @@ export function App({ storage, getToken, user }) {
   // A failed plan write means this device and the account have diverged — the
   // catalog-drift incident proved that must never be silent again.
   const [planSyncFailed, setPlanSyncFailed] = useState(false);
-  const [addOpen, setAddOpen] = useState(null);    // "Add a session" sheet: null | { disc, dateISO } (Today passes {}, calendar cards preselect)
+  const [addOpen, setAddOpen] = useState(null);    // "Add a session" sheet: null | { disc, dateISO } (Today passes {}, calendar cards preselect; tracker routes it to the manual-log flavour)
+  const [manualDetail, setManualDetail] = useState(null); // stored manual entry being edited (second-and-later taps on a Logged row)
   const [recap, setRecap] = useState(null);        // session recap slides (workout whose recording just landed)
   // Support library: which topic is open, and where to return to when leaving
   // (charts on any tab deep-link in via openSupport).
@@ -431,6 +438,45 @@ export function App({ storage, getToken, user }) {
     }
     storage.save('recapSeen', next);
   };
+  // The manual diary's write path. Load is machine-estimated at save time and
+  // frozen (estimateTss keys on the library type the athlete picked); feel is
+  // descriptive only and never folds into the number.
+  const logManualActivity = spec => {
+    const sameDay = displayActivities.some(a => a && a.date === spec.dateISO
+      && T.DISCIPLINE[a.type] === spec.discipline);
+    if (sameDay && !confirm('You already have a ' + spec.discipline + ' session on '
+      + T.fmtDate(spec.dateISO, { weekday: 'short', month: 'short', day: 'numeric' }) + '. Log this one too?')) return;
+    const entry = {
+      id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      date: spec.dateISO, sport: spec.discipline, sessionType: spec.type,
+      durationMin: spec.durationMin,
+      trainingLoad: Math.round(T.estimateTss({ durationMin: spec.durationMin, type: spec.type })),
+      feel: spec.feel || null, createdAt: new Date().toISOString(), editedAt: null,
+    };
+    setManualActs(storage.upsertManualActivity(entry));
+    setAddOpen(null);
+  };
+  const saveManualEdit = (id, spec) => {
+    const prev = manualActs.find(e => e.id === id);
+    if (!prev) { setManualDetail(null); return; }
+    // Same speed bump as creation: an edit that moves the entry onto a day
+    // that already holds a session of the same sport asks first — excluding
+    // the entry's own current slot (gauntlet catch).
+    const sameDay = displayActivities.some(a => a && a.manualId !== id && a.date === spec.dateISO
+      && T.DISCIPLINE[a.type] === spec.discipline);
+    if (sameDay && (prev.date !== spec.dateISO || prev.sport !== spec.discipline)
+      && !confirm('You already have a ' + spec.discipline + ' session on '
+        + T.fmtDate(spec.dateISO, { weekday: 'short', month: 'short', day: 'numeric' }) + '. Keep this change?')) return;
+    const entry = {
+      ...prev, date: spec.dateISO, sport: spec.discipline, sessionType: spec.type,
+      durationMin: spec.durationMin,
+      trainingLoad: Math.round(T.estimateTss({ durationMin: spec.durationMin, type: spec.type })),
+      feel: spec.feel || null, editedAt: new Date().toISOString(),
+    };
+    setManualActs(storage.upsertManualActivity(entry));
+    setManualDetail(null);
+  };
+  const removeManual = id => { setManualActs(storage.removeManualActivity(id)); setManualDetail(null); };
   const openRecording = arg => {
     if (!arg) return;
     // Carry the tapped activity through when the row supplied one, so a matched
@@ -447,6 +493,25 @@ export function App({ storage, getToken, user }) {
     const a = arg.activity;
     if (!a || !a.movingTimeSec) return;
     const disc = T.DISCIPLINE[a.type] || 'bike';
+    // A manual entry celebrates ONCE like any recording, then every later tap
+    // opens the edit sheet — the natural second action on your own entry is
+    // fixing it, not replaying slides.
+    if (a.manual) {
+      const seen = storage.load('recapSeen', {});
+      if (seen[a.id]) {
+        const stored = manualActs.find(e => e.id === a.manualId);
+        if (stored) setManualDetail(stored);
+        return;
+      }
+      markRecapSeen(a, seen);
+      setRecap({
+        // type filled so the review's steady/easy-intent verdicts can key on
+        // the library session the athlete picked; adhoc skips plan-relative ones
+        workout: { id: 'adhoc-' + a.id, adhoc: true, type: a.name, title: a.name, discipline: disc, durationMin: Math.round(a.movingTimeSec / 60) },
+        activity: a,
+      });
+      return;
+    }
     markRecapSeen(a);
     setRecap({
       workout: {
@@ -533,7 +598,12 @@ export function App({ storage, getToken, user }) {
   const weekly = T.proposeRace(engineInputs) || T.proposeWeek(engineInputs);
   // Recovery timeline: speaks only from the high-risk form zone (null otherwise).
   const recovery = T.projectRecovery(engineInputs);
-  const runLoad = T.runLoadSignal(engineInputs); // proposeWeek already walks this each render; matches recovery above
+  // proposeWeek already walks this each render; matches recovery above. In
+  // tracker mode the diary (feed + manual) carries the run history instead of
+  // the plan-scoped log, so the athlete strip's run tile stays honest.
+  const runLoad = plan.race === 'tracker'
+    ? T.runLoadFromActivities({ activities: displayActivities, todayISO: T.iso(new Date()) })
+    : T.runLoadSignal(engineInputs);
   // Completed sessions spotted on the watch → one-tap logging (with the
   // athlete's recorded RPE as the feel, and a calibration observation each).
   const spotted = T.matchActivities({ activities, plan, log, moves, todayISO: T.iso(new Date()) });
@@ -702,8 +772,8 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} storage={storage} />}
-      {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={activities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} storage={storage} />}
+      {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
       {view === 'settings' && <SettingsView plan={plan}
@@ -755,7 +825,12 @@ export function App({ storage, getToken, user }) {
         onWhatIf={tracker ? null : w => { setDetail(null); setWhatIf({ initial: { tab: 'miss', skipIds: [w.id], skipLabel: w.title || w.type } }); }}
         onReplayRecap={log[detail.id] && recordingFor(detail) ? () => { const w2 = detail; setDetail(null); setRecap({ workout: w2, activity: recordingFor(w2) }); } : null} />}
 
-      {addOpen && <AddWorkoutSheet initialDisc={addOpen.disc} dateISO={addOpen.dateISO} onAdd={addWorkout} onClose={() => setAddOpen(null)} />}
+      {addOpen && <AddWorkoutSheet mode={tracker ? 'log' : 'plan'} initialDisc={addOpen.disc} dateISO={addOpen.dateISO}
+        onAdd={tracker ? logManualActivity : addWorkout} onClose={() => setAddOpen(null)} />}
+      {manualDetail && <AddWorkoutSheet mode="log" editing={manualDetail}
+        onAdd={spec => saveManualEdit(manualDetail.id, spec)}
+        onDelete={() => removeManual(manualDetail.id)}
+        onClose={() => setManualDetail(null)} />}
 
       <div className="nav">
         {tabs.map(([k, ic, label]) => (

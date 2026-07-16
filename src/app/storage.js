@@ -23,13 +23,35 @@ export function storageForUser(userId) {
   // authoritative per date and would silently drop a field it doesn't know.
   const feelKey = ns + 'feel';
   const loadFeels = () => { try { return JSON.parse(localStorage.getItem(feelKey) || '{}'); } catch (e) { return {}; } };
+  // Manually logged sessions (tracker mode's diary, sensor-less or watch-missed).
+  // Local-only until the backend grows a free-standing activities endpoint —
+  // the log endpoint keys on workout GUIDs, which manual entries don't have.
+  const manualKey = ns + 'manualActivities';
+  const loadManual = () => { try { return JSON.parse(localStorage.getItem(manualKey) || '[]'); } catch (e) { return []; } };
+  const saveManual = arr => { try { localStorage.setItem(manualKey, JSON.stringify(arr)); } catch (e) {} };
 
   return {
     load(k, fb) { try { const v = localStorage.getItem(ns + k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
     save(k, v) { try { localStorage.setItem(ns + k, JSON.stringify(v)); } catch (e) {} },
-    // Note: calibration deliberately survives clear() — it's an append-only
-    // dataset spanning plans, not state tied to the current one.
+    // Note: calibration and manualActivities deliberately survive clear() —
+    // both are append-only diaries spanning plans, not current-plan state.
     clear() { ['plan', 'log', 'moves', 'adjust', 'pendingMoves'].forEach(k => localStorage.removeItem(ns + k)); },
+    loadManualActivities: loadManual,
+    // Replace-by-id upsert, date-sorted, capped like calibration so the diary
+    // can't grow unbounded (500 sessions ≈ well over a year of training).
+    upsertManualActivity(entry) {
+      const a = loadManual().filter(e => e.id !== entry.id);
+      a.push(entry);
+      a.sort((x, y) => (x.date < y.date ? -1 : 1));
+      const out = a.slice(-500);
+      saveManual(out);
+      return out;
+    },
+    removeManualActivity(id) {
+      const a = loadManual().filter(e => e.id !== id);
+      saveManual(a);
+      return a;
+    },
     loadWellness,
     upsertWellness(rec) {
       const a = loadWellness().filter(r => r.date !== rec.date);

@@ -60,6 +60,43 @@ export function deriveLoadRecords({ plan, log, moves, adjust, todayISO, seed }) 
   return out;
 }
 
+// The tracker-mode sibling of deriveLoadRecords: with no plan weeks, the
+// diary IS the training log, so the same recurrence walks the activities
+// (feed and manual alike — anything carrying a trainingLoad). Bootstrap
+// seeding mirrors wk1Daily's convention: the first calendar week of diary
+// load, averaged over 7 days, with ATL = CTL (balanced start). Pass `seed`
+// to continue from the last measured record instead.
+export function deriveActivityLoadRecords({ activities, seed, todayISO }) {
+  const today = todayISO || iso(new Date());
+  const acts = (activities || []).filter(a => a && a.date && a.trainingLoad != null);
+  if (!seed && !acts.length) return [];
+  const byDate = {};
+  acts.forEach(a => { byDate[a.date] = (byDate[a.date] || 0) + a.trainingLoad; });
+
+  let start, ctl, atl;
+  if (seed) {
+    start = iso(addDays(seed.date, 1)); ctl = seed.ctl; atl = seed.atl;
+  } else {
+    const firstDate = Object.keys(byDate).sort()[0];
+    const windowEnd = iso(addDays(firstDate, 6));
+    let total = 0;
+    Object.keys(byDate).forEach(d => { if (d >= firstDate && d <= windowEnd) total += byDate[d]; });
+    const daily = total / 7;
+    start = firstDate; ctl = daily; atl = daily;
+  }
+  if (today < start) return [];
+  const out = [];
+  const days = daysBetween(start, today);
+  for (let i = 0; i <= days; i++) {
+    const d = iso(addDays(start, i));
+    const tss = byDate[d] || 0;
+    ctl += (tss - ctl) / 42;
+    atl += (tss - atl) / 7;
+    out.push({ date: d, ctl: round2(ctl), atl: round2(atl), tsb: round2(ctl - atl), derived: true });
+  }
+  return out;
+}
+
 // Fill the wellness records with derived load, deferring to measured data:
 // - FRESH measured CTL (within the engine's freshness window) owns the series
 //   outright — the derived model stays out entirely.
@@ -76,10 +113,14 @@ export function withLogLoad(records, inputs) {
   const real = recs.filter(r => r.ctl != null && !r.derived);
   const last = real.length ? real[real.length - 1] : null;
   if (last && last.date >= iso(addDays(today, -RAMP_RULES.freshDays))) return recs;
-  const derived = deriveLoadRecords({
-    ...(inputs || {}),
-    seed: last ? { date: last.date, ctl: last.ctl, atl: last.atl } : undefined,
-  });
+  const seed = last ? { date: last.date, ctl: last.ctl, atl: last.atl } : undefined;
+  // With no plan weeks (tracker) the diary carries the load; the fresh /
+  // stale-continuation / no-measured contract above is identical either way.
+  const plan = inputs && inputs.plan;
+  const tracked = !plan || !Array.isArray(plan.weeks) || !plan.weeks.length;
+  const derived = tracked
+    ? deriveActivityLoadRecords({ activities: inputs && inputs.activities, seed, todayISO: today })
+    : deriveLoadRecords({ ...(inputs || {}), seed });
   if (!derived.length) return recs;
   const byDate = {};
   derived.forEach(d => { byDate[d.date] = d; });

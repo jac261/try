@@ -39,7 +39,7 @@ export function reviewActivity({ workout, activity, paces, log }) {
   if (a.distance && w.discipline === 'bike') stats.push(['Avg speed', (a.distance / 1000 / (a.movingTimeSec / 3600)).toFixed(1) + ' km/h']);
   if (a.averageWatts) stats.push(['Avg power', Math.round(a.averageWatts) + ' W']);
   if (a.averageHeartrate) stats.push(['Avg HR', Math.round(a.averageHeartrate) + ' bpm']);
-  if (a.trainingLoad != null) stats.push(['Load', Math.round(a.trainingLoad)]);
+  if (a.trainingLoad != null) stats.push(['Load', (a.estimated ? '~' : '') + Math.round(a.trainingLoad)]);
   if (a.rpe != null) stats.push(['RPE', Math.round(a.rpe) + '/10']);
 
   // Duration vs plan (the plan's number, after any ease/trim the athlete saw).

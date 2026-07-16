@@ -10,6 +10,11 @@ import { iso, addDays } from './date.js';
 // intervals.icu activity type → our discipline. Bricks have no single type —
 // they match as a ride+run PAIR (see brickPairFor); the old strength exclusion
 // predates keying on the WeightTraining type, which maps cleanly.
+// The matcher's acceptance window: a recording within [lo, hi] of the planned
+// (or manually logged) duration counts as the same session. One constant so
+// auto-matching, brick pairing and manual-entry shadowing can never drift.
+export const MATCH_WINDOW = { lo: 0.5, hi: 1.7 };
+
 export const DISCIPLINE = {
   Run: 'run', VirtualRun: 'run',
   Ride: 'bike', VirtualRide: 'bike',
@@ -32,7 +37,7 @@ export function brickPairFor({ workout, activities, moves, used }) {
   const rides = on('bike'), runs = on('run');
   if (rides.length !== 1 || runs.length !== 1) return null;
   const min = (rides[0].movingTimeSec + runs[0].movingTimeSec) / 60;
-  if (min < planned * 0.5 || min > planned * 1.7) return null;
+  if (min < planned * MATCH_WINDOW.lo || min > planned * MATCH_WINDOW.hi) return null;
   return { ride: rides[0], run: runs[0] };
 }
 
@@ -81,7 +86,7 @@ export function matchActivities({ activities, plan, log, moves, todayISO }) {
       .filter(a => a && !used.has(a.id) && DISCIPLINE[a.type] === w.discipline
         && a.date === eff(w) && a.movingTimeSec != null)
       .map(a => ({ a, min: a.movingTimeSec / 60 }))
-      .filter(x => x.min >= planned * 0.5 && x.min <= planned * 1.7)
+      .filter(x => x.min >= planned * MATCH_WINDOW.lo && x.min <= planned * MATCH_WINDOW.hi)
       .sort((x, y) => Math.abs(x.min - planned) - Math.abs(y.min - planned))[0];
     if (best) {
       used.add(best.a.id);
@@ -103,7 +108,7 @@ export function activityFor({ workout, activities, moves }) {
   const best = activities
     .filter(a => a && DISCIPLINE[a.type] === workout.discipline && a.date === date && a.movingTimeSec != null)
     .map(a => ({ a, min: a.movingTimeSec / 60 }))
-    .filter(x => x.min >= planned * 0.5 && x.min <= planned * 1.7)
+    .filter(x => x.min >= planned * MATCH_WINDOW.lo && x.min <= planned * MATCH_WINDOW.hi)
     .sort((x, y) => Math.abs(x.min - planned) - Math.abs(y.min - planned))[0];
   return best ? best.a : null;
 }

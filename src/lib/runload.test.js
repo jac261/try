@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runLoadSignal, longRunJumpSignal, RUN_RAMP_RULES, LONG_RUN_RULES } from './runload.js';
+import { runLoadSignal, longRunJumpSignal, runLoadFromActivities, RUN_RAMP_RULES, LONG_RUN_RULES } from './runload.js';
 import { iso, addDays } from './date.js';
 
 const TODAY = '2026-07-09';
@@ -157,5 +157,31 @@ describe('longRunJumpSignal (single-session jump)', () => {
     const c = jumpCase(60, 100, { inDays: 12 });
     const s = longRunJumpSignal({ ...c, moves: { up: iso(addDays(TODAY, 2)) }, adjust: {}, todayISO: TODAY });
     expect(s.upcoming.id).toBe('up');
+  });
+});
+
+describe('runLoadFromActivities (tracker-mode run load from the diary)', () => {
+  const T0 = '2026-07-14';
+  const run = (daysAgo, min) => ({ id: daysAgo + ':' + min, date: iso(addDays(T0, -daysAgo)), type: 'Run', movingTimeSec: min * 60 });
+
+  it('reads acute vs uncoupled baseline straight off run activities, manual or recorded', () => {
+    const acts = [
+      run(2, 50), run(5, 40),                       // acute week: 90
+      run(9, 40), run(12, 30),                      // baseline week 1: 70
+      run(16, 40), run(19, 30),                     // baseline week 2: 70
+      { id: 'x', date: iso(addDays(T0, -3)), type: 'Ride', movingTimeSec: 60 * 60 }, // rides never count
+    ];
+    const s = runLoadFromActivities({ activities: acts, todayISO: T0 });
+    expect(s.acute7d).toBe(90);
+    expect(s.baselineWeekly).toBe(70);
+    expect(s.rampPct).toBeCloseTo(90 / 70 - 1, 5);
+  });
+
+  it('thin history judges nothing: too few baseline weeks or too small a base', () => {
+    expect(runLoadFromActivities({ activities: [run(2, 50)], todayISO: T0 })).toBe(null);
+    // two baseline weeks but under the hour-a-week floor
+    const tiny = [run(2, 20), run(9, 25), run(16, 25)];
+    expect(runLoadFromActivities({ activities: tiny, todayISO: T0 })).toBe(null);
+    expect(runLoadFromActivities({ activities: [], todayISO: T0 })).toBe(null);
   });
 });

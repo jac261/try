@@ -98,11 +98,12 @@ export function buildRecap({ workout, activity, intervals, route, paces, plan, l
   // 5 — effort and load.
   const effortLines = [];
   if (activity.rpe != null) effortLines.push('You rated it ' + Math.round(activity.rpe) + '/10.');
+  else if (activity.feel) effortLines.push('You called it ' + (activity.feel === 'right' ? 'just right' : activity.feel) + '.');
   const warn = rv.verdicts.find(v => v.tone === 'warn');
   if (warn && warn !== lead) effortLines.push(warn.text);
   if (activity.trainingLoad != null) {
     slides.push({
-      kind: 'effort', title: 'The dose', big: 'Load ' + Math.round(activity.trainingLoad),
+      kind: 'effort', title: 'The dose', big: 'Load ' + (activity.estimated ? '~' : '') + Math.round(activity.trainingLoad),
       count: { to: Math.round(activity.trainingLoad), fmt: 'load' },
       lines: effortLines.length ? effortLines : ['Banked into your fitness — the curve remembers.'],
     });

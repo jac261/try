@@ -18,6 +18,7 @@
  * are contested territory.
  */
 import { iso, addDays } from './date.js';
+import { DISCIPLINE } from './autolog.js';
 
 // Percent, not absolute: run load is small and the aggregate ramp's CTL/week
 // vocabulary does not translate. Deliberately looser than the folklore "10%
@@ -167,6 +168,36 @@ export function runLoadSignal({ plan, log, moves, adjust, todayISO }) {
     // Unrounded on purpose: the threshold compares live on this value, and
     // quantizing before a strict > would quietly shift the effective
     // thresholds above their stated ones. Round at display, not here.
+    rampPct: acuteRaw / baselineWeekly - 1,
+  };
+}
+
+// The tracker-mode sibling of runLoadSignal: with no plan weeks the diary
+// (feed recordings and manual entries alike) carries the run history, so the
+// same acute-vs-uncoupled-baseline ramp reads straight off activity minutes.
+// Same currency (minutes, not TSS), same floors, same unrounded rampPct.
+// → { acute7d, baselineWeekly, rampPct } or null when history is too thin.
+export function runLoadFromActivities({ activities, todayISO }) {
+  const today = todayISO || iso(new Date());
+  const runs = (activities || []).filter(a => a && a.date && a.movingTimeSec && DISCIPLINE[a.type] === 'run');
+  if (!runs.length) return null;
+  const sum = (from, to) => runs.reduce((s, a) => (a.date > from && a.date <= to ? s + a.movingTimeSec / 60 : s), 0);
+  const acuteRaw = sum(iso(addDays(today, -7)), today);
+  // Baseline: the four complete weeks before the acute week, skipping empty
+  // ones (a holiday week judges nothing) — uncoupled, like runLoadSignal.
+  let blocks = 0, total = 0;
+  for (let b = 1; b <= 4; b++) {
+    const to = iso(addDays(today, -7 * b)), from = iso(addDays(today, -7 * (b + 1)));
+    const wk = sum(from, to);
+    if (wk === 0) continue;
+    blocks++; total += wk;
+  }
+  if (blocks < RUN_RAMP_RULES.minBaselineWeeks) return null;
+  const baselineWeekly = total / blocks;
+  if (baselineWeekly < RUN_RAMP_RULES.minWeeklyMin) return null;
+  return {
+    acute7d: Math.round(acuteRaw),
+    baselineWeekly: Math.round(baselineWeekly),
     rampPct: acuteRaw / baselineWeekly - 1,
   };
 }

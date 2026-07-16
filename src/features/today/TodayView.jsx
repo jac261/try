@@ -78,7 +78,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, storage }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, storage }) {
   const tracker = plan.race === 'tracker';
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
@@ -104,7 +104,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
     title: 'Ready for your next plan?',
     sub: connected
       ? 'Sessions from your watch land below and on your calendar. Tap to start your next plan.'
-      : 'When you are ready for structure again, tap to start your next plan.',
+      : 'Log sessions here or on your calendar to keep your training diary going. Tap to start your next plan.',
     act: onEditPlan,
   });
   // The plan's own edges (race just passed / maintenance block ending)
@@ -188,11 +188,13 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
           <Icon name="calendar" size={15} />
           <span>Next up · {T.fmtDate(effDate(next, moves), { weekday: 'long' })}: <b>{easedOf(next).title}</b> · {T.fmtDuration(easedOf(next).durationMin || 0)}</span>
         </div>}
-        {!tracker && <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> Add a session</div>}
+        {/* tracker's row logs a DONE session into the diary; plan mode's adds
+            a scheduled one — same doorway, App routes by mode */}
+        <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> {tracker ? 'Log a session' : 'Add a session'}</div>
       </div>
-      <RecordedActivities activities={activities} date={todayISO} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} />
+      <RecordedActivities activities={displayActivities || activities} date={todayISO} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} />
       {storage && <WeeklyDigest plan={plan} log={log} moves={moves} adjust={adjust} adjustLog={adjustLog}
-        wellness={wellness} activities={activities} storage={storage} todayISO={todayISO} />}
+        wellness={wellness} activities={displayActivities || activities} storage={storage} todayISO={todayISO} />}
       {!tracker && <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout} />}
     </>
   );

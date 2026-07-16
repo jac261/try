@@ -44,7 +44,8 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
   if (tracker) {
     // Tracker mode: no plan to compare against, so the week is exactly what
     // was recorded — counts and minutes from the feed, and load only when
-    // the recordings carry it (measured upstream, so no estimate tilde).
+    // the recordings carry it; manual diary entries carry an ESTIMATED load,
+  // so any of them in the week puts the tilde on the total.
     const acts = (activities || []).filter(a => a && a.date && inRange(a.date, weekMonday, weekEnd) && a.movingTimeSec);
     if (!acts.length) return null;
     const totalMin = Math.round(acts.reduce((s, a) => s + a.movingTimeSec / 60, 0));
@@ -53,7 +54,7 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
       tracker: true, range,
       done: acts.length, planned: null, totalMin,
       load: loads.length ? Math.round(loads.reduce((s, v) => s + v, 0)) : null,
-      loadEstimated: false,
+      loadEstimated: acts.some(a => a.estimated),
       fitness: fitnessLine(wellness, weekMonday, weekEnd),
       missed: [], engine: [], ahead: null,
     };

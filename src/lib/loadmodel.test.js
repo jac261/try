@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveLoadRecords, withLogLoad } from './loadmodel.js';
+import { deriveLoadRecords, deriveActivityLoadRecords, withLogLoad } from './loadmodel.js';
 import { estimateTss } from './adapt.js';
 import { generatePlan } from './plan.js';
 import { iso, addDays } from './date.js';
@@ -137,5 +137,45 @@ describe('loadmodel.withLogLoad (read-time merge)', () => {
   it('with no plan the records pass through untouched', () => {
     const records = [{ date: START, hrv: 60 }];
     expect(withLogLoad(records, { plan: null })).toBe(records);
+  });
+});
+
+describe('loadmodel.deriveActivityLoadRecords (tracker-mode diary CTL/ATL)', () => {
+  const D0 = '2026-07-01';
+  const acts = [
+    { id: 1, date: D0, trainingLoad: 40 },
+    { id: 2, date: iso(addDays(D0, 2)), trainingLoad: 60 },
+    { id: 'manual-a', date: iso(addDays(D0, 4)), trainingLoad: 35, manual: true, estimated: true },
+  ];
+
+  it('bootstraps from the first calendar week of diary load, averaged over 7 days', () => {
+    const out = deriveActivityLoadRecords({ activities: acts, todayISO: iso(addDays(D0, 6)) });
+    expect(out.length).toBe(7);
+    const daily = (40 + 60 + 35) / 7;
+    // day one applies the recurrence once on top of the balanced seed
+    expect(out[0].ctl).toBeCloseTo(daily + (40 - daily) / 42, 1);
+    expect(out[0].derived).toBe(true);
+    expect(out[out.length - 1].tsb).toBeCloseTo(out[out.length - 1].ctl - out[out.length - 1].atl, 5);
+  });
+
+  it('a seed continues from the last measured record instead of bootstrapping', () => {
+    const out = deriveActivityLoadRecords({
+      activities: acts, seed: { date: D0, ctl: 50, atl: 45 }, todayISO: iso(addDays(D0, 2)),
+    });
+    expect(out.length).toBe(2); // the day after the seed, through today
+    expect(out[0].ctl).toBeCloseTo(50 + (0 - 50) / 42, 2); // no diary load that day (series rounds to 2dp)
+  });
+
+  it('nothing to derive from means an empty series, never an invented one', () => {
+    expect(deriveActivityLoadRecords({ activities: [], todayISO: D0 })).toEqual([]);
+    expect(deriveActivityLoadRecords({ activities: null, todayISO: D0 })).toEqual([]);
+    expect(deriveActivityLoadRecords({ activities: [{ id: 1, date: D0 }], todayISO: D0 })).toEqual([]); // no trainingLoad
+  });
+
+  it('withLogLoad walks the diary when the plan is a tracker sentinel', () => {
+    const tracker = { race: 'tracker', weeks: [] };
+    const out = withLogLoad([], { plan: tracker, activities: acts, todayISO: iso(addDays(D0, 6)) });
+    expect(out.length).toBe(7);
+    expect(out.every(r => r.derived)).toBe(true);
   });
 });

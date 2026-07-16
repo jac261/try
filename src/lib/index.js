@@ -10,6 +10,7 @@ export * from './plan.js';
 export * from './wellness.js';
 export * from './adapt.js';
 export * from './loadmodel.js';
+export * from './manual.js';
 export * from './review.js';
 export * from './recap.js';
 export * from './route.js';

@@ -11,7 +11,7 @@ import { INTENSITY_TYPES } from './tuning.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { wellness as wellnessLib } from './wellness.js';
 import { runLoadSignal, longRunJumpSignal, RUN_RAMP_RULES, LONG_RUN_RULES } from './runload.js';
-export { RUN_RAMP_RULES, LONG_RUN_RULES, runLoadSignal, longRunJumpSignal } from './runload.js';
+export { RUN_RAMP_RULES, LONG_RUN_RULES, runLoadSignal, longRunJumpSignal, runLoadFromActivities } from './runload.js';
 
 // A proposal: { kind, workout, headline, why, action }
 //   kind: 'ease' | 'restore' | 'move-test'
