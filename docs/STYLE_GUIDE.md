@@ -155,7 +155,7 @@ Pill badges pair a translucent tint with a saturated text colour.
 
 ## 3. Typography
 
-**Typeface:** [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans) (Google Fonts).
+**Typeface:** [Figtree](https://fonts.google.com/specimen/Figtree) (self-hosted variable woff2 in `src/assets/`, weights 300-900; no CDN so offline typography holds).
 Weights loaded: **400 / 500 / 600 / 700 / 800**.
 **Fallback stack:** `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif`.
 
@@ -216,7 +216,7 @@ dot:      circle cx=12 cy=13.4 r=1.6      (filled)
 ```
 
 - **On dark:** white (`--ink` / `#ffffff`) stroke + dot on `--bg` navy.
-- Always pair with the wordmark **"Try"** in Plus Jakarta Sans 800.
+- Always pair with the wordmark **"Try"** in Figtree 800.
 - Clear space ≥ the height of the dot on all sides. Don't recolour, skew, or add effects.
 
 ---

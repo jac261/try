@@ -33,6 +33,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon.svg', 'icons/favicon-48.png', 'icons/apple-touch-icon-180.png'],
+      // The default glob is js/css/html only; the self-hosted Figtree woff2
+      // must be precached or offline sessions fall back to the system font.
+      workbox: { globPatterns: ['**/*.{js,css,html,woff2}'] },
       manifest: {
         name: 'Try — Triathlon Training',
         short_name: 'Try',

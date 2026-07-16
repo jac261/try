@@ -1,4 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+/* Figtree, self-hosted as a variable font (screen winner, 2026-07-16): one
+   woff2 per subset covers weights 300 to 900, renders offline (the old
+   Google Fonts import silently lost typography in the installed PWA), and
+   stops render-blocking on an external host. */
+@font-face {
+  font-family: 'Figtree'; font-style: normal; font-weight: 300 900; font-display: swap;
+  src: url('./assets/figtree-var.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Figtree'; font-style: normal; font-weight: 300 900; font-display: swap;
+  src: url('./assets/figtree-var-ext.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 :root {
   --bg: #0e1217;            /* dark navy base */
@@ -35,7 +48,7 @@ html, body { margin: 0; padding: 0; }
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 #root { min-height: 100vh; }
@@ -592,7 +605,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .wk:not(.done) .check:hover { border-color: var(--accent); color: var(--line); }
 
 /* signed values: lift +/− to the optical centre of lining digits */
-.sgn { display: inline-block; transform: translateY(-0.11em); }
+.sgn { display: inline-block; transform: translateY(-0.05em); } /* Figtree: signs sit 5% of the em low (measured); Jakarta needed 11% */
 
 /* ---------- month calendar (Calendar tab) ---------- */
 .cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }

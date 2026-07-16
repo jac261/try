@@ -134,7 +134,7 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
                   stroke="#8b95a7" strokeWidth="0.5" opacity="0.18" />
                 <text x={pad + 14} y={Y(loFinite) + 2} textAnchor="end" fontSize="5.5" fontWeight="700"
                   fill="#8b95a7" opacity="0.9" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  {loFinite !== 0 && <tspan dy="-0.11em">{loFinite > 0 ? '+' : '−'}</tspan>}{loFinite !== 0 && <tspan dy="0.11em">{Math.abs(loFinite)}</tspan>}{loFinite === 0 && '0'}</text>
+                  {loFinite !== 0 && <tspan dy="-0.05em">{loFinite > 0 ? '+' : '−'}</tspan>}{loFinite !== 0 && <tspan dy="0.05em">{Math.abs(loFinite)}</tspan>}{loFinite === 0 && '0'}</text>
               </g>
             )}
           </g>
@@ -180,7 +180,7 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
             strokeWidth="0.7" strokeDasharray="3 3" opacity="0.5" />
           <text x={pad + 14} y={Y(l.v) + 2} textAnchor="end" fontSize="5.5" fontWeight="700"
             fill={l.color || '#8b95a7'} opacity="0.9" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {l.v !== 0 && <tspan dy="-0.11em">{l.v > 0 ? '+' : '−'}</tspan>}{l.v !== 0 && <tspan dy="0.11em">{Math.abs(l.v)}</tspan>}{l.v === 0 && '0'}</text>
+            {l.v !== 0 && <tspan dy="-0.05em">{l.v > 0 ? '+' : '−'}</tspan>}{l.v !== 0 && <tspan dy="0.05em">{Math.abs(l.v)}</tspan>}{l.v === 0 && '0'}</text>
         </g>
       ))}
       {series.map((s, i) => (
