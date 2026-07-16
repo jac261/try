@@ -473,7 +473,14 @@ export function App({ storage, getToken, user }) {
     const old = plan.profile;
     const snapshot = { date: T.iso(new Date()), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness };
     const profile = withWeight(Object.assign({}, old, fields, { fitnessHistory: (old.fitnessHistory || []).concat([snapshot]) }));
-    const np = T.generatePlan(profile);
+    // Hold the frequency-swap verdict steady: a retarget keeps the structure,
+    // and a flipped verdict would change disciplines at ids the log joins on.
+    // The verdict is DETECTED from the plan's own weeks, not read from the
+    // limiterSwap stamp: the backend's typed plan DTO drops the stamp on
+    // every hydrate, and trusting it silently un-swapped a reloaded plan on
+    // its next retarget (re-verify catch). Legacy and unswapped plans detect
+    // to null: no swap appears mid-flight.
+    const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan) });
     np.createdAt = plan.createdAt;
     np.updatedAt = new Date().toISOString();
     setPlan(np);

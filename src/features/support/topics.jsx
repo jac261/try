@@ -174,9 +174,11 @@ export const TOPICS = [
       <H>Your weakest link</H>
       <P>Your three sports are placed on one experience scale using the same baselines that set
         your paces. When one sits clearly behind the others, the Progress page names it and the
-        plan quietly gives that sport extra time through the building phases. Near-ties stay
-        balanced — a limiter is only declared when the gap is real, and missing data (no power
-        meter, say) removes a sport from the comparison rather than guessing.</P>
+        plan quietly tilts the building phases toward it: its sessions run longer, more so the
+        bigger the gap, and where the week has room your strongest sport hands one of its
+        sessions to the limiter. Peak and taper weeks keep their race shape untouched. Near-ties
+        stay balanced — a limiter is only declared when the gap is real, and missing data (no
+        power meter, say) removes a sport from the comparison rather than guessing.</P>
       <H>Tune-up races</H>
       <P>A real event raced mid-plan — a sprint before your Olympic, a parkrun in a base block —
         can be added from the plan settings. The plan drops it onto its day, eases the approach so

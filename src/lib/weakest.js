@@ -67,20 +67,32 @@ export function weakestLink({ profile }) {
     : null;
   const total = mins ? mins.swim + mins.bike + mins.run : 0;
 
+  // The strongest sport is only named alongside a declared limiter: it is the
+  // donor for the frequency swap (plan.js swapForLimiter), and naming one on
+  // a near-tie would be the same noise problem as naming a weakest.
+  const high = sorted[sorted.length - 1];
   return {
     scores,
     missing,
     excludedSport: excluded,
     weakest: gap >= GAP ? low : null,
+    strongest: gap >= GAP ? high : null,
     gap: Math.round(gap * 10) / 10,
+    // Unrounded, for threshold decisions: rounding a 1.0125 gap to the display
+    // value 1.0 and then comparing `> 1` mis-tiered the bias (gauntlet catch).
+    gapRaw: gap,
     share: gap >= GAP && mins ? Math.round(mins[low] / total * 100) : null,
   };
 }
 
 // The plan-generation bias: the limiter's sessions earn extra time in the
-// building phases. Returns a per-discipline duration multiplier map.
-export const WEAK_BIAS = 1.1;
+// building phases, graduated by how far behind it sits — a meaningful gap
+// gets a nudge, a full level or more gets a shove (Jon, 2026-07-16). Returns
+// a per-discipline duration multiplier map.
+export const WEAK_BIAS = 1.1;      // modest gap: half a level to a level
+export const WEAK_BIAS_BIG = 1.2;  // large gap: more than a full level
 export function weakBias(profile) {
   const wl = weakestLink({ profile });
-  return wl && wl.weakest ? { [wl.weakest]: WEAK_BIAS } : {};
+  if (!wl || !wl.weakest) return {};
+  return { [wl.weakest]: wl.gapRaw > 1 ? WEAK_BIAS_BIG : WEAK_BIAS };
 }

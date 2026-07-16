@@ -2,7 +2,7 @@
 import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { RACES, B_RACES, FITNESS, ZONES } from './domain.js';
-import { weakBias } from './weakest.js';
+import { weakBias, weakestLink } from './weakest.js';
 
 /* ---- paces derived from the athlete's baselines ---- */
 function computePaces(profile) {
@@ -662,6 +662,77 @@ function disciplineTemplate(days, excluded) {
   return t[clamp(days, 3, 7)];
 }
 
+// Frequency swap — the second half of limiter treatment (Jon, 2026-07-16):
+// through Base and Build the athlete's strongest sport donates one weekly
+// session slot to the limiter, the way a coach adds a weak-sport session
+// instead of only stretching the existing ones. The duration bias (weakBias)
+// composes on top. Deterministic safety rules, each one load-bearing:
+//   - donor is the strongest sport's easy slot, else its quality slot; never
+//     a long or brick (the weekend anchors keep their race-specific shape)
+//   - the strongest sport keeps at least one other session in the week, or
+//     the swap skips (donating its only slot would detrain it); a brick
+//     counts as presence for run and bike, since it trains both legs — the
+//     3-day template still never swaps (all its non-swim slots are longs)
+//   - the incoming slot takes a role the limiter does not already hold that
+//     week; the per-week seed makes duplicate discipline+role pairs
+//     byte-identical, so if both roles are taken the swap skips
+//   - the caller excludes recovery weeks, post-race weeks, weeks hosting the
+//     strongest sport's benchmark test (the test would otherwise replace the
+//     donated slot's LONG via its findIndex fallback), and injured-state
+//     plans (onboarding promises the remaining sports build normally)
+export function swapForLimiter(template, wl, phase) {
+  if (!wl || !wl.weakest || !wl.strongest || wl.weakest === wl.strongest) return template;
+  if (phase !== 'Base' && phase !== 'Build') return template;
+  const has = tok => template.indexOf(tok) >= 0;
+  const donor = has(wl.strongest + ':easy') ? wl.strongest + ':easy'
+    : has(wl.strongest + ':quality') ? wl.strongest + ':quality' : null;
+  if (!donor) return template;
+  const keeps = template.some(t => t !== donor && (t.indexOf(wl.strongest + ':') === 0
+    || ((wl.strongest === 'run' || wl.strongest === 'bike') && t.indexOf('brick:') === 0)));
+  if (!keeps) return template;
+  const role = !has(wl.weakest + ':easy') ? 'easy' : !has(wl.weakest + ':quality') ? 'quality' : null;
+  if (!role) return template;
+  const out = template.slice();
+  out[out.indexOf(donor)] = wl.weakest + ':' + role;
+  return out;
+}
+
+// Rediscover the swap verdict a plan was BUILT with, from its own structure.
+// The stamped plan.limiterSwap does not survive the backend's typed plan DTO
+// (hydration rebuilds the plan field by field), and retargets must hold the
+// swap steady across reloads — so the structure itself is the source of
+// truth: find a building week whose discipline:role tokens differ from the
+// profile's template in exactly the way one (weakest, strongest) swap would
+// produce. Weeks that skipped the swap (recovery, strongest-test weeks)
+// match the plain template and prove nothing; tune-up races carry no role
+// and custom sessions keep their x- ids, so both fall out of the token list;
+// strength doubles fall out by discipline.
+export function detectLimiterSwap(plan) {
+  if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
+  const profile = plan.profile || {};
+  const template = disciplineTemplate(profile.daysPerWeek, profile.excludedDiscipline);
+  if (!template) return null;
+  const sig = a => a.slice().sort().join('|');
+  const base = sig(template);
+  const pairs = [];
+  ['swim', 'bike', 'run'].forEach(w => ['swim', 'bike', 'run'].forEach(s => { if (w !== s) pairs.push({ weakest: w, strongest: s }); }));
+  for (const wk of plan.weeks) {
+    if ((wk.phase !== 'Base' && wk.phase !== 'Build') || wk.isRecovery) continue;
+    const toks = wk.workouts.filter(x => x && x.role && !x.custom && !x.second && !x.race && !x.bRace
+      && x.discipline !== 'rest' && x.discipline !== 'strength' && String(x.id).indexOf('x-') !== 0)
+      .map(x => x.discipline + ':' + x.role);
+    const s = sig(toks);
+    if (s === base) continue;
+    // A swap changes exactly one token, so the (removed, added) pair — and
+    // therefore the signature — identifies the verdict uniquely.
+    for (const pair of pairs) {
+      const cand = swapForLimiter(template, pair, wk.phase);
+      if (cand !== template && sig(cand) === s) return pair;
+    }
+  }
+  return null;
+}
+
 // preferred weekdays (0=Mon..6=Sun): quality midweek, long on weekend
 const WEEKDAY_ORDER = [1, 3, 0, 2, 4]; // Tue, Thu, Mon, Wed, Fri
 const WEEKEND = [5, 6];                 // Sat, Sun
@@ -944,7 +1015,7 @@ function loadFactor(phase, posInPhase, lenPhase) {
 }
 
 /* ---- main entry ---- */
-export const generatePlan = function (profile) {
+export const generatePlan = function (profile, opts) {
   const race = RACES[profile.raceType];
   const fitness = FITNESS[profile.fitness] || FITNESS.intermediate;
   const pc = computePaces(profile);
@@ -1005,6 +1076,26 @@ export const generatePlan = function (profile) {
   // baselines (see lib/weakest.js) — {} when the sports are balanced or the
   // data can't say.
   const bias = weakBias(profile);
+  // The frequency-swap verdict (see swapForLimiter). It changes WHICH
+  // discipline sits at a workout id, so it must never flip on a mid-plan
+  // retarget: ids are positional and the log/moves overlays join on them, so
+  // a flipped verdict would retroactively turn a logged run into a swim
+  // (gauntlet catch, reproduced). retarget() passes the plan's own stamped
+  // verdict via opts.lockedSwap (null for legacy plans: locked to no swap);
+  // onboarding and reshapePlan omit it, taking a fresh verdict — a reshape
+  // already re-lays the structure and clears structure-bound overlays.
+  // Injured-state plans never swap: onboarding promises the remaining two
+  // sports keep building normally, and the swap would cut the stronger one.
+  // The injured guard outranks a locked verdict: a stale lock naming the
+  // excluded discipline would otherwise swap a session of it straight into
+  // an injured-state plan (re-verify catch).
+  const swapWl = profile.excludedDiscipline ? null
+    : opts && opts.lockedSwap !== undefined
+      ? opts.lockedSwap
+      : (() => {
+        const wl = weakestLink({ profile });
+        return wl && wl.weakest ? { weakest: wl.weakest, strongest: wl.strongest } : null;
+      })();
 
   // phase position bookkeeping
   const phaseLen = {}, phasePos = {};
@@ -1055,8 +1146,15 @@ export const generatePlan = function (profile) {
     // through role 'quality' because typeFor's recovery branch maps that to
     // the gentle type per discipline (Technique/Endurance/Easy) — role 'easy'
     // would hand the bike a type buildBike has no branch for.
+    // Limiter frequency swap: only in real building weeks — recovery weeks
+    // (including the post-race one) stay even by definition, and a week
+    // hosting the strongest sport's benchmark test keeps its quality slot,
+    // or the test's findIndex fallback would consume the long instead.
+    const weekTemplate = (isRecovery || postRaceWeek
+      || (testKind && swapWl && TEST_DISC[testKind] === swapWl.strongest))
+      ? template : swapForLimiter(template, swapWl, phase);
     const longs = [], mids = [];
-    template.forEach(tok => {
+    weekTemplate.forEach(tok => {
       const [disc, role] = tok.split(':');
       if (postRaceWeek) {
         // ONE gentle session per discipline: the recovery week pins the seed
@@ -1237,5 +1335,8 @@ export const generatePlan = function (profile) {
     profile: profile, race: race.key, createdAt: new Date().toISOString(),
     totalWeeks: totalWeeks, paces: pc, weeks: weeks,
     leadIn: leadIn || undefined, shortRunway: shortRunway || undefined,
+    // The swap verdict this plan was built with, so retargets can hold it
+    // steady (see the swapWl note above). null means "built with no swap".
+    limiterSwap: swapWl,
   };
 };
