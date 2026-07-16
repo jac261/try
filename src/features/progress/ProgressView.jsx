@@ -69,7 +69,9 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
 
   return (
     <>
-      <AthleteStateStrip wellness={wellness} runLoad={runLoad} recovery={recovery} onSupport={onSupport} />
+      <AthleteStateStrip wellness={wellness} runLoad={runLoad} recovery={recovery} onSupport={onSupport}
+        excludedDiscipline={plan.weeks.some(wk => wk.workouts.some(w => w.discipline === 'run' && log[w.id]))
+          ? null : plan.profile.excludedDiscipline} />
       <div className="section-title">Progress</div>
       {!tracker && <>
         <div className="kpis">
@@ -110,7 +112,9 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
         const wl = T.weakestLink({ profile: { ...plan.profile, weightKg: w ? w.weightKg : plan.profile.weightKg } });
         if (!wl) return null;
         const NAME = { run: 'Run', bike: 'Bike', swim: 'Swim' };
-        const ORDER = ['swim', 'bike', 'run'];
+        // An excluded sport (injured state) gets a plain sentence, not a bar:
+        // scoring what the plan cannot train would be a nag.
+        const ORDER = ['swim', 'bike', 'run'].filter(d => d !== wl.excludedSport);
         // Bars wear the colour of the BAND their score sits in (cool → hot,
         // matching the axis labels), not the sport's colour — the row label
         // already names the sport; the colour should answer "how good".
@@ -149,6 +153,9 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
                   .map(([l, c]) => <span key={l} style={{ color: c }}>{l}</span>)}
               </div>
             </div>
+            {wl.excludedSport && <p className="lead" style={{ margin: '10px 0 0' }}>
+              {NAME[wl.excludedSport]} is paused while you manage an injury. {ORDER.map(d => NAME[d]).join(' and ')} keep building.
+            </p>}
             <p className="lead" style={{ margin: '10px 0 0' }}>
               {wl.weakest
                 ? 'Your ' + NAME[wl.weakest].toLowerCase() + ' sits clearly behind' + (wl.share ? ' and is roughly ' + wl.share + '% of your race' : '') + ' — the plan gives it extra time while you build.'

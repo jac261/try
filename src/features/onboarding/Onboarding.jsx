@@ -17,7 +17,7 @@ export function Onboarding({ onCreate }) {
   // Pre-fill the name from the Clerk login (the app only renders this when signed in).
   const [f, setF] = useState(() => ({
     name: clerkDisplayName(user), raceType: 'olympic', fitness: 'intermediate', trainingDays: [0, 1, 3, 5, 6], longDay: 5,
-    raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '', css100: '', ftp: '',
+    raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '', css100: '', ftp: '', excludedDiscipline: null,
   }));
   // If Clerk loads the profile a beat later, fill the name once — never over typed input.
   useEffect(() => {
@@ -46,8 +46,13 @@ export function Onboarding({ onCreate }) {
       daysPerWeek: f.trainingDays.length,
       raceDate: maintenance ? T.iso(T.addDays(mon, 12 * 7 - 1)) : f.raceDate,
       horizonWeeks: maintenance ? 12 : undefined,
-      fivekSec: T.parseTimeToSec(f.fivek), css100Sec: T.parseTimeToSec(f.css100),
+      // never submit a number for the excluded discipline: the field hides,
+      // but a value typed BEFORE selecting the exclusion would still be in
+      // state (gauntlet catch: type a 5k time, go back, exclude running)
+      fivekSec: f.excludedDiscipline === 'run' ? null : T.parseTimeToSec(f.fivek),
+      css100Sec: f.excludedDiscipline === 'swim' ? null : T.parseTimeToSec(f.css100),
       ftp: f.ftp ? Number(f.ftp) : null, startDate: T.iso(new Date()),
+      excludedDiscipline: f.excludedDiscipline || null,
     });
   }
 
@@ -84,6 +89,32 @@ export function Onboarding({ onCreate }) {
           {f.raceType === 'maintenance' && <p className="lead" style={{ fontSize: 13 }}>
             A 12-week keep-fit block: balanced swim, bike and run with a recovery week every few weeks.
             When you enter a race, the plan rebuilds around it.</p>}
+          <label className="field" style={{ marginBottom: 4 }}><span className="lab">Any injury we should plan around?</span></label>
+          <p className="lead" style={{ fontSize: 13, marginTop: 0 }}>
+            This is not medical advice. If you are not sure whether to train at all, check with a doctor
+            or physio first. Tell us what to leave out and we will build the rest of your week around it.</p>
+          <div className="choice">
+            <div className={'opt' + (!f.excludedDiscipline ? ' on' : '')} {...tap(() => set('excludedDiscipline', null))}>
+              Training as normal<small>All three sports</small></div>
+            <div className={'opt' + (f.excludedDiscipline === 'run' ? ' on' : '')} {...tap(() => set('excludedDiscipline', 'run'))}>
+              Can't run right now<small>No run sessions. Swim and bike keep building, and that fitness carries over.</small></div>
+            <div className={'opt' + (f.excludedDiscipline === 'swim' ? ' on' : '')} {...tap(() => set('excludedDiscipline', 'swim'))}>
+              Can't swim right now<small>No swim sessions. Bike and run keep building normally.</small></div>
+          </div>
+          {f.excludedDiscipline && f.raceType !== 'maintenance' && (
+            <p className="lead" style={{ color: '#fde68a', fontSize: 13, marginTop: 8 }}>
+              A {T.RACES[f.raceType].name} needs swimming, biking and running on the day. This plan trains
+              {f.excludedDiscipline === 'run' ? ' swim and bike' : ' bike and run'} only, and it will not
+              change on its own if your injury does. If you are not sure you will be
+              {f.excludedDiscipline === 'run' ? ' running' : ' swimming'} again well before race day,
+              consider starting with No race yet instead.</p>
+          )}
+          {f.excludedDiscipline === 'run' && f.trainingDays.length > 5 && (
+            <p className="lead" style={{ fontSize: 13, marginTop: 8 }}>
+              With running out, swim and bike top out at five real sessions a week. Extra days you pick
+              will stay free rather than being filled with padding.</p>
+          )}
+          <div style={{ height: 12 }} />
           <label className="field" style={{ marginBottom: 8 }}><span className="lab">Which days will you train?</span></label>
           <DaySelector days={f.trainingDays} longDay={f.longDay} onChange={(d, l) => setF(s => ({ ...s, trainingDays: d, longDay: l }))} />
           <div style={{ height: 18 }} />
@@ -101,10 +132,12 @@ export function Onboarding({ onCreate }) {
         {step === 2 && <>
           <h2>Your current fitness <span className="hint" style={{ fontWeight: 500 }}>· optional</span></h2>
           <p className="lead"><b>New to triathlon? You can skip all of these.</b> We'll then guide every session by effort (RPE / heart-rate zones), with ballpark paces estimated from your {T.FITNESS[f.fitness].name} level. Add any numbers you do know to make it precise.</p>
-          <label className="field"><span className="lab">Recent 5 km run time <span className="hint">optional · mm:ss</span></span>
-            <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>
-          <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
-            <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>
+          {f.excludedDiscipline !== 'run' && <label className="field"><span className="lab">Recent 5 km run time <span className="hint">optional · mm:ss</span></span>
+            <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>}
+          {f.excludedDiscipline === 'run' && <p className="lead" style={{ fontSize: 13 }}>Running is out of your plan for now, so we will not ask for a run time.</p>}
+          {f.excludedDiscipline !== 'swim' && <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
+            <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>}
+          {f.excludedDiscipline === 'swim' && <p className="lead" style={{ fontSize: 13 }}>Swimming is out of your plan for now, so we will not ask for a swim pace.</p>}
           <label className="field"><span className="lab">Cycling FTP <span className="hint">optional · watts</span></span>
             <input value={f.ftp} placeholder="e.g. 200" inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
           <div className="row"><button className="btn ghost" onClick={() => setStep(1)}>Back</button>

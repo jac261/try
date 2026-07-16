@@ -31,7 +31,7 @@
 import { wellness as W } from '@/lib/wellness.js';
 import { RUN_RAMP_RULES } from '@/lib/runload.js';
 
-export function athleteState({ wellness, runLoad, recovery } = {}) {
+export function athleteState({ wellness, runLoad, recovery, excludedDiscipline } = {}) {
   const load = (wellness || []).filter(r => r.ctl != null && r.atl != null).slice(-60);
   // Two rows minimum: a trend arrow needs a start and an end, and a lone
   // reading is too thin to headline "where you stand". The recovery tile keys
@@ -115,7 +115,10 @@ export function athleteState({ wellness, runLoad, recovery } = {}) {
     {
       key: 'runload', label: 'Run load', topic: 'ramp-rate',
       empty: !runOk,
-      emptyWord: 'Not enough runs yet',
+      // An excluded run (injured state) reads as paused, not as thin data —
+      // but ONLY while no runs are actually logged: logging a run anyway is
+      // the athlete's call, and real data always outranks the schedule.
+      emptyWord: excludedDiscipline === 'run' ? 'Run paused for now' : 'Not enough runs yet',
       word: runWord,
       // the acute minutes stay: the only number on the strip, because no card
       // below carries it (the Ramp rate chart tracks overall load, not runs)
