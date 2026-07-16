@@ -114,7 +114,7 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
         // Bars wear the colour of the BAND their score sits in (cool → hot,
         // matching the axis labels), not the sport's colour — the row label
         // already names the sport; the colour should answer "how good".
-        const BAND_COLORS = ['#5b8cff', '#2dd4bf', '#facc15', '#f472b6'];
+        const BAND_COLORS = ['#5b8cff', '#2dd4bf', '#a78bfa', '#f472b6'];
         const bandColor = s => BAND_COLORS[Math.min(3, Math.max(0, Math.floor(s)))];
         return <>
           <div className="section-title">Weakest link</div>
@@ -145,7 +145,7 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
               {/* Levels are BANDS, not points: each label owns a quarter of the
                   axis, coloured cool → hot so Elite pops. */}
               <div className="wlb-scale" aria-hidden="true">
-                {[['Beg', '#5b8cff'], ['Int', '#2dd4bf'], ['Adv', '#facc15'], ['Elite', '#f472b6']]
+                {[['Beg', '#5b8cff'], ['Int', '#2dd4bf'], ['Adv', '#a78bfa'], ['Elite', '#f472b6']]
                   .map(([l, c]) => <span key={l} style={{ color: c }}>{l}</span>)}
               </div>
             </div>
