@@ -43,9 +43,11 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   const actByDate = useMemo(() => {
     const m = {};
     if (tracker) (activities || []).forEach(a => {
-      // Same guard as RecordedActivities: an unmapped activity type (walk,
-      // yoga, ski) stays off the grid rather than defaulting to a bike dot.
-      if (!a || !a.date || !a.movingTimeSec || !T.DISCIPLINE[a.type]) return;
+      // The exact guard RecordedActivities uses, drift check included: an
+      // unmapped activity type (walk, yoga, ski) stays off the grid rather
+      // than defaulting to a bike dot, and the grid, the day card and the
+      // Recorded list can never disagree about whether a day has recordings.
+      if (!a || !a.date || !a.movingTimeSec || !T.DISCIPLINES[T.DISCIPLINE[a.type]]) return;
       (m[a.date] = m[a.date] || []).push(a);
     });
     return m;
@@ -82,6 +84,10 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   };
 
   const daySessions = (byDate[selected] || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
+  // With no plan there are never day sessions, so the card exists only to say
+  // "Nothing recorded." — which it must not while the Recorded list below has
+  // rows for the day (field report 2026-07-16: it contradicted a recorded run).
+  const dayActs = selected ? (actByDate[selected] || []) : [];
 
   return (
     <>
@@ -126,7 +132,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
 
       {selected && <>
         <div className="section-title">{T.fmtDate(selected, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
-        <div className="card">
+        {!(tracker && dayActs.length > 0) && <div className="card">
           {daySessions.length === 0
             ? <div className="empty" style={{ padding: '18px 8px' }}>{tracker ? 'Nothing recorded.' : 'Nothing planned — drop a session here, or rest.'}</div>
             : daySessions.map(w => (
@@ -142,8 +148,8 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
               </div>
             ))}
           {daySessions.some(w => !w.race && !w.bRace) && <div className="cal-hint">Hold a session's grip and drag it onto a day above to reschedule</div>}
-        </div>
-        <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} />
+        </div>}
+        <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} noHeading={tracker} />
       </>}
 
       {drag && <div className="drag-ghost" style={{ left: drag.x, top: drag.y, borderColor: drag.color }}>{drag.title}</div>}

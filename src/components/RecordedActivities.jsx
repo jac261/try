@@ -41,7 +41,7 @@ function Row({ disc, name, stat, tag, onOpen }) {
   );
 }
 
-export function RecordedActivities({ activities, date, plan, log, moves, onOpen }) {
+export function RecordedActivities({ activities, date, plan, log, moves, onOpen, noHeading }) {
   // The DISCIPLINES guard keeps a future drift between the activity-type map
   // and the disciplines table from crashing the row render.
   const day = (activities || []).filter(a => a && a.date === date && DISC[a.type] && T.DISCIPLINES[DISC[a.type]] && a.movingTimeSec);
@@ -85,7 +85,10 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen 
   if (!rows.length) return null;
   return (
     <>
-      <div className="section-title" style={{ marginTop: 14 }}>Recorded</div>
+      {/* noHeading: when this card is a day's only content (calendar tab with
+          no plan), the date heading directly above already owns it, and two
+          stacked section-titles read as a layout glitch */}
+      {!noHeading && <div className="section-title" style={{ marginTop: 14 }}>Recorded</div>}
       <div className="card">
         {rows.map(({ key, open, ...r }) => <Row key={key} {...r} onOpen={() => onOpen && onOpen(open)} />)}
       </div>
