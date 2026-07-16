@@ -629,6 +629,39 @@ const TEMPLATES = {
   7: ['swim:easy', 'run:quality', 'bike:quality', 'swim:quality', 'run:long', 'bike:long', 'brick:long'],
 };
 
+// Injured-state templates (profile.excludedDiscipline, design panel
+// 2026-07-16): the same hand-authored style, discipline swapped, role kept,
+// and never the same discipline+role twice in a week — the seed is per week,
+// so a duplicate pair would generate two byte-identical sessions.
+//
+// No running: bricks become genuine long rides (a brick without its run leg
+// is just a ride, and LONG_BIKE runs longer than the brick's deliberately
+// shortened bike leg). Swim only carries {easy, quality} roles (no swim-long
+// table exists, and Peak forces Open Water onto every swim slot — a third
+// swim would duplicate), so swim+bike tops out at FIVE distinct sessions:
+// days 6 and 7 reuse the 5-slot table and the surplus days stay free rather
+// than being filled with padding. Onboarding says so out loud.
+const TEMPLATES_NO_RUN = {
+  3: ['swim:quality', 'bike:quality', 'bike:long'],
+  4: ['swim:easy', 'swim:quality', 'bike:quality', 'bike:long'],
+  5: ['swim:easy', 'swim:quality', 'bike:easy', 'bike:quality', 'bike:long'],
+  6: ['swim:easy', 'swim:quality', 'bike:easy', 'bike:quality', 'bike:long'],
+  7: ['swim:easy', 'swim:quality', 'bike:easy', 'bike:quality', 'bike:long'],
+};
+// No swimming: run+bike (and the brick keeps both its legs) fill every slot.
+const TEMPLATES_NO_SWIM = {
+  3: ['bike:quality', 'bike:long', 'run:long'],
+  4: ['run:easy', 'bike:quality', 'run:quality', 'brick:long'],
+  5: ['bike:easy', 'run:quality', 'bike:quality', 'run:long', 'bike:long'],
+  6: ['bike:easy', 'run:quality', 'bike:quality', 'run:easy', 'run:long', 'bike:long'],
+  7: ['bike:easy', 'run:quality', 'bike:quality', 'run:easy', 'run:long', 'bike:long', 'brick:long'],
+};
+// Unrecognised values fall back to the full template: fail safe, never crash.
+function disciplineTemplate(days, excluded) {
+  const t = excluded === 'run' ? TEMPLATES_NO_RUN : excluded === 'swim' ? TEMPLATES_NO_SWIM : TEMPLATES;
+  return t[clamp(days, 3, 7)];
+}
+
 // preferred weekdays (0=Mon..6=Sun): quality midweek, long on weekend
 const WEEKDAY_ORDER = [1, 3, 0, 2, 4]; // Tue, Thu, Mon, Wed, Fri
 const WEEKEND = [5, 6];                 // Sat, Sun
@@ -652,7 +685,9 @@ function typeFor(discipline, role, phase, isRecovery, intensity) {
   if (role === 'brick') return 'Brick';
   // Peak swims become race-specific open-water sessions (any role, but not recovery weeks).
   if (discipline === 'swim' && phase === 'Peak' && !isRecovery) return 'Open Water';
-  if (role === 'easy') return discipline === 'swim' ? 'Technique' : 'Easy';
+  // bike has no 'Easy' builder branch (falling through would hand it the
+  // Threshold else-branch, the recovery-week lesson) — Endurance IS its easy
+  if (role === 'easy') return discipline === 'swim' ? 'Technique' : discipline === 'bike' ? 'Endurance' : 'Easy';
   // role === 'quality'
   if (isRecovery) return discipline === 'swim' ? 'Technique' : (discipline === 'bike' ? 'Endurance' : 'Easy');
   const ladder = INTENSITY_LADDER[discipline] || ['Easy'];
@@ -665,8 +700,12 @@ function baseDuration(discipline, role, race) {
   if (role === 'brick') return LONG_BRICK[race];
   if (role === 'long') return discipline === 'bike' ? LONG_BIKE[race] : (discipline === 'run' ? LONG_RUN[race] : 60);
   if (discipline === 'swim') return role === 'easy' ? 35 : 45;
-  if (discipline === 'run') return 50;
-  if (discipline === 'bike') return 55;
+  if (discipline === 'run') return role === 'easy' ? 40 : 50;
+  // An easy spin is shorter than a quality ride, and the gap also keeps a
+  // recovery week's collapsed types (both map to Endurance there) from
+  // producing two byte-identical sessions (injured-state templates carry
+  // bike:easy; the classic templates never did).
+  if (discipline === 'bike') return role === 'easy' ? 45 : 55;
   return 40;
 }
 
@@ -951,7 +990,7 @@ export const generatePlan = function (profile) {
   const prefDays = (profile.trainingDays && profile.trainingDays.length >= 3)
     ? profile.trainingDays.slice().sort((a, b) => a - b) : null;
   const days = prefDays ? prefDays.length : profile.daysPerWeek;
-  const template = TEMPLATES[clamp(days, 3, 7)];
+  const template = disciplineTemplate(days, profile.excludedDiscipline);
   let longDay = profile.longDay;
   if (prefDays && (longDay === undefined || prefDays.indexOf(longDay) < 0)) {
     longDay = prefDays.indexOf(5) >= 0 ? 5 : (prefDays.indexOf(6) >= 0 ? 6 : prefDays[prefDays.length - 1]);
@@ -978,11 +1017,15 @@ export const generatePlan = function (profile) {
     if ((ph === 'Base' || ph === 'Build' || ph === 'Maintain') && !rec && w >= 1) eligibleTestWeeks.push(w);
   }
   const testByWeek = {};
-  const nTests = Math.min(TEST_ROTATION.length, eligibleTestWeeks.length);
+  // No benchmark for a discipline the plan does not train (injured state):
+  // same spread logic over the two remaining tests.
+  const TEST_DISC = { run5k: 'run', bikeFtp: 'bike', swimCss: 'swim' };
+  const rotation = TEST_ROTATION.filter(t => TEST_DISC[t] !== profile.excludedDiscipline);
+  const nTests = Math.min(rotation.length, eligibleTestWeeks.length);
   for (let i = 0; i < nTests; i++) {
     const pos = nTests === 1 ? Math.floor(eligibleTestWeeks.length / 2)
       : Math.round((i + 0.5) / nTests * (eligibleTestWeeks.length - 1));
-    testByWeek[eligibleTestWeeks[pos]] = TEST_ROTATION[i];
+    testByWeek[eligibleTestWeeks[pos]] = rotation[i];
   }
 
   const weeks = [];

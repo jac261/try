@@ -62,3 +62,17 @@ describe('generatePlan weakest-link bias', () => {
       expect(swimAt(biased, fromEnd).map(w => w.durationMin)).toEqual(swimAt(plain, fromEnd).map(w => w.durationMin)));
   });
 });
+
+
+describe('weakestLink with an excluded discipline', () => {
+  it('never scores or names the excluded sport, even with a stale baseline on file', () => {
+    const wl = weakestLink({ profile: { raceType: 'olympic', excludedDiscipline: 'swim', fivekSec: 1218, css100Sec: 120, ftp: 222, weightKg: 64.3 } });
+    expect(wl.scores.swim).toBeUndefined();
+    expect(wl.excludedSport).toBe('swim');
+    expect(wl.weakest).not.toBe('swim');
+    expect(wl.missing).not.toContain('swim'); // paused is not the same as missing data
+  });
+  it('fewer than two active sports still means no verdict', () => {
+    expect(weakestLink({ profile: { excludedDiscipline: 'run', fivekSec: 1218, css100Sec: 120 } })).toBe(null);
+  });
+});

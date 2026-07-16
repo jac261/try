@@ -44,8 +44,13 @@ export function weakestLink({ profile }) {
   if (profile.fivekSec) scores.run = levelIndex(profile.fivekSec, LADDERS.run);
   if (profile.css100Sec) scores.swim = levelIndex(profile.css100Sec, LADDERS.swim);
   if (profile.ftp && profile.weightKg) scores.bike = levelIndex(profile.ftp / profile.weightKg, LADDERS.bike);
+  // An excluded discipline (injured state) is never scored or named the
+  // limiter, even when a pre-injury baseline still sits on the profile: the
+  // plan cannot act on it, so a verdict would be a nag, not a decision.
+  const excluded = profile.excludedDiscipline || null;
+  if (excluded) delete scores[excluded];
   const have = Object.keys(scores);
-  const missing = ['swim', 'bike', 'run'].filter(d => !have.includes(d));
+  const missing = ['swim', 'bike', 'run'].filter(d => !have.includes(d) && d !== excluded);
   if (have.length < 2) return null;
 
   const sorted = have.slice().sort((a, b) => scores[a] - scores[b]);
@@ -65,6 +70,7 @@ export function weakestLink({ profile }) {
   return {
     scores,
     missing,
+    excludedSport: excluded,
     weakest: gap >= GAP ? low : null,
     gap: Math.round(gap * 10) / 10,
     share: gap >= GAP && mins ? Math.round(mins[low] / total * 100) : null,

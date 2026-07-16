@@ -155,3 +155,22 @@ describe('athleteState (the strip mapper)', () => {
     expect(tileFor(s, 'runload').topic).toBe('ramp-rate');
   });
 });
+
+
+describe('athleteState with running excluded (injured state)', () => {
+  it('the empty run tile reads paused, not thin data', () => {
+    const s = athleteState({ wellness: [], runLoad: null, excludedDiscipline: 'run' });
+    // strip may hide entirely with no data at all; force it visible via load history
+    const withLoad = athleteState({
+      wellness: Array.from({ length: 5 }, (_, i) => ({ date: '2026-07-0' + (i + 1), ctl: 50 + i, atl: 45, tsb: 5 })),
+      runLoad: null, excludedDiscipline: 'run',
+    });
+    expect(tileFor(withLoad, 'runload').emptyWord).toBe('Run paused for now');
+  });
+  it('a run logged anyway outranks the schedule: normal tile, no paused wording', () => {
+    const s = athleteState({ wellness: [], runLoad: { acute7d: 45, baselineWeekly: 40, rampPct: 0.12 }, excludedDiscipline: 'run' });
+    const t = tileFor(s, 'runload');
+    expect(t.empty).toBe(false);
+    expect(t.word).toBe('Steady');
+  });
+});

@@ -16,8 +16,8 @@ export function ariaFor(t) {
   return 'Run load ' + (t.word || '').toLowerCase() + ', ' + String(t.sub || '').replace(' · ', ', ') + '. Open the ramp explainer.';
 }
 
-export function AthleteStateStrip({ wellness, runLoad, recovery, onSupport }) {
-  const s = athleteState({ wellness, runLoad, recovery });
+export function AthleteStateStrip({ wellness, runLoad, recovery, onSupport, excludedDiscipline }) {
+  const s = athleteState({ wellness, runLoad, recovery, excludedDiscipline });
   if (!s.show) return null;
   return (
     <>

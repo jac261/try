@@ -705,3 +705,80 @@ describe('generatePlan — weekly load reads test weeks honestly (the week-6 rep
     expect(weekLoad(p.weeks[i])).toBeGreaterThan(weekLoad(p.weeks[i - 1])); // load tells the truth
   });
 });
+
+
+describe('injured state (profile.excludedDiscipline)', () => {
+  const base = { name: 'J', fitness: 'intermediate', trainingDays: [0, 1, 2, 3, 5, 6], longDay: 5,
+    daysPerWeek: 6, startDate: '2026-07-13' };
+  const race = { ...base, raceType: 'olympic', raceDate: '2026-09-20' };
+  const maint = { ...base, raceType: 'maintenance', raceDate: '2026-10-04', horizonWeeks: 12 };
+  const all = p => p.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest');
+
+  it('no-run plans contain zero run sessions and zero bricks, race day untouched', () => {
+    const p = generatePlan({ ...race, excludedDiscipline: 'run' });
+    const sessions = all(p).filter(w => !w.race);
+    expect(sessions.some(w => w.discipline === 'run' || w.discipline === 'brick')).toBe(false);
+    expect(sessions.length).toBeGreaterThan(0);
+    // race day is the real race, independent of what was trained
+    expect(all(p).some(w => w.race)).toBe(true);
+  });
+
+  it('no-swim plans contain zero swim sessions; bricks keep both their legs', () => {
+    // 7 training days: the brick slot only exists at 4 and 7 days, exactly
+    // as in the classic templates
+    const p = generatePlan({ ...race, excludedDiscipline: 'swim', trainingDays: [0, 1, 2, 3, 4, 5, 6], daysPerWeek: 7 });
+    const sessions = all(p).filter(w => !w.race);
+    expect(sessions.some(w => w.discipline === 'swim')).toBe(false);
+    expect(sessions.some(w => w.discipline === 'brick')).toBe(true);
+  });
+
+  it('swim and bike top out at five sessions a week: surplus days stay free', () => {
+    const p = generatePlan({ ...maint, excludedDiscipline: 'run', trainingDays: [0, 1, 2, 3, 4, 5, 6], daysPerWeek: 7 });
+    p.weeks.forEach(wk => {
+      const real = wk.workouts.filter(w => w.discipline !== 'rest' && !w.race && !w.test);
+      expect(real.length).toBeLessThanOrEqual(5);
+    });
+  });
+
+  it('every generated session has positive, sane segments (the bike easy slot maps to Endurance, never a Threshold fallback)', () => {
+    ['run', 'swim'].forEach(ex => {
+      const p = generatePlan({ ...maint, excludedDiscipline: ex });
+      all(p).filter(w => !w.race && !w.test).forEach(w => {
+        expect(w.durationMin).toBeGreaterThan(0);
+        expect(Array.isArray(w.segments) && w.segments.length > 0).toBe(true);
+      });
+      // no bike session may carry the Threshold-fallback title from an
+      // unmapped 'Easy' type (the recovery-week lesson)
+      const bikes = all(p).filter(w => w.discipline === 'bike' && !w.test);
+      bikes.forEach(w => expect(w.type).not.toBe('Easy'));
+    });
+  });
+
+  it('benchmark tests skip the excluded discipline', () => {
+    const noRun = generatePlan({ ...race, excludedDiscipline: 'run' });
+    const tests = all(noRun).filter(w => w.test);
+    expect(tests.length).toBeGreaterThan(0);
+    expect(tests.some(w => w.discipline === 'run')).toBe(false);
+    const noSwim = generatePlan({ ...race, excludedDiscipline: 'swim' });
+    expect(all(noSwim).filter(w => w.test).some(w => w.discipline === 'swim')).toBe(false);
+  });
+
+  it('an unrecognised exclusion fails safe to the full template', () => {
+    const p = generatePlan({ ...maint, excludedDiscipline: 'bike' });
+    expect(all(p).some(w => w.discipline === 'bike')).toBe(true); // fallback, not a crash
+  });
+
+  it('no week schedules the same discipline and role twice (seed-identical duplicate hazard)', () => {
+    ['run', 'swim'].forEach(ex => {
+      const p = generatePlan({ ...maint, excludedDiscipline: ex, trainingDays: [0, 1, 2, 3, 4, 5, 6], daysPerWeek: 7 });
+      p.weeks.forEach(wk => {
+        const real = wk.workouts.filter(w => w.discipline !== 'rest' && !w.race && !w.test);
+        // the hazard is BYTE-IDENTICAL sessions: same discipline, same type,
+        // same duration (recovery weeks collapse easy/quality to one gentle
+        // type, which is fine as long as the sessions still differ)
+        const keys = real.map(w => w.discipline + ':' + w.type + ':' + w.durationMin);
+        expect(new Set(keys).size).toBe(keys.length);
+      });
+    });
+  });
+});
