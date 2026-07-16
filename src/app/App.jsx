@@ -684,7 +684,7 @@ export function App({ storage, getToken, user }) {
             message, and a third "ready" in three lines read as copy-paste. */}
         <div className="sub">Hi {plan.profile.name}{tracker ? '' : " — let's get to the finish line"}</div>
         <div className="race-chip">{tracker
-          ? <span>Ready for your next plan</span>
+          ? <span>Ready for your next plan?</span>
           : race.noRace
             ? <><span>Maintenance block</span><b>{Math.max(0, Math.ceil(rawDaysToRace / 7))}</b><span>weeks left</span></>
             : <><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></>}</div>
