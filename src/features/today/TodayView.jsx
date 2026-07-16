@@ -10,6 +10,14 @@ import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 import { WeeklyDigest } from '@/features/today/WeeklyDigest.jsx';
 const D = T.DISCIPLINES;
 
+// A rejected weekly proposal stays rejected while its SIGNATURE (kind, week,
+// targets) is unchanged: the engine re-derives the same proposal every render,
+// so without this the banner returns the moment it is dismissed. A materially
+// different proposal (new week, new targets, new kind) speaks again.
+const WEEKLY_DISMISS = 'try.weeklyProposalDismissed';
+const loadWeeklyDismiss = () => { try { return localStorage.getItem(WEEKLY_DISMISS); } catch (e) { return null; } };
+const saveWeeklyDismiss = v => { try { localStorage.setItem(WEEKLY_DISMISS, v); } catch (e) { /* private mode */ } };
+
 // The user's expand/collapse choice for the week tab sticks across visits.
 const WEEK_PREF = 'try.showWeek';
 const loadWeekPref = () => { try { return JSON.parse(localStorage.getItem(WEEK_PREF)); } catch (e) { return null; } };
@@ -78,6 +86,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   const today = all.filter(w => effDate(w, moves) === todayISO);
   const suggestions = paceSuggestions(plan, log);
   const [coachIdx, setCoachIdx] = useState(0);
+  const [weeklyDismissed, setWeeklyDismissed] = useState(loadWeeklyDismiss);
   const [reviewToday, setReviewToday] = useState(false);
   const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile onToggle={() => onToggleWorkout(w.id)} />;
 
@@ -112,10 +121,13 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
       + ' Your fitness history is kept. Tap to switch to tracker mode.',
     act: onEnterTracker,
   });
-  if (!tracker && weekly) {
+  const weeklySig = weekly
+    ? weekly.kind + ':' + (weekly.week != null ? weekly.week : '') + ':' + (weekly.targets || []).join('.') : null;
+  if (!tracker && weekly && weeklyDismissed !== weeklySig) {
     const skin = { 'trim-week': ['banner ramp', 'trend'], 'trim-long-run': ['banner ramp', 'trend'], 'boost-week': ['banner tune', 'flame'], 'restore-week': ['banner', 'bolt'] };
     const [cls, icon] = skin[weekly.kind] || ['banner', 'bolt'];
-    coach.push({ key: 'weekly', cls, icon, title: weekly.headline, sub: weekly.why + ' Tap to apply →', act: () => onWeekly(weekly) });
+    coach.push({ key: 'weekly', cls, icon, title: weekly.headline, sub: weekly.why + ' Tap to apply →', act: () => onWeekly(weekly),
+      dismiss: () => { saveWeeklyDismiss(weeklySig); setWeeklyDismissed(weeklySig); } });
   }
   if (!tracker && spotted && spotted.length > 0) coach.push({
     key: 'spotted', cls: 'banner', icon: 'watch',
@@ -146,6 +158,9 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
         <div className="bi"><Icon name={slot.icon} size={20} /></div>
         <div style={{ flex: 1 }}><div className="bt">{slot.title}</div>
           <div className="bs">{slot.sub}</div></div>
+        {slot.dismiss && <div className="bmore bx" role="button" tabIndex={0} aria-label="Dismiss this suggestion"
+          onClick={e => { e.stopPropagation(); slot.dismiss(); }}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); slot.dismiss(); } }}>✕</div>}
         {coach.length > 1 && <div className="bmore" aria-hidden="true"
           onClick={e => { e.stopPropagation(); setCoachIdx(i => i + 1); }}>
           {(coachIdx % coach.length) + 1}/{coach.length} ▸</div>}

@@ -16,6 +16,12 @@ import { TrendChart } from '@/components/charts.jsx';
 const LOAD_PREF = 'try.showLoad';
 const loadPref = () => { try { return localStorage.getItem(LOAD_PREF); } catch (e) { return null; } };
 const saveLoadPref = v => { try { localStorage.setItem(LOAD_PREF, v ? '1' : '0'); } catch (e) { /* private mode */ } };
+// A rejected proposal stays rejected: the signature is kind + workout + day,
+// so "Not today" holds for the rest of the day but a NEW day (or a different
+// proposal, e.g. green-morning restore after an amber ease) speaks again.
+const PROP_DISMISS = 'try.todayProposalDismissed';
+const loadPropDismiss = () => { try { return localStorage.getItem(PROP_DISMISS); } catch (e) { return null; } };
+const savePropDismiss = v => { try { localStorage.setItem(PROP_DISMISS, v); } catch (e) { /* private mode */ } };
 
 const BAND_COLOR = { green: 'var(--run)', amber: 'var(--bike)', red: 'var(--danger)' };
 
@@ -55,6 +61,10 @@ function ReadinessRing({ score, band }) {
 export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport, recovery, noPlan }) {
   const [loadChoice, setLoadChoice] = useState(loadPref);
   const [whyOpen, setWhyOpen] = useState(false);
+  // Declared with the other hooks, ABOVE the !rec early return: a hook below
+  // it changes the mounted instance's hook count the moment the first
+  // readiness entry lands (the splash-hold crash class, 2026-07-15).
+  const [propDismissed, setPropDismissed] = useState(loadPropDismiss);
   const todayISO = T.iso(new Date());
   const rec = wellness.find(r => r.date === todayISO) || (wellness.length ? wellness[wellness.length - 1] : null);
   if (!rec) {
@@ -81,7 +91,13 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
   // the body, not a session that does not exist.
   const adv = T.wellness.advice(rd.band, !!hard, today.length ? (sessTitle || 'rest day') : (noPlan ? null : 'rest day'));
   const stale = rec.date !== todayISO;
-  const proposal = stale ? null : T.proposeToday({ band: rd.band, score: rd.score, todays: today });
+  const rawProposal = stale ? null : T.proposeToday({ band: rd.band, score: rd.score, todays: today });
+  // The band is part of the signature: rejecting an amber ease must not
+  // silence the red-band escalation of the same session later the same day.
+  const propSig = rawProposal
+    ? rawProposal.kind + ':' + rd.band + ':' + (rawProposal.workout ? rawProposal.workout.id : '') + ':' + todayISO : null;
+  const proposal = rawProposal && propDismissed !== propSig ? rawProposal : null;
+  const rejectProposal = () => { savePropDismiss(propSig); setPropDismissed(propSig); };
 
   // Training-load signals feed the coach line, the summary numbers and the
   // auto-expand rule, so they're computed up front (all null-safe on thin data).
@@ -122,9 +138,15 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
           <div className="rd-proposal">
             <div className="ph"><Icon name={proposal.kind === 'restore' ? 'bolt' : proposal.kind === 'move-test' ? 'calendar' : 'rest'} size={16} /> {proposal.headline}</div>
             <div className="pw">{proposal.why}</div>
-            <button className="btn ghost sm rd-action" onClick={accept}>
-              {proposal.kind === 'move-test' ? 'Open & reschedule' : proposal.kind === 'restore' ? 'Restore the session' : 'Accept the swap'}
-            </button>
+            <div className="rd-actions">
+              <button className="btn ghost sm rd-action" onClick={accept}>
+                {proposal.kind === 'move-test' ? 'Open & reschedule' : proposal.kind === 'restore' ? 'Restore the session' : 'Accept the swap'}
+              </button>
+              {/* the reject: the card must not persist all day once the
+                  athlete has decided against it (Jon, 2026-07-16) */}
+              <a className="reset rd-reject" {...tap(rejectProposal)} role="button"
+                aria-label="Dismiss this suggestion for today">Not today</a>
+            </div>
           </div>
         );
       })() : eased ? (
