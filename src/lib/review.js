@@ -78,8 +78,11 @@ export function reviewActivity({ workout, activity, paces, log }) {
 
   // Interval sessions: an average cannot see the reps. (Ad-hoc recordings have
   // no planned intent to speak of, so this note would be noise — skip it.)
+  // No promise of a rep table either: that view loads separately and can
+  // legitimately be absent (no WORK laps, fetch failure), so this verdict
+  // must stand alone without pointing at numbers that may never render.
   if (!w.adhoc && !steadyKey && !EASY_INTENT[w.type] && (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim')) {
-    verdicts.push({ tone: 'info', text: 'Interval session — the average blurs work and recovery together, so no pace verdict here. The recording on intervals.icu shows it rep by rep.' });
+    verdicts.push({ tone: 'info', text: 'Interval session — the average blurs work and recovery together, so no pace verdict here.' });
   }
 
   // Load vs plan (meaningless for an unplanned session — there is no plan dose).

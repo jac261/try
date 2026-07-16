@@ -36,7 +36,7 @@ export function eftpProposal({ activities, thresholds, plan, todayISO }) {
         candidates.push({
           kind: 'eftp', sport: 'bike', ftp, eftp, drift: Math.abs(drift), up: eftp > ftp,
           headline: eftp > ftp ? 'Your bike fitness has moved up' : 'Your bike targets may be set too high',
-          why: 'intervals.icu now estimates your FTP at ' + eftp + ' W; the plan trains to ' + ftp + ' W.',
+          why: 'We now estimate your FTP at ' + eftp + ' W; the plan trains to ' + ftp + ' W.',
           retarget: { ftp: eftp },
         });
       }
@@ -54,7 +54,7 @@ export function eftpProposal({ activities, thresholds, plan, todayISO }) {
         candidates.push({
           kind: 'eftp', sport: 'run', drift: Math.abs(drift), up: drift > 0,
           headline: drift > 0 ? 'Your run fitness has moved up' : 'Your run paces may be set too hot',
-          why: 'intervals.icu holds your run threshold at ' + fmtPace(icuSec) + ' /km; the plan trains to ' + fmtPace(planSec) + ' /km.',
+          why: 'Your run threshold is now set at ' + fmtPace(icuSec) + ' /km; the plan trains to ' + fmtPace(planSec) + ' /km.',
           retarget: { fivekSec: Math.round((icuSec - 12) * 5) },
         });
       }
@@ -72,7 +72,7 @@ export function eftpProposal({ activities, thresholds, plan, todayISO }) {
         candidates.push({
           kind: 'eftp', sport: 'swim', drift: Math.abs(drift), up: drift > 0,
           headline: drift > 0 ? 'Your swim fitness has moved up' : 'Your swim paces may be set too hot',
-          why: 'intervals.icu holds your CSS at ' + fmtPace(icuSec) + ' /100m; the plan trains to ' + fmtPace(planSec) + ' /100m.',
+          why: 'Your CSS is now set at ' + fmtPace(icuSec) + ' /100m; the plan trains to ' + fmtPace(planSec) + ' /100m.',
           retarget: { css100Sec: Math.round(icuSec) },
         });
       }

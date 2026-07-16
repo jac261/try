@@ -14,7 +14,7 @@ export function WellnessTrends({ wellness , onSupport, onWhatIf }) {
       <div className="section-title">Fitness &amp; recovery</div>
       <div className="card"><div className="empty" style={{ padding: '22px 16px' }}>
         <div className="big"><Icon name="heartrate" size={32} /></div>
-        Log a few days of readiness (or connect intervals.icu) and your Fitness, Form &amp; HRV trends will appear here.
+        Log a few days of readiness (or connect your watch data in Settings) and your Fitness, Form &amp; HRV trends will appear here.
       </div></div>
     </>
   );

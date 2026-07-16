@@ -16,10 +16,10 @@ describe('reviewActivity (post-session analysis)', () => {
     expect(fast.verdicts.some(v => v.tone === 'warn' && /easy/i.test(v.text))).toBe(true);
   });
 
-  it('interval sessions never get a pace verdict, only the rep-by-rep pointer', () => {
+  it('interval sessions never get a pace verdict, only the no-average note', () => {
     const w = { discipline: 'run', type: 'Threshold', durationMin: 55 };
     const rv = reviewActivity({ workout: w, activity: act({ distance: 11000 }), paces });
-    expect(rv.verdicts.some(v => /rep by rep/i.test(v.text))).toBe(true);
+    expect(rv.verdicts.some(v => /no pace verdict/i.test(v.text))).toBe(true);
     expect(rv.verdicts.some(v => /in the band|quicker than/i.test(v.text))).toBe(false);
   });
 

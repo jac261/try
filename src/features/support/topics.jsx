@@ -31,7 +31,7 @@ export const TOPICS = [
         fuelling. That is why the app pairs it with your morning readiness signals rather than
         trusting it alone.</P>
       <H>Without a connected account</H>
-      <P>No intervals.icu? The curves are estimated from the sessions you tick off in the app,
+      <P>Not connected? The curves are estimated from the sessions you tick off in the app,
         using the same model — the chart says "estimated" so you know which you are looking at.
         Connect an account and measured data takes over automatically. The estimate only sees what
         you log, so keeping your plan honest keeps the curves honest.</P>
@@ -104,8 +104,8 @@ export const TOPICS = [
         instead. The plan schedules benchmark tests (5 km run, 20-minute FTP, swim 400/200) at
         sensible points so the estimates become measurements.</P>
       <H>When numbers drift</H>
-      <P>Fitness changes. If intervals.icu starts estimating a meaningfully different FTP or
-        threshold pace from your actual riding and running, the app proposes a one-tap retarget;
+      <P>Fitness changes. If your actual riding and running start pointing to a meaningfully
+        different FTP or threshold pace, the app proposes a one-tap retarget;
         your feel ratings after sessions feed the same signal ("bike feels easy" three times means
         the zones are probably soft).</P>
     </>,

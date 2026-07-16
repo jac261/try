@@ -162,7 +162,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           );
         })()}
         {activity && <a className="act-link" href={T.activityUrl(activity)} target="_blank" rel="noopener noreferrer">
-          <Icon name="watch" size={15} /> See your recording on intervals.icu{activity.name ? ' · ' + activity.name : ''} ↗</a>}
+          <Icon name="watch" size={15} /> See the full recording{activity.name ? ' · ' + activity.name : ''} ↗</a>}
         {(w.race || w.bRace) && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
         {w.custom && onRemove && <>
           <div style={{ height: 10 }} />
