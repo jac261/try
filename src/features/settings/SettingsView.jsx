@@ -174,7 +174,7 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
       <div className="card">
         <h2>{p.name}</h2>
         <p className="lead">{tracker
-          ? 'No plan running. Just tracking your sessions.'
+          ? 'No plan active. Just tracking your sessions.'
           : <>Training for the {T.RACES[p.raceType].name} on {T.fmtDate(T.iso(p.raceDate), { month: 'long', day: 'numeric', year: 'numeric' })}</>}</p>
         <div className="statline">
           <div className="s"><b>{p.daysPerWeek}</b><span>days/week</span></div>

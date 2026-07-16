@@ -680,9 +680,11 @@ export function App({ storage, getToken, user }) {
           </button>
           <h1><Icon name="logo" size={26} /> Try</h1>
         </div>
-        <div className="sub">Hi {plan.profile.name}{tracker ? ', tracker mode' : " — let's get to the finish line"}</div>
+        {/* No suffix with no plan: the chip below already carries the next-plan
+            message, and a third "ready" in three lines read as copy-paste. */}
+        <div className="sub">Hi {plan.profile.name}{tracker ? '' : " — let's get to the finish line"}</div>
         <div className="race-chip">{tracker
-          ? <><span>Tracker mode</span><span>no plan running</span></>
+          ? <span>Ready for your next plan</span>
           : race.noRace
             ? <><span>Maintenance block</span><b>{Math.max(0, Math.ceil(rawDaysToRace / 7))}</b><span>weeks left</span></>
             : <><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></>}</div>

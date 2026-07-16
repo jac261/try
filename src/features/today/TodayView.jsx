@@ -103,8 +103,8 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
     key: 'no-plan', cls: 'banner tune', icon: 'clipboard',
     title: 'Ready for your next plan?',
     sub: connected
-      ? 'You are in tracker mode. Sessions from your watch land below and on your calendar. Tap to start your next plan.'
-      : 'You are in tracker mode. When you are ready for structure again, tap to start your next plan.',
+      ? 'Sessions from your watch land below and on your calendar. Tap to start your next plan.'
+      : 'When you are ready for structure again, tap to start your next plan.',
     act: onEditPlan,
   });
   // The plan's own edges (race just passed / maintenance block ending)
@@ -118,7 +118,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
     sub: (connected
       ? 'Stop the plan and take a break from structure. Sessions from your watch still land on your calendar.'
       : 'Stop the plan and take a break from structure.')
-      + ' Your fitness history is kept. Tap to switch to tracker mode.',
+      + ' Your fitness history is kept. Tap to make the switch.',
     act: onEnterTracker,
   });
   const weeklySig = weekly
@@ -149,22 +149,27 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
     .sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1)[0];
   const restDay = todayReal.length === 0;
 
+  const coachCard = slot && <div className={slot.cls} {...tap(slot.act)}>
+    <div className="bi"><Icon name={slot.icon} size={20} /></div>
+    <div style={{ flex: 1 }}><div className="bt">{slot.title}</div>
+      <div className="bs">{slot.sub}</div></div>
+    {slot.dismiss && <div className="bmore bx" role="button" tabIndex={0} aria-label="Dismiss this suggestion"
+      onClick={e => { e.stopPropagation(); slot.dismiss(); }}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); slot.dismiss(); } }}>✕</div>}
+    {coach.length > 1 && <div className="bmore" aria-hidden="true"
+      onClick={e => { e.stopPropagation(); setCoachIdx(i => i + 1); }}>
+      {(coachIdx % coach.length) + 1}/{coach.length} ▸</div>}
+  </div>;
+
   return (
     <>
       <div className="section-title">Today · {T.fmtDate(todayISO, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
+      {/* With no plan the tab's one call to action is the next-plan prompt, so
+          it leads; in plan mode readiness keeps the top spot (Jon, 2026-07-16). */}
+      {tracker && coachCard}
       <ReadinessCard wellness={wellness} today={today.map(w => ({ ...easedOf(w), done: !!log[w.id] }))} noPlan={tracker}
         onEdit={onEditWellness} onFeel={onFeel} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} onSupport={onSupport} recovery={recovery} />
-      {slot && <div className={slot.cls} {...tap(slot.act)}>
-        <div className="bi"><Icon name={slot.icon} size={20} /></div>
-        <div style={{ flex: 1 }}><div className="bt">{slot.title}</div>
-          <div className="bs">{slot.sub}</div></div>
-        {slot.dismiss && <div className="bmore bx" role="button" tabIndex={0} aria-label="Dismiss this suggestion"
-          onClick={e => { e.stopPropagation(); slot.dismiss(); }}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); slot.dismiss(); } }}>✕</div>}
-        {coach.length > 1 && <div className="bmore" aria-hidden="true"
-          onClick={e => { e.stopPropagation(); setCoachIdx(i => i + 1); }}>
-          {(coachIdx % coach.length) + 1}/{coach.length} ▸</div>}
-      </div>}
+      {!tracker && coachCard}
       <div className="card">
         {allDone && !reviewToday
           ? <div className="today-done">
@@ -174,7 +179,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
             <a className="reset" {...tap(() => setReviewToday(true))}>Review</a>
           </div>
           : today.length === 0
-            ? <div className="empty"><div className="big"><Icon name="rest" size={40} /></div>{tracker ? 'No plan running.' : 'No session scheduled today.'}</div>
+            ? <div className="empty"><div className="big"><Icon name="rest" size={40} /></div>{tracker ? 'No plan active. Rest up.' : 'No session scheduled today.'}</div>
             : today.map(row)}
         {(allDone || restDay) && next && <div className="tmrw" {...tap(() => open(next))}
           aria-label={'Next up, ' + T.fmtDate(effDate(next, moves), { weekday: 'long' }) + ': ' + easedOf(next).title + '. Open details'}>

@@ -26,7 +26,7 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
       <div className="card">
         <div className="row" style={{ marginBottom: 8 }}>
           <div className="muted" style={{ fontSize: 12 }}>
-            {d.tracker ? 'Tracker mode' : (d.phase ? d.phase + ' phase · week ' + d.weekNo + ' of ' + d.totalWeeks : '')}
+            {d.tracker ? 'No plan active' : (d.phase ? d.phase + ' phase · week ' + d.weekNo + ' of ' + d.totalWeeks : '')}
           </div>
           <div className="spacer" />
           <a className="reset" {...tap(dismiss)} role="button" aria-label="Dismiss this week's digest">Dismiss</a>

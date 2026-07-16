@@ -17,7 +17,7 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
       <div className="section-title">Plan</div>
       <div className="card" style={{ textAlign: 'center', padding: '26px 18px' }}>
         <div className="empty" style={{ padding: 0, marginBottom: 14 }}>
-          <div className="big"><Icon name="clipboard" size={40} /></div>No plan running
+          <div className="big"><Icon name="clipboard" size={40} /></div>No plan active
         </div>
         <p style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.5, margin: '0 0 18px' }}>
           You are just tracking right now. When you are ready, I will build your next plan around your fitness and your dates.
