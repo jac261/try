@@ -104,7 +104,7 @@ export function App({ storage, getToken, user }) {
   // A failed plan write means this device and the account have diverged — the
   // catalog-drift incident proved that must never be silent again.
   const [planSyncFailed, setPlanSyncFailed] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);   // "Add a session" sheet (Today tab)
+  const [addOpen, setAddOpen] = useState(null);    // "Add a session" sheet: null | { disc, dateISO } (Today passes {}, calendar cards preselect)
   const [recap, setRecap] = useState(null);        // session recap slides (workout whose recording just landed)
   // Support library: which topic is open, and where to return to when leaving
   // (charts on any tab deep-link in via openSupport).
@@ -609,9 +609,9 @@ export function App({ storage, getToken, user }) {
   // User-added sessions: first-class plan workouts (flagged custom), persisted
   // through the same plan replace as retargets — server preserves logs by ref.
   const addWorkout = spec => {
-    const r = T.addCustomWorkout(plan, Object.assign({}, spec, { dateISO: T.iso(new Date()) }));
+    const r = T.addCustomWorkout(plan, Object.assign({ dateISO: T.iso(new Date()) }, spec));
     setPlan(r.plan);
-    setAddOpen(false);
+    setAddOpen(null);
     // adoptMap sweeps for a quick-complete raced against this replace: the new
     // workout's log lands once its GUID is known instead of staying local-only.
     sync.replacePlan(r.plan).then(adoptMap);
@@ -695,8 +695,8 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen(true)} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} storage={storage} />}
-      {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={activities} onOpenRecording={openRecording} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} storage={storage} />}
+      {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={activities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
       {view === 'settings' && <SettingsView plan={plan}
@@ -748,7 +748,7 @@ export function App({ storage, getToken, user }) {
         onWhatIf={tracker ? null : w => { setDetail(null); setWhatIf({ initial: { tab: 'miss', skipIds: [w.id], skipLabel: w.title || w.type } }); }}
         onReplayRecap={log[detail.id] && recordingFor(detail) ? () => { const w2 = detail; setDetail(null); setRecap({ workout: w2, activity: recordingFor(w2) }); } : null} />}
 
-      {addOpen && <AddWorkoutSheet onAdd={addWorkout} onClose={() => setAddOpen(false)} />}
+      {addOpen && <AddWorkoutSheet initialDisc={addOpen.disc} dateISO={addOpen.dateISO} onAdd={addWorkout} onClose={() => setAddOpen(null)} />}
 
       <div className="nav">
         {tabs.map(([k, ic, label]) => (

@@ -13,7 +13,7 @@ const D = T.DISCIPLINES;
    (writes the existing moves overlay, so it syncs and tags exactly like the
    detail sheet's reschedule — which remains the keyboard/screen-reader path).
    The week-by-week programme listing lives on the Plan tab now. */
-export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove, activities, onOpenRecording }) {
+export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove, activities, onOpenRecording, onAddWorkout }) {
   const todayISO = T.iso(new Date());
   // Tracker mode has no plan weeks: browse a rolling window around today so the
   // month grid still works and detected activities land on their days.
@@ -151,6 +151,32 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         </div>}
         <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} noHeading={tracker} />
       </>}
+
+      {/* One card per sport: tap to open the add sheet with that sport
+          preselected and the selected day as the target; the sheet's library
+          list carries the type choice. Plan mode only — a custom workout
+          needs a plan week to live in (addCustomWorkout). */}
+      {!tracker && onAddWorkout && (() => {
+        // Clamp into the plan window: edge months show tappable off-plan days,
+        // and addCustomWorkout files any out-of-window date under the LAST
+        // week, silently corrupting that week's totals (gauntlet 2026-07-16).
+        const addTarget = clampDay(selected || todayISO);
+        return <>
+          <div className="section-title">Add a session</div>
+          <div className="cal-add">
+            {['run', 'bike', 'swim'].map(k => (
+              <div key={k} className="card cal-add-card"
+                {...tap(() => onAddWorkout(k, addTarget))}
+                aria-label={'Add a ' + D[k].name.toLowerCase() + ' session to '
+                  + T.fmtDate(addTarget, { weekday: 'long', month: 'long', day: 'numeric' })}>
+                <div className="dot" style={{ background: D[k].grad }}><Icon name={D[k].icon} size={22} /></div>
+                <span className="cal-add-name">{D[k].name}</span>
+                <span className="cal-add-hint">+ Add</span>
+              </div>
+            ))}
+          </div>
+        </>;
+      })()}
 
       {drag && <div className="drag-ghost" style={{ left: drag.x, top: drag.y, borderColor: drag.color }}>{drag.title}</div>}
     </>

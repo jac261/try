@@ -634,6 +634,12 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .drag-handle:active { cursor: grabbing; color: var(--ink); }
 .drag-ghost { position: fixed; z-index: 80; transform: translate(-50%, -130%); background: var(--card-2); border: 1.5px solid; border-radius: 999px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; color: var(--ink); pointer-events: none; box-shadow: 0 10px 26px rgba(0, 0, 0, .5); white-space: nowrap; }
 .cal-hint { font-size: 11.5px; color: var(--faint); text-align: center; margin-top: 10px; }
+/* the three add-a-session cards at the foot of the calendar tab */
+.cal-add { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.cal-add-card { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 16px 8px 13px; margin: 0; cursor: pointer; }
+.cal-add-card:active { transform: scale(.97); }
+.cal-add-name { font-size: 14px; font-weight: 700; }
+.cal-add-hint { font-size: 11.5px; color: var(--muted); }
 
 /* ---------- support library ---------- */
 .info-link { float: right; margin-left: 12px; font-size: 11px; font-weight: 700; color: var(--blue); cursor: pointer; text-transform: none; letter-spacing: 0; }

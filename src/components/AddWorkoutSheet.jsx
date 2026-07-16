@@ -18,12 +18,18 @@ const TYPE_OPTIONS = {
 };
 const DEFAULT_DUR = { run: 45, bike: 60, swim: 40, brick: 60, strength: 40 };
 
-export function AddWorkoutSheet({ onAdd, onClose }) {
-  const [disc, setDisc] = useState('run');
-  const [type, setType] = useState('Easy');
-  const [dur, setDur] = useState(DEFAULT_DUR.run);
+export function AddWorkoutSheet({ onAdd, onClose, initialDisc, dateISO }) {
+  // The calendar's add cards open this sheet with a sport preselected and a
+  // target day (the selected calendar day); the Today doorway passes neither.
+  const d0 = TYPE_OPTIONS[initialDisc] ? initialDisc : 'run';
+  const [disc, setDisc] = useState(d0);
+  const [type, setType] = useState(TYPE_OPTIONS[d0][0]);
+  const [dur, setDur] = useState(DEFAULT_DUR[d0]);
   const pick = d => { setDisc(d); setType(TYPE_OPTIONS[d][0]); setDur(DEFAULT_DUR[d]); };
   const fixed = disc === 'strength';
+  const target = dateISO || T.iso(new Date());
+  const dayLabel = target === T.iso(new Date()) ? 'today'
+    : T.fmtDate(target, { weekday: 'long', month: 'short', day: 'numeric' });
   const sheetRef = useSheetFocus(onClose);
   return (
     <div className="scrim" onClick={onClose}>
@@ -31,7 +37,7 @@ export function AddWorkoutSheet({ onAdd, onClose }) {
         aria-label="Add a session" onClick={e => e.stopPropagation()}>
         <div className="grab" />
         <h2 style={{ margin: '0 0 4px', fontSize: 21, letterSpacing: '-.5px' }}>Add a session</h2>
-        <div className="muted" style={{ fontSize: 13 }}>An extra session on today, outside your plan. It counts towards your training load like any other.</div>
+        <div className="muted" style={{ fontSize: 13 }}>An extra session on {dayLabel}, outside your plan. It counts towards your training load like any other.</div>
         <div className="aw-lab">Sport</div>
         <div className="aw-discs">
           {Object.keys(TYPE_OPTIONS).map(d => (
@@ -56,7 +62,7 @@ export function AddWorkoutSheet({ onAdd, onClose }) {
             <button className="btn ghost sm" type="button" onClick={() => setDur(d => Math.min(240, d + 5))}><span className="sgn">+</span>5</button>
           </div>}
         <button className="btn primary" style={{ width: '100%', marginTop: 18 }} type="button"
-          onClick={() => onAdd({ discipline: disc, type, durationMin: dur })}>Add to today</button>
+          onClick={() => onAdd({ discipline: disc, type, durationMin: dur, dateISO: target })}>Add to {dayLabel}</button>
       </div>
     </div>
   );
