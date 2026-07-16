@@ -401,7 +401,13 @@ export function App({ storage, getToken, user }) {
       const entry = { done: true, at, actualMin, notes: observe(id, null, at, actualMin) };
       setLog(l => ({ ...l, [id]: entry }));
       if (gid(id)) sync.saveLog(gid(id), entry);
-      if (actualMin && w) setRecap({ workout: w }); // a recording landed with the tick → celebrate + consequence
+      if (actualMin && w) {
+        // a recording landed with the tick → celebrate + consequence. The
+        // fourth recap doorway, and it must mark seen like the other three
+        // or the deck replays forever (gauntlet catch, 2026-07-16).
+        markRecapSeen(recordingFor(w));
+        setRecap({ workout: w });
+      }
     }
   };
   // Tap a row in the Recorded card → open the in-app recap deck rather than
@@ -409,15 +415,39 @@ export function App({ storage, getToken, user }) {
   // planned session; an unplanned activity gets a lightweight ad-hoc workout
   // synthesised from itself, so the wrapped-style deck still shows what you did
   // (no plan-relative verdicts — reviewActivity skips those when adhoc).
+  // The wrapped recap is a one-time celebration per recording: the first tap
+  // plays the deck, every later tap opens the session overview instead, which
+  // carries a replay link (Jon, 2026-07-16). Seen ids persist per device,
+  // pruned to the newest hundred.
+  const markRecapSeen = (a, preloaded) => {
+    if (!a || !a.id) return;
+    const seen = preloaded || storage.load('recapSeen', {});
+    if (seen[a.id]) return;
+    const next = { ...seen, [a.id]: new Date().toISOString() };
+    const ids = Object.keys(next);
+    if (ids.length > 120) {
+      ids.sort((x, y) => (next[x] < next[y] ? -1 : 1)).slice(0, ids.length - 100)
+        .forEach(id => delete next[id]);
+    }
+    storage.save('recapSeen', next);
+  };
   const openRecording = arg => {
     if (!arg) return;
     // Carry the tapped activity through when the row supplied one, so a matched
     // recap opens the exact recording tapped rather than re-deriving the
     // closest-to-plan match. Bricks pass no activity and re-build their pair.
-    if (arg.workout) { setRecap({ workout: arg.workout, activity: arg.activity || null }); return; }
+    if (arg.workout) {
+      const a = arg.activity || recordingFor(arg.workout);
+      const seen = storage.load('recapSeen', {});
+      if (a && seen[a.id]) { setDetail(arg.workout); return; }
+      markRecapSeen(a, seen);
+      setRecap({ workout: arg.workout, activity: arg.activity || null });
+      return;
+    }
     const a = arg.activity;
     if (!a || !a.movingTimeSec) return;
     const disc = T.DISCIPLINE[a.type] || 'bike';
+    markRecapSeen(a);
     setRecap({
       workout: {
         id: 'adhoc-' + a.id, adhoc: true,
@@ -514,7 +544,10 @@ export function App({ storage, getToken, user }) {
       if (gid(m.workout.id)) sync.saveLog(gid(m.workout.id), entry);
     });
     setLog(l => ({ ...l, ...entries }));
-    if (spotted.length) setRecap({ workout: spotted[0].workout }); // recap the headline session
+    if (spotted.length) {
+      markRecapSeen(recordingFor(spotted[0].workout));
+      setRecap({ workout: spotted[0].workout }); // recap the headline session
+    }
   };
   // Every accepted proposal is journalled with the exact headline and why
   // the athlete tapped, so the weekly digest can quote — never re-derive —
@@ -710,7 +743,8 @@ export function App({ storage, getToken, user }) {
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}
         onLogResult={() => { setDetail(null); setEditFitness(true); }}
         onRemove={detail.custom ? () => removeWorkout(detail.id) : null} onLoadIntervals={sync.loadActivityIntervals} onSupport={t => { setDetail(null); openSupport(t); }}
-        onWhatIf={tracker ? null : w => { setDetail(null); setWhatIf({ initial: { tab: 'miss', skipIds: [w.id], skipLabel: w.title || w.type } }); }} />}
+        onWhatIf={tracker ? null : w => { setDetail(null); setWhatIf({ initial: { tab: 'miss', skipIds: [w.id], skipLabel: w.title || w.type } }); }}
+        onReplayRecap={log[detail.id] && recordingFor(detail) ? () => { const w2 = detail; setDetail(null); setRecap({ workout: w2, activity: recordingFor(w2) }); } : null} />}
 
       {addOpen && <AddWorkoutSheet onAdd={addWorkout} onClose={() => setAddOpen(false)} />}
 

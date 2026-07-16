@@ -33,7 +33,7 @@ const WHY_DISC = {
   'swim:Endurance': 'Build aerobic endurance in the water. Long, smooth and unhurried — hold relaxed form as the distance adds up.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap }) {
   // The rep table: lazily fetch the recording's interval analysis once the
   // session is done and matched. null → loading/none; [] handled by the lib.
   const [reps, setReps] = useState(null);
@@ -119,7 +119,10 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           if (!rv) return null;
           return (
             <div className="review">
-              <div className="section-title" style={{ margin: '14px 0 6px' }}>How it went</div>
+              <div className="section-title" style={{ margin: '14px 0 6px' }}>How it went
+                {/* the deck only auto-plays once per recording; this is the way back in */}
+                {onReplayRecap && <a className="reset" {...tap(onReplayRecap)} role="button"
+                  aria-label="Replay the recap slides" style={{ marginLeft: 8 }}>▶ Replay recap</a>}</div>
               <div className="rd-pmc" style={{ marginTop: 0, flexWrap: 'wrap' }}>
                 {rv.stats.slice(0, 4).map(([k, v]) => <div key={k}><b style={{ fontSize: 15 }}>{v}</b><span>{k}</span></div>)}
               </div>
