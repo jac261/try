@@ -37,6 +37,20 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     return m;
   }, [plan, moves]);
 
+  // Tracker mode is a diary: the grid's dots come from the RECORDED feed,
+  // since there are no plan workouts to dot the days with (field report
+  // 2026-07-16: recorded workouts were invisible until a day was tapped).
+  const actByDate = useMemo(() => {
+    const m = {};
+    if (tracker) (activities || []).forEach(a => {
+      // Same guard as RecordedActivities: an unmapped activity type (walk,
+      // yoga, ski) stays off the grid rather than defaulting to a bike dot.
+      if (!a || !a.date || !a.movingTimeSec || !T.DISCIPLINE[a.type]) return;
+      (m[a.date] = m[a.date] || []).push(a);
+    });
+    return m;
+  }, [tracker, activities]);
+
   const ym = s => s.slice(0, 7);
   const canPrev = ym(anchor) > ym(planStart);
   const canNext = ym(anchor) < ym(planEnd);
@@ -84,20 +98,25 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         <div className="cal-grid">
           {grid.cells.map((d, i) => {
             const ws = d ? (byDate[d] || []) : [];
+            const acts = d ? (actByDate[d] || []) : [];
             const inPlan = d && d >= planStart && d <= planEnd;
             return (
               <div key={i} data-caldate={d || undefined}
                 className={'cal-day' + (!d ? ' blank' : '') + (d && !inPlan ? ' off' : '')
                   + (d === todayISO ? ' today' : '') + (d === selected ? ' sel' : '')
-                  + (d === raceISO ? ' race' : '') + (drag && d && drag.over === d ? ' drop' : '')}
+                  + (d && d === raceISO ? ' race' : '') + (drag && d && drag.over === d ? ' drop' : '')}
                 aria-current={d === selected ? 'date' : undefined}
                 aria-label={d ? T.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })
-                  + (ws.length ? ': ' + ws.map(w => w.title).join(' and ') : '') : undefined}
+                  + (ws.length ? ': ' + ws.map(w => w.title).join(' and ') : '')
+                  + (acts.length ? ': ' + acts.length + ' recorded ' + (acts.length === 1 ? 'session' : 'sessions') : '') : undefined}
                 {...(d ? tap(() => setSelected(d)) : {})}>
                 {d && <div className="cd-num">{Number(d.slice(8))}</div>}
                 {d && <div className="cd-dots">
                   {ws.slice(0, 3).map(w => <i key={w.id} className={log[w.id] ? 'done' : ''}
                     style={{ background: w.race || w.bRace ? '#facc15' : D[w.discipline].color }} />)}
+                  {/* recorded sessions are inherently done, so they wear the tick */}
+                  {acts.slice(0, Math.max(0, 3 - ws.length)).map(a => <i key={'a' + a.id} className="done"
+                    style={{ background: (D[T.DISCIPLINE[a.type]] || D.bike).color }} />)}
                 </div>}
               </div>
             );
