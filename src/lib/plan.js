@@ -684,7 +684,10 @@ function typeFor(discipline, role, phase, isRecovery, intensity) {
   if (role === 'long') return 'Long';
   if (role === 'brick') return 'Brick';
   // Peak swims become race-specific open-water sessions (any role, but not recovery weeks).
-  if (discipline === 'swim' && phase === 'Peak' && !isRecovery) return 'Open Water';
+  // Only the QUALITY swim goes race-specific in Peak: forcing every slot to
+  // Open Water made two-swim weeks byte-identical (pre-existing, widened by
+  // the injured-state templates); the easy slot keeps its technique work.
+  if (discipline === 'swim' && phase === 'Peak' && !isRecovery && role !== 'easy') return 'Open Water';
   // bike has no 'Easy' builder branch (falling through would hand it the
   // Threshold else-branch, the recovery-week lesson) — Endurance IS its easy
   if (role === 'easy') return discipline === 'swim' ? 'Technique' : discipline === 'bike' ? 'Endurance' : 'Easy';
@@ -1054,7 +1057,12 @@ export const generatePlan = function (profile) {
     template.forEach(tok => {
       const [disc, role] = tok.split(':');
       if (postRaceWeek) {
-        mids.push({ disc: disc === 'brick' ? 'bike' : disc, role: 'quality' });
+        // ONE gentle session per discipline: the recovery week pins the seed
+        // and collapses every role, so a second slot of the same discipline
+        // would be byte-identical (pre-existing on 6-7 day plans, widened by
+        // the injured-state templates; gauntlet catch 2026-07-16).
+        const d2 = disc === 'brick' ? 'bike' : disc;
+        if (!mids.some(m => m.disc === d2)) mids.push({ disc: d2, role: 'quality' });
         return;
       }
       (role === 'long' || role === 'brick' ? longs : mids).push({ disc, role });

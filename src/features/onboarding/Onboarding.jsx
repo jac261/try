@@ -46,7 +46,11 @@ export function Onboarding({ onCreate }) {
       daysPerWeek: f.trainingDays.length,
       raceDate: maintenance ? T.iso(T.addDays(mon, 12 * 7 - 1)) : f.raceDate,
       horizonWeeks: maintenance ? 12 : undefined,
-      fivekSec: T.parseTimeToSec(f.fivek), css100Sec: T.parseTimeToSec(f.css100),
+      // never submit a number for the excluded discipline: the field hides,
+      // but a value typed BEFORE selecting the exclusion would still be in
+      // state (gauntlet catch: type a 5k time, go back, exclude running)
+      fivekSec: f.excludedDiscipline === 'run' ? null : T.parseTimeToSec(f.fivek),
+      css100Sec: f.excludedDiscipline === 'swim' ? null : T.parseTimeToSec(f.css100),
       ftp: f.ftp ? Number(f.ftp) : null, startDate: T.iso(new Date()),
       excludedDiscipline: f.excludedDiscipline || null,
     });

@@ -782,3 +782,37 @@ describe('injured state (profile.excludedDiscipline)', () => {
     });
   });
 });
+
+
+describe('gauntlet regressions: recovery-week and Peak duplication', () => {
+  const race = { name: 'J', raceType: 'olympic', fitness: 'intermediate',
+    trainingDays: [0, 1, 2, 3, 4, 5, 6], longDay: 5, daysPerWeek: 7,
+    startDate: '2026-07-13', raceDate: '2026-09-20' };
+
+  it('the post-race recovery week holds at most one session per discipline, all distinct', () => {
+    [undefined, 'run', 'swim'].forEach(ex => {
+      const p = generatePlan({ ...race, excludedDiscipline: ex });
+      const last = p.weeks[p.weeks.length - 1];
+      expect(last.isRecovery).toBe(true);
+      const real = last.workouts.filter(w => w.discipline !== 'rest' && !w.race);
+      const discs = real.map(w => w.discipline);
+      expect(new Set(discs).size).toBe(discs.length);
+      const keys = real.map(w => w.discipline + ':' + w.type + ':' + w.durationMin);
+      expect(new Set(keys).size).toBe(keys.length);
+    });
+  });
+
+  it('Peak weeks with two swims differentiate: quality goes Open Water, easy keeps Technique', () => {
+    const p = generatePlan({ ...race, excludedDiscipline: 'run' });
+    const peak = p.weeks.filter(w => w.phase === 'Peak' && !w.isRecovery);
+    expect(peak.length).toBeGreaterThan(0);
+    peak.forEach(wk => {
+      const swims = wk.workouts.filter(w => w.discipline === 'swim' && !w.test && !w.race);
+      if (swims.length >= 2) {
+        const types = new Set(swims.map(w => w.type));
+        expect(types.size).toBeGreaterThan(1); // never two identical Open Water sessions
+        expect([...types]).toContain('Open Water'); // race-specific work survives
+      }
+    });
+  });
+});

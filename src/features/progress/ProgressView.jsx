@@ -69,7 +69,9 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
 
   return (
     <>
-      <AthleteStateStrip wellness={wellness} runLoad={runLoad} recovery={recovery} onSupport={onSupport} excludedDiscipline={plan.profile.excludedDiscipline} />
+      <AthleteStateStrip wellness={wellness} runLoad={runLoad} recovery={recovery} onSupport={onSupport}
+        excludedDiscipline={plan.weeks.some(wk => wk.workouts.some(w => w.discipline === 'run' && log[w.id]))
+          ? null : plan.profile.excludedDiscipline} />
       <div className="section-title">Progress</div>
       {!tracker && <>
         <div className="kpis">
