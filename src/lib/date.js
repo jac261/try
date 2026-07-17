@@ -29,7 +29,10 @@ export function iso(d) {
 }
 
 export function weeksBetween(a, b) {
-  return (toDate(b) - toDate(a)) / (7 * 24 * 3600 * 1000);
+  // Calendar days over 7, not raw milliseconds: a DST transition inside the
+  // span made the millisecond version fractionally wrong (12.994 weeks for
+  // exactly 13). daysBetween rounds the 23/25-hour day away.
+  return daysBetween(a, b) / 7;
 }
 
 export function daysBetween(a, b) {

@@ -956,7 +956,10 @@ export const upgradePlanSegments = function (plan) {
   let changed = false;
   const weeks = plan.weeks.map(week => {
     const workouts = week.workouts.map(w => {
-      if (w.race || w.test || w.discipline === 'rest' || !w.durationMin) return w;
+      // bRace included: a tune-up's race-day instructions must never be
+      // rebuilt into training content (sim catch 2026-07-17 — every app load
+      // was silently corrupting them, 'RACE' being no builder's type).
+      if (w.race || w.bRace || w.test || w.discipline === 'rest' || !w.durationMin) return w;
       const segsNow = w.segments || [];
       // Staleness signal (no schema field): a run/bike session whose segments
       // do not sum to its durationMin drifted under the old sizing, so re-derive
@@ -1262,7 +1265,11 @@ export const generatePlan = function (profile, opts) {
       const HARD = { 'Fartlek': 2, 'Tempo': 3, 'Threshold': 4, 'VO2 Intervals': 5, 'Sweet Spot': 3, 'CSS Intervals': 3, 'Race Pace': 4 };
       const score = x => (HARD[x.type] || 0) + (x.role === 'quality' ? 1 : 0);
       const hosts = workouts.filter(x => x.discipline !== 'rest' && !x.race && !x.test && x.role !== 'long' && x.discipline !== 'brick');
-      hosts.sort((a, b) => score(b) - score(a) || b.durationMin - a.durationMin);
+      // Tie-break by weekday order, NOT duration: durations wear the limiter
+      // bias, which a fitness-only retarget legitimately changes, and a moved
+      // host re-ids the double and orphans its log entry (sim catch
+      // 2026-07-17). Weekday order is stable for a stable schedule.
+      hosts.sort((a, b) => score(b) - score(a) || (a.id < b.id ? -1 : 1));
       const host = hosts[0];
       if (host) workouts.push({
         id: w + '-' + host.id.split('-')[1] + '-1', week: w, phase: phase, date: host.date,

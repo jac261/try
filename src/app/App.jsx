@@ -667,8 +667,19 @@ export function App({ storage, getToken, user }) {
     const np = T.generatePlan(profile);
     np.createdAt = plan.createdAt;
     if (plan.updatedAt) np.updatedAt = plan.updatedAt;
-    const valid = new Set(np.weeks.flatMap(w => w.workouts).map(w => w.id));
-    setLog(l => { const n = {}; Object.keys(l).forEach(id => { if (valid.has(id)) n[id] = l[id]; }); return n; });
+    // Ids are positional, so surviving-id pruning alone let a completed
+    // swim's tick re-attach to whatever run now sits at the same id (sim
+    // catch 2026-07-17 — the same reuse hazard the moves/adjust comment below
+    // describes). A tick survives only when the id still means the SAME
+    // session: same discipline on the same date.
+    const oldById = {};
+    plan.weeks.flatMap(w => w.workouts).forEach(w => { oldById[w.id] = w; });
+    const survives = {};
+    np.weeks.flatMap(w => w.workouts).forEach(w => {
+      const o = oldById[w.id];
+      if (o && o.discipline === w.discipline && o.date === w.date) survives[w.id] = 1;
+    });
+    setLog(l => { const n = {}; Object.keys(l).forEach(id => { if (survives[id]) n[id] = l[id]; }); return n; });
     // Moves and engine adjustments are annotations on a specific STRUCTURE, and
     // workout ids are reused across regenerations — so pruning them by
     // surviving id is a no-op that lets old-structure moves land on the new

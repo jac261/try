@@ -24,7 +24,9 @@ export function proposeToday({ band, score, todays }) {
   if (!candidates.length) return null;
 
   const test = candidates.find(w => w.test);
-  const hard = candidates.find(w => INTENSITY_TYPES[w.type] && !w.eased && !w.test);
+  // G3: a session already adapted is never re-proposed over — trimmed and
+  // boosted overlays count, not just eased (sim catch 2026-07-17).
+  const hard = candidates.find(w => INTENSITY_TYPES[w.type] && !w.eased && !w.trimmed && !w.boosted && !w.test);
   const eased = candidates.find(w => w.eased);
 
   // D4 — red + test day: never soften a test, propose moving it (G2).

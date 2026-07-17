@@ -469,3 +469,12 @@ describe('RUN2 — the long-run jump guardrail', () => {
     expect(p.kind).toBe('trim-week'); // RUN1's shape, not the jump rule
   });
 });
+
+describe('G3 covers every adjustment kind (sim catch 2026-07-17)', () => {
+  it('a trimmed or boosted session is never re-proposed for easing', () => {
+    const w = { id: 'x', title: 'Tempo Run', type: 'Tempo', discipline: 'run', durationMin: 35, trimmed: true, trimmedFrom: 50 };
+    expect(proposeToday({ band: 'red', score: 30, todays: [{ ...w, done: false }] })).toBe(null);
+    const b = { ...w, trimmed: undefined, boosted: true, boostedFrom: 45 };
+    expect(proposeToday({ band: 'amber', score: 55, todays: [{ ...b, done: false }] })).toBe(null);
+  });
+});

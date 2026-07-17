@@ -40,3 +40,10 @@ describe('date helpers', () => {
     expect(iso(startOfWeekMonday('2026-09-14'))).toBe('2026-09-14'); // Monday → itself
   });
 });
+
+describe('weeksBetween across DST (sim catch 2026-07-17)', () => {
+  it('counts calendar weeks, not raw milliseconds', () => {
+    expect(weeksBetween('2026-01-05', '2026-04-06')).toBe(13); // spans spring-forward
+    expect(weeksBetween('2026-10-05', '2026-11-02')).toBe(4);  // spans fall-back
+  });
+});

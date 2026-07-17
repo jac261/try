@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { weakestLink, weakBias, WEAK_BIAS, WEAK_BIAS_BIG } from './weakest.js';
-import { generatePlan, swapForLimiter, detectLimiterSwap } from './plan.js';
+import { generatePlan, swapForLimiter, detectLimiterSwap, upgradePlanSegments } from './plan.js';
 
 describe('weakestLink (which sport is limiting)', () => {
   it('a strong runner and rider with an intermediate swim gets the swim named, with its race share', () => {
@@ -211,5 +211,27 @@ describe('weakestLink with an excluded discipline', () => {
   });
   it('fewer than two active sports still means no verdict', () => {
     expect(weakestLink({ profile: { excludedDiscipline: 'run', fivekSec: 1218, css100Sec: 120 } })).toBe(null);
+  });
+});
+
+describe('sim catches 2026-07-17: structural stability and tune-up integrity', () => {
+  const base = { name: 'J', raceType: 'olympic', fitness: 'beginner',
+    trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5,
+    startDate: '2026-01-05', raceDate: '2026-11-01', fivekSec: 1670, css100Sec: 110, ftp: 200, weightKg: 70 };
+
+  it('a fitness-only retarget never moves the strength double\'s id', () => {
+    const p1 = generatePlan(base);
+    const p2 = generatePlan({ ...base, fivekSec: 1765 }, { lockedSwap: detectLimiterSwap(p1) });
+    const ids = p => p.weeks.flatMap(w => w.workouts).filter(x => x.discipline === 'strength').map(x => x.id);
+    expect(ids(p2)).toEqual(ids(p1));
+  });
+
+  it('upgradePlanSegments never rewrites a tune-up race\'s instructions', () => {
+    const p = generatePlan({ ...base, raceType: 'half', raceDate: '2026-09-06', fitness: 'intermediate',
+      bRaces: [{ kind: 'run5k', date: '2026-03-02' }] });
+    const before = p.weeks.flatMap(w => w.workouts).find(w => w.bRace);
+    expect(before).toBeTruthy();
+    const after = upgradePlanSegments(p).weeks.flatMap(w => w.workouts).find(w => w.bRace);
+    expect(after.segments).toEqual(before.segments);
   });
 });

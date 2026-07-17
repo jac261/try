@@ -59,3 +59,35 @@ describe('mergeActivities (feed + diary, shadow dedup)', () => {
     expect(mergeActivities([], entries)[0].manual).toBe(true);
   });
 });
+
+describe('mergeActivities shadow multiplicity (sim catch 2026-07-17)', () => {
+  it('one recording shadows at most one entry: the second logged run survives', () => {
+    // AM 60 min + PM 90 min logged; the watch synced one 70 min recording
+    // whose duration falls inside BOTH windows
+    const feed = [{ id: 'f1', date: '2026-07-14', type: 'Run', movingTimeSec: 70 * 60 }];
+    const entries = [entry({ id: 'am', durationMin: 60 }), entry({ id: 'pm', durationMin: 90 })];
+    const out = mergeActivities(feed, entries);
+    expect(out.length).toBe(2); // the recording plus ONE surviving manual row
+    expect(out.filter(a => a.manual).length).toBe(1);
+  });
+  it('two recordings still shadow two matching entries', () => {
+    const feed = [
+      { id: 'f1', date: '2026-07-14', type: 'Run', movingTimeSec: 61 * 60 },
+      { id: 'f2', date: '2026-07-14', type: 'Run', movingTimeSec: 88 * 60 },
+    ];
+    const entries = [entry({ id: 'am', durationMin: 60 }), entry({ id: 'pm', durationMin: 90 })];
+    expect(mergeActivities(feed, entries).length).toBe(2); // both manual rows shadowed
+  });
+});
+
+describe('shadow pairing is best fit and order independent (re-verify catch 2026-07-17)', () => {
+  it('an ambiguous recording hides the CLOSEST entry, whichever order the store holds', () => {
+    const feed = [{ id: 'f1', date: '2026-07-14', type: 'Run', movingTimeSec: 95 * 60 }];
+    const am = entry({ id: 'am', durationMin: 60 });
+    const pm = entry({ id: 'pm', durationMin: 90 });
+    const survivorOf = list => mergeActivities(feed, list).find(a => a.manual).manualId;
+    // 95 min sits in both windows; 90 is the closer match, so AM survives
+    expect(survivorOf([am, pm])).toBe('am');
+    expect(survivorOf([pm, am])).toBe('am'); // editing-induced reorder changes nothing
+  });
+});
