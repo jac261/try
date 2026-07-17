@@ -152,47 +152,27 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} noHeading={tracker} />
       </>}
 
-      {/* One card per sport: tap to open the add sheet with that sport
+      {/* One card per sport, full discipline colour with the icon front and
+          centre (Jon, 2026-07-17): tap to open the add sheet with that sport
           preselected and the selected day as the target; the sheet's library
-          list carries the type choice. Plan mode only — a custom workout
-          needs a plan week to live in (addCustomWorkout). */}
-      {!tracker && onAddWorkout && (() => {
-        // Clamp into the plan window: edge months show tappable off-plan days,
-        // and addCustomWorkout files any out-of-window date under the LAST
-        // week, silently corrupting that week's totals (gauntlet 2026-07-16).
-        const addTarget = clampDay(selected || todayISO);
+          list carries the type choice. In plan mode this schedules a custom
+          workout; in tracker mode App routes it to the manual-log flavour. */}
+      {onAddWorkout && (() => {
+        // Plan mode clamps into the plan window: edge months show tappable
+        // off-plan days, and addCustomWorkout files any out-of-window date
+        // under the LAST week (gauntlet 2026-07-16). Tracker's browse window
+        // already covers any day worth logging.
+        const addTarget = tracker ? (selected || todayISO) : clampDay(selected || todayISO);
         return <>
           <div className="section-title">Add a session</div>
           <div className="cal-add">
             {['run', 'bike', 'swim'].map(k => (
-              <div key={k} className="card cal-add-card"
+              <div key={k} className="card cal-add-card" style={{ background: D[k].grad }}
                 {...tap(() => onAddWorkout(k, addTarget))}
-                aria-label={'Add a ' + D[k].name.toLowerCase() + ' session to '
+                aria-label={'Add a ' + D[k].name.toLowerCase() + ' session on '
                   + T.fmtDate(addTarget, { weekday: 'long', month: 'long', day: 'numeric' })}>
-                <div className="dot" style={{ background: D[k].grad }}><Icon name={D[k].icon} size={22} /></div>
+                <Icon name={D[k].icon} size={36} />
                 <span className="cal-add-name">{D[k].name}</span>
-                <span className="cal-add-hint">+ Add</span>
-              </div>
-            ))}
-          </div>
-        </>;
-      })()}
-
-      {/* Tracker's sibling of the add cards: log a DONE session into the
-          diary on the selected day. Same three cards, App routes by mode. */}
-      {tracker && onAddWorkout && (() => {
-        const logTarget = selected || todayISO;
-        return <>
-          <div className="section-title">Log a session</div>
-          <div className="cal-add">
-            {['run', 'bike', 'swim'].map(k => (
-              <div key={k} className="card cal-add-card"
-                {...tap(() => onAddWorkout(k, logTarget))}
-                aria-label={'Log a ' + D[k].name.toLowerCase() + ' session on '
-                  + T.fmtDate(logTarget, { weekday: 'long', month: 'long', day: 'numeric' })}>
-                <div className="dot" style={{ background: D[k].grad }}><Icon name={D[k].icon} size={22} /></div>
-                <span className="cal-add-name">{D[k].name}</span>
-                <span className="cal-add-hint">+ Log</span>
               </div>
             ))}
           </div>
