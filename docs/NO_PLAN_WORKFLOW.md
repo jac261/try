@@ -133,7 +133,7 @@ contract.
 | GET /api/plans/current | Works; post-PR-17 returns the sentinel. Target model: 404 honestly means no plan. |
 | PUT /api/plans/current | Works; how the sentinel syncs post-merge; moot in true no-plan. |
 | PATCH /api/plans/{id} | 501 stub, unchanged. |
-| DELETE /api/plans/{id} | 501 stub today. The ONE new verb needed: implement as end/archive (status ended, soft-delete graph via existing SoftDeletePlanGraphAsync); GET current 404s after. The state transition the API currently lacks entirely. |
+| DELETE /api/plans/{id} | SHIPPED in PR #22 (2026-07-17): implemented as end/archive via TrainingPlanService.EndPlanAsync; GET current 404s after. |
 | /api/workouts/{guid} log / move / adjustment | Moot with no plan — correctly. Never bend into durable history. |
 | /api/wellness (all + sync) | Works unchanged. Tracker's backbone; weight already flows. |
 | intervals-icu GET activities | Works; needs only a larger client `days`. |
@@ -182,7 +182,7 @@ Phase 0 — this week (Jack ~0.5 day, Jon ~1–2 days). MUST, in order:
    and update values without generatePlan (Jon).
 5. Truthful empty states everywhere in tracker (Jon).
 
-Phase 1 — after this spec is agreed (Jack ~2–2.5 days, two small PRs):
+Phase 1 — DONE (shipped together as backend PR #22, merged 2026-07-17: user_profiles migration + Profile on MeResponse + PUT /api/me/profile + DELETE /api/plans/{id} as end/archive). Originally:
 6. PR A: user_profiles migration, Profile on MeResponse, PUT /api/me/profile.
 7. PR B: implement DELETE /api/plans/{id} as end/archive; GET current 404s
    after. Independent of PR A.

@@ -216,14 +216,12 @@ export function App({ storage, getToken, user }) {
     let cancelled = false;
     sync.hydrate().then(result => {
       if (cancelled) return;
-      // Tracker is a client-only state until the backend catalog accepts it
-      // (race 'tracker' + zero-week plans). Keep the local tracker plan
-      // authoritative over the server's STALE pre-tracker plan, but YIELD to a
-      // genuinely newer plan (a real plan started on another device, updatedAt
-      // beyond the tracker's) so this device is never stranded and — once the
-      // backend accepts tracker — a newer plan is never overwritten. Push
-      // silently so tracker syncs the moment the backend supports it. Once the
-      // server itself returns a tracker plan this whole branch is a no-op.
+      // The backend accepts the zero-week tracker sentinel as of PR #17
+      // (merged 2026-07-17), so this branch is now mostly a no-op safety net.
+      // It remains for devices holding a STALE pre-tracker server plan: keep
+      // the local tracker authoritative over that, but YIELD to a genuinely
+      // newer plan (a real plan started on another device, updatedAt beyond
+      // the tracker's) so this device is never stranded. Push stays silent.
       const sp = result && result.plan;
       // Compare parsed epoch ms, not raw ISO strings: the backend may serialize
       // updatedAt in a different ISO form (offset vs Z, fractional precision)
@@ -330,9 +328,10 @@ export function App({ storage, getToken, user }) {
     // The diary needs depth the spotting window doesn't: refetch the feed to
     // match the tracker calendar's browsable range.
     fetchActivities(TRACKER_FEED_DAYS);
-    // Silent push: the backend catalog rejects a zero-week 'tracker' plan until
-    // it ships support, so a failed save here is expected and must not raise the
-    // "didn't save" alarm. The plan lives locally; hydrate keeps it and retries
+    // Silent push: the backend accepts the tracker sentinel as of PR #17
+    // (merged 2026-07-17), so this now saves; kept silent because a tracker
+    // transition is not a user-initiated save and must not raise the
+    // "didn't save" alarm on transient failures. The plan lives locally; hydrate keeps it and retries
     // the push on every load, so it syncs the moment the backend accepts it.
     sync.replacePlan(np).then(m => { if (m) adoptMap(m); });
   };
