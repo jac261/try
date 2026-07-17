@@ -30,12 +30,13 @@ describe('the add-a-session cards', () => {
     expect(html).not.toContain('+ Add');
   });
 
-  it('wear the full discipline colour with the icon large and centred', () => {
+  it('wear the full discipline colour with the icon large and centred, strength included', () => {
     const html = renderToString(<CalendarView {...base} onAddWorkout={() => {}} />);
     // gradient background inlined on each card, icon at the large size
-    expect((html.match(/cal-add-card/g) || []).length).toBe(3);
-    expect((html.match(/linear-gradient/g) || []).length).toBeGreaterThanOrEqual(3);
-    expect(html).toContain('width="36"');
+    expect((html.match(/cal-add-card/g) || []).length).toBe(4);
+    expect(html).toContain('Strength');
+    expect((html.match(/linear-gradient/g) || []).length).toBeGreaterThanOrEqual(4);
+    expect(html).toContain('width="32"');
   });
 
   it('tapping a card reports the sport and the selected day', async () => {
@@ -67,8 +68,8 @@ describe('the full add and remove journey (tracker diary via the calendar)', () 
     await act(async () => {
       root.render(<App storage={storage} getToken={async () => null} user={{ imageUrl: null }} />);
     });
-    // splash hold is a 1.2s timer; let it and hydration settle
-    await act(async () => { await new Promise(r => setTimeout(r, 1400)); });
+    // splash hold runs 2.6s (spin + three pulses); let it and hydration settle
+    await act(async () => { await new Promise(r => setTimeout(r, 2800)); });
 
     // to the calendar tab
     const navBtn = [...el.querySelectorAll('.nav button')].find(b => b.textContent.includes('Calendar'));
@@ -85,6 +86,12 @@ describe('the full add and remove journey (tracker diary via the calendar)', () 
     await act(async () => { submit.click(); });
     expect(storage.loadManualActivities().length).toBe(1);
     expect(el.textContent).toContain('Logged');
+    // and the session is on the calendar itself: the day cell gains a
+    // recorded dot and announces it (Jon, 2026-07-17: added sessions must
+    // land on the calendar)
+    const todayCell = el.querySelector('.cal-day.today');
+    expect(todayCell.querySelectorAll('.cd-dots i.done').length).toBe(1);
+    expect(todayCell.getAttribute('aria-label')).toContain('1 recorded session');
 
     // first tap on the row celebrates (recap deck), close it
     const row = [...el.querySelectorAll('.wk')].find(r => (r.getAttribute('aria-label') || '').startsWith('Open '));

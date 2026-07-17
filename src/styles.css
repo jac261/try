@@ -96,13 +96,19 @@ body {
   color: var(--text);
 }
 .splash h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.8px; }
+/* The mark spins once, then pulses three times (Jon, 2026-07-17); the
+   wordmark keeps the soft opacity pulse underneath. The splash hold in
+   App.jsx is sized to let the whole sequence play. */
 .splash svg { color: var(--blue); }
-.splash > * { animation: splash-pulse 1.15s ease-in-out infinite; } /* one full pulse inside the 1.2s minimum hold */
+.splash > * { animation: splash-pulse 1.15s ease-in-out infinite; }
+.splash > svg { animation: splash-spin .85s cubic-bezier(.35, .1, .25, 1), splash-scale .5s ease-in-out .95s 3; }
 @keyframes splash-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes splash-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes splash-scale { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.16); } }
 /* Reduced-motion reset AFTER the animation rule it cancels — a media query
    adds no specificity, so source order decides (the recap cascade lesson). */
 @media (prefers-reduced-motion: reduce) {
-  .splash > * { animation: none; }
+  .splash > *, .splash > svg { animation: none; }
 }
 
 /* ---------- header (navy + royal-blue glow) ---------- */
@@ -652,11 +658,11 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 @media (prefers-reduced-motion: reduce) { .compass-needle { animation: none; } }
 
 /* the three add-a-session cards at the foot of the calendar tab */
-.cal-add { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.cal-add { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 /* full discipline colour, icon large and centred (Jon, 2026-07-17) */
 .cal-add-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 18px 8px 15px; margin: 0; cursor: pointer; color: #fff; border: none; }
 .cal-add-card:active { transform: scale(.97); }
-.cal-add-name { font-size: 14px; font-weight: 700; }
+.cal-add-name { font-size: 13px; font-weight: 700; }
 
 /* ---------- support library ---------- */
 .info-link { float: right; margin-left: 12px; font-size: 11px; font-weight: 700; color: var(--blue); cursor: pointer; text-transform: none; letter-spacing: 0; }

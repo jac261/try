@@ -166,12 +166,12 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         return <>
           <div className="section-title">Add a session</div>
           <div className="cal-add">
-            {['run', 'bike', 'swim'].map(k => (
+            {['run', 'bike', 'swim', 'strength'].map(k => (
               <div key={k} className="card cal-add-card" style={{ background: D[k].grad }}
                 {...tap(() => onAddWorkout(k, addTarget))}
                 aria-label={'Add a ' + D[k].name.toLowerCase() + ' session on '
                   + T.fmtDate(addTarget, { weekday: 'long', month: 'long', day: 'numeric' })}>
-                <Icon name={D[k].icon} size={36} />
+                <Icon name={D[k].icon} size={32} />
                 <span className="cal-add-name">{D[k].name}</span>
               </div>
             ))}

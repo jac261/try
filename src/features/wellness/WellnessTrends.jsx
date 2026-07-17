@@ -62,7 +62,7 @@ export function WellnessTrends({ wellness , onSupport, onWhatIf }) {
         </div>
         {tsbSeries.length >= 2 && <TrendChart height={120} domain={{ min: -35, max: 32 }}
           zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
-          series={[{ values: tsbSeries, color: 'var(--brick)', width: 2.2 }]} />}
+          series={[{ values: tsbSeries, color: 'var(--brick)', width: 2.2, colorOf: v => (T.wellness.formZone(v) || {}).color }]} />}
         {onWhatIf && <a className="wi-link" {...tap(onWhatIf)} role="button">Try a what-if →</a>}
       </div>
 
