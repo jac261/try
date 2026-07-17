@@ -186,16 +186,11 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
       {series.map((s, i) => (
         <g key={i}>
           {s.fill && <path d={area(s.values)} fill={s.color} opacity="0.13" />}
-          {/* colorOf: the line wears the colour of the zone it is passing
-              through (Jon, 2026-07-17) — per-segment strokes, each coloured by
-              the value it arrives at, so crossings change colour at the step */}
-          {s.colorOf
-            ? s.values.slice(1).map((v, j) => (
-              <line key={'s' + j} x1={X(j)} y1={Y(s.values[j])} x2={X(j + 1)} y2={Y(v)}
-                stroke={s.colorOf(v) || s.color} strokeWidth={s.width || 2.2} strokeLinecap="round" />))
-            : <path d={line(s.values)} fill="none" stroke={s.color} strokeWidth={s.width || 2.2} strokeLinecap="round" strokeLinejoin="round" />}
-          <circle cx={X(s.values.length - 1)} cy={Y(s.values[s.values.length - 1])} r="3"
-            fill={(s.colorOf && s.colorOf(s.values[s.values.length - 1])) || s.color} />
+          {/* one solid colour for the whole line — the form line is coloured by
+              the zone its CURRENT value sits in (Jon, 2026-07-17), passed as
+              s.color from the caller, not per segment */}
+          <path d={line(s.values)} fill="none" stroke={s.color} strokeWidth={s.width || 2.2} strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx={X(s.values.length - 1)} cy={Y(s.values[s.values.length - 1])} r="3" fill={s.color} />
         </g>
       ))}
       {/* the occupied zone's name renders ABOVE the data lines, with a card-colour

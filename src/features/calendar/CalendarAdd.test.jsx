@@ -68,8 +68,8 @@ describe('the full add and remove journey (tracker diary via the calendar)', () 
     await act(async () => {
       root.render(<App storage={storage} getToken={async () => null} user={{ imageUrl: null }} />);
     });
-    // splash hold runs 2.6s (spin + three pulses); let it and hydration settle
-    await act(async () => { await new Promise(r => setTimeout(r, 2800)); });
+    // splash hold runs 4.2s (the mark tumbles all three faces); let it settle
+    await act(async () => { await new Promise(r => setTimeout(r, 4600)); });
 
     // to the calendar tab
     const navBtn = [...el.querySelectorAll('.nav button')].find(b => b.textContent.includes('Calendar'));

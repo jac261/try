@@ -229,7 +229,7 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
             </div>
             <TrendChart height={84} domain={{ min: -35, max: 32 }}
               zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
-              series={[{ values: tsbSeries, color: 'var(--brick)', width: 2, colorOf: v => (T.wellness.formZone(v) || {}).color }]} />
+              series={[{ values: tsbSeries, color: (zone && zone.color) || 'var(--brick)', width: 2 }]} />
             {/* Recovery timeline: only exists while form sits in high risk.
                 "should"/"around" are load-bearing; the beyond-horizon case is
                 never phrased as "never recovers" — day 15 wasn't looked at. */}

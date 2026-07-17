@@ -96,15 +96,29 @@ body {
   color: var(--text);
 }
 .splash h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.8px; }
-/* The mark spins once, then pulses three times (Jon, 2026-07-17); the
-   wordmark keeps the soft opacity pulse underneath. The splash hold in
-   App.jsx is sized to let the whole sequence play. */
+/* The mark tumbles one face of the triangle at a time (Jon, 2026-07-17):
+   a slow 120 degree rotation brings a new side to the bottom, a pulse on
+   landing, then the next face, until all three have been down. Rotation is
+   about the triangle's centroid (14.69/24 of the box height = 61.2%) so an
+   equilateral 120 degree turn lands congruent instead of orbiting. The
+   wordmark keeps the soft opacity pulse; the splash hold in App.jsx is sized
+   to let the whole sequence play once. */
 .splash svg { color: var(--blue); }
 .splash > * { animation: splash-pulse 1.15s ease-in-out infinite; }
-.splash > svg { animation: splash-spin .85s cubic-bezier(.35, .1, .25, 1), splash-scale .5s ease-in-out .95s 3; }
+.splash > svg { transform-origin: 50% 61.2%; animation: splash-tumble 4.2s ease-in-out both; }
 @keyframes splash-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-@keyframes splash-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-@keyframes splash-scale { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.16); } }
+@keyframes splash-tumble {
+  0%   { transform: rotate(0deg)   scale(1); }
+  14%  { transform: rotate(120deg) scale(1); }     /* face 2 to the bottom */
+  22%  { transform: rotate(120deg) scale(1.16); }  /* pulse */
+  30%  { transform: rotate(120deg) scale(1); }
+  47%  { transform: rotate(240deg) scale(1); }     /* face 3 to the bottom */
+  55%  { transform: rotate(240deg) scale(1.16); }
+  63%  { transform: rotate(240deg) scale(1); }
+  80%  { transform: rotate(360deg) scale(1); }      /* face 1 back to the bottom */
+  88%  { transform: rotate(360deg) scale(1.16); }
+  100% { transform: rotate(360deg) scale(1); }
+}
 /* Reduced-motion reset AFTER the animation rule it cancels — a media query
    adds no specificity, so source order decides (the recap cascade lesson). */
 @media (prefers-reduced-motion: reduce) {

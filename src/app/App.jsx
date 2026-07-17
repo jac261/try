@@ -56,8 +56,8 @@ export function App({ storage, getToken, user }) {
   // after the early returns (the default-to-no-plan hooks lesson).
   const [splashHeld, setSplashHeld] = useState(true);
   useEffect(() => {
-    // long enough for the mark's spin (.85s) plus three pulses (Jon, 2026-07-17)
-    const t = setTimeout(() => setSplashHeld(false), 2600);
+    // long enough for the mark to tumble through all three faces (4.2s, Jon)
+    const t = setTimeout(() => setSplashHeld(false), 4400);
     return () => clearTimeout(t);
   }, []);
   const didHydrate = useRef(false);
