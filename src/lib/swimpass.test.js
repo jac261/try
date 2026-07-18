@@ -494,16 +494,52 @@ describe('two swims in a week are never the same session (role pass 2026-07-18)'
   // Role only earns its place if EVERY rebuild path passes it. A path that
   // forgets rebuilds a quality swim as an easy one — a different session than
   // the one it replaced, which is the rebuild-stability contract breaking.
-  it('every rebuild path preserves the role, so a rebuild reproduces its session', () => {
+  //   These tests drive each path until it produces two sessions that differ in
+  // NOTHING BUT role, then assert they differ. Asserting instead that a rebuild
+  // at the stored duration reproduces the stored segments proves nothing:
+  // trimWorkout and boostWorkout early-return the SAME OBJECT when the target
+  // duration does not move (plan.js `if (dur >= w.durationMin) return w`), so
+  // the assertion compares an array to itself and holds even if the path drops
+  // role entirely. That vacuous version shipped here first and a gauntlet
+  // mutation test caught it: deleting w.role from all three rebuild paths left
+  // the whole suite green (2026-07-18).
+  it('easeWorkout preserves role: two swims easing onto the same slot stay distinct', () => {
+    const p = generatePlan(recoveryCollide);
+    const [easy, quality] = p.weeks[2].workouts.filter(x => x.discipline === 'swim');
+    // Both ease to Technique at the same 25 min floor, off the same seed, so
+    // role is the only input left that differs.
+    const a = easeWorkout(easy, p), b = easeWorkout(quality, p);
+    expect([a.type, b.type]).toEqual(['Technique', 'Technique']);
+    expect([a.durationMin, b.durationMin]).toEqual([25, 25]);
+    expect(JSON.stringify(a.segments)).not.toBe(JSON.stringify(b.segments));
+  });
+
+  it('boostWorkout preserves role', () => {
+    const p = generatePlan(recoveryCollide);
+    const [easy, quality] = p.weeks[2].workouts.filter(x => x.discipline === 'swim');
+    const a = boostWorkout(easy, p, 2), b = boostWorkout(quality, p, 2);
+    expect([a.durationMin, b.durationMin]).toEqual([30, 30]);
+    expect(JSON.stringify(a.segments)).not.toBe(JSON.stringify(b.segments));
+  });
+
+  it('trimWorkout preserves role', () => {
+    // The recovery pair sits at 15 min, under trimWorkout's 20 min floor, so it
+    // early-returns and cannot exercise this path at all. This week holds two
+    // Technique swims at 30 and 35 min off one seed: trim both to 25 and only
+    // role is left to tell them apart.
+    const p = generatePlan({ ...recoveryCollide, raceType: 'sprint', css100Sec: 140, daysPerWeek: 5 });
+    const [easy, quality] = p.weeks[27].workouts.filter(x => x.discipline === 'swim' && !x.test && !x.race && x.durationMin > 0);
+    expect([easy.type, quality.type]).toEqual(['Technique', 'Technique']);
+    const a = trimWorkout(easy, p, 25 / easy.durationMin), b = trimWorkout(quality, p, 25 / quality.durationMin);
+    expect([a.durationMin, b.durationMin]).toEqual([25, 25]);
+    expect(JSON.stringify(a.segments)).not.toBe(JSON.stringify(b.segments));
+  });
+
+  it('a rebuild is deterministic, not merely different', () => {
     const p = generatePlan(recoveryCollide);
     const quality = p.weeks[2].workouts.find(x => x.discipline === 'swim' && x.role === 'quality');
-    // Ease/trim/boost re-size the same session: rebuilding at the stored
-    // duration must return exactly the stored segments.
-    expect(boostWorkout(quality, p, 1).segments).toEqual(quality.segments);
-    expect(trimWorkout(quality, p, 1).segments).toEqual(quality.segments);
-    // And a rebuild is deterministic rather than merely different.
-    expect(trimWorkout(quality, p, 0.8).segments).toEqual(trimWorkout(quality, p, 0.8).segments);
     expect(easeWorkout(quality, p).segments).toEqual(easeWorkout(quality, p).segments);
+    expect(boostWorkout(quality, p, 2).segments).toEqual(boostWorkout(quality, p, 2).segments);
   });
 
   it('upgradePlanSegments is a no-op on a freshly generated plan', () => {
