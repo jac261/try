@@ -1,0 +1,319 @@
+import { describe, it, expect } from 'vitest';
+import { generatePlan, swapForLimiter, detectLimiterSwap, addCustomWorkout, easeWorkout, boostWorkout, segMinutes } from './plan.js';
+import { cssFromTestIntervals, cssTestActivityFor, eftpProposal } from './eftp.js';
+import { intervalRows } from './review.js';
+
+/* The swim pass (2026-07-18): the limiter frequency swap can now grant a
+   third swim as a Long Swim, buildSwim gained a Long type and a level-gated
+   drill catalog, and the swim CSS test's arithmetic is automated from the
+   recording's laps. Each test here pins a design-panel catch. */
+
+// Strong run (near-elite 5k), strong bike (4.3 W/kg), beginner swim: swim is
+// the limiter by well over a full level, so the swap and the big bias engage.
+const swimWeak = {
+  name: 'S', raceType: 'olympic', fitness: 'intermediate',
+  fivekSec: 1200, css100Sec: 140, ftp: 320, weightKg: 75,
+  daysPerWeek: 6, trainingDays: [0, 1, 3, 4, 5, 6], longDay: 5,
+  startDate: '2026-06-01', raceDate: '2026-08-30',
+};
+
+const TEMPLATE_6 = ['swim:easy', 'run:quality', 'bike:quality', 'swim:quality', 'run:long', 'bike:long'];
+
+describe('swapForLimiter long fallback', () => {
+  it('grants swim:long when swim already holds easy and quality, appended last', () => {
+    const out = swapForLimiter(TEMPLATE_6, { weakest: 'swim', strongest: 'bike' }, 'Base');
+    expect(out).not.toBe(TEMPLATE_6);
+    expect(out[out.length - 1]).toBe('swim:long');
+    expect(out).not.toContain('bike:quality'); // the donor left
+    expect(out).toContain('run:long');
+    expect(out).toContain('bike:long');
+    expect(out.length).toBe(6);
+  });
+
+  it('never grants a long to run or bike (their longs are already in the template)', () => {
+    // A hypothetical template where run holds easy+quality but no long cannot
+    // arise from the shipped tables; the guard keeps the fallback swim-only.
+    const t = ['run:easy', 'run:quality', 'bike:quality', 'swim:quality', 'bike:long'];
+    const out = swapForLimiter(t, { weakest: 'run', strongest: 'bike' }, 'Base');
+    expect(out).toBe(t); // no role available for run: skip, not a run:long
+  });
+
+  it('still skips outside Base and Build', () => {
+    expect(swapForLimiter(TEMPLATE_6, { weakest: 'swim', strongest: 'bike' }, 'Peak')).toBe(TEMPLATE_6);
+  });
+});
+
+describe('the third swim in a generated plan', () => {
+  const p = generatePlan(swimWeak);
+  const buildingWeeks = p.weeks.filter(w => (w.phase === 'Base' || w.phase === 'Build') && !w.isRecovery);
+  const swapped = buildingWeeks.filter(w => w.workouts.filter(x => x.discipline === 'swim').length === 3);
+
+  it('swim-limited 6-day weeks carry three swims including a Long Swim', () => {
+    expect(swapped.length).toBeGreaterThan(0);
+    swapped.forEach(w => {
+      const long = w.workouts.find(x => x.discipline === 'swim' && x.role === 'long');
+      expect(long).toBeTruthy();
+      expect(long.type).toBe('Long');
+      expect(long.title).toBe('Long Swim');
+    });
+  });
+
+  it('the weekend anchors keep their days; the swim long lands on a weekday', () => {
+    swapped.forEach(w => {
+      const day = x => (new Date(x.date + 'T00:00:00Z').getUTCDay() + 6) % 7; // 0=Mon..6=Sun
+      const runLong = w.workouts.find(x => x.discipline === 'run' && x.role === 'long');
+      const bikeLong = w.workouts.find(x => x.discipline === 'bike' && x.role === 'long');
+      const swimLong = w.workouts.find(x => x.discipline === 'swim' && x.role === 'long');
+      // longDay (Sat) goes to the first template long; the other weekend day
+      // to the second; the appended swim long must NOT hold Sat or Sun.
+      expect([day(runLong), day(bikeLong)].sort()).toEqual([5, 6]);
+      expect(day(swimLong)).toBeLessThan(5);
+    });
+  });
+
+  it('the swim long never exceeds the 90-minute cap, even for an elite athlete', () => {
+    const elite = generatePlan({ ...swimWeak, fitness: 'elite', raceType: 'full', raceDate: '2027-02-28' });
+    elite.weeks.flatMap(w => w.workouts)
+      .filter(x => x.discipline === 'swim' && x.role === 'long')
+      .forEach(x => expect(x.durationMin).toBeLessThanOrEqual(90));
+  });
+
+  it('detectLimiterSwap recovers the long-swap verdict from structure alone', () => {
+    const verdict = detectLimiterSwap(p);
+    expect(verdict).toEqual({ weakest: 'swim', strongest: 'bike' });
+    // and a retarget-style regeneration under the locked verdict keeps it
+    const again = generatePlan(swimWeak, { lockedSwap: verdict });
+    expect(detectLimiterSwap(again)).toEqual(verdict);
+  });
+});
+
+describe('the Long Swim builder', () => {
+  const p = generatePlan(swimWeak);
+  const someDate = wk => p.weeks[wk].start;
+  const custom = (wk, dur) => addCustomWorkout(p, { discipline: 'swim', type: 'Long', durationMin: dur, dateISO: someDate(wk) }).workout;
+
+  it('sizes volume from the session duration instead of the saturating reps formula', () => {
+    const w = p.weeks.find(x => x.phase === 'Build' && !x.isRecovery);
+    const long75 = addCustomWorkout(p, { discipline: 'swim', type: 'Long', durationMin: 75, dateISO: w.start }).workout;
+    // 75 minutes at an estimated-intermediate CSS swims well past the ~2.1 km
+    // the shared reps formula tops out at.
+    expect(long75.distance).toBeGreaterThan(2.6);
+    expect(long75.unit).toBe('km');
+    long75.segments.forEach(s => expect(s.swim).toBeTruthy()); // watch DSL for every segment
+  });
+
+  it('keeps the harder formats out of Base', () => {
+    // every Base-week seed: variant menu is 2 (continuous or broken), never
+    // the pyramid (which prescribes five stepped reps)
+    p.weeks.filter(w => w.phase === 'Base' && !w.isRecovery).forEach(w => {
+      const wo = addCustomWorkout(p, { discipline: 'swim', type: 'Long', durationMin: 60, dateISO: w.start }).workout;
+      const repSegs = wo.segments.filter(s => s.swim && s.swim.n === 1);
+      expect(repSegs.length).toBe(0); // pyramid steps are 1-rep swimReps
+    });
+  });
+
+  it('every generated Long Swim actually swims about its stated minutes (gauntlet: clamp-budget divergence)', () => {
+    // The old 2..8 rep clamp swam +24% on a beginner 30-min long and -20% or
+    // worse on a capped elite 90; every variant must now track its budget.
+    const profiles = [
+      { ...swimWeak, fitness: 'beginner', css100Sec: 160, raceType: 'sprint' },
+      swimWeak,
+      { ...swimWeak, fitness: 'elite', css100Sec: 105, raceType: 'full', raceDate: '2027-02-28' },
+    ];
+    profiles.forEach(prof => {
+      generatePlan(prof).weeks.flatMap(w => w.workouts)
+        .filter(x => x.discipline === 'swim' && x.role === 'long')
+        .forEach(x => {
+          const actual = x.segments.reduce((a, s) => a + segMinutes(s), 0);
+          const r = actual / x.durationMin;
+          expect(r, x.durationMin + 'min ' + x.segments.map(s => s.label).join(' / ')).toBeGreaterThan(0.8);
+          expect(r, x.durationMin + 'min ' + x.segments.map(s => s.label).join(' / ')).toBeLessThan(1.18);
+        });
+    });
+  });
+
+  it('boostWorkout cannot push a capped Long Swim past the pool ceiling (gauntlet)', () => {
+    const elite = generatePlan({ ...swimWeak, fitness: 'elite', css100Sec: 105, raceType: 'full', raceDate: '2027-02-28' });
+    const capped = elite.weeks.flatMap(w => w.workouts)
+      .find(x => x.discipline === 'swim' && x.role === 'long' && x.durationMin === 90);
+    expect(capped).toBeTruthy();
+    expect(boostWorkout(capped, elite, 1.1).durationMin).toBe(90);
+  });
+
+  it('the continuous variant never coaches a split the review would flag (gauntlet)', () => {
+    const p2 = generatePlan(swimWeak);
+    p2.weeks.flatMap(w => w.workouts)
+      .filter(x => x.discipline === 'swim' && x.role === 'long')
+      .forEach(x => x.segments.forEach(s => expect(s.detail || '').not.toMatch(/quicker|faster/)));
+  });
+
+  it('eases to a Technique swim like every other swim', () => {
+    const w = p.weeks.find(x => x.phase === 'Build' && !x.isRecovery);
+    const long = addCustomWorkout(p, { discipline: 'swim', type: 'Long', durationMin: 60, dateISO: w.start }).workout;
+    const eased = easeWorkout(long, p);
+    expect(eased.type).toBe('Technique');
+    expect(eased.eased).toBe(true);
+  });
+});
+
+describe('the drill catalog', () => {
+  const techniques = plan => plan.weeks.flatMap(w => w.workouts)
+    .filter(x => x.discipline === 'swim' && x.type === 'Technique');
+  const drillSegsOf = wo => wo.segments.filter(s => /× 50 m /.test(s.label));
+
+  it('every technique swim carries per-drill segments with a focus cue', () => {
+    const p = generatePlan(swimWeak);
+    const t = techniques(p);
+    expect(t.length).toBeGreaterThan(0);
+    t.forEach(wo => {
+      const drills = drillSegsOf(wo);
+      expect(drills.length).toBeGreaterThanOrEqual(3);
+      drills.forEach(s => {
+        expect(s.detail.length).toBeGreaterThan(10); // a cue, not a bare name
+        expect(s.swim).toBeTruthy();
+      });
+    });
+  });
+
+  it('beginners only ever see the fundamentals; kit drills need an established stroke', () => {
+    const p = generatePlan({ ...swimWeak, fitness: 'beginner' });
+    techniques(p).forEach(wo => drillSegsOf(wo).forEach(s => {
+      expect(s.detail).not.toMatch(/paddles|snorkel|pull buoy/);
+    }));
+    // an advanced athlete's rotation does reach the kit drills
+    const adv = generatePlan({ ...swimWeak, fitness: 'advanced' });
+    const kit = techniques(adv).some(wo => drillSegsOf(wo).some(s => /paddles|snorkel|pull buoy/.test(s.detail)));
+    expect(kit).toBe(true);
+  });
+
+  it('the two technique swims of one week never share a byte-identical drill list (gauntlet + re-verify)', () => {
+    // RECOVERY weeks included on purpose: they collapse both swim roles to
+    // Technique at clamped rep counts, which is exactly where the first salt
+    // (rep-count based) silently re-collided (re-verify catch 2026-07-18).
+    ['beginner', 'intermediate', 'advanced', 'elite'].forEach(fitness => {
+      ['sprint', 'olympic', 'half', 'full'].forEach(raceType => {
+        const p = generatePlan({ ...swimWeak, fitness, raceType, css100Sec: 160, raceDate: raceType === 'full' ? '2027-02-28' : swimWeak.raceDate });
+        p.weeks.forEach(w => {
+          const t = w.workouts.filter(x => x.discipline === 'swim' && x.type === 'Technique');
+          if (t.length < 2) return;
+          const lists = t.map(wo => JSON.stringify(drillSegsOf(wo).map(s => s.label)));
+          expect(new Set(lists).size, fitness + '/' + raceType + ' week ' + w.index).toBe(lists.length);
+        });
+      });
+    });
+  });
+
+  it('same seed, same drills (rebuild stability)', () => {
+    const a = generatePlan(swimWeak), b = generatePlan(swimWeak);
+    expect(JSON.stringify(techniques(a).map(x => x.segments)))
+      .toBe(JSON.stringify(techniques(b).map(x => x.segments)));
+  });
+});
+
+describe('cssFromTestIntervals', () => {
+  const work = (distance, movingTimeSec) => ({ type: 'WORK', distance, movingTimeSec });
+  const rest = (distance, movingTimeSec) => ({ type: 'RECOVERY', distance, movingTimeSec });
+
+  it('derives CSS from a clean metric test', () => {
+    // 400 in 7:00 (105 /100m), 200 in 3:16 (98 /100m) → CSS = (420-196)/2 = 112
+    const r = cssFromTestIntervals([rest(400, 500), work(400, 420), rest(200, 260), work(200, 196), rest(200, 250)]);
+    expect(r).toBeTruthy();
+    expect(r.css100Sec).toBe(112);
+  });
+
+  it('normalises by recorded distance for a yard pool, never a nominal /2', () => {
+    // 400 yd = 365.8 m in 6:24, 200 yd = 182.9 m in 3:00: same swimmer as a
+    // metric athlete with CSS (384-180)/(182.9/100) = 111.5 → 112. A naive /2
+    // would claim 102, nine seconds per 100 m too fast.
+    const r = cssFromTestIntervals([work(365.8, 384), work(182.9, 180)]);
+    expect(r).toBeTruthy();
+    expect(r.css100Sec).toBe(112);
+  });
+
+  it('fails closed on ambiguity, a missing effort, or a slower 200', () => {
+    expect(cssFromTestIntervals([work(400, 420), work(380, 400), work(200, 196)])).toBe(null); // two 400 candidates
+    expect(cssFromTestIntervals([work(400, 420)])).toBe(null); // no 200
+    expect(cssFromTestIntervals([work(400, 420), work(200, 230)])).toBe(null); // 200 slower than the 400: busted test
+    expect(cssFromTestIntervals(null)).toBe(null);
+    expect(cssFromTestIntervals([])).toBe(null);
+  });
+
+  it('rejects an implausible result', () => {
+    expect(cssFromTestIntervals([work(400, 200), work(200, 99)])).toBe(null); // sub-World-Record slope
+  });
+});
+
+describe('cssTestActivityFor (the dedicated test-recording finder)', () => {
+  const swim = (id, movingTimeSec, date = '2026-06-10', type = 'Swim') => ({ id, type, date, movingTimeSec });
+
+  it('matches a fast swimmer\'s ~21-minute test that activityFor\'s window would reject (gauntlet)', () => {
+    expect(cssTestActivityFor({ activities: [swim('a', 1286)], date: '2026-06-10' }).id).toBe('a');
+  });
+
+  it('prefers the swim closest to a realistic test length and ignores other sports and days', () => {
+    const acts = [
+      swim('long', 4200), swim('test', 2000),
+      swim('otherday', 2100, '2026-06-09'),
+      { id: 'run', type: 'Run', date: '2026-06-10', movingTimeSec: 2100 },
+    ];
+    expect(cssTestActivityFor({ activities: acts, date: '2026-06-10' }).id).toBe('test');
+    expect(cssTestActivityFor({ activities: [], date: '2026-06-10' })).toBe(null);
+    expect(cssTestActivityFor({ activities: [swim('tiny', 300)], date: '2026-06-10' })).toBe(null);
+  });
+});
+
+describe('auto-CSS proposal precedence', () => {
+  const plan = generatePlan({ ...swimWeak, css100Sec: 120 });
+  const today = '2026-06-10';
+
+  it('a measured test outranks the passive intervals.icu threshold setting', () => {
+    const prop = eftpProposal({
+      activities: [], plan, todayISO: today,
+      thresholds: { swimThresholdPace: 100 / 130 }, // config says 130 (drift 8%)
+      cssTest: { actId: 'a1', date: today, test: { css100Sec: 112, t400Sec: 420, t200Sec: 196, d400: 400, d200: 200 } },
+    });
+    expect(prop.kind).toBe('csstest');
+    expect(prop.retarget).toEqual({ css100Sec: 112 });
+    expect(prop.why).toContain('/100m');
+    expect(prop.why).toContain('the plan trains to');
+    // recorded distances, never nominal labels: a yard-pool 366 m must not
+    // be dressed up as a metric 400
+    expect(prop.why).toContain('400 m in');
+    expect(prop.why).toContain('200 m in');
+    const yard = eftpProposal({
+      activities: [], plan, todayISO: today, thresholds: null,
+      cssTest: { actId: 'a2', date: today, test: { css100Sec: 112, t400Sec: 384, t200Sec: 180, d400: 366, d200: 183 } },
+    });
+    expect(yard.why).toContain('366 m in');
+    expect(yard.why).toContain('183 m in');
+    expect(yard.why).not.toContain('400 m in');
+  });
+
+  it('stays quiet when the measurement matches the plan', () => {
+    const prop = eftpProposal({
+      activities: [], plan, todayISO: today, thresholds: null,
+      cssTest: { actId: 'a1', date: today, test: { css100Sec: 120, t400Sec: 440, t200Sec: 200, d400: 400, d200: 200 } },
+    });
+    expect(prop).toBe(null);
+  });
+});
+
+describe('Long Swim review', () => {
+  const p = generatePlan(swimWeak);
+  const w = p.weeks.find(x => x.phase === 'Build' && !x.isRecovery);
+  const long = addCustomWorkout(p, { discipline: 'swim', type: 'Long', durationMin: 60, dateISO: w.start }).workout;
+
+  it('judges Long Swim reps against the steady band in the rep table', () => {
+    const steady = p.paces.swim.steady;
+    const rows = intervalRows({
+      workout: long, paces: p.paces,
+      intervals: [
+        { type: 'WORK', movingTimeSec: steady * 4, distance: 400, averageSpeed: 400 / (steady * 4) },
+        { type: 'WORK', movingTimeSec: (steady + 20) * 4, distance: 400, averageSpeed: 400 / ((steady + 20) * 4) },
+      ],
+    });
+    expect(rows.judged).toBe(2);
+    expect(rows.rows[0].tone).toBe('good');
+    expect(rows.rows[1].tone).toBe('info');
+  });
+});

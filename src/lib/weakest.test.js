@@ -92,9 +92,19 @@ describe('swapForLimiter (the frequency swap)', () => {
     expect(swapForLimiter(T5, wl('run', 'swim'), 'Base')).toBe(T5);
   });
 
-  it('skips when the limiter already holds both roles (duplicate pairs are byte-identical)', () => {
+  it('a swim holding both roles now earns a LONG instead of skipping (swim pass 2026-07-18)', () => {
+    // The caller still never swaps injured-state templates; this documents
+    // the pure function's fallback: easy -> quality -> long, swim only.
     const NR4 = ['swim:easy', 'swim:quality', 'bike:quality', 'bike:long'];
-    expect(swapForLimiter(NR4, wl('swim', 'bike'), 'Base')).toBe(NR4);
+    const out = swapForLimiter(NR4, wl('swim', 'bike'), 'Base');
+    expect(out[out.length - 1]).toBe('swim:long'); // appended, so template longs keep their weekend slots
+    expect(out).not.toContain('bike:quality');
+    expect(out).toContain('bike:long');
+  });
+
+  it('skips only when swim holds easy, quality AND long', () => {
+    const full = ['swim:easy', 'swim:quality', 'swim:long', 'bike:quality', 'bike:long'];
+    expect(swapForLimiter(full, wl('swim', 'bike'), 'Base')).toBe(full);
   });
 
   it('no verdict, no swap', () => {

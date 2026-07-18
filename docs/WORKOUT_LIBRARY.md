@@ -52,10 +52,20 @@ repeat loop on the watch (a `repeat_until_steps_cmplt` step pointing back to the
 ### Swim (`sport = swimming`, distance-based)
 | Type | Structure |
 |---|---|
-| Technique | warm-up 300 m · drills · **N × 100 m steady** · cool-down 200 m |
+| Technique | warm-up 300 m · **per-drill 2 × 50 m sets** (rotating catalog, level-gated, kit named) · **N × 100 m steady** · cool-down 200 m |
+| Long | warm-up 300 m · steady main sized from the session's own minutes (continuous / broken 400s / pyramid, harder formats Build-only) · cool-down 200 m |
 | CSS Intervals | warm-up 400 m · **N × (100 m @ CSS / 15 s rest)** · cool-down 200 m |
 | Open Water | warm-up · **4 × 200 m race effort** · skills · cool-down |
 | Endurance / Race Pace | warm-up · continuous main set · cool-down |
+
+The Long swim never appears in a base weekly template: it enters a week only
+through the limiter frequency swap when swim is the athlete's limiter and
+already holds both of its usual slots, and it is capped so the volume
+multiplier chain cannot push a pool session past 90 minutes. The swim CSS
+benchmark's arithmetic is also automated: when the logged test matches a
+recording with clean 400/200 work laps, the app derives CSS from the recorded
+times and distances (yard pools normalise correctly) and offers the usual
+one-tap retarget.
 
 ### Benchmark tests
 5 km run TT, 20-min bike FTP, and swim CSS (400 m + 200 m TT) — warm-up/cool-down are paced,

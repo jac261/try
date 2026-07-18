@@ -15,7 +15,7 @@ const D = T.DISCIPLINES;
 const TYPE_OPTIONS = {
   run: ['Easy', 'Long', 'Fartlek', 'Tempo', 'Threshold', 'VO2 Intervals'],
   bike: ['Endurance', 'Long', 'Tempo', 'Sweet Spot', 'Threshold', 'VO2 Intervals'],
-  swim: ['Technique', 'Endurance', 'CSS Intervals', 'Race Pace', 'Open Water'],
+  swim: ['Technique', 'Endurance', 'Long', 'CSS Intervals', 'Race Pace', 'Open Water'],
   brick: ['Brick'],
   strength: ['Strength'],
 };

@@ -31,6 +31,11 @@ const WHY = {
 // Endurance Swim explained itself as a bike session).
 const WHY_DISC = {
   'swim:Endurance': 'Build aerobic endurance in the water. Long, smooth and unhurried — hold relaxed form as the distance adds up.',
+  // The shared 'Long' entry talks about fuelling, which is run/bike advice; a
+  // pool session needs its own reason to exist.
+  // Not "your biggest swim of the week": the other swim sessions can out-
+  // distance it depending on level and race (gauntlet catch 2026-07-18).
+  'swim:Long': 'Steady, patient distance work. An even rhythm from the first length to the last: the volume does the work when your form holds it together.',
 };
 
 export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap }) {

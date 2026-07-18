@@ -122,6 +122,11 @@ export function App({ storage, getToken, user }) {
     sync.loadActivities(days).then(a => { if (a && seq === actSeq.current) setActivities(a); });
   };
   const [thresholds, setThresholds] = useState(null); // intervals.icu per-sport thresholds (fitness watcher)
+  // Auto-CSS: the one-shot interval fetch for a logged, matched swim CSS test.
+  // Cached per activity id and fail-closed ({ actId, test: null } on any
+  // fetch error or ambiguous laps), so the plan surface never re-fetches or
+  // blocks on it. date is the test's effective day, for freshness gating.
+  const [cssTest, setCssTest] = useState(null);
   // A failed plan write means this device and the account have diverged — the
   // catalog-drift incident proved that must never be silent again.
   const [planSyncFailed, setPlanSyncFailed] = useState(false);
@@ -397,6 +402,35 @@ export function App({ storage, getToken, user }) {
     sync.loadThresholds().then(t => { if (!cancelled && t) setThresholds(t); });
     return () => { cancelled = true; };
   }, [sync]); // eslint-disable-line react-hooks/exhaustive-deps -- didHydrate-guarded: runs once
+
+  // Auto-CSS: when the plan's swim CSS test is logged and matched to a
+  // recording, fetch that one recording's laps and do the (T400-T200) maths
+  // the session note asks for by hand. Strictly one fetch per matched
+  // activity (failures cache as test:null), never on the tracker, and only
+  // while the test is fresh enough to still propose a retarget.
+  useEffect(() => {
+    if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !Array.isArray(activities) || !activities.length) return;
+    const today = T.iso(new Date());
+    const tests = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.test && w.testKind === 'swimCss' && log[w.id])
+      .map(w => ({ w, date: (moves && moves[w.id]) || w.date }))
+      .filter(x => {
+        const age = T.daysBetween(x.date, today);
+        return age >= 0 && age <= T.EFTP_RULES.freshDays;
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    if (!tests.length) return;
+    // Not activityFor: its plan-duration window rejects a fast swimmer's
+    // ~21-minute real test against the prescribed 45. The dedicated finder
+    // matches on the day and a realistic absolute test length instead.
+    const a = T.cssTestActivityFor({ activities, date: tests[0].date });
+    if (!a || (cssTest && cssTest.actId === a.id)) return;
+    let cancelled = false;
+    sync.loadActivityIntervals(a.id)
+      .then(rows => { if (!cancelled) setCssTest({ actId: a.id, date: tests[0].date, test: T.cssFromTestIntervals(rows) }); })
+      .catch(() => { if (!cancelled) setCssTest({ actId: a.id, date: tests[0].date, test: null }); });
+    return () => { cancelled = true; };
+  }, [plan, activities, log, moves, cssTest, sync]);
 
   // Fold a server wellness list into local state + the offline cache (server wins
   // per date; local-only days are pushed up). Also called when the Settings page
@@ -723,7 +757,11 @@ export function App({ storage, getToken, user }) {
   // athlete's recorded RPE as the feel, and a calibration observation each).
   const spotted = T.matchActivities({ activities, plan, log, moves, todayISO: T.iso(new Date()) });
   // eFTP watcher: dormant until the backend passes eftp through on activities.
-  const eftp = T.eftpProposal({ activities, thresholds, plan, todayISO: T.iso(new Date()) });
+  // The measured CSS test (fetched below) joins the candidates while fresh; a
+  // stale state entry simply stops being passed once the test ages out.
+  const cssFresh = cssTest && cssTest.date
+    && T.daysBetween(cssTest.date, T.iso(new Date())) <= T.EFTP_RULES.freshDays;
+  const eftp = T.eftpProposal({ activities, thresholds, plan, todayISO: T.iso(new Date()), cssTest: cssFresh ? cssTest : null });
   const applyEftp = () => { if (eftp) retarget(eftp.retarget); };
   const logSpotted = () => {
     const at = new Date().toISOString();

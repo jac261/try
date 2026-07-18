@@ -114,7 +114,11 @@ function fmtDur(sec) {
    to fail. Sub-30-second slivers (lap-button stubs) are dropped. */
 const REP_BANDS = {
   run: { 'Threshold': ['threshold', 10], 'Tempo': ['tempo', 12], 'VO2 Intervals': ['interval', 10] },
-  swim: { 'CSS Intervals': ['css', 4], 'Race Pace': ['css', 4] },
+  // The Long swim stays OUT of the STEADY map on purpose: its broken and
+  // pyramid variants bake planned rest into the recording, so the whole-
+  // session average would read slow against a flat steady target. Every rep
+  // in every Long variant targets steady, so the rep table judges it fairly.
+  swim: { 'CSS Intervals': ['css', 4], 'Race Pace': ['css', 4], 'Long': ['steady', 8] },
   bike: { 'Threshold': [0.95, 1.05], 'Sweet Spot': [0.84, 0.90], 'VO2 Intervals': [1.05, 1.25], 'Tempo': [0.83, 0.90] },
 };
 

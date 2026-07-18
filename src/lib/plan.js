@@ -437,7 +437,59 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
   return { title: title, segments: segs, distance: dist, unit: 'km', distEst: true };
 }
 
-function buildSwim(type, dur, pc, seed) {
+// The drill catalog Technique sessions rotate through. cue is the one thing
+// to think about mid-drill; gear names the kit so a session can say up front
+// what to bring; level gates the harder entries (−1 fundamentals for
+// everyone, 0 standard, 1 needs an established stroke) against the athlete's
+// intensity dial. Backstroke earns its place as active recovery between
+// freestyle rep work, not as a scored stroke.
+const SWIM_DRILLS = [
+  { name: 'Catch-up', cue: 'one arm waits for the other, long body line', level: -1 },
+  { name: 'Single-arm', cue: 'off arm by your side, rotate to breathe', level: -1 },
+  { name: 'Scull', cue: 'slow figure-eights, feel the water on your palms', level: -1 },
+  { name: 'Fingertip drag', cue: 'trail your fingertips forward, high elbow', level: -1 },
+  { name: 'Kick on side', cue: 'bottom arm extended, steady relaxed kick', level: -1 },
+  { name: 'Backstroke lengths', cue: 'easy backstroke, open the shoulders and reset', level: -1 },
+  { name: 'Fist', cue: 'closed fists, press the water with your forearm', level: 0 },
+  { name: '6-1-6', cue: 'six kicks on your side, one stroke, six more', level: 0 },
+  { name: 'Doggy paddle', cue: 'head up, pull straight back under your body', level: 0 },
+  { name: 'Pull buoy swim', cue: 'buoy between thighs, hips high, long strokes', gear: 'pull buoy', level: 0 },
+  { name: 'Paddle pull', cue: 'firm catch, no slipping through the water', gear: 'paddles and pull buoy', level: 1 },
+  { name: 'Snorkel swim', cue: 'head perfectly still, balanced stroke both sides', gear: 'centre snorkel', level: 1 },
+];
+// Deterministic rotation over the drills this athlete is ready for: same
+// (seed, salt) means same drills, honouring the rebuild-stability contract
+// every variant menu in this file honours. The salt is the session's RAW
+// duration, which differs between the week's easy and quality Technique
+// swims, so the two sessions of one week never draw a byte-identical drill
+// list (gauntlet catch 2026-07-18); it moves on a trim/boost exactly like
+// the rest of the rebuilt structure does. Not the rep count: the reps clamp
+// floors both of a recovery week's swims to the same value and re-collides
+// them (re-verify catch, same day). Durations are round5 values from
+// distinct role bases, so same-week salts always differ and never by a
+// pool-size multiple. Level −1 keeps six fundamentals in every pool.
+function pickDrills(seed, intensity, n, salt) {
+  const pool = SWIM_DRILLS.filter(d => d.level <= (intensity || 0));
+  // The salt adds AFTER the multiply ((seed + salt) * n would collapse two
+  // odd salts whenever n divides the pool size), and on the round5 grid:
+  // durations are multiples of 5, so a raw-minute salt collides whenever a
+  // same-week pair differs by exactly the pool size (35 vs 45 min against
+  // the 10-drill pool re-collided; second re-verify catch). Divided by 5,
+  // same-week gaps of 5-15 min can never hit a pool-size multiple.
+  const start = ((seed || 0) * n + Math.round((salt || 0) / 5)) % pool.length;
+  return Array.from({ length: n }, (_, i) => pool[(start + i) % pool.length]);
+}
+// One segment per drill, so every drill carries its own focus cue (and names
+// its kit) instead of a comma list with nowhere to explain itself.
+function drillSegs(pc, drills) {
+  return drills.map(d => ({
+    label: '2 × 50 m ' + d.name,
+    detail: d.cue + (d.gear ? ' · ' + d.gear : ''),
+    ...swimRep(pc, 'easy', 'Z1', 2, 50, 15),
+  }));
+}
+
+function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
   const v = n => (seed || 0) % n;
   const reps = clamp(Math.round(dur / 4), 6, 16);
   let segs = [], title = 'Swim', main;
@@ -447,16 +499,69 @@ function buildSwim(type, dur, pc, seed) {
     segs = v(2) === 0
       ? [
         { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
-        { label: '6 × 50 m drills', detail: 'Catch-up, single-arm, scull', ...swimRep(pc, 'easy', 'Z1', 6, 50, 15) },
+        ...drillSegs(pc, pickDrills(seed, intensity, 3, dur)),
         { label: reps + ' × 100 m steady', detail: swimDetail(pc, 'steady', 'Z3'), ...swimRep(pc, 'steady', 'Z3', reps, 100, 10) },
         { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
       ]
       : [
         { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
-        { label: '8 × 50 m drills', detail: 'Fist, 6-1-6, kick on side', ...swimRep(pc, 'easy', 'Z1', 8, 50, 15) },
+        ...drillSegs(pc, pickDrills(seed, intensity, 4, dur)),
         { label: reps + ' × 100 m as 25 m drill / 75 m smooth', detail: swimDetail(pc, 'steady', 'Z3'), ...swimRep(pc, 'steady', 'Z3', reps, 100, 10) },
         { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
       ];
+  } else if (type === 'Long') {
+    title = 'Long Swim';
+    // Volume from the session's own duration, not the shared reps formula
+    // (which saturates at ~64 min): whatever time remains after the fixed
+    // warm-up and cool-down is swum at steady pace, floored to a clean 100 m.
+    const wuCdSec = (300 / 100 + 200 / 100) * pc.swim.easy;
+    const mainM = Math.max(400, Math.floor((dur * 60 - wuCdSec) / pc.swim.steady) * 100);
+    // The hardest format follows the run/bike long precedent: broken formats
+    // with structure arrive in Build for athletes past beginner; Base keeps
+    // the honest continuous and gently broken aerobic versions.
+    const hard = phase === 'Build' && intensity >= 0;
+    const variant = v(hard ? 3 : 2);
+    if (variant === 0) {
+      // Even rhythm on purpose: the review judges Long laps against the flat
+      // steady band, so the session must never coach a split the review would
+      // then call hot (gauntlet catch 2026-07-18).
+      segs = [
+        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
+        { label: mainM + ' m continuous', detail: swimDetail(pc, 'steady', 'Z2') + ' · settle in and hold a smooth, even rhythm', ...swimBlock(pc, 'steady', 'Z2', mainM) },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
+      ];
+    } else if (variant === 1) {
+      // Rep size scales with the budget so the rep count never has to lie:
+      // the old 2..8 clamp swam double a small budget and truncated a big one
+      // (gauntlet catch 2026-07-18). 800s keep an elite 90-min long at a sane
+      // rep count; the floor of one rep only appears on tiny custom picks.
+      const repM = mainM >= 2400 ? 800 : 400;
+      const n4 = Math.max(1, Math.round(mainM / repM));
+      segs = [
+        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
+        { label: n4 + ' × ' + repM + ' m steady', detail: swimDetail(pc, 'steady', 'Z2') + ' · ' + (repM >= 600 ? 30 : 20) + ' s rest', ...swimRep(pc, 'steady', 'Z2', n4, repM, repM >= 600 ? 30 : 20) },
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
+      ];
+    } else {
+      // Pyramid at one steady pace: the shape keeps a long session mentally
+      // small without turning aerobic volume into an interval day. Shoulders
+      // round to 50 m and the middle step absorbs the remainder, so the total
+      // tracks the budget instead of a hard 9-unit grid (gauntlet catch).
+      const u = Math.max(50, Math.round(mainM / 9 / 50) * 50);
+      const mid = Math.max(u, Math.round((mainM - 6 * u) / 50) * 50);
+      const steps = [u, 2 * u, mid, 2 * u, u];
+      segs = [
+        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
+        ...steps.map((m, i) => {
+          const rest = m >= 600 ? 30 : 20;
+          return {
+            label: m + ' m steady', detail: swimDetail(pc, 'steady', 'Z2') + ' · ' + rest + ' s rest' + (i === steps.length - 1 ? ' · hold form to the end' : ''),
+            ...swimRep(pc, 'steady', 'Z2', 1, m, rest),
+          };
+        }),
+        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
+      ];
+    }
   } else if (type === 'CSS Intervals') {
     title = 'CSS Intervals';
     const twos = Math.max(3, Math.round(reps / 2));
@@ -609,7 +714,7 @@ function buildTest(kind, pc) {
       { label: '200 m time trial — all out', detail: 'Note your time (T200).' },
       { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
     ],
-    note: 'CSS pace per 100 m = (T400 − T200) ÷ 2. Enter it in Update fitness.',
+    note: 'CSS pace per 100 m = (T400 − T200) ÷ 2 in a metres pool. Enter it in Update fitness; with a connected watch the app can work it out from your recorded laps.',
   };
 }
 
@@ -620,6 +725,14 @@ const TEST_DISC = { run5k: 'run', bikeFtp: 'bike', swimCss: 'swim' };
 const LONG_RUN = { sprint: 55, olympic: 70, half: 95, t100: 100, full: 120, maintenance: 70 };
 const LONG_BIKE = { sprint: 70, olympic: 100, half: 160, t100: 170, full: 210, maintenance: 100 };
 const LONG_BRICK = { sprint: 70, olympic: 95, half: 135, t100: 145, full: 165, maintenance: 90 };
+// The long swim only enters a week via the limiter frequency swap (no base
+// template carries swim:long), so these sit deliberately under the run/bike
+// longs: it is a third swim for a swim-limited athlete, not a weekend anchor.
+const LONG_SWIM = { sprint: 40, olympic: 50, half: 60, t100: 60, full: 75, maintenance: 50 };
+// Pool sessions stop earning past ~90 min for the athletes this app serves;
+// the volume multiplier chain (level factor × week load × limiter bias) is
+// unclamped and swim-limited elites would otherwise be handed 2h+ swims.
+const LONG_SWIM_CAP = 90;
 
 const TEMPLATES = {
   3: ['swim:quality', 'bike:long', 'run:long'],
@@ -690,9 +803,26 @@ export function swapForLimiter(template, wl, phase) {
   const keeps = template.some(t => t !== donor && (t.indexOf(wl.strongest + ':') === 0
     || ((wl.strongest === 'run' || wl.strongest === 'bike') && t.indexOf('brick:') === 0)));
   if (!keeps) return template;
-  const role = !has(wl.weakest + ':easy') ? 'easy' : !has(wl.weakest + ':quality') ? 'quality' : null;
+  //   - when the limiter already holds both easy and quality (swim on the 6/7
+  //     day templates — the only sport capped at two slots), the swap grants a
+  //     LONG instead of skipping (design panel 2026-07-18). Swim-only: run and
+  //     bike longs are in every template that trains them, so has() already
+  //     blocks the fallback there, and a swim long is the coaching-correct
+  //     third swim for a swim-limited athlete.
+  const role = !has(wl.weakest + ':easy') ? 'easy' : !has(wl.weakest + ':quality') ? 'quality'
+    : wl.weakest === 'swim' && !has('swim:long') ? 'long' : null;
   if (!role) return template;
   const out = template.slice();
+  if (role === 'long') {
+    // Append rather than substitute in place: the day assigner hands weekend
+    // slots to long/brick tokens in array order, and the donor's (earlier)
+    // index would let the new swim long steal a weekend from the run or bike
+    // long. Appended last, the original anchors keep Saturday and Sunday and
+    // the swim long overflows onto a weekday (design panel catch 2026-07-18).
+    out.splice(out.indexOf(donor), 1);
+    out.push(wl.weakest + ':long');
+    return out;
+  }
   out[out.indexOf(donor)] = wl.weakest + ':' + role;
   return out;
 }
@@ -774,7 +904,7 @@ function typeFor(discipline, role, phase, isRecovery, intensity) {
 
 function baseDuration(discipline, role, race) {
   if (discipline === 'brick') return LONG_BRICK[race];
-  if (role === 'long') return discipline === 'bike' ? LONG_BIKE[race] : (discipline === 'run' ? LONG_RUN[race] : 60);
+  if (role === 'long') return discipline === 'bike' ? LONG_BIKE[race] : (discipline === 'run' ? LONG_RUN[race] : LONG_SWIM[race] || 60);
   if (discipline === 'swim') return role === 'easy' ? 35 : 45;
   if (discipline === 'run') return role === 'easy' ? 40 : 50;
   // An easy spin is shorter than a quality ride, and the gap also keeps a
@@ -794,7 +924,7 @@ function intensityOf(profile) {
 function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0, raceType) {
   if (discipline === 'run') return buildRun(type, dur, pc, seed, phase, intensity);
   if (discipline === 'bike') return buildBike(type, dur, pc, seed, phase, intensity);
-  if (discipline === 'swim') return buildSwim(type, dur, pc, seed);
+  if (discipline === 'swim') return buildSwim(type, dur, pc, seed, phase, intensity);
   if (discipline === 'brick') return buildBrick(dur, pc, phase, seed, raceType);
   if (discipline === 'strength') return buildStrength(phase);
   return { title: 'Session', segments: [], distance: null, unit: '' };
@@ -837,7 +967,11 @@ export const trimWorkout = function (w, plan, factor) {
 export const boostWorkout = function (w, plan, factor) {
   const disc = w.discipline;
   if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
-  const dur = round5(w.durationMin * factor);
+  // The pool ceiling holds on every rebuild path, not just generation: a
+  // capped swim long boosted by the F2 nudge must not creep past it
+  // (gauntlet catch 2026-07-18).
+  const cap = disc === 'swim' && w.role === 'long' ? LONG_SWIM_CAP : Infinity;
+  const dur = Math.min(round5(w.durationMin * factor), cap);
   if (dur <= w.durationMin) return w;
   const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile));
   return Object.assign({}, w, {
@@ -1234,7 +1368,10 @@ export const generatePlan = function (profile, opts) {
       // No weakest-link bias in the post-race recovery week: recovery is even
       // by definition — the limiter gets its extra time while building.
       const wb = !postRaceWeek && (phase === 'Base' || phase === 'Build' || phase === 'Maintain') && bias[s.disc] ? bias[s.disc] : 1;
-      const dur = round5(durBase * load * wb);
+      // The swim long is the one long the multiplier chain can push somewhere
+      // silly (see LONG_SWIM_CAP); run/bike longs keep their historic scaling.
+      const dur = Math.min(round5(durBase * load * wb),
+        s.disc === 'swim' && s.role === 'long' ? LONG_SWIM_CAP : Infinity);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
       const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType);
