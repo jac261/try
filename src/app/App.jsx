@@ -96,6 +96,20 @@ export function App({ storage, getToken, user }) {
   // manual entry can never claim to be watch data.
   const [manualActs, setManualActs] = useState(() => storage.loadManualActivities());
   const displayActivities = useMemo(() => T.mergeActivities(activities, manualActs), [activities, manualActs]);
+  // The plan-independent athlete profile (Phase 2, docs/NO_PLAN_WORKFLOW.md):
+  // the between-plans source of truth, mirrored to /api/me/profile on every
+  // change. plan.profile stays the in-plan mirror while a plan exists; this
+  // store is what survives when the plan ends. The LOCAL copy is the full
+  // profile; the server keeps its plan-independent subset and ignores the
+  // race fields we send. Deliberately not in storage.clear(): the profile
+  // spans plans, like the calibration and manual diaries.
+  const [profileStore, setProfileStore] = useState(() => storage.load('profile', null));
+  const saveProfileBoth = profile => {
+    if (!profile) return;
+    setProfileStore(profile);
+    storage.save('profile', profile);
+    sync.saveProfile(profile);
+  };
   const recs = useMemo(() => T.withLogLoad(T.wellness.mergeFeel(wellness, feels),
     { plan, log, moves, adjust, activities: displayActivities, todayISO: T.iso(new Date()) }),
     [wellness, feels, plan, log, moves, adjust, displayActivities]);
@@ -135,6 +149,47 @@ export function App({ storage, getToken, user }) {
   // any overlay entries created while the old map was stale — their optimistic
   // sync was skipped (gid() was undefined), so the server never saw them and
   // the next hydrate would drop them.
+  // Adopt a plan write's response ({ refToId, planId } | null): the ref map
+  // via adoptMap, and the plan's server GUID stamped onto the LOCAL plan
+  // object — but only when it is still the same plan that was saved (the
+  // createdAt nonce), and only from a SUCCESSFUL response, so a failed save
+  // can never tag a plan with a stale id and a late response can never tag a
+  // successor plan (re-verify catches, 2026-07-17). The id lives ON the plan:
+  // cached, cleared and replaced atomically with it, never a separate key.
+  // Each plan write gets a monotonic token; only the LATEST write's response
+  // may adopt. createdAt alone cannot tell two rapid writes to the same plan
+  // apart (retarget/reshape preserve it by design), and the serial queue
+  // guarantees response1 lands before request2 even dispatches — so without
+  // the token, a superseded response briefly installed a wrong-structure ref
+  // map (convergence-gate catch 2026-07-18).
+  const writeSeq = useRef(0);
+  const adoptRes = nonce => {
+    const tok = ++writeSeq.current;
+    return res => {
+      if (tok !== writeSeq.current) return; // a newer write owns the state now
+      const cur = live.current.plan;
+      if (!cur || cur.createdAt !== nonce) return;
+      if (cur.race === 'tracker') {
+        // The plan this save belongs to was ENDED locally while the save was
+        // in flight (buildTrackerPlan preserves createdAt, so the nonce still
+        // matches). The row now exists server-side with a known id: finish
+        // the end — the serial queue orders this DELETE after the create —
+        // and record it on the sentinel so the hydrate seam can verify it.
+        // Never adopt a plan's ref map onto a sentinel.
+        if (res && res.planId != null) {
+          sync.endPlan(res.planId);
+          setPlan(p => (p && p.createdAt === nonce && p.race === 'tracker')
+            ? { ...p, endedServerId: res.planId } : p);
+        }
+        return;
+      }
+      adoptMap(res ? res.refToId : null);
+      if (res && res.planId != null) {
+        setPlan(p => (p && p.createdAt === nonce && p.serverId !== res.planId)
+          ? { ...p, serverId: res.planId } : p);
+      }
+    };
+  };
   const adoptMap = map => {
     if (!map) { setPlanSyncFailed(true); return; }
     setPlanSyncFailed(false);
@@ -214,36 +269,82 @@ export function App({ storage, getToken, user }) {
     if (didHydrate.current) return;
     didHydrate.current = true;
     let cancelled = false;
-    sync.hydrate().then(result => {
+    sync.hydrate().then(async result => {
       if (cancelled) return;
-      // The backend accepts the zero-week tracker sentinel as of PR #17
-      // (merged 2026-07-17), so this branch is now mostly a no-op safety net.
-      // It remains for devices holding a STALE pre-tracker server plan: keep
-      // the local tracker authoritative over that, but YIELD to a genuinely
-      // newer plan (a real plan started on another device, updatedAt beyond
-      // the tracker's) so this device is never stranded. Push stays silent.
+      // Phase 2 (docs/NO_PLAN_WORKFLOW.md): server-side, tracker is
+      // "no plan + profile". Every branch below is keyed on PLAN IDENTITY
+      // (server GUIDs), never on timestamps: a plan is only ever deleted by
+      // the id this device decided to end, and a server plan with any OTHER
+      // id is someone's real plan and is always adopted.
       const sp = result && result.plan;
-      // Compare parsed epoch ms, not raw ISO strings: the backend may serialize
-      // updatedAt in a different ISO form (offset vs Z, fractional precision)
-      // than the tracker's new Date().toISOString(), and a lexicographic compare
-      // would misorder same-second stamps. Unparseable → NaN → keep local tracker.
-      const serverNewer = !!(sp && sp.updatedAt && plan && plan.updatedAt && Date.parse(sp.updatedAt) > Date.parse(plan.updatedAt));
-      if (plan && plan.race === 'tracker' && !(sp && sp.race === 'tracker') && !serverNewer) {
-        sync.replacePlan(plan).then(m => { if (m) adoptMap(m); });
-        setHydrated(true);
-        return;
+      if (plan && plan.race === 'tracker' && sp && sp.race !== 'tracker') {
+        if (plan.endedServerId != null && result.planId === plan.endedServerId) {
+          // The exact plan this device decided to end — the DELETE never
+          // landed (offline at the time). Finish the job idempotently.
+          saveProfileBoth(plan.profile);
+          sync.endPlan(result.planId);
+          setHydrated(true);
+          return;
+        }
+        // A different plan: started elsewhere (or predates the end decision
+        // in a way we cannot prove). Adopt it — never delete, never ignore.
+        // Falls through to the normal server-plan branch below.
       }
       if (result === 'none') {
-        // Signed in but no server plan: migrate a pre-backend local plan up, else
-        // fall through to onboarding. adoptMap migrates the local overlays too.
-        if (plan) sync.savePlan(plan).then(adoptMap); else setPlan(null);
+        // Signed in but no server plan.
+        if (plan && plan.race === 'tracker') {
+          // The sentinel is already the correct client representation of
+          // "no plan + profile"; just keep the profile up.
+          saveProfileBoth(plan.profile);
+        } else if (plan && (plan.serverId != null || T.planEnded(plan, T.iso(new Date())))) {
+          // This plan was ONCE on the server (id stamped) and is gone now —
+          // it was ended on another device — or its own dates are done. Never
+          // resurrect it; drop to tracker on its profile. (Caches from before
+          // serverId existed can slip this guard once; accepted and documented
+          // as a narrow self-healing rollout window — see NO_PLAN_WORKFLOW.)
+          saveProfileBoth(plan.profile);
+          setPlan(T.buildTrackerPlan(plan, new Date().toISOString()));
+          setLog({}); setMoves({}); setPendingMoves({}); setAdjust({});
+          fetchActivities(TRACKER_FEED_DAYS);
+        } else if (plan) {
+          // A real plan the server has never seen (offline creation): migrate
+          // it up. The only 'none' case that legitimately creates a plan.
+          sync.savePlan(plan).then(adoptRes(plan.createdAt));
+        } else {
+          // No local plan at all: tracker if a profile exists (the plan was
+          // ended on another device), else onboarding.
+          const prof = profileStore || await sync.loadProfile();
+          if (cancelled) return; // unmount during the /api/me await must not write
+          if (prof) {
+            storage.save('profile', prof);
+            setProfileStore(prof);
+            setPlan(T.trackerFromProfile(prof));
+            fetchActivities(TRACKER_FEED_DAYS);
+          } else setPlan(null);
+        }
       } else if (result) {
         const ids = result.refToId || {};
-        setPlan(T.upgradePlanSegments(result.plan));
-        // A tracker plan adopted FROM the server (entered on another device)
-        // arrives after the mount fetch already ran shallow — deepen the feed
-        // to the diary window it is about to browse.
-        if (result.plan.race === 'tracker') fetchActivities(TRACKER_FEED_DAYS);
+        // One-time idempotent sentinel migration: a server-side tracker plan
+        // (synced before Phase 2) becomes "profile up, plan ended"; the local
+        // sentinel keeps representing the state.
+        if (result.plan.race === 'tracker') {
+          const prof = (plan && plan.race === 'tracker' && plan.profile) || result.plan.profile;
+          saveProfileBoth(prof);
+          sync.endPlan(result.planId);
+          setPlan(plan && plan.race === 'tracker' ? plan : T.trackerFromProfile(prof));
+          fetchActivities(TRACKER_FEED_DAYS);
+          setHydrated(true);
+          return;
+        }
+        const adopted = T.upgradePlanSegments(result.plan);
+        if (result.planId != null) adopted.serverId = result.planId;
+        setPlan(adopted);
+        // keep the standalone profile store warm (local seed; the backend
+        // already backfilled its own subset copy from active plans)
+        if (!profileStore && adopted.profile) {
+          storage.save('profile', adopted.profile);
+          setProfileStore(adopted.profile);
+        }
         // Merge, don't replace: an entry created while a plan push was still in
         // flight (stale gid → its own push was skipped) or offline exists only
         // locally — wholesale-replacing would silently lose it. The loading
@@ -321,19 +422,30 @@ export function App({ storage, getToken, user }) {
   // 2026-07-13 gauntlet catch on this feature's first cut).
   const enterTracker = () => {
     const np = T.buildTrackerPlan(plan, new Date().toISOString());
+    // Remember WHICH server plan this decision ends: if the DELETE below never
+    // lands (offline), the next hydrate finishes the job — but only when the
+    // server still holds this exact id. Any other id is someone's real plan.
+    np.endedServerId = plan.serverId != null ? plan.serverId : null;
     setLog({}); setMoves({}); setPendingMoves({}); setAdjust({});
+    // Stale workout GUIDs from the ended plan must not resolve for the next
+    // plan's reused positional ids (the onRegenerate lesson): a truthy-but-
+    // wrong gid() pushes at dead rows AND stops sweepStale's later re-push.
+    setRefToId({});
     setPlan(np);
     setEditPlan(false);
     setPlanSyncFailed(false); // clear any prior real-plan alarm; tracker never raises it
     // The diary needs depth the spotting window doesn't: refetch the feed to
     // match the tracker calendar's browsable range.
     fetchActivities(TRACKER_FEED_DAYS);
-    // Silent push: the backend accepts the tracker sentinel as of PR #17
-    // (merged 2026-07-17), so this now saves; kept silent because a tracker
-    // transition is not a user-initiated save and must not raise the
-    // "didn't save" alarm on transient failures. The plan lives locally; hydrate keeps it and retries
-    // the push on every load, so it syncs the moment the backend accepts it.
-    sync.replacePlan(np).then(m => { if (m) adoptMap(m); });
+    // Phase 2 (docs/NO_PLAN_WORKFLOW.md): server-side, tracker is "no plan +
+    // profile". Snapshot the profile up and END the exact plan this session
+    // was using — the sentinel above is client-only and is never pushed. A
+    // never-synced plan (no serverId) has nothing to delete. Both calls are
+    // fire-and-forget: offline, local state is already right and the hydrate
+    // seam reconciles via endedServerId. The watch-push effect sees the
+    // zero-week plan and clears the scheduled events window on its own.
+    saveProfileBoth(np.profile);
+    if (plan.serverId != null) sync.endPlan(plan.serverId);
   };
   // Default-to-no-plan (docs/NO_PLAN_FLOW.md): a plan whose last day has passed
   // ends into tracker mode unless the user already started a new one. Gated on
@@ -350,7 +462,7 @@ export function App({ storage, getToken, user }) {
   // Splash while hydrating: the same shared screen the auth gate shows while
   // the session loads, so startup is ONE screen. Held for at least one pulse.
   if (!hydrated || splashHeld) return <Splash />;
-  if (!plan) return <Onboarding onCreate={p => { const w = [...recs].reverse().find(r => r.weightKg); const np = T.generatePlan(w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p); setPlan(np); setView('today'); setBuilding(true); sync.savePlan(np).then(adoptMap); }} />;
+  if (!plan) return <Onboarding onCreate={p => { const w = [...recs].reverse().find(r => r.weightKg); const np = T.generatePlan(w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p); setPlan(np); setView('today'); setBuilding(true); saveProfileBoth(np.profile); sync.savePlan(np).then(adoptRes(np.createdAt)); }} />;
   if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
 
   // Resolve our client ref → server workout GUID for the log/move endpoints; skip
@@ -548,8 +660,10 @@ export function App({ storage, getToken, user }) {
     const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan) });
     np.createdAt = plan.createdAt;
     np.updatedAt = new Date().toISOString();
+    np.serverId = plan.serverId; // same server row: replace updates in place
     setPlan(np);
-    sync.replacePlan(np).then(adoptMap);
+    sync.replacePlan(np).then(adoptRes(np.createdAt));
+    saveProfileBoth(np.profile); // the standalone profile mirrors every retarget
   };
   // In tracker mode a fitness update must NOT generate a plan: it snapshots
   // history, refreshes the numbers and paces, and the sentinel stays a
@@ -559,7 +673,8 @@ export function App({ storage, getToken, user }) {
       const np = T.applyTrackerFitness(plan, fields, new Date().toISOString());
       np.profile = withWeight(np.profile);
       setPlan(np);
-      sync.replacePlan(np).then(m => { if (m) adoptMap(m); }); // silent, like enterTracker
+      // Phase 2: tracker state syncs as the PROFILE, never as a plan push.
+      saveProfileBoth(np.profile);
     } else retarget(fields);
     setEditFitness(false);
   };
@@ -663,10 +778,17 @@ export function App({ storage, getToken, user }) {
   // engine adjustments — annotations on the OLD structure — clear wholesale
   // (fitness/history carry over on the profile).
   const reshapePlan = fields => {
+    const fromTracker = plan.race === 'tracker';
     const profile = withWeight(Object.assign({}, plan.profile, fields));
     const np = T.generatePlan(profile);
-    np.createdAt = plan.createdAt;
-    if (plan.updatedAt) np.updatedAt = plan.updatedAt;
+    // From tracker this is a brand-NEW plan: fresh identity (its own
+    // createdAt nonce, no serverId — the old row was ended). From a real
+    // plan it is a reshape of the same server row.
+    if (!fromTracker) {
+      np.createdAt = plan.createdAt;
+      if (plan.updatedAt) np.updatedAt = plan.updatedAt;
+      np.serverId = plan.serverId;
+    }
     // Ids are positional, so surviving-id pruning alone let a completed
     // swim's tick re-attach to whatever run now sits at the same id (sim
     // catch 2026-07-17 — the same reuse hazard the moves/adjust comment below
@@ -687,11 +809,16 @@ export function App({ storage, getToken, user }) {
     // Clear them wholesale; completions above stay, per the documented intent.
     setMoves({});
     setAdjust({});
+    setRefToId({}); // regenerated id space: no stale GUID may resolve meanwhile
     setPlan(np);
     setEditPlan(false);
-    // PUT replaces the plan graph; the server prunes logs/moves for workouts that
-    // no longer exist, mirroring the local prune above.
-    sync.replacePlan(np).then(adoptMap);
+    // From tracker: CREATE. The sync layer serialises plan lifecycle writes,
+    // so this POST cannot start until the enterTracker DELETE has settled —
+    // without that ordering the 409→PUT fallback reused the dying row's id
+    // and the late DELETE destroyed the brand-new plan (gauntlet critical,
+    // reproduced 2026-07-18). From a real plan: replace the same row.
+    (fromTracker ? sync.savePlan(np) : sync.replacePlan(np)).then(adoptRes(np.createdAt));
+    saveProfileBoth(np.profile);
   };
   const endPlanToTracker = () => { if (confirm('End your plan and just track? Your fitness history is kept.')) enterTracker(); };
   // User-added sessions: first-class plan workouts (flagged custom), persisted
@@ -700,9 +827,9 @@ export function App({ storage, getToken, user }) {
     const r = T.addCustomWorkout(plan, Object.assign({ dateISO: T.iso(new Date()) }, spec));
     setPlan(r.plan);
     setAddOpen(null);
-    // adoptMap sweeps for a quick-complete raced against this replace: the new
+    // adoptRes sweeps for a quick-complete raced against this replace: the new
     // workout's log lands once its GUID is known instead of staying local-only.
-    sync.replacePlan(r.plan).then(adoptMap);
+    sync.replacePlan(r.plan).then(adoptRes(r.plan.createdAt));
   };
   const removeWorkout = id => {
     const np = T.removeCustomWorkout(plan, id);
@@ -711,7 +838,7 @@ export function App({ storage, getToken, user }) {
     setLog(l => { const n = { ...l }; delete n[id]; return n; });
     setMoves(m => { const n = { ...m }; delete n[id]; return n; });
     setAdjust(a => { const n = { ...a }; delete n[id]; return n; });
-    sync.replacePlan(np).then(adoptMap);
+    sync.replacePlan(np).then(adoptRes(np.createdAt));
   };
 
   const openSupport = topic => {
@@ -778,7 +905,7 @@ export function App({ storage, getToken, user }) {
             : <><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></>}</div>
       </div>
 
-      {planSyncFailed && !tracker && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptMap))}>
+      {planSyncFailed && !tracker && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptRes(plan.createdAt)))}>
         <div className="bi"><Icon name="bolt" size={20} /></div>
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>

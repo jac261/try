@@ -912,6 +912,26 @@ export const planEnded = function (plan, todayISO) {
 // trend survive when they end this one. race:'tracker' is the sole predicate
 // for the app's no-plan / tracker-only mode; raceDate is nulled so nothing
 // counts down to a race that no longer exists.
+// The client-side tracker sentinel from a STANDALONE profile (Phase 2 of
+// docs/NO_PLAN_WORKFLOW.md): server-side the state is "no plan + profile";
+// this sentinel is the in-memory representation the component tree keeps
+// using, synthesized at hydrate and NEVER pushed to the server. The server
+// profile is a plan-independent subset (no raceType/raceDate/startDate), so
+// only derivable fields are defaulted here; race fields stay absent and the
+// plan editor refuses to build until a race is chosen.
+export const trackerFromProfile = function (profile, nowISO) {
+  const p = profile || {};
+  const daysPerWeek = p.daysPerWeek != null ? p.daysPerWeek
+    : (Array.isArray(p.trainingDays) ? p.trainingDays.length : 5);
+  const full = Object.assign({}, p, { raceDate: null, daysPerWeek });
+  return {
+    profile: full,
+    race: 'tracker', createdAt: nowISO || new Date().toISOString(),
+    updatedAt: nowISO || new Date().toISOString(),
+    totalWeeks: 0, paces: computePaces(full), weeks: [], limiterSwap: null,
+  };
+};
+
 export const buildTrackerPlan = function (plan, nowISO) {
   return {
     profile: Object.assign({}, plan.profile, { raceDate: null }),

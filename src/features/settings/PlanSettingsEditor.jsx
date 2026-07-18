@@ -68,7 +68,13 @@ export function PlanSettingsEditor({ profile, onClose, onSave }) {
           <div style={{ height: 6 }} />
         </>}
         <div style={{ height: 12 }} />
-        <button className="btn primary" onClick={() => onSave({ raceType: f.raceType, raceDate: f.raceDate, daysPerWeek: f.trainingDays.length, trainingDays: f.trainingDays, longDay: f.longDay, bRaces: tune && tune.date ? [{ kind: tune.kind, date: tune.date }] : [] })}>Save &amp; rebuild plan</button>
+        {/* No race chosen, no plan: a profile fetched from the server is
+            plan-independent and carries no raceType, and generatePlan on an
+            undefined race type crashes (gauntlet critical 2026-07-17). The
+            pills above select one; until then the build stays disabled. */}
+        {!f.raceType && <p className="lead" style={{ margin: '0 2px 8px' }}>Pick a race distance above to build the plan.</p>}
+        <button className="btn primary" disabled={!f.raceType}
+          onClick={() => f.raceType && onSave({ raceType: f.raceType, raceDate: f.raceDate, daysPerWeek: f.trainingDays.length, trainingDays: f.trainingDays, longDay: f.longDay, bRaces: tune && tune.date ? [{ kind: tune.kind, date: tune.date }] : [] })}>Save &amp; rebuild plan</button>
       </div>
     </div>
   );

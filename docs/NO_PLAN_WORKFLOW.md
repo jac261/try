@@ -187,16 +187,42 @@ Phase 1 — DONE (shipped together as backend PR #22, merged 2026-07-17: user_pr
 7. PR B: implement DELETE /api/plans/{id} as end/archive; GET current 404s
    after. Independent of PR A.
 
-Phase 2 — frontend migration (Jon ~2–3 days):
-8. Standalone profile store hydrated from /api/me; onboarding routes on
-   profile-null; FitnessEditor writes profile (and plan mirror while a plan
-   exists).
-9. enterTracker becomes: snapshot profile up, push one final empty
-   planned-events window, DELETE current plan, set plan null locally.
-10. One-time idempotent sentinel migration on hydrate (PUT profile, drop the
-    plan; PUT idempotent, repeat-DELETE 404 tolerated). Then delete
-    buildTrackerPlan, the hydrate special case, and flip the six
-    race==='tracker' predicates to plan===null.
+Phase 2 — frontend migration. REBUILT 2026-07-18 around PLAN IDENTITY after
+two failed gauntlet rounds (14 confirmed findings); a third round then found
+one root cause behind every remaining critical: the backend's "current plan"
+is a REUSED ROW (PUT /api/plans/current overwrites the same id with new
+content; DELETE has no version guard), so client-held ids are slot ids, not
+per-plan identities. The client now SERIALISES all plan lifecycle writes
+(create/replace/end through one ordered queue), which closes every
+single-device sequence; cross-device end-vs-create races remain until the
+backend ask lands. BACKEND ASK (Jack): make DELETE /api/plans/{id}
+conditional on the updatedAt/version the client last observed (no-op/409 on
+mismatch), or mint a fresh row id on replace — either closes the cross-device
+window for good. The plan below, as amended:
+8. DONE — standalone profile store ('profile' key, survives clear()),
+   mirrored to PUT /api/me/profile on every change. The LOCAL copy is the
+   full profile; the server keeps its plan-independent subset (no raceType/
+   raceDate/startDate) and ignores the extra fields. The plan editor gates
+   "Save & rebuild" on a chosen race type so a subset profile can never
+   reach generatePlan.
+9. DONE, amended — enterTracker snapshots the profile up and DELETEs the
+   plan by plan.serverId (the GUID stamped onto the local plan object from
+   every successful server response — never a fresh "current plan" lookup,
+   which could delete a plan another device just started). The sentinel
+   records endedServerId; the hydrate seam finishes an interrupted end only
+   on EXACT id match, and adopts any other server plan unconditionally. The
+   watch-push effect clears the events window by itself.
+10. AMENDED — the client KEEPS the tracker sentinel as its in-memory/cached
+    representation (the ~30 tracker call sites built during 2026-07-16/17
+    stay untouched); it is simply never pushed. Server-side the bridge is
+    gone: tracker rows migrate to "profile up + plan ended" idempotently at
+    hydrate. Resurrection guard: hydrate 'none' with a local real plan drops
+    to tracker when the plan carries a serverId (it was ended elsewhere) or
+    its dates are done; only never-synced plans migrate up. ACCEPTED narrow
+    window: caches written before serverId existed can slip this guard once
+    (self-healing after one load; both live users load daily). Sentinel
+    deletion from the client (plan===null everywhere) is deferred to Phase 4
+    alongside the backend's 'tracker' RaceTypes removal.
 
 Phase 3 — the sessions layer (both). LATER, first in the queue, and a MUST
 before any sensor-less user is real:

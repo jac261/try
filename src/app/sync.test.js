@@ -4,6 +4,9 @@ vi.mock('@/lib/api.js', () => ({
   getCurrentPlan: vi.fn(),
   createPlan: vi.fn(),
   replaceCurrentPlan: vi.fn(),
+  deletePlan: vi.fn(),
+  putProfile: vi.fn(),
+  getMe: vi.fn(),
   putWorkoutLog: vi.fn(),
   deleteWorkoutLog: vi.fn(),
   putWorkoutMove: vi.fn(),
@@ -71,21 +74,33 @@ describe('makeSync.hydrate', () => {
 });
 
 describe('makeSync.savePlan', () => {
-  it('POSTs a new plan and resolves to the ref→GUID map', async () => {
-    api.createPlan.mockResolvedValue({ ok: true, status: 201, body: { race: 'olympic' } });
+  it('POSTs a new plan and resolves to the ref map plus the plan GUID', async () => {
+    api.createPlan.mockResolvedValue({ ok: true, status: 201, body: { id: 'plan-guid', race: 'olympic' } });
     api.toClientState.mockReturnValue({ refToId: { '0-0': 'guid-0-0' } });
-    const map = await makeSync(getToken).savePlan({ race: 'olympic' });
+    const res = await makeSync(getToken).savePlan({ race: 'olympic' });
     expect(api.createPlan).toHaveBeenCalledWith(getToken, { race: 'olympic' });
     expect(api.replaceCurrentPlan).not.toHaveBeenCalled();
-    expect(map).toEqual({ '0-0': 'guid-0-0' });
+    expect(res).toEqual({ refToId: { '0-0': 'guid-0-0' }, planId: 'plan-guid' });
   });
   it('falls back to PUT when the server already has a plan (409)', async () => {
     api.createPlan.mockResolvedValue({ ok: false, status: 409 });
-    api.replaceCurrentPlan.mockResolvedValue({ ok: true, status: 200, body: { race: 'olympic' } });
+    api.replaceCurrentPlan.mockResolvedValue({ ok: true, status: 200, body: { id: 'plan-guid-2', race: 'olympic' } });
     api.toClientState.mockReturnValue({ refToId: { '0-0': 'guid-x' } });
-    const map = await makeSync(getToken).savePlan({ race: 'olympic' });
+    const res = await makeSync(getToken).savePlan({ race: 'olympic' });
     expect(api.replaceCurrentPlan).toHaveBeenCalledWith(getToken, { race: 'olympic' });
-    expect(map).toEqual({ '0-0': 'guid-x' });
+    expect(res).toEqual({ refToId: { '0-0': 'guid-x' }, planId: 'plan-guid-2' });
+  });
+  it('replacePlan falls back to POST when there is no current plan (404 — it was ended)', async () => {
+    api.replaceCurrentPlan.mockResolvedValue({ ok: false, status: 404 });
+    api.createPlan.mockResolvedValue({ ok: true, status: 201, body: { id: 'plan-guid-3', race: 'olympic' } });
+    api.toClientState.mockReturnValue({ refToId: { '0-0': 'guid-y' } });
+    const res = await makeSync(getToken).replacePlan({ race: 'olympic' });
+    expect(api.createPlan).toHaveBeenCalledWith(getToken, { race: 'olympic' });
+    expect(res).toEqual({ refToId: { '0-0': 'guid-y' }, planId: 'plan-guid-3' });
+  });
+  it('a failed save resolves null: no id ever comes out of a failure', async () => {
+    api.createPlan.mockResolvedValue({ ok: false, status: 500 });
+    expect(await makeSync(getToken).savePlan({ race: 'olympic' })).toBe(null);
   });
 });
 
@@ -338,5 +353,37 @@ describe('makeSync adjustments (adaptive engine, dormant until backend ships)', 
     api.deleteWorkoutAdjustment.mockResolvedValue({ ok: true });
     await makeSync(getToken).removeAdjustment('guid-0-1');
     expect(api.deleteWorkoutAdjustment).toHaveBeenCalledWith(getToken, 'guid-0-1');
+  });
+});
+
+describe('plan lifecycle serialisation (the reused-row race, 2026-07-18)', () => {
+  it('a create issued while an end is in flight waits for the delete to settle', async () => {
+    // Fake slot semantics: the row is reused. If the POST ran before the
+    // DELETE settled it would 409 into a PUT that overwrites the dying row,
+    // and the late DELETE would destroy the new plan.
+    let rowActive = true;
+    let releaseDelete;
+    const order = [];
+    api.deletePlan.mockImplementation(() => new Promise(res => {
+      releaseDelete = () => { rowActive = false; order.push('delete'); res({ ok: true, status: 200 }); };
+    }));
+    api.createPlan.mockImplementation(() => {
+      order.push('create');
+      if (rowActive) return Promise.resolve({ ok: false, status: 409 });
+      return Promise.resolve({ ok: true, status: 201, body: { id: 'guid-P2', race: 'sprint' } });
+    });
+    api.toClientState.mockReturnValue({ refToId: {} });
+
+    const s = makeSync(getToken);
+    const endP = s.endPlan('guid-P1');       // in flight, held
+    const saveP = s.savePlan({ race: 'sprint' }); // must queue behind it
+    await new Promise(r => setTimeout(r, 20));
+    expect(order).toEqual([]);               // the create has not fired early
+    releaseDelete();
+    await endP;
+    const res = await saveP;
+    expect(order).toEqual(['delete', 'create']); // strictly ordered
+    expect(api.replaceCurrentPlan).not.toHaveBeenCalled(); // no 409→PUT row reuse
+    expect(res).toEqual({ refToId: {}, planId: 'guid-P2' }); // a FRESH row
   });
 });

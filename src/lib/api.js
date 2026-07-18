@@ -87,7 +87,22 @@ export function putPreferences(getToken, preferences) {
   return request('/api/me/preferences', { getToken, method: 'PUT', body: preferences });
 }
 
+// The plan-independent athlete profile (backend PR #22): the between-plans
+// source of truth. The server keeps its own SUBSET (no raceType/raceDate/
+// startDate — those belong to a plan) and ignores the extra fields we send;
+// the FULL profile lives in the local store, and race fields are re-collected
+// when the next plan is created.
+export function putProfile(getToken, profile) {
+  return request('/api/me/profile', { getToken, method: 'PUT', body: profile });
+}
+
 /* ---------------- plans ---------------- */
+
+// End (archive) a plan server-side — the real state transition behind
+// entering tracker (backend PR #22). Repeat deletes 404, tolerated by callers.
+export function deletePlan(getToken, planId) {
+  return request('/api/plans/' + planId, { getToken, method: 'DELETE' });
+}
 
 // The POST/PUT body is exactly our T.generatePlan(profile) output — no transform.
 export function createPlan(getToken, plan) {
@@ -323,7 +338,9 @@ export function toClientState(resp) {
   (resp.logs || []).forEach(l => { if (!log[l.clientWorkoutRef] && meaningfulLog(l)) log[l.clientWorkoutRef] = toLogEntry(l); });
   (resp.moves || []).forEach(m => { if (!moves[m.clientWorkoutRef]) moves[m.clientWorkoutRef] = m.movedDate; });
 
-  return { plan, log, moves, adjust, refToId };
+  // the server plan GUID rides along: it becomes plan.serverId in the App,
+  // the one identity every end-plan decision keys on
+  return { plan, log, moves, adjust, refToId, planId: resp.id != null ? resp.id : null };
 }
 
 // Our log entry { done, at, feel } → the API's log body.

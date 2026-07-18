@@ -7,7 +7,7 @@
    ("0-0"). Every plan response carries both, so hydrate/savePlan/replacePlan return
    a `refToId` map the caller keeps and uses to resolve a ref → GUID before pushing. */
 import {
-  getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan,
+  getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan, deletePlan, putProfile, getMe,
   putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
   putWorkoutAdjustment, deleteWorkoutAdjustment,
   getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents, getIntervalsThresholds, getIntervalsActivityIntervals, getIntervalsActivityRoute,
@@ -20,9 +20,13 @@ function fire(promise, what) {
     .catch(e => { console.warn('[sync] ' + what + ' error:', e && e.message); });
 }
 
-// The ref → workout-GUID map from a plan response, or null on failure.
-function refFrom(r) {
-  return r && r.ok && r.body ? (toClientState(r.body).refToId || {}) : null;
+// A plan write's useful outcome: the ref → workout-GUID map plus the plan's
+// own server GUID, or null on failure. The GUID is stamped onto the local
+// plan object ONLY from a successful response (a failed save must never tag
+// a plan with a stale id — re-verify catch 2026-07-17).
+function resFrom(r) {
+  if (!(r && r.ok && r.body)) return null;
+  return { refToId: toClientState(r.body).refToId || {}, planId: r.body.id != null ? r.body.id : null };
 }
 
 /* ---------------- reconcile helpers (local overlays ⇄ server copies) ----------------
@@ -97,30 +101,76 @@ export function sweepStale(overlay, oldMap, newMap, push) {
 }
 
 export function makeSync(getToken) {
-  // Load the server's plan graph. Returns { plan, log, moves, refToId } | 'none'
-  // (signed in, no plan) | null (offline/error → caller keeps the local cache).
+  // PLAN LIFECYCLE WRITES ARE SERIALIZED. The backend's "current plan" is a
+  // reused row: PUT /api/plans/current overwrites the SAME row id with new
+  // content, and DELETE has no version guard — so a delete that lands after
+  // a 409→PUT fallback would destroy the brand-new plan that now occupies
+  // the row (gauntlet critical, reproduced 2026-07-18). Chaining every
+  // create/replace/end through one promise queue guarantees this device's
+  // decisions land in the order they were made: an end always settles before
+  // the next create can touch the row. Cross-device interleavings need the
+  // backend's conditional delete (asked of Jack in NO_PLAN_WORKFLOW.md).
+  let planChain = Promise.resolve();
+  const serial = fn => {
+    const p = planChain.then(fn, fn);
+    planChain = p.then(() => {}, () => {});
+    return p;
+  };
+
+  // Load the server's plan graph. Returns { plan, log, moves, refToId, planId }
+  // | 'none' (signed in, no plan) | null (offline/error → caller keeps cache).
   const hydrate = async () => {
     const res = await getCurrentPlan(getToken);
     if (res.ok && res.body) return toClientState(res.body);
     if (res.ok && res.body === null) return 'none';
     return null;
   };
-  const replacePlan = plan => replaceCurrentPlan(getToken, plan)
-    .then(r => { if (!r || !r.ok) console.warn('[sync] replace plan failed:', (r && r.message) || 'no response'); return refFrom(r); })
-    .catch(e => { console.warn('[sync] replace plan error:', e && e.message); return null; });
-  // Create the plan; if the server already has one (409) fall back to replacing it.
-  // Resolves to the ref→GUID map (or null on failure).
-  const savePlan = plan => apiCreatePlan(getToken, plan)
+  // Replace the current plan; if there IS no current plan (404 — it was ended,
+  // e.g. starting the next plan from tracker) fall back to creating one. The
+  // symmetric twin of savePlan's 409 fallback, so either entry point converges
+  // on the server's actual state instead of failing into the retry banner.
+  const replacePlanNow = plan => replaceCurrentPlan(getToken, plan)
     .then(r => {
-      if (r && r.status === 409) return replacePlan(plan);
-      if (!r || !r.ok) { console.warn('[sync] create plan failed:', (r && r.message) || 'no response'); return null; }
-      return refFrom(r);
+      if (r && r.status === 404) return apiCreatePlan(getToken, plan)
+        .then(r2 => { if (!r2 || !r2.ok) console.warn('[sync] create-after-404 failed:', (r2 && r2.message) || 'no response'); return resFrom(r2); });
+      if (!r || !r.ok) console.warn('[sync] replace plan failed:', (r && r.message) || 'no response');
+      return resFrom(r);
     })
-    .catch(e => { console.warn('[sync] create plan error:', e && e.message); return null; });
+    .catch(e => { console.warn('[sync] replace plan error:', e && e.message); return null; });
+  const replacePlan = plan => serial(() => replacePlanNow(plan));
+  // Create the plan; if the server already has one (409) fall back to replacing it.
+  // Resolves to { refToId, planId } (or null on failure).
+  const savePlan = plan => serial(() => apiCreatePlan(getToken, plan)
+    .then(r => {
+      if (r && r.status === 409) return replacePlanNow(plan);
+      if (!r || !r.ok) { console.warn('[sync] create plan failed:', (r && r.message) || 'no response'); return null; }
+      return resFrom(r);
+    })
+    .catch(e => { console.warn('[sync] create plan error:', e && e.message); return null; }));
+
+  // The plan-independent profile (Phase 2): PUT is idempotent; failures are
+  // logged, never fatal (the local store stays authoritative offline).
+  const saveProfile = profile => fire(putProfile(getToken, profile), 'profile');
+  // The athlete profile from /api/me, or null (offline / none stored).
+  const loadProfile = async () => {
+    const res = await getMe(getToken);
+    return res.ok && res.body && res.body.profile ? res.body.profile : null;
+  };
+  // End a SPECIFIC plan by its server GUID — always the id the caller decided
+  // to end, never a fresh "current plan" lookup (a fresh GET could return a
+  // plan another device just started and delete it — gauntlet critical
+  // 2026-07-17). A repeat delete 404s: tolerated, the goal state holds.
+  const endPlan = planId => serial(async () => {
+    if (!planId) return false;
+    const res = await deletePlan(getToken, planId);
+    if (res && (res.ok || res.status === 404)) return true;
+    console.warn('[sync] end plan failed:', (res && res.message) || 'no response');
+    return false;
+  });
 
   // workoutId is the server GUID (resolve from refToId before calling).
   return {
-    hydrate, savePlan, replacePlan,
+    hydrate, savePlan, replacePlan, saveProfile, loadProfile, endPlan,
     saveLog: (workoutId, entry) => fire(putWorkoutLog(getToken, workoutId, logToApi(entry)), 'log ' + workoutId),
     removeLog: workoutId => fire(deleteWorkoutLog(getToken, workoutId), 'unlog ' + workoutId),
     saveMove: (workoutId, date) => fire(putWorkoutMove(getToken, workoutId, { movedDate: date, reason: null }), 'move ' + workoutId),

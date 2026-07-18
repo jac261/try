@@ -266,6 +266,7 @@ body {
 
 /* ---------- buttons / forms ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer; font-weight: 800; font-size: 15px; padding: 15px 18px; border-radius: 40px; width: 100%; font-family: inherit; letter-spacing: -.2px; transition: transform .08s, filter .15s; }
+.btn:disabled { opacity: .45; cursor: default; pointer-events: none; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); }
 .btn.primary:hover { filter: brightness(.94); }
 .btn.primary:active { transform: translateY(1px); }
