@@ -15,6 +15,13 @@ import { iso, addDays } from './date.js';
 // auto-matching, brick pairing and manual-entry shadowing can never drift.
 export const MATCH_WINDOW = { lo: 0.5, hi: 1.7 };
 
+// Trainer and treadmill recordings. Their distance comes from a virtual
+// course or a belt reading, so any speed or pace derived from it says nothing
+// about how the session went and must never be presented as if it did
+// (gauntlet catch 2026-07-18).
+export const INDOOR_TYPES = { VirtualRide: 1, VirtualRun: 1 };
+export const isIndoor = a => !!(a && INDOOR_TYPES[a.type]);
+
 export const DISCIPLINE = {
   Run: 'run', VirtualRun: 'run',
   Ride: 'bike', VirtualRide: 'bike',

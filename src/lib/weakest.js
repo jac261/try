@@ -10,15 +10,17 @@
  * the comparison rather than guessing, and with fewer than two comparable
  * sports there is no verdict at all.
  */
-import { FITNESS, RACES } from './domain.js';
+import { FITNESS, RACES, saneWeightKg } from './domain.js';
 
 // The experience ladders, worst → best. Run/swim come from FITNESS so the two
 // systems can never drift; the bike ladder is W/kg (the only honest cross-
-// athlete bike scale, which is why the bike needs a recent weight).
+// athlete bike scale, which is why the bike needs a recent weight). All three
+// derive from FITNESS so a rebalanced rung moves the scoring ladder and the
+// plan's own estimates together (gauntlet catch 2026-07-18).
 const LADDERS = {
   run: { values: Object.values(FITNESS).map(f => f.est5k), lowerBetter: true },
   swim: { values: Object.values(FITNESS).map(f => f.estCss), lowerBetter: true },
-  bike: { values: [2.0, 2.6, 3.2, 4.0], lowerBetter: false },
+  bike: { values: Object.values(FITNESS).map(f => f.estWkg), lowerBetter: false },
 };
 
 // Continuous position on a 4-rung ladder: 0 at rung 0, 3 at rung 3, clamped
@@ -43,7 +45,12 @@ export function weakestLink({ profile }) {
   const scores = {};
   if (profile.fivekSec) scores.run = levelIndex(profile.fivekSec, LADDERS.run);
   if (profile.css100Sec) scores.swim = levelIndex(profile.css100Sec, LADDERS.swim);
-  if (profile.ftp && profile.weightKg) scores.bike = levelIndex(profile.ftp / profile.weightKg, LADDERS.bike);
+  // Same weight guard the plan's own estimate uses: an out-of-range weight
+  // used to score the bike at the ladder floor, naming it the limiter off a
+  // typo (re-verify catch 2026-07-18). No usable weight means the bike sits
+  // out of the comparison, exactly like a missing FTP.
+  const kg = saneWeightKg(profile.weightKg);
+  if (profile.ftp && kg) scores.bike = levelIndex(profile.ftp / kg, LADDERS.bike);
   // An excluded discipline (injured state) is never scored or named the
   // limiter, even when a pre-injury baseline still sits on the profile: the
   // plan cannot act on it, so a verdict would be a nag, not a decision.

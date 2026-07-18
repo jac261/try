@@ -1,7 +1,7 @@
 /* Try — periodized plan generator + structured workout builder */
 import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
-import { RACES, B_RACES, FITNESS, ZONES } from './domain.js';
+import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg } from './domain.js';
 import { weakBias, weakestLink } from './weakest.js';
 
 /* ---- paces derived from the athlete's baselines ---- */
@@ -11,11 +11,30 @@ function computePaces(profile) {
   const fivek = profile.fivekSec || lvl.est5k;
   const p = fivek / 5;                             // sec per km at 5k effort
   const css = profile.css100Sec || lvl.estCss;
-  const ftp = profile.ftp || null;                 // watts (optional, no estimate)
+  // Bike watts: the athlete's own FTP, else a level x weight estimate so a new
+  // rider sees target ranges instead of RPE-only text. Converting W/kg into
+  // absolute watts needs a weight, so no weight still means no watts, exactly
+  // as before. The estimate lives ONLY here: profile.ftp stays null until a
+  // real number arrives, because weakest.js, eftp.js, tuning.js and the
+  // fitness-history trend all read profile.ftp directly and would each be
+  // corrupted by a guess (design panel 2026-07-18).
+  // An unusable weight means no estimate at all, rather than a confident
+  // wrong number projected onto the card as a coached target (500 kg used to
+  // read as a 975 W endurance ride).
+  const kg = saneWeightKg(profile.weightKg);
+  const ftpEstimated = !profile.ftp && !!kg;
+  const ftp = profile.ftp || (ftpEstimated ? Math.round(lvl.estWkg * kg) : null);
   return {
     runEstimated: !profile.fivekSec,               // true when paces are level-based guesses
     swimEstimated: !profile.css100Sec,
     ftp: ftp,
+    ftpEstimated: ftpEstimated,
+    // Watts per kilo, for the distance model's speed scaling. This is already
+    // a ratio, so unlike ftp above it needs NO weight to be meaningful: the
+    // level rung alone still tells us a beginner and an elite cover different
+    // ground (gauntlet catch 2026-07-18 — tying it to weight flattened every
+    // weightless plan to one speed).
+    bikeWkg: profile.ftp && kg ? profile.ftp / kg : lvl.estWkg,
     run: { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8 },
     swim: { easy: css + 12, steady: css + 6, css: css, fast: css - 6 },
   };
@@ -33,6 +52,9 @@ function swimDetail(pc, key, zone) {
 }
 function bikeDetail(pc, lo, hi, zone) {
   const z = ZONES[zone];
+  // An estimated FTP keeps the RPE band alongside the watts: the numbers are a
+  // starting point to ride by feel against, not a tested target.
+  if (pc.ftp && pc.ftpEstimated) return '~' + Math.round(pc.ftp * lo) + '–' + Math.round(pc.ftp * hi) + ' W · ' + zone + ' · ' + z.rpe;
   if (pc.ftp) return Math.round(pc.ftp * lo) + '–' + Math.round(pc.ftp * hi) + ' W · ' + zone + ' ' + z.name;
   return zone + ' ' + z.name + ' · ' + z.rpe;
 }
@@ -94,10 +116,38 @@ function runDistance(segs, pc) {
   segs.forEach(s => { if (s.blocks) s.blocks.forEach(b => add(b.min, b.zone)); else add(s.min, s.zone); });
   return Math.round(km * 10) / 10;
 }
+// Bike distance from the session's own zone mix, the same shape as
+// runDistance: a threshold block covers more ground per minute than a
+// recovery spin, so an interval session and an endurance ride of equal
+// length no longer read as the same distance (they used to share one flat
+// 30 km/h guess). Speeds are km/h for a rider on flat-to-rolling roads,
+// scaled by the athlete's watts per kilo. Still an estimate (no terrain,
+// wind, draft or position model), so callers keep distEst and the tilde.
+const ZONE_KMH = { Z1: 24, Z2: 28, Z3: 32, Z4: 35, Z5: 37 };
+const REF_WKG = 2.6; // the intermediate rung ZONE_KMH is written for
+function bikeDistance(segs, pc) {
+  const wkg = (pc && pc.bikeWkg) || REF_WKG;
+  // Speed rises far more slowly than power (aerodynamic drag), so scale on a
+  // cube root: double the watts per kilo is about a quarter more speed.
+  const scale = Math.pow(wkg / REF_WKG, 1 / 3);
+  let km = 0;
+  const add = (min, zone) => { km += (min || 0) / 60 * (ZONE_KMH[zone] || ZONE_KMH.Z2) * scale; };
+  segs.forEach(s => { if (s.blocks) s.blocks.forEach(b => add(b.min, b.zone)); else add(s.min, s.zone); });
+  return Math.round(km);
+}
 function swimDistance(segs) {
   let m = 0;
   segs.forEach(s => { if (s.swim) m += s.swim.distM != null ? s.swim.distM : (s.swim.n || 0) * (s.swim.repM || 0); });
   return Math.round(m / 100) / 10;
+}
+
+// Which disciplines' distances are estimates: the bike is always modelled,
+// run distance is honest only when the athlete's own 5k time anchors it, and
+// swim is summed prescribed metres (exact).
+function distEstFor(disc, pc) {
+  if (disc === 'bike') return true;
+  if (disc === 'run') return !!(pc && pc.runEstimated);
+  return false;
 }
 
 const FIT_FLOOR = 3;
@@ -433,8 +483,7 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
     Threshold: { label: 'Threshold effort', detail: bikeDetail(pc, 0.83, 0.9, 'Z3'), zone: 'Z3' },
   };
   segs = fitFlex(segs, dur, (type === 'Long' || type === 'Endurance') ? 'lead' : 'tail', FB[type] || FB.Tempo);
-  const dist = Math.round(dur / 60 * 30); // ~30 km/h estimate (no power-to-speed model)
-  return { title: title, segments: segs, distance: dist, unit: 'km', distEst: true };
+  return { title: title, segments: segs, distance: bikeDistance(segs, pc), unit: 'km', distEst: true };
 }
 
 // The drill catalog Technique sessions rotate through. cue is the one thing
@@ -940,7 +989,7 @@ export const easeWorkout = function (w, plan) {
   const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile));
   return Object.assign({}, w, {
     type: easyType, title: built.title, durationMin: dur,
-    distance: built.distance, unit: built.unit, segments: built.segments,
+    distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
     eased: true, easedFrom: w.type, key: false,
   });
 };
@@ -957,7 +1006,7 @@ export const trimWorkout = function (w, plan, factor) {
   const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile));
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
-    distance: built.distance, unit: built.unit, segments: built.segments,
+    distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
     trimmed: true, trimmedFrom: w.durationMin,
   });
 };
@@ -976,7 +1025,7 @@ export const boostWorkout = function (w, plan, factor) {
   const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile));
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
-    distance: built.distance, unit: built.unit, segments: built.segments,
+    distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
     boosted: true, boostedFrom: w.durationMin,
   });
 };
@@ -1000,7 +1049,7 @@ export const addCustomWorkout = function (plan, { discipline, type, durationMin,
   const workout = {
     id: key + '-' + n, week: wk.index, seed: seed, phase: wk.phase, date: dateISO,
     discipline: discipline, role: 'custom', type: type, title: built.title,
-    durationMin: dur, distance: built.distance, unit: built.unit,
+    durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
     segments: built.segments, custom: true,
   };
   const weeks = plan.weeks.map(w => w.index !== wk.index ? w
@@ -1128,14 +1177,35 @@ export const upgradePlanSegments = function (plan) {
       const brickStale = w.discipline === 'brick' && w.phase === 'Peak'
         && segsNow.some(s => /race pace/i.test(s.label || '')
           && s.zone !== (RACE_RUN_ANCHOR[plan.profile.raceType] || RACE_RUN_ANCHOR.olympic).zone);
+      // Bike distances built under the old flat 30 km/h guess never drift on
+      // minutes (distance was computed independently of the segments), so
+      // they would never rebuild on their own. Compare the stored number
+      // against what the zone-mix model says now and treat any whole-km gap
+      // as stale, so one calendar cannot mix both models (design panel
+      // 2026-07-18). Both models return integers, so a half-km tolerance
+      // catches every real difference without churning on rounding.
+      const bikeDistStale = w.discipline === 'bike' && w.distance != null
+        && segsNow.some(s => s.zone || s.blocks)
+        && Math.abs(w.distance - bikeDistance(segsNow, plan.paces)) > 0.51;
       const current = segsNow.some(s => s.zone || s.blocks)
         && !(w.discipline === 'swim' && segsNow.some(s => s.blocks && !s.swim))
-        && !driftsRunBike && !brickStale;
-      if (current) return w;
+        && !driftsRunBike && !brickStale && !bikeDistStale;
+      // distEst is not stored server-side: the plan DTO drops it, so a synced
+      // workout comes back with the flag missing and its distance silently
+      // loses the tilde. It is fully derivable, so backfill it here rather
+      // than teaching the wire format a new field (gauntlet catch
+      // 2026-07-18; run had the same latent gap).
+      if (current) {
+        if (w.distance == null) return w;
+        const want = distEstFor(w.discipline, plan.paces);
+        if (!!w.distEst === want) return w;
+        changed = true;
+        return Object.assign({}, w, { distEst: want });
+      }
       const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType);
       if (!(built.segments || []).some(s => s.zone || s.blocks)) return w; // swims/strength stay as they are
       changed = true;
-      return Object.assign({}, w, { segments: built.segments, distance: built.distance });
+      return Object.assign({}, w, { segments: built.segments, distance: built.distance, distEst: !!built.distEst });
     });
     return Object.assign({}, week, { workouts: workouts });
   });
@@ -1378,7 +1448,7 @@ export const generatePlan = function (profile, opts) {
       workouts.push({
         id: w + '-' + d, week: w, phase: phase, date: date, seed: seed,
         discipline: s.disc, role: s.role, type: type, title: built.title,
-        durationMin: dur, distance: built.distance, unit: built.unit,
+        durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
         segments: built.segments, key: s.role === 'long' || s.role === 'brick',
       });
     }
@@ -1409,7 +1479,7 @@ export const generatePlan = function (profile, opts) {
         const built = buildTest(testKind, pc);
         workouts[ti] = Object.assign({}, workouts[ti], {
           type: 'Test', title: built.title, durationMin: built.durationMin,
-          distance: built.distance, unit: built.unit, segments: built.segments,
+          distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
           test: true, testKind: testKind, note: built.note, key: true,
         });
       }
@@ -1487,7 +1557,7 @@ export const generatePlan = function (profile, opts) {
           const t = typeFor(wo.discipline, wo.role, wo.phase, true, fitness.intensity);
           const dur = Math.max(20, round5(wo.durationMin * 0.6));
           const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity, profile.raceType);
-          return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, unit: built.unit, segments: built.segments };
+          return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments };
         }
         return wo;
       }).filter(Boolean);

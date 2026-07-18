@@ -45,11 +45,28 @@ export const ZONES = {
 //   recoveryDepth — how much volume drops on a recovery week (lower = bigger cut)
 //   est5k/estCss  — fallback baselines (5k time in sec, swim /100m in sec) used to
 //                   estimate paces when the athlete leaves the fitness fields blank
+// A weight the app is willing to compute with. Anything outside human range
+// is a typo (pounds entered as kilos, a stray minus) and every consumer must
+// refuse it identically: the plan's watt estimate, the limiter board's W/kg
+// score and the editors' previews all route through here, so none of them can
+// project a nonsense number the others would reject (gauntlet 2026-07-18).
+export const WEIGHT_KG = { min: 30, max: 250 };
+export function saneWeightKg(weightKg) {
+  const n = Number(weightKg);
+  return n >= WEIGHT_KG.min && n <= WEIGHT_KG.max ? n : null;
+}
+
+// estWkg mirrors est5k/estCss for the bike, in watts per kilo. It matches the
+// weakest.js ladder so the two systems can never disagree about what a level
+// means. It is a WEAKER estimate than its run/swim siblings: profile.fitness
+// is one multisport dial, so a strong cyclist new to triathlon reads low and
+// a strong runner reads high. That is why an estimated FTP never judges a
+// session in review (design panel 2026-07-18).
 export const FITNESS = {
-  beginner:     { key: 'beginner',     name: 'Beginner',     factor: 0.75, intensity: -1, recoveryEvery: 3, recoveryDepth: 0.6,  est5k: 2040, estCss: 140, blurb: 'New to multisport — build the base' },
-  intermediate: { key: 'intermediate', name: 'Intermediate', factor: 1.0,  intensity: 0,  recoveryEvery: 4, recoveryDepth: 0.72, est5k: 1620, estCss: 120, blurb: 'A few seasons in, training consistently' },
-  advanced:     { key: 'advanced',     name: 'Advanced',     factor: 1.2,  intensity: 1,  recoveryEvery: 4, recoveryDepth: 0.75, est5k: 1320, estCss: 105, blurb: 'Experienced & chasing a result' },
-  elite:        { key: 'elite',        name: 'Elite',        factor: 1.42, intensity: 2,  recoveryEvery: 4, recoveryDepth: 0.82, est5k: 1110, estCss: 90,  blurb: 'Semi-pro / front-of-pack age-grouper' },
+  beginner:     { key: 'beginner',     name: 'Beginner',     factor: 0.75, intensity: -1, recoveryEvery: 3, recoveryDepth: 0.6,  est5k: 2040, estCss: 140, estWkg: 2.0, blurb: 'New to multisport — build the base' },
+  intermediate: { key: 'intermediate', name: 'Intermediate', factor: 1.0,  intensity: 0,  recoveryEvery: 4, recoveryDepth: 0.72, est5k: 1620, estCss: 120, estWkg: 2.6, blurb: 'A few seasons in, training consistently' },
+  advanced:     { key: 'advanced',     name: 'Advanced',     factor: 1.2,  intensity: 1,  recoveryEvery: 4, recoveryDepth: 0.75, est5k: 1320, estCss: 105, estWkg: 3.2, blurb: 'Experienced & chasing a result' },
+  elite:        { key: 'elite',        name: 'Elite',        factor: 1.42, intensity: 2,  recoveryEvery: 4, recoveryDepth: 0.82, est5k: 1110, estCss: 90,  estWkg: 4.0, blurb: 'Semi-pro / front-of-pack age-grouper' },
 };
 
 export const PHASE_INFO = {

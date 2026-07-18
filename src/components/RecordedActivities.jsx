@@ -13,11 +13,16 @@ import { Icon } from '@/components/Icon.jsx';
 
 const DISC = T.DISCIPLINE; // activity type → discipline (autolog's map)
 
+// Trainer and treadmill recordings: label the row and drop the speed bit
+// rather than presenting a fabricated one. The map lives in autolog beside
+// DISCIPLINE so review.js judges the same recordings the same way.
+const INDOOR = T.INDOOR_TYPES;
 function statBits(a, disc) {
   const bits = [];
+  const indoor = !!INDOOR[a.type];
   if (a.movingTimeSec) bits.push(T.fmtDuration(Math.round(a.movingTimeSec / 60)));
   if (a.distance) bits.push((a.distance / 1000).toFixed(a.distance >= 10000 ? 0 : 1) + ' km');
-  if (a.movingTimeSec && a.distance) {
+  if (a.movingTimeSec && a.distance && !indoor) {
     if (disc === 'run') bits.push(T.fmtPace(a.movingTimeSec / (a.distance / 1000)) + ' /km');
     if (disc === 'swim') bits.push(T.fmtPace(a.movingTimeSec / (a.distance / 100)) + ' /100m');
     if (disc === 'bike') bits.push((a.distance / 1000 / (a.movingTimeSec / 3600)).toFixed(1) + ' km/h');
@@ -28,14 +33,18 @@ function statBits(a, disc) {
   return bits.join(' · ');
 }
 
-function Row({ disc, name, stat, tag, onOpen, manual }) {
+function Row({ disc, name, stat, tag, onOpen, manual, indoor }) {
   return (
     // A manual row's first tap celebrates, later taps edit — the accessible
     // name stays neutral so it is never wrong about which one comes next.
-    <div className="wk" {...tap(onOpen)} aria-label={(manual ? 'Open ' : 'Recap: ') + name}>
+    // Indoor joins the label because it is the first tag that WITHHOLDS data
+    // (the pace or speed line): without it a screen reader gets no
+    // explanation for the missing stat (gauntlet catch 2026-07-18).
+    <div className="wk" {...tap(onOpen)}
+      aria-label={(manual ? 'Open ' : 'Recap: ') + name + (indoor ? ', indoor' : '')}>
       <div className="dot" style={{ background: T.DISCIPLINES[disc].grad }}><Icon name={T.DISCIPLINES[disc].icon} size={22} /></div>
       <div className="meta">
-        <div className="t">{name} {tag && <span className="tag key">{tag}</span>}</div>
+        <div className="t">{name} {tag && <span className="tag key">{tag}</span>}{indoor && <span className="tag indoor">Indoor</span>}</div>
         <div className="s">{stat}</div>
       </div>
       <div className="right" aria-hidden="true">›</div>
@@ -66,8 +75,8 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
     rows.push({
       key: 'brick-' + w.id, disc: 'brick', name: w.title || 'Brick', open: { workout: w },
       tag: (log || {})[w.id] && log[w.id].done ? 'Matched' : null,
-      stat: T.fmtDuration(Math.round(pair.ride.movingTimeSec / 60)) + ' ride + '
-        + T.fmtDuration(Math.round(pair.run.movingTimeSec / 60)) + ' run'
+      stat: T.fmtDuration(Math.round(pair.ride.movingTimeSec / 60)) + (INDOOR[pair.ride.type] ? ' indoor ride + ' : ' ride + ')
+        + T.fmtDuration(Math.round(pair.run.movingTimeSec / 60)) + (INDOOR[pair.run.type] ? ' indoor run' : ' run')
         + (load != null ? ' · load ' + load : ''),
     });
   });
@@ -87,6 +96,7 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
     // window, and re-deriving from the workout alone would resolve to the
     // recording closest to the planned duration, not the one actually tapped.
     rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc), manual: !!a.manual,
+      indoor: !!INDOOR[a.type],
       tag: a.manual ? 'Logged' : owner ? 'Matched' : null,
       open: owner ? { workout: owner, activity: a } : { activity: a } });
   });

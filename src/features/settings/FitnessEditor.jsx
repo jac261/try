@@ -34,8 +34,12 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan }) {
           <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>
         <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
           <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>
+        {/* Placeholder only, exactly like the run and swim estimates above:
+            pre-filling the level estimate into the field would let a guess
+            become a saved, untilded FTP on a single tap (design panel
+            2026-07-18). */}
         <label className="field"><span className="lab">Cycling FTP <span className="hint">optional · watts</span></span>
-          <input value={f.ftp} placeholder="e.g. 200" inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
+          <input value={f.ftp} placeholder={'e.g. ' + (T.saneWeightKg(f.weightKg) ? Math.round(T.FITNESS[f.fitness].estWkg * T.saneWeightKg(f.weightKg)) : 200)} inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
         <label className="field"><span className="lab">Weight <span className="hint">optional · kg — lets the bike join the weakest-link scale (W/kg)</span></span>
           <input value={f.weightKg} placeholder="e.g. 70" inputMode="decimal" onChange={e => set('weightKg', e.target.value)} /></label>
         <button className="btn primary" onClick={() => onSave({
