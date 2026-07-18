@@ -53,10 +53,17 @@ repeat loop on the watch (a `repeat_until_steps_cmplt` step pointing back to the
 | Type | Structure |
 |---|---|
 | Technique | warm-up 300 m · **per-drill 2 × 50 m sets** (rotating catalog, level-gated, kit named) · **N × 100 m steady** · cool-down 200 m |
-| Long | warm-up 300 m · steady main sized from the session's own minutes (continuous / broken 400s / pyramid, harder formats Build-only) · cool-down 200 m |
-| CSS Intervals | warm-up 400 m · **N × (100 m @ CSS / 15 s rest)** · cool-down 200 m |
-| Open Water | warm-up · **4 × 200 m race effort** · skills · cool-down |
-| Endurance / Race Pace | warm-up · continuous main set · cool-down |
+| Long | warm-up 300 m · steady main (continuous / broken 400s / pyramid, harder formats Build-only) · cool-down 200 m |
+| CSS Intervals | warm-up 400 m · **N × (100 m @ CSS / 15 s rest)** (or 200s / 400s / 50 m sprints by weekly rotation) · cool-down 200 m |
+| Open Water | warm-up · **N × 200 m race effort** · skills (carries its own minutes) · cool-down |
+| Endurance / Race Pace | warm-up · continuous main set (Endurance also rotates a broken-thirds format) · cool-down |
+
+Every swim type sizes its sets from the session's own minutes and the
+athlete's CSS-anchored paces, the way Long always did: rep counts, rep
+distances and (on the smallest taper/recovery sessions) the warm-up and
+cool-down all flex so the built session tracks its stated duration, while the
+weekly format rotation stays independent of duration — a trim or boost
+re-sizes the same format, never a different one.
 
 The Long swim never appears in a base weekly template: it enters a week only
 through the limiter frequency swap when swim is the athlete's limiter and

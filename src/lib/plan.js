@@ -488,27 +488,53 @@ function drillSegs(pc, drills) {
     ...swimRep(pc, 'easy', 'Z1', 2, 50, 15),
   }));
 }
+// Classic shoulders whenever the budget can afford them; a deep-taper or
+// recovery-week swim at a slow CSS (15-20 stated minutes) steps them down
+// rather than spending half the session before the main work starts. The
+// 45% line keeps the full shoulders on every normal session and only
+// engages on the smallest builds.
+function swimShoulders(pc, budgetSec, wuM, cdM) {
+  const steps = [[wuM, cdM], [200, 100], [100, 100]];
+  return steps.find(s => ((s[0] + s[1]) / 100) * pc.swim.easy <= budgetSec * 0.45) || [100, 100];
+}
 
 function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
   const v = n => (seed || 0) % n;
-  const reps = clamp(Math.round(dur / 4), 6, 16);
-  let segs = [], title = 'Swim', main;
+  const budget = dur * 60;
+  // Every type buys its main work from the session's own seconds, the way
+  // Long always has: the old shared reps formula ignored the athlete's CSS
+  // entirely, so a slow swimmer's stated minutes bought far more built time
+  // than the card admitted (sizing catch 2026-07-18). The variant MENU never
+  // moves with dur — same seed + same inputs is the same session, and a
+  // trim/boost re-sizes inside the same format; only counts and metres flex.
+  const perRep = (key, m, rest) => (m / 100) * pc.swim[key] + rest;
+  const wuSeg = m => ({ label: 'Warm-up ' + m + ' m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', m) });
+  const cdSeg = m => ({ label: 'Cool-down ' + m + ' m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', m) });
+  let segs = [], title = 'Swim';
   if (type === 'Technique') {
     title = 'Technique Swim';
-    main = reps * 100;
-    segs = v(2) === 0
-      ? [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
-        ...drillSegs(pc, pickDrills(seed, intensity, 3, dur)),
-        { label: reps + ' × 100 m steady', detail: swimDetail(pc, 'steady', 'Z3'), ...swimRep(pc, 'steady', 'Z3', reps, 100, 10) },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
-      ]
-      : [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
-        ...drillSegs(pc, pickDrills(seed, intensity, 4, dur)),
-        { label: reps + ' × 100 m as 25 m drill / 75 m smooth', detail: swimDetail(pc, 'steady', 'Z3'), ...swimRep(pc, 'steady', 'Z3', reps, 100, 10) },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
-      ];
+    const sh = swimShoulders(pc, budget, 300, 200);
+    const perDrill = 2 * perRep('easy', 50, 15);
+    // The drill count is the variant's own (3 or 4); only a tiny budget trims
+    // it, never below two — drills are the session's purpose, so the steady
+    // set is what flexes, down to nothing on the smallest recovery swims.
+    const drillBudget = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
+    const nDrills = Math.min(v(2) === 0 ? 3 : 4, Math.max(2, Math.floor(drillBudget / perDrill)));
+    const mainSec = drillBudget - nDrills * perDrill;
+    // Rep distance scales so an elite hour keeps a sane count (the Long
+    // precedent: the count never has to lie).
+    let repM = 100, rest = 10, reps = Math.round(mainSec / perRep('steady', 100, 10));
+    if (reps > 16) { repM = 200; rest = 15; reps = Math.round(mainSec / perRep('steady', 200, 15)); }
+    reps = Math.max(0, reps);
+    const mainLabel = v(2) === 0
+      ? reps + ' × ' + repM + ' m steady'
+      : reps + ' × ' + repM + ' m as ' + (repM / 4) + ' m drill / ' + (repM * 3 / 4) + ' m smooth';
+    segs = [
+      wuSeg(sh[0]),
+      ...drillSegs(pc, pickDrills(seed, intensity, nDrills, dur)),
+      ...(reps > 0 ? [{ label: mainLabel, detail: swimDetail(pc, 'steady', 'Z3'), ...swimRep(pc, 'steady', 'Z3', reps, repM, rest) }] : []),
+      cdSeg(sh[1]),
+    ];
   } else if (type === 'Long') {
     title = 'Long Swim';
     // Volume from the session's own duration, not the shared reps formula
@@ -564,51 +590,67 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
     }
   } else if (type === 'CSS Intervals') {
     title = 'CSS Intervals';
-    const twos = Math.max(3, Math.round(reps / 2));
+    const sh = swimShoulders(pc, budget, 400, 200);
+    const avail = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
     const variant = v(3);
-    main = variant === 1 ? twos * 200 : reps * 100;
-    segs = [
-      [
-        { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 400) },
-        { label: reps + ' × 100 m @ CSS', detail: swimDetail(pc, 'css', 'Z4') + ' · 15 s rest', ...swimRep(pc, 'css', 'Z4', reps, 100, 15) },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
-      ],
-      [
-        { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 400) },
-        { label: twos + ' × 200 m @ CSS + 2 s/100 m', detail: swimDetail(pc, 'css', 'Z4') + ' · 20 s rest', ...swimRep(pc, 'css', 'Z4', twos, 200, 20) },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
-      ],
-      [
-        { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 400) },
-        { label: (reps * 2) + ' × 50 m fast', detail: swimDetail(pc, 'fast', 'Z5') + ' · 20 s rest', ...swimRep(pc, 'fast', 'Z5', reps * 2, 50, 20) },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
-      ],
-    ][variant];
+    let mains;
+    if (variant === 0) {
+      let repM = 100, rest = 15, n = Math.round(avail / perRep('css', 100, 15));
+      if (n > 16) { repM = 200; rest = 20; n = Math.round(avail / perRep('css', 200, 20)); }
+      n = Math.max(3, n);
+      mains = [{ label: n + ' × ' + repM + ' m @ CSS', detail: swimDetail(pc, 'css', 'Z4') + ' · ' + rest + ' s rest', ...swimRep(pc, 'css', 'Z4', n, repM, rest) }];
+    } else if (variant === 1) {
+      let repM = 200, rest = 20, n = Math.round(avail / perRep('css', 200, 20));
+      if (n > 12) { repM = 400; rest = 30; n = Math.round(avail / perRep('css', 400, 30)); }
+      n = Math.max(2, n);
+      mains = [{ label: n + ' × ' + repM + ' m @ CSS + 2 s/100 m', detail: swimDetail(pc, 'css', 'Z4') + ' · ' + rest + ' s rest', ...swimRep(pc, 'css', 'Z4', n, repM, rest) }];
+    } else {
+      // The sprint set caps at 24 × 50 m: past that the residual swims
+      // steady — aerobic support after the fast work, never an ever-longer
+      // string of all-out 50s.
+      const n = clamp(Math.round(avail / perRep('fast', 50, 20)), 4, 24);
+      const absorbM = Math.floor((avail - n * perRep('fast', 50, 20)) / pc.swim.steady) * 100;
+      mains = [{ label: n + ' × 50 m fast', detail: swimDetail(pc, 'fast', 'Z5') + ' · 20 s rest', ...swimRep(pc, 'fast', 'Z5', n, 50, 20) }];
+      if (absorbM >= 300) mains.push({ label: absorbM + ' m steady', detail: swimDetail(pc, 'steady', 'Z2'), ...swimBlock(pc, 'steady', 'Z2', absorbM) });
+    }
+    segs = [wuSeg(sh[0]), ...mains, cdSeg(sh[1])];
   } else if (type === 'Open Water') {
     title = 'Open Water Swim';
-    main = reps * 100;
+    const sh = swimShoulders(pc, budget, 300, 200);
+    const avail = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
+    // Race-effort volume takes ~60% of what remains; the rest is the skills
+    // block, which now carries its real minutes so the session sums honestly
+    // (it stays unstructured: skills are drilled by feel, not by the clock).
+    const n = clamp(Math.round(avail * 0.6 / perRep('css', 200, 30)), 2, 6);
+    const raceSet = { label: n + ' × 200 m @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes', ...swimRep(pc, 'css', 'Z4', n, 200, 30) };
+    const skillsMin = Math.max(0, Math.round(dur - sumMinutes([wuSeg(sh[0]), raceSet, cdSeg(sh[1])])));
     segs = [
-      { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
-      { label: '4 × 200 m @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes', ...swimRep(pc, 'css', 'Z4', 4, 200, 30) },
-      { label: 'Open-water skills', detail: 'Deep-water start, drafting, buoy turns — practise swimming straight' },
-      { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
+      wuSeg(sh[0]),
+      raceSet,
+      { label: 'Open-water skills', detail: 'Deep-water start, drafting, buoy turns — practise swimming straight', ...(skillsMin ? { min: skillsMin } : {}) },
+      cdSeg(sh[1]),
     ];
   } else { // Endurance / Race Pace
     title = type === 'Race Pace' ? 'Race-Pace Swim' : 'Endurance Swim';
-    main = reps * 100;
-    const third = Math.max(1, Math.round(reps / 3)) * 100;
-    segs = type === 'Endurance' && v(2) === 1
-      ? [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
+    const key = type === 'Race Pace' ? 'css' : 'steady';
+    const zone = type === 'Race Pace' ? 'Z4' : 'Z2';
+    const sh = swimShoulders(pc, budget, 300, 200);
+    const avail = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
+    if (type === 'Endurance' && v(2) === 1) {
+      const third = Math.max(100, Math.floor((avail - 90) / pc.swim.steady / 3) * 100);
+      segs = [
+        wuSeg(sh[0]),
         { label: '3 × ' + third + ' m steady · 30 s rest', detail: swimDetail(pc, 'steady', 'Z2'), ...swimRep(pc, 'steady', 'Z2', 3, third, 30) },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
-      ]
-      : [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
-        { label: (reps * 100) + ' m continuous', detail: swimDetail(pc, type === 'Race Pace' ? 'css' : 'steady', type === 'Race Pace' ? 'Z4' : 'Z2'), ...swimBlock(pc, type === 'Race Pace' ? 'css' : 'steady', type === 'Race Pace' ? 'Z4' : 'Z2', reps * 100) },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
+        cdSeg(sh[1]),
       ];
-    if (type === 'Endurance' && v(2) === 1) main = third * 3;
+    } else {
+      const mainM = Math.max(300, Math.floor(avail / pc.swim[key]) * 100);
+      segs = [
+        wuSeg(sh[0]),
+        { label: mainM + ' m continuous', detail: swimDetail(pc, key, zone), ...swimBlock(pc, key, zone, mainM) },
+        cdSeg(sh[1]),
+      ];
+    }
   }
   const dist = swimDistance(segs); // exact: summed prescribed metres, not a flat overhead guess
   return { title: title, segments: segs, distance: dist, unit: 'km' };

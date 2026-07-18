@@ -298,6 +298,66 @@ describe('auto-CSS proposal precedence', () => {
   });
 });
 
+describe('swim sizing honesty (sizing pass 2026-07-18)', () => {
+  // The shared reps formula ignored CSS pace, so a slow swimmer's stated
+  // minutes bought far more built time than the card admitted (a beginner
+  // "35 min" quality Technique swim built ~46 real minutes). Every type now
+  // sizes from its own budget, the way Long already did.
+  const profiles = [
+    { ...swimWeak, fitness: 'beginner', css100Sec: 160, raceType: 'sprint' },
+    { ...swimWeak, fitness: 'beginner', css100Sec: 170, raceType: 'olympic' },
+    swimWeak,
+    { ...swimWeak, fitness: 'elite', css100Sec: 105, raceType: 'full', raceDate: '2027-02-28' },
+  ];
+  const allSwims = prof => generatePlan(prof).weeks.flatMap(w => w.workouts)
+    .filter(x => x.discipline === 'swim' && !x.test && !x.race && x.durationMin > 0);
+
+  it('every generated swim of every type swims about its stated minutes', () => {
+    profiles.forEach(prof => allSwims(prof).forEach(x => {
+      const actual = x.segments.reduce((a, s) => a + segMinutes(s), 0);
+      const r = actual / x.durationMin;
+      const tag = prof.fitness + ' ' + x.type + ' ' + x.durationMin + 'min: ' + x.segments.map(s => s.label).join(' / ');
+      expect(r, tag).toBeGreaterThan(0.8);
+      expect(r, tag).toBeLessThan(1.18);
+    }));
+  });
+
+  it('rep distance scales before the count turns silly (Long precedent)', () => {
+    profiles.forEach(prof => allSwims(prof).forEach(x => x.segments.forEach(s => {
+      if (s.swim && s.swim.n) expect(s.swim.n, x.type + ' ' + x.durationMin + 'min: ' + s.label).toBeLessThanOrEqual(24);
+    })));
+  });
+
+  it('the variant menu never moves with duration (rebuild contract)', () => {
+    const p = generatePlan(swimWeak);
+    const wk = p.weeks.find(x => x.phase === 'Build' && !x.isRecovery);
+    const flavour = wo => /fast/.test(wo.segments[1].label) ? 'fast'
+      : /\+ 2 s/.test(wo.segments[1].label) ? 'twos' : 'css';
+    const kinds = [30, 45, 60, 75].map(d =>
+      flavour(addCustomWorkout(p, { discipline: 'swim', type: 'CSS Intervals', durationMin: d, dateISO: wk.start }).workout));
+    expect(new Set(kinds).size).toBe(1);
+  });
+
+  it('a deep-taper 15-minute swim still fits inside itself (shoulders step down, drills survive)', () => {
+    const p = generatePlan({ ...swimWeak, fitness: 'beginner', css100Sec: 170 });
+    const tech = addCustomWorkout(p, { discipline: 'swim', type: 'Technique', durationMin: 15, dateISO: p.weeks[1].start }).workout;
+    const actual = tech.segments.reduce((a, s) => a + segMinutes(s), 0);
+    expect(actual / 15).toBeLessThan(1.18);
+    expect(tech.segments.filter(s => /× 50 m /.test(s.label)).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('an Open Water session carries its skills minutes so the card sums honestly', () => {
+    const p = generatePlan(swimWeak);
+    const peak = p.weeks.find(x => x.phase === 'Peak' && !x.isRecovery);
+    const ow = addCustomWorkout(p, { discipline: 'swim', type: 'Open Water', durationMin: 45, dateISO: peak.start }).workout;
+    const skills = ow.segments.find(s => /skills/.test(s.label));
+    expect(skills.min).toBeGreaterThan(0);
+    const actual = ow.segments.reduce((a, s) => a + segMinutes(s), 0);
+    expect(actual / 45).toBeGreaterThan(0.9);
+    expect(actual / 45).toBeLessThan(1.1);
+  });
+});
+
 describe('Long Swim review', () => {
   const p = generatePlan(swimWeak);
   const w = p.weeks.find(x => x.phase === 'Build' && !x.isRecovery);
