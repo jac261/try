@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan, swapForLimiter, detectLimiterSwap, addCustomWorkout, easeWorkout, boostWorkout, segMinutes } from './plan.js';
+import { generatePlan, swapForLimiter, detectLimiterSwap, addCustomWorkout, easeWorkout, boostWorkout, trimWorkout, upgradePlanSegments, segMinutes } from './plan.js';
 import { cssFromTestIntervals, cssTestActivityFor, eftpProposal } from './eftp.js';
 import { intervalRows } from './review.js';
 
@@ -355,6 +355,172 @@ describe('swim sizing honesty (sizing pass 2026-07-18)', () => {
     const actual = ow.segments.reduce((a, s) => a + segMinutes(s), 0);
     expect(actual / 45).toBeGreaterThan(0.9);
     expect(actual / 45).toBeLessThan(1.1);
+  });
+});
+
+describe('swim coaching ceilings (sizing gauntlet 2026-07-18)', () => {
+  const elite = { ...swimWeak, fitness: 'elite', css100Sec: 90, raceType: 'olympic', raceDate: '2026-10-04' };
+  const allSwims = prof => generatePlan(prof).weeks.flatMap(w => w.workouts)
+    .filter(x => x.discipline === 'swim' && !x.test && !x.race && x.durationMin > 0);
+
+  it('never prescribes an unswimmable continuous block at race pace (blocker)', () => {
+    // Filling the budget honestly with one 4100 m continuous CSS effort is
+    // arithmetic, not coaching: past the ceiling the volume goes into reps.
+    [elite, { ...elite, fitness: 'advanced', css100Sec: 105 }, swimWeak].forEach(prof => {
+      allSwims(prof).filter(x => x.type === 'Race Pace').forEach(x => {
+        x.segments.forEach(s => {
+          const m = /^(\d+) m continuous$/.exec(s.label);
+          if (m) expect(+m[1], x.durationMin + 'min ' + s.label).toBeLessThanOrEqual(1500);
+        });
+      });
+    });
+  });
+
+  it('an Open Water session is mostly race-specific swimming, not skills filler', () => {
+    allSwims(elite).filter(x => x.type === 'Open Water').forEach(x => {
+      const skills = x.segments.find(s => /skills/.test(s.label));
+      const total = x.segments.reduce((a, s) => a + segMinutes(s), 0);
+      expect(segMinutes(skills) / total, x.durationMin + 'min').toBeLessThan(0.3);
+    });
+  });
+
+  it('a long Technique swim adds drill rounds instead of becoming an endurance set', () => {
+    allSwims(elite).filter(x => x.type === 'Technique' && x.durationMin >= 55).forEach(x => {
+      const drills = x.segments.filter(s => /× 50 m /.test(s.label));
+      expect(drills.length, x.durationMin + 'min').toBeGreaterThanOrEqual(5);
+    });
+  });
+
+  it('quality sessions keep a real warm-up in front of threshold work', () => {
+    const slow = { ...swimWeak, fitness: 'beginner', css100Sec: 170, raceType: 'sprint' };
+    [slow, swimWeak, elite].forEach(prof => {
+      allSwims(prof).filter(x => x.type === 'CSS Intervals' || x.type === 'Open Water').forEach(x => {
+        const m = /^Warm-up (\d+) m$/.exec(x.segments[0].label);
+        expect(+m[1], x.type + ' ' + x.durationMin + 'min').toBeGreaterThanOrEqual(200);
+      });
+    });
+  });
+
+  it('never prescribes the same drill twice in one session (round-2 catch)', () => {
+    // The drill block grows with the budget, but the catalog a level unlocks
+    // is finite (six for a beginner) and the rotation wraps, so the count has
+    // to respect the pool as well as the time.
+    const p = generatePlan({ ...swimWeak, fitness: 'beginner', css100Sec: 140 });
+    [40, 55, 70, 85, 120, 240].forEach(d => {
+      const w = addCustomWorkout(p, { discipline: 'swim', type: 'Technique', durationMin: d, dateISO: p.weeks[1].start }).workout;
+      const drills = w.segments.filter(s => /× 50 m /.test(s.label)).map(s => s.label);
+      expect(new Set(drills).size, d + 'min: ' + drills.join(' / ')).toBe(drills.length);
+    });
+  });
+
+  it('a short Long Swim steps its shoulders down like every other type (round-2 catch)', () => {
+    // Long was the last branch hardcoding 500 m of warm-up and cool-down,
+    // which for a slow swimmer alone outran a trimmed session's whole budget.
+    const p = generatePlan({ ...swimWeak, fitness: 'beginner', css100Sec: 180 });
+    [20, 25, 30, 40].forEach(d => {
+      const w = addCustomWorkout(p, { discipline: 'swim', type: 'Long', durationMin: d, dateISO: p.weeks[1].start }).workout;
+      const r = w.segments.reduce((a, s) => a + segMinutes(s), 0) / d;
+      expect(r, d + 'min: ' + w.segments.map(s => s.label).join(' / ')).toBeLessThan(1.18);
+    });
+  });
+
+  it('the broken Endurance format keeps the budget its rounding discarded (round-2 catch)', () => {
+    // Flooring the per-rep metres and then multiplying by three threw away up
+    // to 297 m — a 20% undershoot at a slow pace.
+    [140, 160, 180].forEach(css => {
+      const p = generatePlan({ ...swimWeak, fitness: 'beginner', css100Sec: css });
+      [35, 45, 55].forEach(d => {
+        const w = addCustomWorkout(p, { discipline: 'swim', type: 'Endurance', durationMin: d, dateISO: p.weeks[1].start }).workout;
+        const r = w.segments.reduce((a, s) => a + segMinutes(s), 0) / d;
+        expect(r, 'css' + css + ' ' + d + 'min: ' + w.segments.map(s => s.label).join(' / ')).toBeGreaterThan(0.85);
+      });
+    });
+  });
+
+  it('an interval session always prescribes a real set, never two reps', () => {
+    const slow = { ...swimWeak, fitness: 'beginner', css100Sec: 170, raceType: 'sprint' };
+    [slow, swimWeak, elite].forEach(prof => {
+      allSwims(prof).filter(x => x.type === 'CSS Intervals').forEach(x => {
+        x.segments.forEach(s => {
+          if (s.swim && s.swim.n && /@ CSS/.test(s.label)) expect(s.swim.n, x.durationMin + 'min ' + s.label).toBeGreaterThanOrEqual(3);
+        });
+      });
+    });
+  });
+});
+
+describe('two swims in a week are never the same session (role pass 2026-07-18)', () => {
+  // The profile that broke the contract before roles reached buildSwim: a deep
+  // recovery week pins seed to 0, collapses both swim slots to Technique, and
+  // round5(35 × load) and round5(45 × load) both land on 15 min. Type, seed and
+  // duration all matched, so the duration salt had nothing left to separate.
+  const recoveryCollide = {
+    name: 'S', raceType: 'full', fitness: 'beginner',
+    fivekSec: 1200, css100Sec: 90, ftp: 320, weightKg: 75,
+    daysPerWeek: 6, longDay: 5, startDate: '2026-06-01', raceDate: '2027-03-14',
+  };
+
+  it('the recovery week that used to collide now builds two distinct swims', () => {
+    const swims = generatePlan(recoveryCollide).weeks[2].workouts.filter(x => x.discipline === 'swim');
+    // Pin the collision preconditions too: if a future sizing change stops the
+    // two slots landing on the same type/seed/duration, this test would go on
+    // passing for the wrong reason and stop guarding anything.
+    expect(swims.map(x => x.type)).toEqual(['Technique', 'Technique']);
+    expect(swims.map(x => x.seed)).toEqual([0, 0]);
+    expect(swims.map(x => x.durationMin)).toEqual([15, 15]);
+    expect(swims.map(x => x.role)).toEqual(['easy', 'quality']);
+    expect(JSON.stringify(swims[0].segments)).not.toBe(JSON.stringify(swims[1].segments));
+  });
+
+  it('holds across the profile matrix, not just the one repro', () => {
+    ['sprint', 'olympic', 'half', 'full'].forEach(raceType => {
+      ['beginner', 'intermediate', 'advanced', 'elite'].forEach(fitness => {
+        [70, 90, 140, 170].forEach(css100Sec => {
+          const p = generatePlan({ ...recoveryCollide, raceType, fitness, css100Sec });
+          p.weeks.forEach(wk => {
+            const sw = wk.workouts.filter(x => x.discipline === 'swim' && !x.race && !x.test && x.durationMin > 0);
+            const seen = new Set();
+            sw.forEach(x => {
+              const sig = JSON.stringify(x.segments);
+              expect(seen.has(sig), `${raceType}/${fitness}/${css100Sec} wk${wk.index} ${x.type} ${x.durationMin}min`).toBe(false);
+              seen.add(sig);
+            });
+          });
+        });
+      });
+    });
+  });
+
+  // Role only earns its place if EVERY rebuild path passes it. A path that
+  // forgets rebuilds a quality swim as an easy one — a different session than
+  // the one it replaced, which is the rebuild-stability contract breaking.
+  it('every rebuild path preserves the role, so a rebuild reproduces its session', () => {
+    const p = generatePlan(recoveryCollide);
+    const quality = p.weeks[2].workouts.find(x => x.discipline === 'swim' && x.role === 'quality');
+    // Ease/trim/boost re-size the same session: rebuilding at the stored
+    // duration must return exactly the stored segments.
+    expect(boostWorkout(quality, p, 1).segments).toEqual(quality.segments);
+    expect(trimWorkout(quality, p, 1).segments).toEqual(quality.segments);
+    // And a rebuild is deterministic rather than merely different.
+    expect(trimWorkout(quality, p, 0.8).segments).toEqual(trimWorkout(quality, p, 0.8).segments);
+    expect(easeWorkout(quality, p).segments).toEqual(easeWorkout(quality, p).segments);
+  });
+
+  it('upgradePlanSegments is a no-op on a freshly generated plan', () => {
+    // The migration reads the STORED w.role. If it passed undefined, every
+    // quality swim in every cached plan would silently rebuild on the easy
+    // rotation — a plan changing under an athlete who changed nothing.
+    const p = generatePlan(recoveryCollide);
+    expect(upgradePlanSegments(p)).toBe(p);
+  });
+
+  it('a custom swim takes a defined role rather than undefined', () => {
+    const p = generatePlan(recoveryCollide);
+    const wk = p.weeks.find(x => x.phase === 'Build' && !x.isRecovery);
+    const custom = addCustomWorkout(p, { discipline: 'swim', type: 'Technique', durationMin: 40, dateISO: wk.start }).workout;
+    expect(custom.role).toBe('custom');
+    // Stored role and built session agree, so its own rebuilds are stable.
+    expect(trimWorkout(custom, p, 1).segments).toEqual(custom.segments);
   });
 });
 

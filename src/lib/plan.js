@@ -11,11 +11,23 @@ function computePaces(profile) {
   const fivek = profile.fivekSec || lvl.est5k;
   const p = fivek / 5;                             // sec per km at 5k effort
   const css = profile.css100Sec || lvl.estCss;
-  const ftp = profile.ftp || null;                 // watts (optional, no estimate)
+  // Bike watts: the athlete's own FTP, else a level x weight estimate so a new
+  // rider sees target ranges instead of RPE-only text. Needs a weight (W/kg is
+  // the only honest cross-athlete bike scale), so no weight means no watts,
+  // exactly as before. The estimate lives ONLY here: profile.ftp stays null
+  // until a real number arrives, because weakest.js, eftp.js, tuning.js and
+  // the fitness-history trend all read profile.ftp directly and would each be
+  // corrupted by a guess (design panel 2026-07-18).
+  const ftpEstimated = !profile.ftp && !!profile.weightKg;
+  const ftp = profile.ftp || (ftpEstimated ? Math.round(lvl.estWkg * profile.weightKg) : null);
   return {
     runEstimated: !profile.fivekSec,               // true when paces are level-based guesses
     swimEstimated: !profile.css100Sec,
     ftp: ftp,
+    ftpEstimated: ftpEstimated,
+    // Watts per kilo, for the distance model's speed scaling. Real FTP when
+    // there is one, else the level rung; null without a weight.
+    bikeWkg: profile.weightKg ? (profile.ftp ? profile.ftp / profile.weightKg : lvl.estWkg) : null,
     run: { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8 },
     swim: { easy: css + 12, steady: css + 6, css: css, fast: css - 6 },
   };
@@ -33,6 +45,9 @@ function swimDetail(pc, key, zone) {
 }
 function bikeDetail(pc, lo, hi, zone) {
   const z = ZONES[zone];
+  // An estimated FTP keeps the RPE band alongside the watts: the numbers are a
+  // starting point to ride by feel against, not a tested target.
+  if (pc.ftp && pc.ftpEstimated) return '~' + Math.round(pc.ftp * lo) + '–' + Math.round(pc.ftp * hi) + ' W · ' + zone + ' · ' + z.rpe;
   if (pc.ftp) return Math.round(pc.ftp * lo) + '–' + Math.round(pc.ftp * hi) + ' W · ' + zone + ' ' + z.name;
   return zone + ' ' + z.name + ' · ' + z.rpe;
 }
@@ -93,6 +108,27 @@ function runDistance(segs, pc) {
   const add = (min, zone) => { km += (min || 0) * 60 / (pc.run[ZONE_PACE[zone]] || pc.run.easy); };
   segs.forEach(s => { if (s.blocks) s.blocks.forEach(b => add(b.min, b.zone)); else add(s.min, s.zone); });
   return Math.round(km * 10) / 10;
+}
+// Bike distance from the session's own zone mix, the same shape as
+// runDistance: a threshold block covers more ground per minute than a
+// recovery spin, so an interval session and an endurance ride of equal
+// length no longer read as the same distance (they used to share one flat
+// 30 km/h guess). Speeds are km/h for a rider on flat-to-rolling roads,
+// scaled by the athlete's level through their W/kg estimate: a 4 W/kg rider
+// holds roughly a third more speed than a 2 W/kg rider for the same zone.
+// Still an estimate (no terrain, wind, draft or position model), so callers
+// keep distEst and the tilde.
+const ZONE_KMH = { Z1: 24, Z2: 28, Z3: 32, Z4: 35, Z5: 37 };
+const REF_WKG = 2.6; // the intermediate rung ZONE_KMH is written for
+function bikeDistance(segs, pc) {
+  const wkg = pc.bikeWkg || REF_WKG;
+  // Speed rises far more slowly than power (aerodynamic drag), so scale on a
+  // cube root: double the watts per kilo is about a quarter more speed.
+  const scale = Math.pow(wkg / REF_WKG, 1 / 3);
+  let km = 0;
+  const add = (min, zone) => { km += (min || 0) / 60 * (ZONE_KMH[zone] || ZONE_KMH.Z2) * scale; };
+  segs.forEach(s => { if (s.blocks) s.blocks.forEach(b => add(b.min, b.zone)); else add(s.min, s.zone); });
+  return Math.round(km);
 }
 function swimDistance(segs) {
   let m = 0;
@@ -433,8 +469,7 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
     Threshold: { label: 'Threshold effort', detail: bikeDetail(pc, 0.83, 0.9, 'Z3'), zone: 'Z3' },
   };
   segs = fitFlex(segs, dur, (type === 'Long' || type === 'Endurance') ? 'lead' : 'tail', FB[type] || FB.Tempo);
-  const dist = Math.round(dur / 60 * 30); // ~30 km/h estimate (no power-to-speed model)
-  return { title: title, segments: segs, distance: dist, unit: 'km', distEst: true };
+  return { title: title, segments: segs, distance: bikeDistance(segs, pc), unit: 'km', distEst: true };
 }
 
 // The drill catalog Technique sessions rotate through. cue is the one thing
@@ -465,10 +500,26 @@ const SWIM_DRILLS = [
 // list (gauntlet catch 2026-07-18); it moves on a trim/boost exactly like
 // the rest of the rebuilt structure does. Not the rep count: the reps clamp
 // floors both of a recovery week's swims to the same value and re-collides
-// them (re-verify catch, same day). Durations are round5 values from
-// distinct role bases, so same-week salts always differ and never by a
-// pool-size multiple. Level −1 keeps six fundamentals in every pool.
-function pickDrills(seed, intensity, n, salt) {
+// them (re-verify catch, same day). Level −1 keeps six fundamentals in every
+// pool.
+//   The hole the duration salt could not close (closed 2026-07-18 by the role
+// pass): a deep recovery week pins seed 0 and can shrink both swim slots to
+// the same round5 duration (a beginner full-distance plan lands both on
+// 15 min), so type, seed and duration all matched and the two cards came out
+// byte-identical. No salt arithmetic could separate them — the salt IS the
+// duration. The fix is a second, independent discriminator: the workout's
+// role, threaded into buildSwim from every path that builds or rebuilds a
+// session. Role changes the DIRECTION of the rotation, not the start — see
+// pickDrills for why no additive offset can do the job.
+// How many distinct drills this athlete's level unlocks. buildSwim needs it to
+// size a drill block without asking for more rounds than the catalog can fill:
+// pickDrills rotates modulo the pool, so an over-long request silently repeats
+// a drill (gauntlet catch 2026-07-18 — a beginner's pool is six, and a 70 min
+// custom Technique swim asked for seven).
+function drillPoolSize(intensity) {
+  return SWIM_DRILLS.filter(d => d.level <= (intensity || 0)).length;
+}
+function pickDrills(seed, intensity, n, salt, role) {
   const pool = SWIM_DRILLS.filter(d => d.level <= (intensity || 0));
   // The salt adds AFTER the multiply ((seed + salt) * n would collapse two
   // odd salts whenever n divides the pool size), and on the round5 grid:
@@ -476,8 +527,23 @@ function pickDrills(seed, intensity, n, salt) {
   // same-week pair differs by exactly the pool size (35 vs 45 min against
   // the 10-drill pool re-collided; second re-verify catch). Divided by 5,
   // same-week gaps of 5-15 min can never hit a pool-size multiple.
-  const start = ((seed || 0) * n + Math.round((salt || 0) / 5)) % pool.length;
-  return Array.from({ length: n }, (_, i) => pool[(start + i) % pool.length]);
+  //   Role walks the catalog BACKWARDS for a quality session. Direction, not
+  // another offset, because every additive scheme — a role constant, a stride,
+  // anything — is a congruence mod pool.length and therefore collides for some
+  // (pool size, duration gap) pair; this comment block already records two such
+  // re-collisions. A stride cannot even separate the roles in principle: every
+  // integer coprime to 6 is 1 or 5 mod 6, so on the beginner pool of six there
+  // are only two usable strides and stride 7 IS stride 1. A forward list and a
+  // backward list share at most their first entry and differ at the second for
+  // every pool larger than two; the pools are 6, 10 and 12, and n is floored at
+  // two, so the two lists can never be equal whatever the seed and duration do.
+  const back = role === 'quality';
+  // The shifted start is cosmetic, not the guarantee: it stops the week's two
+  // Technique swims opening on the same drill. Direction is what makes them
+  // provably different.
+  const start = ((seed || 0) * n + Math.round((salt || 0) / 5) + (back ? 1 : 0)) % pool.length;
+  const at = i => pool[(((start + (back ? -i : i)) % pool.length) + pool.length) % pool.length];
+  return Array.from({ length: n }, (_, i) => at(i));
 }
 // One segment per drill, so every drill carries its own focus cue (and names
 // its kit) instead of a comma list with nowhere to explain itself.
@@ -488,17 +554,28 @@ function drillSegs(pc, drills) {
     ...swimRep(pc, 'easy', 'Z1', 2, 50, 15),
   }));
 }
-// Classic shoulders whenever the budget can afford them; a deep-taper or
-// recovery-week swim at a slow CSS (15-20 stated minutes) steps them down
-// rather than spending half the session before the main work starts. The
-// 45% line keeps the full shoulders on every normal session and only
-// engages on the smallest builds.
-function swimShoulders(pc, budgetSec, wuM, cdM) {
-  const steps = [[wuM, cdM], [200, 100], [100, 100]];
-  return steps.find(s => ((s[0] + s[1]) / 100) * pc.swim.easy <= budgetSec * 0.45) || [100, 100];
+// Classic shoulders whenever the budget can afford them, stepping down when
+// the fixed 500 m would eat more than 45% of the session before the main work
+// starts. That is a function of budget AND pace, not of phase: a short taper
+// swim steps down, but so does an ordinary 25-30 min session for a slow
+// swimmer, whose 500 m costs 14+ minutes (gauntlet catch 2026-07-18 — the
+// earlier note here claimed taper/recovery only, which the generated plans
+// contradict). `floorWu` holds a real warm-up in front of Z4/Z5 work: easing
+// into threshold swimming off 100 m is below any coaching floor, so a quality
+// session gives the rep count up before it gives up the warm-up.
+function swimShoulders(pc, budgetSec, wuM, cdM, floorWu) {
+  const steps = [[wuM, cdM], [Math.max(200, floorWu || 0), 100], [floorWu || 100, 100]];
+  return steps.find(s => ((s[0] + s[1]) / 100) * pc.swim.easy <= budgetSec * 0.45) || steps[steps.length - 1];
 }
 
-function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
+// `role` is the workout's slot in the week (easy/quality/long, or custom for a
+// user-added session). It exists here purely as a discriminator of last resort:
+// a recovery week pins seed to 0 and can collapse both swim slots to the same
+// type AND the same round5 duration, leaving buildSwim no other input that
+// differs. It must be passed by EVERY path that builds or rebuilds a session,
+// or a rebuild returns a different session than the one it replaces and the
+// rebuild-stability contract breaks.
+function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
   const v = n => (seed || 0) % n;
   const budget = dur * 60;
   // Every type buys its main work from the session's own seconds, the way
@@ -515,11 +592,19 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
     title = 'Technique Swim';
     const sh = swimShoulders(pc, budget, 300, 200);
     const perDrill = 2 * perRep('easy', 50, 15);
-    // The drill count is the variant's own (3 or 4); only a tiny budget trims
-    // it, never below two — drills are the session's purpose, so the steady
-    // set is what flexes, down to nothing on the smallest recovery swims.
+    // Drill volume grows with the session instead of staying at the variant's
+    // 3 or 4 rounds: letting the steady set absorb every extra minute turned a
+    // long Technique swim into an Endurance session wearing the wrong title
+    // (an elite hour built 300 m of drills against 2600 m of steady — gauntlet
+    // catch 2026-07-18). Roughly a third of the post-shoulder budget goes to
+    // drills, floored at the variant's own count where affordable and at two
+    // on the smallest swims, and capped at what the athlete's level actually
+    // unlocks so the rotation never wraps and prescribes one drill twice.
     const drillBudget = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
-    const nDrills = Math.min(v(2) === 0 ? 3 : 4, Math.max(2, Math.floor(drillBudget / perDrill)));
+    const base = v(2) === 0 ? 3 : 4;
+    const affordable = Math.floor(drillBudget / perDrill);
+    const ceiling = Math.min(8, drillPoolSize(intensity), Math.max(2, affordable));
+    const nDrills = clamp(Math.max(base, Math.round(drillBudget * 0.35 / perDrill)), 2, Math.max(2, ceiling));
     const mainSec = drillBudget - nDrills * perDrill;
     // Rep distance scales so an elite hour keeps a sane count (the Long
     // precedent: the count never has to lie).
@@ -531,17 +616,31 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
       : reps + ' × ' + repM + ' m as ' + (repM / 4) + ' m drill / ' + (repM * 3 / 4) + ' m smooth';
     segs = [
       wuSeg(sh[0]),
-      ...drillSegs(pc, pickDrills(seed, intensity, nDrills, dur)),
+      ...drillSegs(pc, pickDrills(seed, intensity, nDrills, dur, role)),
       ...(reps > 0 ? [{ label: mainLabel, detail: swimDetail(pc, 'steady', 'Z3'), ...swimRep(pc, 'steady', 'Z3', reps, repM, rest) }] : []),
       cdSeg(sh[1]),
     ];
   } else if (type === 'Long') {
     title = 'Long Swim';
     // Volume from the session's own duration, not the shared reps formula
-    // (which saturates at ~64 min): whatever time remains after the fixed
-    // warm-up and cool-down is swum at steady pace, floored to a clean 100 m.
-    const wuCdSec = (300 / 100 + 200 / 100) * pc.swim.easy;
-    const mainM = Math.max(400, Math.floor((dur * 60 - wuCdSec) / pc.swim.steady) * 100);
+    // (which saturates at ~64 min): whatever time remains after the warm-up
+    // and cool-down is swum at steady pace, floored to a clean 100 m. Long
+    // takes its shoulders from the shared helper like every other type — it
+    // was the one branch still hardcoding 500 m, which for a slow swimmer
+    // costs 16 min and pushed a trimmed 20-minute session 44% over its own
+    // budget (gauntlet catch 2026-07-18). No warm-up floor: this is Z2 work,
+    // so there is no threshold effort to ease into.
+    const sh = swimShoulders(pc, budget, 300, 200);
+    const wuCdSec = ((sh[0] + sh[1]) / 100) * pc.swim.easy;
+    const mainSec = budget - wuCdSec;
+    // `mainM` is swimming metres only, so it sizes the CONTINUOUS variant
+    // exactly. The broken variants must buy their rest out of the same
+    // seconds — costing it nowhere pushed a 35-minute long 16% over, because
+    // four rests are four minutes nobody budgeted (gauntlet catch
+    // 2026-07-18). Each of them re-derives its metres from `mainSec` net of
+    // the rest its own shape adds.
+    const mainM = Math.max(200, Math.round(mainSec / pc.swim.steady) * 100);
+    const metresIn = sec => Math.max(100, Math.round(sec / pc.swim.steady) * 100);
     // The hardest format follows the run/bike long precedent: broken formats
     // with structure arrive in Build for athletes past beginner; Base keeps
     // the honest continuous and gently broken aerobic versions.
@@ -552,32 +651,39 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
       // steady band, so the session must never coach a split the review would
       // then call hot (gauntlet catch 2026-07-18).
       segs = [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
+        wuSeg(sh[0]),
         { label: mainM + ' m continuous', detail: swimDetail(pc, 'steady', 'Z2') + ' · settle in and hold a smooth, even rhythm', ...swimBlock(pc, 'steady', 'Z2', mainM) },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
+        cdSeg(sh[1]),
       ];
     } else if (variant === 1) {
       // Rep size scales with the budget so the rep count never has to lie:
       // the old 2..8 clamp swam double a small budget and truncated a big one
       // (gauntlet catch 2026-07-18). 800s keep an elite 90-min long at a sane
       // rep count; the floor of one rep only appears on tiny custom picks.
-      const repM = mainM >= 2400 ? 800 : 400;
-      const n4 = Math.max(1, Math.round(mainM / repM));
+      // The COUNT is chosen first and the rep distance follows from what is
+      // left after that many rests, so the set actually totals the main:
+      // picking the distance first and rounding the count re-inflated a small
+      // budget by half a rep (gauntlet catch 2026-07-18).
+      const rest = mainM >= 2400 ? 30 : 20;
+      const n4 = Math.max(1, Math.round(mainSec / (((mainM >= 2400 ? 800 : 400) / 100) * pc.swim.steady + rest)));
+      const repM = metresIn((mainSec - n4 * rest) / n4);
       segs = [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
-        { label: n4 + ' × ' + repM + ' m steady', detail: swimDetail(pc, 'steady', 'Z2') + ' · ' + (repM >= 600 ? 30 : 20) + ' s rest', ...swimRep(pc, 'steady', 'Z2', n4, repM, repM >= 600 ? 30 : 20) },
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
+        wuSeg(sh[0]),
+        { label: n4 + ' × ' + repM + ' m steady', detail: swimDetail(pc, 'steady', 'Z2') + ' · ' + rest + ' s rest', ...swimRep(pc, 'steady', 'Z2', n4, repM, rest) },
+        cdSeg(sh[1]),
       ];
     } else {
       // Pyramid at one steady pace: the shape keeps a long session mentally
       // small without turning aerobic volume into an interval day. Shoulders
       // round to 50 m and the middle step absorbs the remainder, so the total
       // tracks the budget instead of a hard 9-unit grid (gauntlet catch).
-      const u = Math.max(50, Math.round(mainM / 9 / 50) * 50);
-      const mid = Math.max(u, Math.round((mainM - 6 * u) / 50) * 50);
+      // Five steps means five rests to pay for before any metres are set.
+      const pyrM = metresIn(mainSec - 5 * 20);
+      const u = Math.max(50, Math.round(pyrM / 9 / 50) * 50);
+      const mid = Math.max(u, Math.round((pyrM - 6 * u) / 50) * 50);
       const steps = [u, 2 * u, mid, 2 * u, u];
       segs = [
-        { label: 'Warm-up 300 m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', 300) },
+        wuSeg(sh[0]),
         ...steps.map((m, i) => {
           const rest = m >= 600 ? 30 : 20;
           return {
@@ -585,12 +691,12 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
             ...swimRep(pc, 'steady', 'Z2', 1, m, rest),
           };
         }),
-        { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', 200) },
+        cdSeg(sh[1]),
       ];
     }
   } else if (type === 'CSS Intervals') {
     title = 'CSS Intervals';
-    const sh = swimShoulders(pc, budget, 400, 200);
+    const sh = swimShoulders(pc, budget, 400, 200, 200);
     const avail = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
     const variant = v(3);
     let mains;
@@ -602,7 +708,10 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
     } else if (variant === 1) {
       let repM = 200, rest = 20, n = Math.round(avail / perRep('css', 200, 20));
       if (n > 12) { repM = 400; rest = 30; n = Math.round(avail / perRep('css', 400, 30)); }
-      n = Math.max(2, n);
+      // A "2 × 200" is a warm-up with ambitions, not an interval session: when
+      // the budget cannot hold three of the longer rep, drop back to 100s and
+      // keep a real set (gauntlet catch 2026-07-18).
+      if (n < 3) { repM = 100; rest = 15; n = Math.max(3, Math.round(avail / perRep('css', 100, 15))); }
       mains = [{ label: n + ' × ' + repM + ' m @ CSS + 2 s/100 m', detail: swimDetail(pc, 'css', 'Z4') + ' · ' + rest + ' s rest', ...swimRep(pc, 'css', 'Z4', n, repM, rest) }];
     } else {
       // The sprint set caps at 24 × 50 m: past that the residual swims
@@ -616,17 +725,34 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
     segs = [wuSeg(sh[0]), ...mains, cdSeg(sh[1])];
   } else if (type === 'Open Water') {
     title = 'Open Water Swim';
-    const sh = swimShoulders(pc, budget, 300, 200);
+    const sh = swimShoulders(pc, budget, 300, 200, 200);
     const avail = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
-    // Race-effort volume takes ~60% of what remains; the rest is the skills
-    // block, which now carries its real minutes so the session sums honestly
-    // (it stays unstructured: skills are drilled by feel, not by the clock).
-    const n = clamp(Math.round(avail * 0.6 / perRep('css', 200, 30)), 2, 6);
-    const raceSet = { label: n + ' × 200 m @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes', ...swimRep(pc, 'css', 'Z4', n, 200, 30) };
-    const skillsMin = Math.max(0, Math.round(dur - sumMinutes([wuSeg(sh[0]), raceSet, cdSeg(sh[1])])));
+    // The skills block is a fixed slice of coaching, not the session's
+    // remainder: capping the race set at six 200s left an elite peak session
+    // two-thirds unstructured filler, in the race-prep swim that matters most
+    // (gauntlet catch 2026-07-18). Skills take ~15% of the post-shoulder time
+    // within a 6-12 min band, and the race-effort reps lengthen — 200 m to
+    // 400 m — so the rest of the session is real race-specific volume at a
+    // sane rep count. The block stays unstructured: skills are drilled by
+    // feel, not by the clock, but it carries its minutes so the card sums.
+    const skillsSec = clamp(avail * 0.15, 6 * 60, 12 * 60);
+    // Race effort takes about 60% of the post-shoulder time and no more: an
+    // open-water day is race rehearsal, not a time trial, so whatever the
+    // reps and the skills block leave over is swum as aerobic support rather
+    // than lengthening the hard set.
+    const raceSec = Math.min(avail - skillsSec, avail * 0.6);
+    let repM = 200, n = Math.round(raceSec / perRep('css', 200, 30));
+    if (n > 6) { repM = 400; n = Math.round(raceSec / perRep('css', 400, 30)); }
+    n = Math.max(2, n);
+    const raceSet = { label: n + ' × ' + repM + ' m @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes', ...swimRep(pc, 'css', 'Z4', n, repM, 30) };
+    const easySec = avail - skillsSec - n * perRep('css', repM, 30);
+    const easyM = Math.floor(easySec / pc.swim.steady) * 100;
+    const skillsMin = Math.max(0, Math.round(dur - sumMinutes([wuSeg(sh[0]), raceSet, cdSeg(sh[1])])
+      - (easyM >= 300 ? (easyM / 100) * pc.swim.steady / 60 : 0)));
     segs = [
       wuSeg(sh[0]),
       raceSet,
+      ...(easyM >= 300 ? [{ label: easyM + ' m steady', detail: swimDetail(pc, 'steady', 'Z2') + ' · relaxed, keep sighting', ...swimBlock(pc, 'steady', 'Z2', easyM) }] : []),
       { label: 'Open-water skills', detail: 'Deep-water start, drafting, buoy turns — practise swimming straight', ...(skillsMin ? { min: skillsMin } : {}) },
       cdSeg(sh[1]),
     ];
@@ -634,22 +760,50 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0) {
     title = type === 'Race Pace' ? 'Race-Pace Swim' : 'Endurance Swim';
     const key = type === 'Race Pace' ? 'css' : 'steady';
     const zone = type === 'Race Pace' ? 'Z4' : 'Z2';
-    const sh = swimShoulders(pc, budget, 300, 200);
+    // Race Pace earns the quality warm-up floor for the same reason CSS
+    // Intervals does; Endurance is Z2 and does not need one.
+    const sh = swimShoulders(pc, budget, 300, 200, type === 'Race Pace' ? 200 : 0);
     const avail = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
     if (type === 'Endurance' && v(2) === 1) {
-      const third = Math.max(100, Math.floor((avail - 90) / pc.swim.steady / 3) * 100);
+      // Round, never floor: flooring the PER-REP metres and then multiplying
+      // by three threw away up to 297 m — nine minutes for a slow swimmer, a
+      // 20% undershoot on a 45-minute session, which is the exact dishonesty
+      // this pass exists to remove (gauntlet catch 2026-07-18). The rep sits
+      // on a 50 m grid rather than 100 m because on a short session the
+      // coarser grid cannot get close enough: three reps each rounded down a
+      // half-length is most of the shortfall on a 20-minute swim, and every
+      // pool this prescribes for is 25 m or 50 m anyway.
+      const third = Math.max(50, Math.round((avail - 90) / pc.swim.steady * 2 / 3) * 50);
       segs = [
         wuSeg(sh[0]),
         { label: '3 × ' + third + ' m steady · 30 s rest', detail: swimDetail(pc, 'steady', 'Z2'), ...swimRep(pc, 'steady', 'Z2', 3, third, 30) },
         cdSeg(sh[1]),
       ];
     } else {
-      const mainM = Math.max(300, Math.floor(avail / pc.swim[key]) * 100);
-      segs = [
-        wuSeg(sh[0]),
-        { label: mainM + ' m continuous', detail: swimDetail(pc, key, zone), ...swimBlock(pc, key, zone, mainM) },
-        cdSeg(sh[1]),
-      ];
+      const mainM = Math.max(300, Math.round(avail / pc.swim[key]) * 100);
+      // A continuous main has a coaching ceiling, and it is much lower at race
+      // pace than at steady: CSS is a ~30-40 min sustainable effort, so an
+      // unbroken 4100 m of it is not a session anyone can swim. Past the
+      // ceiling the same volume is prescribed as long reps with short rest —
+      // still race-pace work, now swimmable (gauntlet blocker 2026-07-18; the
+      // old shared formula hid this behind a 1600 m cap).
+      const ceiling = type === 'Race Pace' ? 1500 : 3000;
+      if (mainM <= ceiling) {
+        segs = [
+          wuSeg(sh[0]),
+          { label: mainM + ' m continuous', detail: swimDetail(pc, key, zone), ...swimBlock(pc, key, zone, mainM) },
+          cdSeg(sh[1]),
+        ];
+      } else {
+        const repM = type === 'Race Pace' ? 400 : 1000;
+        const rest = type === 'Race Pace' ? 20 : 30;
+        const n = Math.max(2, Math.round(avail / perRep(key, repM, rest)));
+        segs = [
+          wuSeg(sh[0]),
+          { label: n + ' × ' + repM + ' m ' + (type === 'Race Pace' ? 'at race pace' : 'steady'), detail: swimDetail(pc, key, zone) + ' · ' + rest + ' s rest', ...swimRep(pc, key, zone, n, repM, rest) },
+          cdSeg(sh[1]),
+        ];
+      }
     }
   }
   const dist = swimDistance(segs); // exact: summed prescribed metres, not a flat overhead guess
@@ -963,10 +1117,13 @@ function baseDuration(discipline, role, race) {
 function intensityOf(profile) {
   return (FITNESS[profile && profile.fitness] || FITNESS.intermediate).intensity;
 }
-function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0, raceType) {
+// `role` is appended last so every existing positional call stays valid; only
+// buildSwim reads it today (see its note). Any new rebuild path MUST pass the
+// stored w.role — omitting it silently rebuilds a quality swim as an easy one.
+function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0, raceType, role) {
   if (discipline === 'run') return buildRun(type, dur, pc, seed, phase, intensity);
   if (discipline === 'bike') return buildBike(type, dur, pc, seed, phase, intensity);
-  if (discipline === 'swim') return buildSwim(type, dur, pc, seed, phase, intensity);
+  if (discipline === 'swim') return buildSwim(type, dur, pc, seed, phase, intensity, role);
   if (discipline === 'brick') return buildBrick(dur, pc, phase, seed, raceType);
   if (discipline === 'strength') return buildStrength(phase);
   return { title: 'Session', segments: [], distance: null, unit: '' };
@@ -979,10 +1136,10 @@ export const easeWorkout = function (w, plan) {
   if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
   const easyType = disc === 'swim' ? 'Technique' : (disc === 'bike' ? 'Endurance' : 'Easy');
   const dur = Math.max(25, round5(w.durationMin * 0.65));
-  const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile));
+  const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), undefined, w.role);
   return Object.assign({}, w, {
     type: easyType, title: built.title, durationMin: dur,
-    distance: built.distance, unit: built.unit, segments: built.segments,
+    distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
     eased: true, easedFrom: w.type, key: false,
   });
 };
@@ -996,10 +1153,10 @@ export const trimWorkout = function (w, plan, factor) {
   if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
   const dur = Math.max(20, round5(w.durationMin * factor));
   if (dur >= w.durationMin) return w;
-  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile));
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), undefined, w.role);
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
-    distance: built.distance, unit: built.unit, segments: built.segments,
+    distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
     trimmed: true, trimmedFrom: w.durationMin,
   });
 };
@@ -1015,10 +1172,10 @@ export const boostWorkout = function (w, plan, factor) {
   const cap = disc === 'swim' && w.role === 'long' ? LONG_SWIM_CAP : Infinity;
   const dur = Math.min(round5(w.durationMin * factor), cap);
   if (dur <= w.durationMin) return w;
-  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile));
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), undefined, w.role);
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
-    distance: built.distance, unit: built.unit, segments: built.segments,
+    distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
     boosted: true, boostedFrom: w.durationMin,
   });
 };
@@ -1033,7 +1190,10 @@ export const addCustomWorkout = function (plan, { discipline, type, durationMin,
   const wk = plan.weeks.find(w => dateISO >= w.start && dateISO <= iso(addDays(w.start, 6)))
     || plan.weeks[plan.weeks.length - 1];
   const seed = wk.isRecovery ? 0 : wk.index;
-  const built = buildWorkout(discipline, type, durationMin, plan.paces, wk.phase, seed, intensityOf(plan.profile), plan.profile.raceType);
+  // A user-added session has no slot in the week's template, so it takes the
+  // same literal 'custom' role it is stored with — never undefined, or the
+  // rebuild paths above (which read w.role) would disagree with this build.
+  const built = buildWorkout(discipline, type, durationMin, plan.paces, wk.phase, seed, intensityOf(plan.profile), plan.profile.raceType, 'custom');
   const dur = built.durationMin || durationMin; // strength fixes its own length
   const key = 'x-' + dateISO.split('-').join('');
   const taken = new Set(wk.workouts.map(x => x.id));
@@ -1042,7 +1202,7 @@ export const addCustomWorkout = function (plan, { discipline, type, durationMin,
   const workout = {
     id: key + '-' + n, week: wk.index, seed: seed, phase: wk.phase, date: dateISO,
     discipline: discipline, role: 'custom', type: type, title: built.title,
-    durationMin: dur, distance: built.distance, unit: built.unit,
+    durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
     segments: built.segments, custom: true,
   };
   const weeks = plan.weeks.map(w => w.index !== wk.index ? w
@@ -1170,14 +1330,34 @@ export const upgradePlanSegments = function (plan) {
       const brickStale = w.discipline === 'brick' && w.phase === 'Peak'
         && segsNow.some(s => /race pace/i.test(s.label || '')
           && s.zone !== (RACE_RUN_ANCHOR[plan.profile.raceType] || RACE_RUN_ANCHOR.olympic).zone);
+      // Bike distances built under the old flat 30 km/h guess never drift on
+      // minutes (distance was computed independently of the segments), so
+      // they would never rebuild on their own. Compare the stored number
+      // against what the zone-mix model says now and treat a real gap as
+      // stale, so one calendar cannot mix both models (design panel
+      // 2026-07-18). The tolerance keeps rounding noise from churning.
+      const bikeDistStale = w.discipline === 'bike' && w.distance != null
+        && segsNow.some(s => s.zone || s.blocks)
+        && Math.abs(w.distance - bikeDistance(segsNow, plan.paces)) > 1.01;
       const current = segsNow.some(s => s.zone || s.blocks)
         && !(w.discipline === 'swim' && segsNow.some(s => s.blocks && !s.swim))
-        && !driftsRunBike && !brickStale;
+        && !driftsRunBike && !brickStale && !bikeDistStale;
       if (current) return w;
-      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType);
+      // w.role is the stored role, and passing it is what keeps this pass a
+      // reference no-op on an already-current plan: generatePlan and this
+      // rebuild now feed buildSwim the same role, so they agree.
+      // On a plan cached BEFORE the role pass the rebuild does change the
+      // quality swims' drill lists — those were built on the roleless forward
+      // rotation and now come back on the backward one. That is this function
+      // doing its job rather than a regression: replacing the colliding pair is
+      // the entire point, and role has been stored on every generated workout
+      // since well before this change, so there is no plan old enough to be
+      // missing it. A workout that somehow lacks a role still rebuilds
+      // forwards, which is what the roleless code produced.
+      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType, w.role);
       if (!(built.segments || []).some(s => s.zone || s.blocks)) return w; // swims/strength stay as they are
       changed = true;
-      return Object.assign({}, w, { segments: built.segments, distance: built.distance });
+      return Object.assign({}, w, { segments: built.segments, distance: built.distance, distEst: !!built.distEst });
     });
     return Object.assign({}, week, { workouts: workouts });
   });
@@ -1416,11 +1596,11 @@ export const generatePlan = function (profile, opts) {
         s.disc === 'swim' && s.role === 'long' ? LONG_SWIM_CAP : Infinity);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
-      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType);
+      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType, s.role);
       workouts.push({
         id: w + '-' + d, week: w, phase: phase, date: date, seed: seed,
         discipline: s.disc, role: s.role, type: type, title: built.title,
-        durationMin: dur, distance: built.distance, unit: built.unit,
+        durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
         segments: built.segments, key: s.role === 'long' || s.role === 'brick',
       });
     }
@@ -1451,7 +1631,7 @@ export const generatePlan = function (profile, opts) {
         const built = buildTest(testKind, pc);
         workouts[ti] = Object.assign({}, workouts[ti], {
           type: 'Test', title: built.title, durationMin: built.durationMin,
-          distance: built.distance, unit: built.unit, segments: built.segments,
+          distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
           test: true, testKind: testKind, note: built.note, key: true,
         });
       }
@@ -1528,8 +1708,8 @@ export const generatePlan = function (profile, opts) {
           touched = true;
           const t = typeFor(wo.discipline, wo.role, wo.phase, true, fitness.intensity);
           const dur = Math.max(20, round5(wo.durationMin * 0.6));
-          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity, profile.raceType);
-          return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, unit: built.unit, segments: built.segments };
+          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity, profile.raceType, wo.role);
+          return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments };
         }
         return wo;
       }).filter(Boolean);

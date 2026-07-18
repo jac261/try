@@ -60,10 +60,26 @@ repeat loop on the watch (a `repeat_until_steps_cmplt` step pointing back to the
 
 Every swim type sizes its sets from the session's own minutes and the
 athlete's CSS-anchored paces, the way Long always did: rep counts, rep
-distances and (on the smallest taper/recovery sessions) the warm-up and
-cool-down all flex so the built session tracks its stated duration, while the
-weekly format rotation stays independent of duration — a trim or boost
-re-sizes the same format, never a different one.
+distances, drill rounds and the warm-up and cool-down all flex so the built
+session tracks its stated duration, while the weekly format rotation stays
+independent of duration — a trim or boost re-sizes the same format, never a
+different one. The warm-up and cool-down step down whenever the usual 500 m
+would take more than about 45% of the session, which depends on pace as much
+as length: short taper swims step down, and so do ordinary sessions for a
+slower swimmer. Sets also carry coaching ceilings independent of the budget —
+continuous race-pace swimming breaks into reps rather than growing without
+limit, and a session's stated character is protected (a long Technique swim
+adds drill rounds instead of becoming an endurance set).
+
+No week ever shows the same swim twice. That guarantee cannot rest on the
+session's duration alone: a deep recovery week collapses both swim slots to
+the same type and shrinks them to the same length, so the two cards have
+nothing left to tell them apart. Each swim therefore also knows its role in
+the week — the easy slot and the quality slot draw the drill catalog in
+opposite directions, so the two sessions differ whatever the sizing does.
+Role is carried on the session itself, which is what keeps a rebuild honest:
+easing, trimming or boosting a swim re-sizes the session it replaced rather
+than quietly swapping it for the other slot's.
 
 The Long swim never appears in a base weekly template: it enters a week only
 through the limiter frequency swap when swim is the athlete's limiter and
