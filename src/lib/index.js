@@ -22,3 +22,4 @@ export * from './watch.js';
 export * from './profile.js';
 export * from './eftp.js';
 export * from './runstats.js';
+export * from './coach.js';

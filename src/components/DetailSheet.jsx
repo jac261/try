@@ -38,7 +38,7 @@ const WHY_DISC = {
   'swim:Long': 'Steady, patient distance work. An even rhythm from the first length to the last: the volume does the work when your form holds it together.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed }) {
   // The rep table: lazily fetch the recording's interval analysis once the
   // session is done and matched. null → loading/none; [] handled by the lib.
   const [reps, setReps] = useState(null);
@@ -70,6 +70,18 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             (its old home borrowed its bottom gap from the review section's
             title), and the eased/trimmed/boosted notes below carry no top
             margin of their own. */}
+        {/* A past session that did not happen gets the one-tap "what
+            happened?" chips. The answer is the ONLY way a miss is ever
+            attributed (wellness never infers it), it feeds the weekly
+            decision, and answering is always optional. */}
+        {!done && !w.race && !w.test && onMissed && shown < T.iso(new Date()) && <div className="feel" style={{ marginTop: 4, marginBottom: 14 }}>
+          <div className="feel-q">This one didn't happen. What got in the way?</div>
+          <div className="feel-row missed">
+            {Object.entries(T.MISSED_REASONS).map(([k, lab]) =>
+              <button key={k} className={'feelbtn' + (missedReason === k ? ' on right' : '')}
+                onClick={() => onMissed(w.id, missedReason === k ? null : k)}>{lab}</button>)}
+          </div>
+        </div>}
         {done && !w.race && onFeel && <div className="feel" style={{ marginTop: 4, marginBottom: 14 }}>
           <div className="feel-q">How did it feel?</div>
           <div className="feel-row">

@@ -83,6 +83,11 @@ export function App({ storage, getToken, user }) {
   const [feels, setFeels] = useState(() => storage.loadFeels());
   const answerFeel = v => setFeels(storage.saveFeel(T.iso(new Date()), v));
   const [adjust, setAdjust] = useState(() => storage.load('adjust', {}));
+  // Coach brain (pass 1): the athlete's one-tap missed-session answers and
+  // the frozen weekly decisions. Both device-local; see storage.js.
+  const [missedReasons, setMissedReasons] = useState(() => storage.loadMissedReasons());
+  const answerMissed = (workoutId, reason) => setMissedReasons(storage.saveMissedReason(workoutId, reason, new Date().toISOString()));
+  const [coachLog, setCoachLog] = useState(() => storage.loadCoachLog());
   // Read-time overlays on the server-shaped wellness store: the morning
   // check-in answers, then Fitness/Fatigue/Form derived from the logged
   // sessions wherever measured data is absent or stale, so the charts,
@@ -122,6 +127,11 @@ export function App({ storage, getToken, user }) {
     sync.loadActivities(days).then(a => { if (a && seq === actSeq.current) setActivities(a); });
   };
   const [thresholds, setThresholds] = useState(null); // intervals.icu per-sport thresholds (fitness watcher)
+  // True once the post-hydration activity and wellness round-trips have
+  // SETTLED (either way). The coach freeze waits for this rather than a flat
+  // debounce: a slow network must delay the frozen verdict, never let it
+  // freeze half-loaded (re-verify catch 2026-07-20).
+  const [fetchesSettled, setFetchesSettled] = useState(false);
   // Auto-CSS: the one-shot interval fetch for a logged, matched swim CSS test.
   // Cached per activity id and fail-closed ({ actId, test: null } on any
   // fetch error or ambiguous laps), so the plan surface never re-fetches or
@@ -432,6 +442,41 @@ export function App({ storage, getToken, user }) {
     return () => { cancelled = true; };
   }, [plan, activities, log, moves, cssTest, sync]);
 
+  // Freeze the coach brain's weekly decision at the digest's own boundary:
+  // the first render that sees a reviewed week with no stored decision writes
+  // it once; every later render quotes the store. Progress shows the OPEN
+  // week live and labelled as in progress; only closed weeks freeze (design
+  // panel 2026-07-20).
+  useEffect(() => {
+    if (!hydrated) return;
+    const todayISO = T.iso(new Date());
+    // Same boundary AND same hour rule as the digest itself, or the two can
+    // disagree about which week is reviewed on a Sunday evening (gauntlet
+    // catch 2026-07-20).
+    const weekMonday = T.reviewedWeekMonday(todayISO, new Date().getHours());
+    // A stored decision only stands for the CURRENT plan: one frozen under a
+    // plan since replaced must not block refreezing or be quoted for this
+    // one (re-verify catch 2026-07-20).
+    const stored = weekMonday && coachLog[weekMonday];
+    const planId = (plan && plan.createdAt) || null;
+    if (!weekMonday || (stored && (stored.planCreatedAt ?? null) === planId)) return;
+    // Freeze only inside the digest's own window, and only after a settle
+    // delay: the post-hydration activity and wellness fetches land on later
+    // round-trips, and a verdict frozen from a half-loaded state would be
+    // wrong forever (gauntlet catch). Any dep change re-arms the timer with
+    // fresher data; the write happens at most once per week regardless.
+    if (!T.digestWindowOpen(weekMonday, todayISO)) return;
+    const t = setTimeout(() => {
+      const prevWeeks = Object.keys(coachLog).sort().reverse().map(k => coachLog[k]);
+      const decision = T.decideWeek({
+        plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
+        missedReasons, todayISO, weekMonday, prevWeeks,
+      });
+      setCoachLog(storage.saveCoachDecision(weekMonday, decision));
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [hydrated, plan, log, moves, adjust, adjustLog, recs, displayActivities, missedReasons, coachLog, storage]);
+
   // Fold a server wellness list into local state + the offline cache (server wins
   // per date; local-only days are pushed up). Also called when the Settings page
   // connects intervals.icu, so the readiness card updates without a reload.
@@ -461,6 +506,10 @@ export function App({ storage, getToken, user }) {
     // server still holds this exact id. Any other id is someone's real plan.
     np.endedServerId = plan.serverId != null ? plan.serverId : null;
     setLog({}); setMoves({}); setPendingMoves({}); setAdjust({});
+    // Missed-session answers are keyed by positional workout id and must die
+    // with the plan they described: a niggle answer re-attaching to the next
+    // plan's unrelated session would be a serious lie (gauntlet 2026-07-20).
+    setMissedReasons(storage.clearMissedReasons());
     // Stale workout GUIDs from the ended plan must not resolve for the next
     // plan's reused positional ids (the onRegenerate lesson): a truthy-but-
     // wrong gid() pushes at dead rows AND stops sweepStale's later re-push.
@@ -762,6 +811,14 @@ export function App({ storage, getToken, user }) {
   const cssFresh = cssTest && cssTest.date
     && T.daysBetween(cssTest.date, T.iso(new Date())) <= T.EFTP_RULES.freshDays;
   const eftp = T.eftpProposal({ activities, thresholds, plan, todayISO: T.iso(new Date()), cssTest: cssFresh ? cssTest : null });
+  // The open week's decision, computed live for Progress and labelled as in
+  // progress there; never stored (only closed weeks freeze).
+  const coachNow = T.decideWeek({
+    plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
+    missedReasons, todayISO: T.iso(new Date()),
+    weekMonday: T.iso(T.startOfWeekMonday(new Date())),
+    prevWeeks: Object.keys(coachLog).sort().reverse().map(k => coachLog[k]),
+  });
   const applyEftp = () => { if (eftp) retarget(eftp.retarget); };
   const logSpotted = () => {
     const at = new Date().toISOString();
@@ -786,8 +843,11 @@ export function App({ storage, getToken, user }) {
   // produced: the digest dedupes overlay rows against journal rows by `at`,
   // and two separate Date constructions would differ by milliseconds and
   // render an accepted proposal twice (quoted AND generic).
+  // factor and targets ride along for the coach brain's week verdicts (a
+  // recovery-depth trim reads differently from a 20% consolidation trim);
+  // older entries without them degrade to the generic reduction.
   const journalProposal = (p, at) => setAdjustLog(l =>
-    [...l, { at, kind: p.kind, headline: p.headline, why: p.why }].slice(-40));
+    [...l, { at, kind: p.kind, headline: p.headline, why: p.why, factor: p.factor ?? null, targets: p.targets || [], week: p.week ?? null, planCreatedAt: (plan && plan.createdAt) || null }].slice(-40));
   const applyWeekly = p => {
     if (!p) return;
     const at = new Date().toISOString();
@@ -847,6 +907,10 @@ export function App({ storage, getToken, user }) {
     // Clear them wholesale; completions above stay, per the documented intent.
     setMoves({});
     setAdjust({});
+    // Reshape changes the week structure, so positional ids change meaning:
+    // missed answers must not re-attach to different sessions (retarget keeps
+    // them: fitness-only updates preserve the calendar).
+    setMissedReasons(storage.clearMissedReasons());
     setRefToId({}); // regenerated id space: no stale GUID may resolve meanwhile
     setPlan(np);
     setEditPlan(false);
@@ -948,10 +1012,10 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} storage={storage} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} coach={coachNow} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
@@ -961,7 +1025,7 @@ export function App({ storage, getToken, user }) {
           // inside App), so EVERY overlay must be reset in state, not just in
           // storage — leftover in-memory pending moves or adjustments would
           // resurrect onto the new plan through the reused workout ids.
-          storage.clear(); setLog({}); setMoves({}); setAdjust({}); setRefToId({}); setPlan(null);
+          storage.clear(); setLog({}); setMoves({}); setAdjust({}); setMissedReasons({}); setRefToId({}); setPlan(null);
         } }}
         onReset={() => { if (confirm('Clear all completion progress?')) setLog({}); }}
         onExport={() => downloadICS(plan, moves)} onReleaseWurm={() => setWurm(true)}
@@ -991,7 +1055,7 @@ export function App({ storage, getToken, user }) {
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} />}
 
-      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)}
+      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed}
         activity={log[detail.id] ? recordingFor(detail) : null}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}

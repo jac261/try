@@ -49,6 +49,19 @@ describe('ProgressView renders in every mode', () => {
     expect(html).not.toContain('Race projections');
   });
 
+  it('renders the coach week rows when a decision is passed', async () => {
+    const plan = generatePlan(profile);
+    const coach = {
+      weekMonday: '2026-07-13', ruleVersion: 1, tracker: false,
+      overall: { decision: 'hold', headline: 'Hold steady. This workload is doing its job', evidence: [], conflicting: [] },
+      disciplines: { run: { decision: 'hold', headline: 'Hold steady', evidence: [], clean: true } },
+      progression: null,
+    };
+    const html = await mount({ plan, activities: null, coach });
+    expect(html).toContain('This week so far');
+    expect(html).toContain('Hold steady');
+  });
+
   it('tracker mode renders', async () => {
     const t = buildTrackerPlan(generatePlan(profile), '2026-07-13T10:00:00.000Z');
     const html = await mount({ plan: t, activities: [run('2026-07-14', 8)] });

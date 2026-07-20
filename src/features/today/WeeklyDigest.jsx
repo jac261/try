@@ -10,7 +10,7 @@ import { Icon } from '@/components/Icon.jsx';
  * 2026-07-15). Shows from Sunday evening through Wednesday, then lapses on
  * its own; dismiss hides this week's for good. Content is recomputed live —
  * only the seen flag persists. */
-export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, storage, todayISO }) {
+export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, storage, todayISO, coachLog }) {
   const [gone, setGone] = useState(false);
   const weekMonday = T.reviewedWeekMonday(todayISO, new Date().getHours());
   const seen = storage.load('digestSeenWeek', null);
@@ -19,6 +19,11 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
   if (!d) return null;
   const dismiss = () => { storage.save('digestSeenWeek', weekMonday); setGone(true); };
   const fmtD = s => T.fmtDate(s, { month: 'short', day: 'numeric' });
+  // The coach's call for the reviewed week: quoted from the frozen store or
+  // absent. Never recomputed here; a recompute presented as the original
+  // call would be a lie on a card whose whole job is the honest record
+  // (design panel 2026-07-20).
+  const coach = coachLog && coachLog[weekMonday];
 
   return (
     <>
@@ -54,7 +59,27 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
           </div>
         ))}
 
-        {!d.tracker && d.engine.map((e, n) => (
+        {coach && (
+          <div className="coach-card">
+            <div className="coach-head">
+              <span className={'coach-pill ' + coach.overall.decision}>{T.DECISION_LABELS[coach.overall.decision]}</span>
+              <b>{coach.overall.headline}</b>
+            </div>
+            {coach.overall.evidence.map((e, n) => (
+              <div className="coach-ev" key={n}><span className="coach-sig">{e.signal}</span>{e.reading}</div>
+            ))}
+            {coach.overall.conflicting.map((c, n) => (
+              <div className="coach-ev conflicting" key={'c' + n}><span className="coach-sig">worth noting</span>{c}</div>
+            ))}
+            {coach.progression && (
+              <div className="coach-ev"><span className="coach-sig">next up</span>{'when the ' + coach.progression.discipline + ' stays clean: ' + coach.progression.what}</div>
+            )}
+          </div>
+        )}
+
+        {/* an engine call already quoted inside the decision card must not
+            render a second time below it (gauntlet catch 2026-07-20) */}
+        {!d.tracker && d.engine.filter(e => !(coach && coach.overall.evidence.some(ev => ev.reading === e.headline))).map((e, n) => (
           <div className="testnote" key={n} style={{ marginTop: 10 }}>
             <Icon name="heartrate" size={18} />
             <span><b>{e.headline}</b>{e.why ? '. ' + e.why : ''}</span>

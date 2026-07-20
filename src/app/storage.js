@@ -35,7 +35,7 @@ export function storageForUser(userId) {
     save(k, v) { try { localStorage.setItem(ns + k, JSON.stringify(v)); } catch (e) {} },
     // Note: calibration and manualActivities deliberately survive clear() —
     // both are append-only diaries spanning plans, not current-plan state.
-    clear() { ['plan', 'log', 'moves', 'adjust', 'pendingMoves'].forEach(k => localStorage.removeItem(ns + k)); },
+    clear() { ['plan', 'log', 'moves', 'adjust', 'pendingMoves', 'missedReasons'].forEach(k => localStorage.removeItem(ns + k)); },
     loadManualActivities: loadManual,
     // Replace-by-id upsert, date-sorted, capped like calibration so the diary
     // can't grow unbounded (500 sessions ≈ well over a year of training).
@@ -59,6 +59,34 @@ export function storageForUser(userId) {
       a.sort((x, y) => (x.date < y.date ? -1 : 1));
       saveWellness(a);
       return a;
+    },
+    // The one-tap answer for a missed session, keyed by WORKOUT id (never the
+    // log dict: a bare log[id] means done all over the codebase, and never
+    // the daily feels map: that is keyed by date for the morning check-in).
+    // Local-only, like the calibration diary.
+    clearMissedReasons() { localStorage.removeItem(ns + 'missedReasons'); return {}; },
+    loadMissedReasons() { try { return JSON.parse(localStorage.getItem(ns + 'missedReasons') || '{}'); } catch (e) { return {}; } },
+    saveMissedReason(workoutId, reason, at) {
+      const m = this.loadMissedReasons();
+      if (reason == null) delete m[workoutId]; else m[workoutId] = { reason, at };
+      const ids = Object.keys(m);
+      // cap by entry count; a season of misses is well under this
+      ids.slice(0, Math.max(0, ids.length - 200)).forEach(id => delete m[id]);
+      try { localStorage.setItem(ns + 'missedReasons', JSON.stringify(m)); } catch (e) {}
+      return m;
+    },
+    // The coach brain's frozen weekly decisions, keyed by week Monday.
+    // Device-local by design (the digest quotes a stored decision verbatim or
+    // shows none; it never recomputes one and presents it as the original
+    // call). Capped in WEEKS, not entries: each week stores one bundle.
+    loadCoachLog() { try { return JSON.parse(localStorage.getItem(ns + 'coachLog') || '{}'); } catch (e) { return {}; } },
+    saveCoachDecision(weekMonday, decision) {
+      const m = this.loadCoachLog();
+      m[weekMonday] = decision;
+      const weeks = Object.keys(m).sort();
+      weeks.slice(0, Math.max(0, weeks.length - 26)).forEach(w => delete m[w]);
+      try { localStorage.setItem(ns + 'coachLog', JSON.stringify(m)); } catch (e) {}
+      return m;
     },
     loadFeels,
     saveFeel(date, value) {

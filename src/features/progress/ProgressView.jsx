@@ -7,7 +7,7 @@ import { AthleteStateStrip } from '@/features/wellness/AthleteStateStrip.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, activities, wellness, runLoad, recovery, onSupport, onWhatIf }) {
+export function ProgressView({ plan, log, activities, coach, wellness, runLoad, recovery, onSupport, onWhatIf }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -198,6 +198,20 @@ export function ProgressView({ plan, log, activities, wellness, runLoad, recover
                 : 'Balanced across sports' + (wl.missing.length ? ' (no reading yet for your ' + wl.missing.map(d => NAME[d].toLowerCase()).join(' or ') + ')' : '')
                   + (tracker ? '. A solid base to start your next plan from.' : ' — the plan stays even.')}
             </p>
+            {/* The coach brain's per-discipline lines for the OPEN week,
+                computed live and labelled so: only closed weeks freeze (the
+                digest quotes those). Folded into this card because it is the
+                one place that already speaks per discipline. */}
+            {coach && (Object.keys(coach.disciplines).length > 0 || coach.overall) && <div className="coach-week">
+              <div className="coach-week-head">This week so far <span className="muted">{T.DECISION_LABELS[coach.overall.decision]}</span></div>
+              {Object.entries(coach.disciplines).map(([d, v]) => (
+                <div className="coach-row" key={d}>
+                  <span className="coach-d">{NAME[d] || d}</span>
+                  <span className={'coach-pill ' + v.decision}>{T.DECISION_LABELS[v.decision]}</span>
+                  <span className="coach-why">{v.headline}</span>
+                </div>
+              ))}
+            </div>}
           </div>
         </>;
       })()}
