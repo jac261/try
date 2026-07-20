@@ -334,6 +334,27 @@ describe('generatePlan', () => {
     expect(p.paces).toBeTruthy();
   });
 
+  it('estimates bike watts from level × weight when the athlete has no FTP (regression: NaN ftp)', () => {
+    // f633453 swept the bike-pass plan.js reads (lvl.estWkg) onto this branch
+    // without the domain.js estWkg definition, so an estimated FTP came out NaN
+    // and bikeWkg undefined — silently killing the whole estimate path.
+    for (const fitness of ['beginner', 'intermediate', 'advanced', 'elite']) {
+      const withWeight = generatePlan({ ...profile('2026-09-23', '2026-07-01'), fitness, weightKg: 70 });
+      expect(Number.isNaN(withWeight.paces.ftp), `${fitness}: ftp is NaN`).toBe(false);
+      expect(withWeight.paces.ftp, `${fitness}: estimated ftp`).toBeGreaterThan(0);
+      expect(withWeight.paces.ftpEstimated, `${fitness}: flagged estimated`).toBe(true);
+      expect(withWeight.paces.bikeWkg, `${fitness}: bikeWkg`).toBeGreaterThan(0);
+    }
+    // No weight → no honest W/kg scale → the estimate stays off (null, not NaN).
+    const noWeight = generatePlan({ ...profile('2026-09-23', '2026-07-01'), weightKg: undefined });
+    expect(noWeight.paces.ftp).toBe(null);
+    expect(noWeight.paces.bikeWkg).toBe(null);
+    // A real FTP always wins over the estimate.
+    const real = generatePlan({ ...profile('2026-09-23', '2026-07-01'), weightKg: 70, ftp: 240 });
+    expect(real.paces.ftp).toBe(240);
+    expect(real.paces.ftpEstimated).toBe(false);
+  });
+
   it('marks race day on the EXACT race date across every offset (regression: ceil week count)', () => {
     const start = '2026-07-01';
     for (let d = 28; d <= 200; d += 1) {
