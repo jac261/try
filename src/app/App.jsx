@@ -595,7 +595,7 @@ export function App({ storage, getToken, user }) {
     const entry = {
       id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
       date: spec.dateISO, sport: spec.discipline, sessionType: spec.type,
-      durationMin: spec.durationMin,
+      durationMin: spec.durationMin, distanceKm: spec.distanceKm || null,
       trainingLoad: Math.round(T.estimateTss({ durationMin: spec.durationMin, type: spec.type })),
       feel: spec.feel || null, createdAt: new Date().toISOString(), editedAt: null,
     };
@@ -615,7 +615,7 @@ export function App({ storage, getToken, user }) {
         + T.fmtDate(spec.dateISO, { weekday: 'short', month: 'short', day: 'numeric' }) + '. Keep this change?')) return;
     const entry = {
       ...prev, date: spec.dateISO, sport: spec.discipline, sessionType: spec.type,
-      durationMin: spec.durationMin,
+      durationMin: spec.durationMin, distanceKm: spec.distanceKm || null,
       trainingLoad: Math.round(T.estimateTss({ durationMin: spec.durationMin, type: spec.type })),
       feel: spec.feel || null, editedAt: new Date().toISOString(),
     };
@@ -951,7 +951,7 @@ export function App({ storage, getToken, user }) {
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}

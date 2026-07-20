@@ -223,3 +223,63 @@ From the [roadmap](try-backend-ideas.md), once the proxy pattern works:
 4. Send me the **backend base URL** + the **auth scheme** you pick, and I'll wire the frontend.
 
 Thanks! Ping Jon (or drop it in the repo) with questions. — the Try frontend
+
+---
+
+## Asks — 18 July 2026 (additive fields on endpoints you already built)
+
+These are all **additive fields on live endpoints**, not new integrations. The
+intervals.icu passthrough already works and the frontend consumes it today:
+`GET /api/integrations/intervals-icu/activities`,
+`.../activities/{id}/intervals`, `.../thresholds`.
+
+1. **Per-ride power on the activities list.** The compact activity shape
+   currently carries `{ id, date, type, name, movingTimeSec, distance,
+   trainingLoad, rpe, feel, eftp }`. Adding **`averageWatts`** and
+   **`normalizedWatts`** (intervals.icu exposes both on the activity) would let
+   the app compute genuine power-derived training load for rides instead of the
+   duration-times-a-constant estimate it uses for all three sports today. This
+   is the single highest-value field for cycling credibility.
+2. **A power-curve endpoint** (or best-efforts array): best average watts for
+   5 s, 1 min, 5 min, 20 min, 60 min over a date range. Every serious cycling
+   app charts this and we cannot derive it client-side from the compact feed.
+3. **Swim stroke fields** on the interval rows: stroke count and SWOLF where
+   the watch recorded them. The swim pass shipped without any stroke-efficiency
+   metric purely because the data does not reach the client.
+4. **Conditional DELETE on plans** (repeat of the Phase 2 ask, still open):
+   `DELETE /api/plans/{id}` currently matches on id and status only, and
+   `ReplaceCurrentPlanAsync` reuses the same row id, so a delete decided on one
+   device can land on a plan another device created a moment later. Either a
+   version/updatedAt guard on the delete, or handing back a fresh row id on
+   replace, closes the last cross-device race.
+
+Item 1 unblocks the most user-visible work; 2 and 3 are chart and metric
+features that can follow. No rush on any of them, and nothing is blocked
+today — the app degrades honestly when a field is missing.
+
+---
+
+## Ask — 18 July 2026 (evening): PlanCatalog race types for single-sport plans
+
+The next frontend milestone is standalone running race plans (5k, 10k, half
+marathon, marathon). `PlanCatalog.RaceTypes` is a closed set and rejects
+unknown strings with a 400, which trips the client's sync-failure banner, so
+nothing can ship client-side until the catalog grows. The ask is one line:
+
+```csharp
+// add to RaceTypes:
+"run5k", "run10k", "runhalf", "runmarathon"
+```
+
+Two notes on the strings, so we never repaint them:
+
+1. They are deliberately `run`-prefixed. The bare words `half` and `full`
+   already mean the 70.3 and 140.6 triathlons in both catalogs, and a bare
+   `"half"` for a half marathon would VALIDATE fine and then silently resolve
+   to the triathlon's distances in every client lookup. The prefix matches the
+   client's existing `B_RACES.run5k` / `run10k` precedent.
+2. No new workout types are needed for this milestone: the run library's
+   existing type strings cover single-sport plans.
+
+Duathlon and aquathlon are a later conversation; not batching them in until
+the product design exists.

@@ -22,7 +22,10 @@ export function WorkoutRow({ w, done, onClick, eff, moved, profile, onToggle }) 
         {/* Race day's durationMin is a placeholder, and '0 min' next to the
             athlete's goal race read as a glitch (UI sim catch 2026-07-17);
             same reasoning as DetailSheet's race-guarded statline. */}
-        <div className="s">{w.type}{w.distance ? ' · ' + w.distance + ' ' + w.unit : ''}{w.race ? '' : ' · ' + T.fmtDuration(w.durationMin || 0)}</div>
+        {/* Estimated distances wear the tilde, like every estimated pace and
+            watt range does. distEst has been set by the builders since the
+            run pass but was never rendered (design panel 2026-07-18). */}
+        <div className="s">{w.type}{w.distance ? ' · ' + (w.distEst ? '~' : '') + w.distance + ' ' + w.unit : ''}{w.race ? '' : ' · ' + T.fmtDuration(w.durationMin || 0)}</div>
         {profile && <ProfileStrip w={w} />}
       </div>
       <div className="right">{T.fmtDate(eff || w.date, { weekday: 'short' })}</div>

@@ -17,7 +17,7 @@ export function Onboarding({ onCreate }) {
   // Pre-fill the name from the Clerk login (the app only renders this when signed in).
   const [f, setF] = useState(() => ({
     name: clerkDisplayName(user), raceType: 'olympic', fitness: 'intermediate', trainingDays: [0, 1, 3, 5, 6], longDay: 5,
-    raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '', css100: '', ftp: '', excludedDiscipline: null,
+    raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '', css100: '', ftp: '', weightKg: '', excludedDiscipline: null,
   }));
   // If Clerk loads the profile a beat later, fill the name once — never over typed input.
   useEffect(() => {
@@ -51,7 +51,8 @@ export function Onboarding({ onCreate }) {
       // state (gauntlet catch: type a 5k time, go back, exclude running)
       fivekSec: f.excludedDiscipline === 'run' ? null : T.parseTimeToSec(f.fivek),
       css100Sec: f.excludedDiscipline === 'swim' ? null : T.parseTimeToSec(f.css100),
-      ftp: f.ftp ? Number(f.ftp) : null, startDate: T.iso(new Date()),
+      ftp: f.ftp ? Number(f.ftp) : null, weightKg: f.weightKg ? Number(f.weightKg) : null,
+      startDate: T.iso(new Date()),
       excludedDiscipline: f.excludedDiscipline || null,
     });
   }
@@ -139,7 +140,14 @@ export function Onboarding({ onCreate }) {
             <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>}
           {f.excludedDiscipline === 'swim' && <p className="lead" style={{ fontSize: 13 }}>Swimming is out of your plan for now, so we will not ask for a swim pace.</p>}
           <label className="field"><span className="lab">Cycling FTP <span className="hint">optional · watts</span></span>
-            <input value={f.ftp} placeholder="e.g. 200" inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
+            <input value={f.ftp} placeholder={'e.g. ' + (T.saneWeightKg(f.weightKg) ? Math.round(T.FITNESS[f.fitness].estWkg * T.saneWeightKg(f.weightKg)) : 200)}
+              inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
+          {/* Weight belongs here, not only in Settings: without it a rider who
+              skips the optional FTP gets no watt targets at all, which is the
+              exact athlete the estimate exists for (gauntlet catch
+              2026-07-18). */}
+          <label className="field"><span className="lab">Weight <span className="hint">optional · kg — lets us estimate your bike targets</span></span>
+            <input value={f.weightKg} placeholder="e.g. 70" inputMode="decimal" onChange={e => set('weightKg', e.target.value)} /></label>
           <div className="row"><button className="btn ghost" onClick={() => setStep(1)}>Back</button>
             <button className="btn primary" onClick={finish}>Generate plan →</button></div>
         </>}

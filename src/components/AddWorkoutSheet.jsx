@@ -35,6 +35,10 @@ export function AddWorkoutSheet({ onAdd, onClose, initialDisc, dateISO, mode, ed
   const [type, setType] = useState(e0 ? e0.sessionType : TYPE_OPTIONS[d0][0]);
   const [dur, setDur] = useState(e0 ? e0.durationMin : DEFAULT_DUR[d0]);
   const [feel, setFeel] = useState(e0 ? e0.feel || null : null);
+  // Log mode only, and never for strength: the diary can carry how far you
+  // went, so the run volume chart is not blind to sensorless sessions
+  // (design panel 2026-07-18).
+  const [distKm, setDistKm] = useState(e0 && e0.distanceKm ? String(e0.distanceKm) : '');
   const pick = d => { setDisc(d); setType(TYPE_OPTIONS[d][0]); setDur(DEFAULT_DUR[d]); };
   // Only plan mode's strength has a generated structure to describe; a logged
   // strength session's load is duration-driven, so it keeps the stepper.
@@ -77,6 +81,11 @@ export function AddWorkoutSheet({ onAdd, onClose, initialDisc, dateISO, mode, ed
             <div className="aw-durv">{T.fmtDuration(dur)}</div>
             <button className="btn ghost sm" type="button" onClick={() => setDur(d => Math.min(240, d + 5))}><span className="sgn">+</span>5</button>
           </div>}
+        {log && disc !== 'strength' && <>
+          <div className="aw-lab">Distance <span className="hint" style={{ textTransform: 'none', letterSpacing: 0 }}>optional · km</span></div>
+          <input className="aw-dist" value={distKm} placeholder={disc === 'swim' ? 'e.g. 1.5' : disc === 'bike' ? 'e.g. 30' : 'e.g. 8'}
+            inputMode="decimal" onChange={e => setDistKm(e.target.value)} />
+        </>}
         {log && <>
           <div className="aw-lab">How did it feel? <span className="hint" style={{ textTransform: 'none', letterSpacing: 0 }}>optional</span></div>
           <div className="feel-row">
@@ -86,7 +95,7 @@ export function AddWorkoutSheet({ onAdd, onClose, initialDisc, dateISO, mode, ed
           </div>
         </>}
         <button className="btn primary" style={{ width: '100%', marginTop: 18 }} type="button"
-          onClick={() => onAdd({ discipline: disc, type, durationMin: dur, dateISO: target, feel })}>
+          onClick={() => onAdd({ discipline: disc, type, durationMin: dur, dateISO: target, feel, distanceKm: log && Number(distKm) > 0 ? Number(distKm) : null })}>
           {e0 ? 'Save changes' : (log ? 'Log for ' : 'Add to ') + dayLabel}</button>
         {log && !e0 && <div className="muted" style={{ fontSize: 11.5, textAlign: 'center', marginTop: 8 }}>Kept on this device.</div>}
         {e0 && onDelete && <button className="btn ghost remove" style={{ width: '100%', marginTop: 10 }} type="button"

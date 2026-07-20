@@ -1,7 +1,7 @@
 /* Try — periodized plan generator + structured workout builder */
 import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
-import { RACES, B_RACES, FITNESS, ZONES } from './domain.js';
+import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg } from './domain.js';
 import { weakBias, weakestLink } from './weakest.js';
 
 /* ---- paces derived from the athlete's baselines ---- */
@@ -12,22 +12,29 @@ function computePaces(profile) {
   const p = fivek / 5;                             // sec per km at 5k effort
   const css = profile.css100Sec || lvl.estCss;
   // Bike watts: the athlete's own FTP, else a level x weight estimate so a new
-  // rider sees target ranges instead of RPE-only text. Needs a weight (W/kg is
-  // the only honest cross-athlete bike scale), so no weight means no watts,
-  // exactly as before. The estimate lives ONLY here: profile.ftp stays null
-  // until a real number arrives, because weakest.js, eftp.js, tuning.js and
-  // the fitness-history trend all read profile.ftp directly and would each be
+  // rider sees target ranges instead of RPE-only text. Converting W/kg into
+  // absolute watts needs a weight, so no weight still means no watts, exactly
+  // as before. The estimate lives ONLY here: profile.ftp stays null until a
+  // real number arrives, because weakest.js, eftp.js, tuning.js and the
+  // fitness-history trend all read profile.ftp directly and would each be
   // corrupted by a guess (design panel 2026-07-18).
-  const ftpEstimated = !profile.ftp && !!profile.weightKg;
-  const ftp = profile.ftp || (ftpEstimated ? Math.round(lvl.estWkg * profile.weightKg) : null);
+  // An unusable weight means no estimate at all, rather than a confident
+  // wrong number projected onto the card as a coached target (500 kg used to
+  // read as a 975 W endurance ride).
+  const kg = saneWeightKg(profile.weightKg);
+  const ftpEstimated = !profile.ftp && !!kg;
+  const ftp = profile.ftp || (ftpEstimated ? Math.round(lvl.estWkg * kg) : null);
   return {
     runEstimated: !profile.fivekSec,               // true when paces are level-based guesses
     swimEstimated: !profile.css100Sec,
     ftp: ftp,
     ftpEstimated: ftpEstimated,
-    // Watts per kilo, for the distance model's speed scaling. Real FTP when
-    // there is one, else the level rung; null without a weight.
-    bikeWkg: profile.weightKg ? (profile.ftp ? profile.ftp / profile.weightKg : lvl.estWkg) : null,
+    // Watts per kilo, for the distance model's speed scaling. This is already
+    // a ratio, so unlike ftp above it needs NO weight to be meaningful: the
+    // level rung alone still tells us a beginner and an elite cover different
+    // ground (gauntlet catch 2026-07-18 — tying it to weight flattened every
+    // weightless plan to one speed).
+    bikeWkg: profile.ftp && kg ? profile.ftp / kg : lvl.estWkg,
     run: { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8 },
     swim: { easy: css + 12, steady: css + 6, css: css, fast: css - 6 },
   };
@@ -114,14 +121,12 @@ function runDistance(segs, pc) {
 // recovery spin, so an interval session and an endurance ride of equal
 // length no longer read as the same distance (they used to share one flat
 // 30 km/h guess). Speeds are km/h for a rider on flat-to-rolling roads,
-// scaled by the athlete's level through their W/kg estimate: a 4 W/kg rider
-// holds roughly a third more speed than a 2 W/kg rider for the same zone.
-// Still an estimate (no terrain, wind, draft or position model), so callers
-// keep distEst and the tilde.
+// scaled by the athlete's watts per kilo. Still an estimate (no terrain,
+// wind, draft or position model), so callers keep distEst and the tilde.
 const ZONE_KMH = { Z1: 24, Z2: 28, Z3: 32, Z4: 35, Z5: 37 };
 const REF_WKG = 2.6; // the intermediate rung ZONE_KMH is written for
 function bikeDistance(segs, pc) {
-  const wkg = pc.bikeWkg || REF_WKG;
+  const wkg = (pc && pc.bikeWkg) || REF_WKG;
   // Speed rises far more slowly than power (aerodynamic drag), so scale on a
   // cube root: double the watts per kilo is about a quarter more speed.
   const scale = Math.pow(wkg / REF_WKG, 1 / 3);
@@ -134,6 +139,15 @@ function swimDistance(segs) {
   let m = 0;
   segs.forEach(s => { if (s.swim) m += s.swim.distM != null ? s.swim.distM : (s.swim.n || 0) * (s.swim.repM || 0); });
   return Math.round(m / 100) / 10;
+}
+
+// Which disciplines' distances are estimates: the bike is always modelled,
+// run distance is honest only when the athlete's own 5k time anchors it, and
+// swim is summed prescribed metres (exact).
+function distEstFor(disc, pc) {
+  if (disc === 'bike') return true;
+  if (disc === 'run') return !!(pc && pc.runEstimated);
+  return false;
 }
 
 const FIT_FLOOR = 3;
@@ -206,7 +220,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
     title = 'Easy Run';
     const half = Math.round(dur / 2);
     segs = [
-      [{ label: 'Relaxed', min: dur, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' }],
+      [{ label: 'Relaxed', min: dur, detail: runDetail(pc, 'easy', 'Z2') + ' · quick, light steps', zone: 'Z2' }],
       [
         { label: 'Relaxed', min: dur - 8, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: '6 × 20 s strides · walk back', min: 8, detail: 'Fast but relaxed · form over force', blocks: rep(6, 0.35, 'Z5', 1, 'Z1') },
@@ -233,7 +247,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
         { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Settle in · relaxed', min: third, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Settle in · relaxed', min: third, detail: runDetail(pc, 'easy', 'Z2') + ' · easy rhythm, quick turnover', zone: 'Z2' },
         { label: 'Steady', min: third, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
         { label: 'Wind it up · tempo', min: dur - 2 * third, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
       ],
@@ -258,7 +272,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
       ],
       [
         { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
-        { label: hills + ' × 75 s uphill hard · jog down', min: hills * 4, detail: runDetail(pc, 'interval', 'Z5'), zone: 'Z5', blocks: rep(hills, 1.25, 'Z5', 2.75, 'Z1') },
+        { label: hills + ' × 75 s uphill hard · jog down', min: hills * 4, detail: 'By effort, not pace · ' + ZONES.Z5.rpe + ' · uphill pace reads slower', zone: 'Z5', terrain: 'hill', blocks: rep(hills, 1.25, 'Z5', 2.75, 'Z1') },
         { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
@@ -291,6 +305,12 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
     const reps = clamp(Math.round((dur - 25) / 12), 2, 4);
     const cruise = clamp(Math.round((dur - 25) / 7), 3, 6);
     const blocks = clamp(Math.round((dur - 25) / 16), 2, 3);
+    const climbs = clamp(Math.round((dur - 25) / 7), 3, 5);
+    // The hill circuit rides the same durability gate as the long run's
+    // hardest variant: sustained climbing at threshold effort is a
+    // Build/Peak tool with real impact load, not a Base or beginner session.
+    // Long Z4 climbs, deliberately unlike VO2's short hard hills: aerobic
+    // strength versus neuromuscular power (design panel 2026-07-18).
     segs = [
       [
         { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
@@ -307,7 +327,24 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
         { label: blocks + ' × (12 min cruise / 4 min easy)', min: blocks * 16, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(blocks, 12, 'Z4', 4, 'Z2') },
         { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
-    ][v(3)];
+    ];
+    // The hill circuit joins as a 4th format in Build/Peak. A 4-slot menu
+    // under the 4-week recovery cadence has a structural trap: recovery weeks
+    // land on (w+1) % 4 === 0 and pin seed 0, so a flat seed % 4 leaves
+    // whichever variant owns slot 3 unreachable in a generated plan — first
+    // the hill circuit, then, merely moved, the 12-min cruise (gauntlet and
+    // re-verify catches 2026-07-18). The selector below breaks the alignment
+    // instead of shuffling the victim.
+    if (durability) segs.splice(2, 0, [
+      { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+      { label: climbs + ' × (4 min uphill at threshold effort / jog down)', min: climbs * 7, detail: 'By effort, not pace · ' + ZONES.Z4.rpe + ' · uphill pace reads slower', zone: 'Z4', terrain: 'hill', blocks: rep(climbs, 4, 'Z4', 3, 'Z1') },
+      { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+    ]);
+    // Stepping the index one extra notch every 4 seeds walks all four slots
+    // across ordinary building weeks while staying a pure, rebuild-stable
+    // function of the stored seed (slot 3 lands on seeds 6, 9, 13...).
+    const s0 = seed || 0;
+    segs = durability ? segs[(s0 + Math.floor(s0 / 4)) % 4] : segs[v(3)];
   }
   // Fit the chosen variant to exactly dur: Long/Easy flex their steady lead-in,
   // the quality formats flex their cool-down; a hard-trimmed session that can't
@@ -1388,27 +1425,48 @@ export const upgradePlanSegments = function (plan) {
       // Bike distances built under the old flat 30 km/h guess never drift on
       // minutes (distance was computed independently of the segments), so
       // they would never rebuild on their own. Compare the stored number
-      // against what the zone-mix model says now and treat a real gap as
-      // stale, so one calendar cannot mix both models (design panel
-      // 2026-07-18). The tolerance keeps rounding noise from churning.
+      // against what the zone-mix model says now and treat any whole-km gap
+      // as stale, so one calendar cannot mix both models (design panel
+      // 2026-07-18). Both models return integers, so a half-km tolerance
+      // catches every real difference without churning on rounding.
       const bikeDistStale = w.discipline === 'bike' && w.distance != null
         && segsNow.some(s => s.zone || s.blocks)
-        && Math.abs(w.distance - bikeDistance(segsNow, plan.paces)) > 1.01;
+        && Math.abs(w.distance - bikeDistance(segsNow, plan.paces)) > 0.51;
       const current = segsNow.some(s => s.zone || s.blocks)
         && !(w.discipline === 'swim' && segsNow.some(s => s.blocks && !s.swim))
         && !driftsRunBike && !brickStale && !bikeDistStale;
-      if (current) return w;
-      // w.role is the stored role, and passing it is what keeps this pass a
-      // reference no-op on an already-current plan: generatePlan and this
-      // rebuild now feed buildSwim the same role, so they agree.
-      // On a plan cached BEFORE the role pass the rebuild does change the
-      // quality swims' drill lists — those were built on the roleless forward
-      // rotation and now come back on the backward one. That is this function
-      // doing its job rather than a regression: replacing the colliding pair is
-      // the entire point, and role has been stored on every generated workout
-      // since well before this change, so there is no plan old enough to be
-      // missing it. A workout that somehow lacks a role still rebuilds
-      // forwards, which is what the roleless code produced.
+      // distEst is not stored server-side: the plan DTO drops it, so a synced
+      // workout comes back with the flag missing and its distance silently
+      // loses the tilde. It is fully derivable, so backfill it here rather
+      // than teaching the wire format a new field (gauntlet catch
+      // 2026-07-18; run had the same latent gap).
+      if (current) {
+        // Two derivable flags the wire may have dropped (the segment DTO
+        // predates them): distEst on the workout, terrain on hill segments.
+        // Hill labels are deterministic builder output, so the tag re-derives
+        // from them exactly — without it the review would quietly go back to
+        // grading hill reps against flat pace after any sync (gauntlet catch
+        // 2026-07-18, the same class as the bike pass's distEst).
+        let out = w;
+        const needsTerrain = w.discipline === 'run'
+          && (w.segments || []).some(s => s && !s.terrain && (s.zone || s.blocks) && /uphill/i.test(s.label || ''));
+        if (needsTerrain) {
+          changed = true;
+          out = Object.assign({}, out, {
+            segments: out.segments.map(s => (s && !s.terrain && /uphill/i.test(s.label || '')) ? Object.assign({}, s, { terrain: 'hill' }) : s),
+          });
+        }
+        if (out.distance == null) return out;
+        const want = distEstFor(out.discipline, plan.paces);
+        if (!!out.distEst === want) return out;
+        changed = true;
+        return Object.assign({}, out, { distEst: want });
+      }
+      // w.role rides along so this rebuild and generatePlan feed buildSwim
+      // the same role: the drill catalog draws in opposite directions for the
+      // easy and quality slots, and a roleless rebuild would quietly swap a
+      // session for the other slot's (swim sizing pass 2026-07-18). A workout
+      // somehow missing role rebuilds forwards, as the roleless code did.
       const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType, w.role);
       if (!(built.segments || []).some(s => s.zone || s.blocks)) return w; // swims/strength stay as they are
       changed = true;
@@ -1667,10 +1725,14 @@ export const generatePlan = function (profile, opts) {
         workouts[i] = {
           id: wo.id, week: w, phase: 'Taper', date: raceISO, discipline: 'brick',
           type: 'RACE', title: 'RACE DAY — ' + race.name, durationMin: 0, distance: null, unit: '',
+          // Every leg always renders: race day is the real event, independent
+          // of what was trained (deliberate; the injured-state onboarding says
+          // so). An untrained leg earns a caution instead of vanishing
+          // (design panel 2026-07-18).
           segments: [
-            { label: 'Swim ' + race.swim + ' km', detail: 'Steady, sight often, settle into rhythm' },
+            { label: 'Swim ' + race.swim + ' km', detail: 'Steady, sight often, settle into rhythm' + (profile.excludedDiscipline === 'swim' ? ' · untrained in this plan, pace it very conservatively' : '') },
             { label: 'Bike ' + race.bike + ' km', detail: 'Hold race watts, fuel every 20 min' },
-            { label: 'Run ' + race.run + ' km', detail: 'Negative split, finish strong' },
+            { label: 'Run ' + race.run + ' km', detail: 'Negative split, finish strong' + (profile.excludedDiscipline === 'run' ? ' · untrained in this plan, walk-run is a fine plan' : '') },
           ], race: true, key: true,
         };
       }

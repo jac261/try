@@ -1,13 +1,13 @@
 import * as T from '@/lib';
 import { Icon } from '@/components/Icon.jsx';
-import { BarChart, Donut, Sparkline } from '@/components/charts.jsx';
+import { BarChart, Donut, Sparkline, TrendChart } from '@/components/charts.jsx';
 import { fitnessSeries } from '@/features/progress/fitnessSeries.js';
 import { WellnessTrends } from '@/features/wellness/WellnessTrends.jsx';
 import { AthleteStateStrip } from '@/features/wellness/AthleteStateStrip.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport, onWhatIf }) {
+export function ProgressView({ plan, log, activities, wellness, runLoad, recovery, onSupport, onWhatIf }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -67,6 +67,18 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
     return { key: m.key, label: m.label, color: m.color, betterDown: m.betterDown, vals: pts.map(p => p.value), latest: m.fmt(latest), changed, improved, deltaStr, deltaSign };
   }).filter(Boolean);
 
+  // Race projections: only from a REAL 5k time (a projection of the level
+  // estimate would be noise wearing a number). Lives inside the fitness card
+  // so it refreshes with the same renders that move the 5k trend.
+  const predict = T.predictRaceTimes(plan.profile);
+
+  // Weekly run volume: what was actually recorded or logged, plan or no plan.
+  // Deliberately a different fact from the athlete strip's ramp verdict (that
+  // is minutes against a baseline; this is raw kilometres), so it carries no
+  // risk bands or ramp language.
+  const runVol = T.weeklyRunKm({ activities, todayISO, weeks: 8 });
+  const anyKm = runVol.some(w => w.km > 0);
+
   return (
     <>
       <AthleteStateStrip wellness={wellness} runLoad={runLoad} recovery={recovery} onSupport={onSupport}
@@ -99,8 +111,25 @@ export function ProgressView({ plan, log, wellness, runLoad, recovery, onSupport
               {t.vals.length >= 2 ? <Sparkline values={t.vals} betterDown={t.betterDown} color={t.color} /> : <span className="trend-base">baseline</span>}
             </div>
           ))}
+          {predict && <div className="predict">
+            <div className="predict-title">Race projections <span className="muted">from your 5k time</span></div>
+            <div className="predict-rows">
+              <div className="predict-row"><span className="pd">10k</span><b>~{T.fmtClock(predict.tenK)}</b></div>
+              <div className="predict-row"><span className="pd">Half marathon</span><b>~{T.fmtClock(predict.halfMarathon)}</b></div>
+              <div className="predict-row"><span className="pd">Marathon</span><b>~{T.fmtClock(predict.marathon.lo)} to {T.fmtClock(predict.marathon.hi)}</b></div>
+            </div>
+            <div className="predict-note">Assumes each distance is trained for. The marathon range most of all: a 5k time says little about marathon endurance until the long runs are in.</div>
+          </div>}
         </div>
       )}
+
+      {anyKm && <>
+        <div className="section-title">Run volume <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(weekly km from runs with a distance)</span></div>
+        <div className="card">
+          <TrendChart height={120} axis series={[]}
+            bars={runVol.map(w => ({ v: w.km, color: D.run.color, label: T.fmtDate(w.start, { day: 'numeric', month: 'numeric' }) }))} />
+        </div>
+      </>}
 
       {(() => {
         // Weakest link: the three sports on one experience scale, and what the

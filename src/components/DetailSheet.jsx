@@ -82,7 +82,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         {w.boosted && <div className="testnote"><Icon name="flame" size={18} /><span>Extended from {T.fmtDuration(w.boostedFrom)} — your form showed room to absorb more load. {onRestore && <a className="reset" {...tap(onRestore)}>Back to the planned volume</a>}</span></div>}
         {!w.race && <div className="statline">
           <div className="s"><b>{T.fmtDuration(w.durationMin || 0)}</b><span>Duration</span></div>
-          {w.distance && <div className="s"><b>{w.distance}</b><span>{w.unit}</span></div>}
+          {w.distance && <div className="s"><b>{w.distEst ? '~' : ''}{w.distance}</b><span>{w.unit}</span></div>}
           <div className="s"><b>{disc.name}</b><span>{w.type}</span></div>
         </div>}
         {why && <div className="why" style={{ borderColor: disc.color }}><span className="why-label">Why this session</span>{why}</div>}

@@ -45,6 +45,17 @@ export const ZONES = {
 //   recoveryDepth — how much volume drops on a recovery week (lower = bigger cut)
 //   est5k/estCss  — fallback baselines (5k time in sec, swim /100m in sec) used to
 //                   estimate paces when the athlete leaves the fitness fields blank
+// A weight the app is willing to compute with. Anything outside human range
+// is a typo (pounds entered as kilos, a stray minus) and every consumer must
+// refuse it identically: the plan's watt estimate, the limiter board's W/kg
+// score and the editors' previews all route through here, so none of them can
+// project a nonsense number the others would reject (gauntlet 2026-07-18).
+export const WEIGHT_KG = { min: 30, max: 250 };
+export function saneWeightKg(weightKg) {
+  const n = Number(weightKg);
+  return n >= WEIGHT_KG.min && n <= WEIGHT_KG.max ? n : null;
+}
+
 // estWkg mirrors est5k/estCss for the bike, in watts per kilo. It matches the
 // weakest.js ladder so the two systems can never disagree about what a level
 // means. It is a WEAKER estimate than its run/swim siblings: profile.fitness
