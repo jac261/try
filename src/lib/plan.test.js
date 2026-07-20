@@ -345,10 +345,12 @@ describe('generatePlan', () => {
       expect(withWeight.paces.ftpEstimated, `${fitness}: flagged estimated`).toBe(true);
       expect(withWeight.paces.bikeWkg, `${fitness}: bikeWkg`).toBeGreaterThan(0);
     }
-    // No weight → no honest W/kg scale → the estimate stays off (null, not NaN).
+    // No weight → no absolute watts (null, not NaN). bikeWkg is different:
+    // it is a ratio and falls back to the level rung so ride distances still
+    // scale by level for weightless profiles (bike-pass gauntlet 2026-07-18).
     const noWeight = generatePlan({ ...profile('2026-09-23', '2026-07-01'), weightKg: undefined });
     expect(noWeight.paces.ftp).toBe(null);
-    expect(noWeight.paces.bikeWkg).toBe(null);
+    expect(noWeight.paces.bikeWkg).toBe(2.6);
     // A real FTP always wins over the estimate.
     const real = generatePlan({ ...profile('2026-09-23', '2026-07-01'), weightKg: 70, ftp: 240 });
     expect(real.paces.ftp).toBe(240);
