@@ -136,7 +136,12 @@ export function intervalRows({ workout, intervals, paces }) {
   const pc = paces || {};
   const work = intervals.filter(i => i && i.type === 'WORK' && i.movingTimeSec >= 30);
   if (!work.length) return null;
-  const band = (REP_BANDS[disc] || {})[workout.type] || null;
+  // A hill session's reps are honest efforts at dishonest GPS paces: grading
+  // them against the flat-terrain target called a well-run rep 'off target'
+  // every time. Fail silent instead, the same principle as a missing FTP
+  // (design panel 2026-07-18).
+  const hilly = (workout.segments || []).some(s => s && s.terrain === 'hill');
+  const band = hilly ? null : (REP_BANDS[disc] || {})[workout.type] || null;
   let judged = 0, onTarget = 0;
   const rows = work.map((i, idx) => {
     const row = {

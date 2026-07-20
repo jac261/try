@@ -303,6 +303,7 @@ export function toClientState(resp) {
       segments: (wo.segments || []).map(s => ({
         label: s.label, min: s.min ?? undefined, detail: s.detail || undefined,
         zone: s.zone || undefined, blocks: s.blocks || undefined, swim: s.swim || undefined,
+        terrain: s.terrain || undefined,
       })),
       key: !!wo.key, race: wo.race || undefined, test: wo.test || undefined,
       testKind: wo.testKind || undefined, note: wo.note || undefined, second: wo.second || undefined,

@@ -476,12 +476,21 @@ describe('workout library variants', () => {
   });
 
   it('selects the format from the week seed, wrapping deterministically', () => {
-    const wk = seed => ({ discipline: 'run', type: 'Threshold', durationMin: 60, week: seed, phase: 'Build', id: seed + '-1' });
+    const wk = (seed, phase = 'Build') => ({ discipline: 'run', type: 'Threshold', durationMin: 60, week: seed, phase, id: seed + '-1' });
     const main = w => trimWorkout(w, p, 0.9).segments[1].label;
     expect(main(wk(0))).toContain('9 min threshold');
     expect(main(wk(1))).toContain('5 min threshold');
-    expect(main(wk(2))).toContain('12 min cruise');
-    expect(main(wk(3))).toContain('9 min threshold'); // wraps around
+    // Build for intermediate+ inserts the gated hill circuit at slot 2 and
+    // selects with a stepped index ((seed + seed/4) % 4) so no slot aligns
+    // with the 4-week recovery cadence (run pass 2026-07-18): every format
+    // reaches ordinary building weeks.
+    expect(main(wk(2))).toContain('uphill at threshold effort');
+    expect(main(wk(3))).toContain('12 min cruise');
+    expect(main(wk(4))).toContain('5 min threshold');  // stepped, not wrapped to 0
+    expect(main(wk(6))).toContain('12 min cruise');    // slot 3 on a NON-recovery seed
+    expect(main(wk(10))).toContain('9 min threshold');
+    // Base keeps the 3-slot menu: no hill circuit outside the durability gate
+    expect(main(wk(2, 'Base'))).toContain('12 min cruise');
   });
 
   it('engine rebuilds keep the session in its week format', () => {

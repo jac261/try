@@ -24,3 +24,12 @@ export function fmtDuration(min) {
   const h = Math.floor(m / 60), r = m % 60;
   return r ? h + 'h ' + r + 'm' : h + 'h';
 }
+
+// Race clock time: H:MM:SS above the hour, M:SS under it. fmtPace would print
+// a marathon as '215:12' and fmtDuration has no seconds, so predictions need
+// their own formatter.
+export function fmtClock(sec) {
+  const t = Math.round(sec), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), r = t % 60;
+  const p2 = n => String(n).padStart(2, '0');
+  return h ? h + ':' + p2(m) + ':' + p2(r) : m + ':' + p2(r);
+}

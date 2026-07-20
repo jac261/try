@@ -33,6 +33,9 @@ export function manualToActivity(entry) {
     type: SPORT_FEED_TYPE[entry.sport],
     name: entry.sessionType,
     movingTimeSec: entry.durationMin * 60,
+    // Optional, athlete-entered kilometres -> the feed's metres. Their own
+    // number, not a machine estimate, so no estimated flag rides on it.
+    distance: entry.distanceKm ? entry.distanceKm * 1000 : undefined,
     trainingLoad: entry.trainingLoad,
     manual: true,
     estimated: true,

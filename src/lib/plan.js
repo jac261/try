@@ -220,7 +220,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
     title = 'Easy Run';
     const half = Math.round(dur / 2);
     segs = [
-      [{ label: 'Relaxed', min: dur, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' }],
+      [{ label: 'Relaxed', min: dur, detail: runDetail(pc, 'easy', 'Z2') + ' · quick, light steps', zone: 'Z2' }],
       [
         { label: 'Relaxed', min: dur - 8, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: '6 × 20 s strides · walk back', min: 8, detail: 'Fast but relaxed · form over force', blocks: rep(6, 0.35, 'Z5', 1, 'Z1') },
@@ -247,7 +247,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
         { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Settle in · relaxed', min: third, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Settle in · relaxed', min: third, detail: runDetail(pc, 'easy', 'Z2') + ' · easy rhythm, quick turnover', zone: 'Z2' },
         { label: 'Steady', min: third, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
         { label: 'Wind it up · tempo', min: dur - 2 * third, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
       ],
@@ -272,7 +272,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
       ],
       [
         { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
-        { label: hills + ' × 75 s uphill hard · jog down', min: hills * 4, detail: runDetail(pc, 'interval', 'Z5'), zone: 'Z5', blocks: rep(hills, 1.25, 'Z5', 2.75, 'Z1') },
+        { label: hills + ' × 75 s uphill hard · jog down', min: hills * 4, detail: 'By effort, not pace · ' + ZONES.Z5.rpe + ' · uphill pace reads slower', zone: 'Z5', terrain: 'hill', blocks: rep(hills, 1.25, 'Z5', 2.75, 'Z1') },
         { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
@@ -305,6 +305,12 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
     const reps = clamp(Math.round((dur - 25) / 12), 2, 4);
     const cruise = clamp(Math.round((dur - 25) / 7), 3, 6);
     const blocks = clamp(Math.round((dur - 25) / 16), 2, 3);
+    const climbs = clamp(Math.round((dur - 25) / 7), 3, 5);
+    // The hill circuit rides the same durability gate as the long run's
+    // hardest variant: sustained climbing at threshold effort is a
+    // Build/Peak tool with real impact load, not a Base or beginner session.
+    // Long Z4 climbs, deliberately unlike VO2's short hard hills: aerobic
+    // strength versus neuromuscular power (design panel 2026-07-18).
     segs = [
       [
         { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
@@ -321,7 +327,24 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
         { label: blocks + ' × (12 min cruise / 4 min easy)', min: blocks * 16, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(blocks, 12, 'Z4', 4, 'Z2') },
         { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
-    ][v(3)];
+    ];
+    // The hill circuit joins as a 4th format in Build/Peak. A 4-slot menu
+    // under the 4-week recovery cadence has a structural trap: recovery weeks
+    // land on (w+1) % 4 === 0 and pin seed 0, so a flat seed % 4 leaves
+    // whichever variant owns slot 3 unreachable in a generated plan — first
+    // the hill circuit, then, merely moved, the 12-min cruise (gauntlet and
+    // re-verify catches 2026-07-18). The selector below breaks the alignment
+    // instead of shuffling the victim.
+    if (durability) segs.splice(2, 0, [
+      { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+      { label: climbs + ' × (4 min uphill at threshold effort / jog down)', min: climbs * 7, detail: 'By effort, not pace · ' + ZONES.Z4.rpe + ' · uphill pace reads slower', zone: 'Z4', terrain: 'hill', blocks: rep(climbs, 4, 'Z4', 3, 'Z1') },
+      { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+    ]);
+    // Stepping the index one extra notch every 4 seeds walks all four slots
+    // across ordinary building weeks while staying a pure, rebuild-stable
+    // function of the stored seed (slot 3 lands on seeds 6, 9, 13...).
+    const s0 = seed || 0;
+    segs = durability ? segs[(s0 + Math.floor(s0 / 4)) % 4] : segs[v(3)];
   }
   // Fit the chosen variant to exactly dur: Long/Easy flex their steady lead-in,
   // the quality formats flex their cool-down; a hard-trimmed session that can't
@@ -1196,11 +1219,26 @@ export const upgradePlanSegments = function (plan) {
       // than teaching the wire format a new field (gauntlet catch
       // 2026-07-18; run had the same latent gap).
       if (current) {
-        if (w.distance == null) return w;
-        const want = distEstFor(w.discipline, plan.paces);
-        if (!!w.distEst === want) return w;
+        // Two derivable flags the wire may have dropped (the segment DTO
+        // predates them): distEst on the workout, terrain on hill segments.
+        // Hill labels are deterministic builder output, so the tag re-derives
+        // from them exactly — without it the review would quietly go back to
+        // grading hill reps against flat pace after any sync (gauntlet catch
+        // 2026-07-18, the same class as the bike pass's distEst).
+        let out = w;
+        const needsTerrain = w.discipline === 'run'
+          && (w.segments || []).some(s => s && !s.terrain && (s.zone || s.blocks) && /uphill/i.test(s.label || ''));
+        if (needsTerrain) {
+          changed = true;
+          out = Object.assign({}, out, {
+            segments: out.segments.map(s => (s && !s.terrain && /uphill/i.test(s.label || '')) ? Object.assign({}, s, { terrain: 'hill' }) : s),
+          });
+        }
+        if (out.distance == null) return out;
+        const want = distEstFor(out.discipline, plan.paces);
+        if (!!out.distEst === want) return out;
         changed = true;
-        return Object.assign({}, w, { distEst: want });
+        return Object.assign({}, out, { distEst: want });
       }
       const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType);
       if (!(built.segments || []).some(s => s.zone || s.blocks)) return w; // swims/strength stay as they are
@@ -1460,10 +1498,14 @@ export const generatePlan = function (profile, opts) {
         workouts[i] = {
           id: wo.id, week: w, phase: 'Taper', date: raceISO, discipline: 'brick',
           type: 'RACE', title: 'RACE DAY — ' + race.name, durationMin: 0, distance: null, unit: '',
+          // Every leg always renders: race day is the real event, independent
+          // of what was trained (deliberate; the injured-state onboarding says
+          // so). An untrained leg earns a caution instead of vanishing
+          // (design panel 2026-07-18).
           segments: [
-            { label: 'Swim ' + race.swim + ' km', detail: 'Steady, sight often, settle into rhythm' },
+            { label: 'Swim ' + race.swim + ' km', detail: 'Steady, sight often, settle into rhythm' + (profile.excludedDiscipline === 'swim' ? ' · untrained in this plan, pace it very conservatively' : '') },
             { label: 'Bike ' + race.bike + ' km', detail: 'Hold race watts, fuel every 20 min' },
-            { label: 'Run ' + race.run + ' km', detail: 'Negative split, finish strong' },
+            { label: 'Run ' + race.run + ' km', detail: 'Negative split, finish strong' + (profile.excludedDiscipline === 'run' ? ' · untrained in this plan, walk-run is a fine plan' : '') },
           ], race: true, key: true,
         };
       }

@@ -77,19 +77,24 @@ export function watchSteps(w) {
   if (w.discipline !== 'run' && w.discipline !== 'bike') return null;
   const segs = w.segments || [];
   if (!segs.length || !segs.every(s => (s.blocks && s.blocks.length) || (s.min && s.zone))) return null;
-  const tok = b => '- ' + durTok(b.min) + ' ' + zoneTok(w.discipline, b.zone);
+  // A hill segment's card says "by effort, not pace"; pushing a pace-zone
+  // target for the same step would contradict the session's own coaching, so
+  // hill work steps go to the watch open (duration only, effort in the name)
+  // while their recoveries keep a pace target (gauntlet catch 2026-07-18).
+  const tok = (b, open) => '- ' + durTok(b.min) + (open && b.zone !== 'Z1' && b.zone !== 'Z2' ? '' : ' ' + zoneTok(w.discipline, b.zone));
   const sections = [];
   let seconds = 0;
   segs.forEach((s, i) => {
     const blocks = s.blocks || [{ min: s.min, zone: s.zone }];
     blocks.forEach(b => { seconds += Math.round(b.min * 60); });
     const label = (s.label || '').toLowerCase();
+    const hill = s.terrain === 'hill';
     const header = i === 0 && label.includes('warm') ? 'Warmup'
       : i === segs.length - 1 && (label.includes('cool') || label.includes('ease home')) ? 'Cooldown'
         : null;
     const u = s.blocks && uniformReps(s.blocks);
-    if (u) sections.push(u.n + 'x\n' + tok(u.on) + '\n' + tok(u.off));
-    else sections.push((header ? header + '\n' : '') + blocks.map(tok).join('\n'));
+    if (u) sections.push(u.n + 'x\n' + tok(u.on, hill) + '\n' + tok(u.off, hill));
+    else sections.push((header ? header + '\n' : '') + blocks.map(b => tok(b, hill)).join('\n'));
   });
   return { dsl: sections.join('\n\n'), seconds };
 }

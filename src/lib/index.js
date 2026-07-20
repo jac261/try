@@ -21,3 +21,4 @@ export * from './autolog.js';
 export * from './watch.js';
 export * from './profile.js';
 export * from './eftp.js';
+export * from './runstats.js';
