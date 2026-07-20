@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { generatePlan, swapForLimiter, detectLimiterSwap, addCustomWorkout, easeWorkout, boostWorkout, trimWorkout, upgradePlanSegments, segMinutes } from './plan.js';
 import { cssFromTestIntervals, cssTestActivityFor, eftpProposal } from './eftp.js';
 import { intervalRows } from './review.js';
+import { toClientState } from './api.js';
 
 /* The swim pass (2026-07-18): the limiter frequency swap can now grant a
    third swim as a Long Swim, buildSwim gained a Long type and a level-gated
@@ -645,5 +646,37 @@ describe('Long Swim review', () => {
     expect(rows.judged).toBe(2);
     expect(rows.rows[0].tone).toBe('good');
     expect(rows.rows[1].tone).toBe('info');
+  });
+});
+
+describe('role survives the wire (the drill-divergence guarantee depends on it)', () => {
+  it('a hydrate that keeps role keeps the recovery week distinct; the mapping preserves it', () => {
+    // The backend stores and returns each workout's role (PlanResponse.Role);
+    // this pins the client mapping so a refactor can never quietly drop the
+    // field the byte-identical-swims guarantee rides on (landing verification
+    // catch 2026-07-20).
+    const p = generatePlan(swimWeak);
+    const wire = {
+      id: 'guid-1', profile: p.profile, race: p.race, createdAt: p.createdAt,
+      updatedAt: p.createdAt, totalWeeks: p.totalWeeks, paces: p.paces,
+      weeks: p.weeks.map(w => ({
+        index: w.index, phase: w.phase, isRecovery: w.isRecovery, start: w.start, totalMin: w.totalMin,
+        // the segment DTO strips profile data; role rides on the WORKOUT and survives
+        workouts: w.workouts.map(wo => ({
+          ...wo, id: 'guid-' + wo.id, clientWorkoutRef: wo.id,
+          segments: (wo.segments || []).map(s => ({ label: s.label, min: s.min, detail: s.detail })),
+        })),
+      })),
+    };
+    const hydrated = toClientState(wire).plan;
+    hydrated.weeks.flatMap(w => w.workouts).filter(x => x.discipline !== 'rest' && !x.race)
+      .forEach(x => expect(x.role, x.id).toBeTruthy());
+    const rebuilt = upgradePlanSegments(hydrated);
+    rebuilt.weeks.filter(w => w.isRecovery).forEach(w => {
+      const swims = w.workouts.filter(x => x.discipline === 'swim');
+      if (swims.length < 2) return;
+      const lists = swims.map(x => JSON.stringify(x.segments));
+      expect(new Set(lists).size, 'week ' + w.index).toBe(lists.length);
+    });
   });
 });
