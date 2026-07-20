@@ -844,8 +844,22 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
   // ceiling as every other steady block. Deterministic and pure: only reached
   // when the built shape overruns, and sized from dur alone.
   if (sumMinutes(segs) > dur * 1.12) {
-    const m = Math.max(100, Math.round(dur * 60 / pc.swim.steady) * 100);
-    segs = steadyMetres(pc, m, ' · steady and relaxed');
+    // Keep a warm-up and cool-down around the collapsed main the way fitFlex's
+    // run/bike fallback preserves the session's frame: an earlier version
+    // dropped straight to one bare block, which deleted the shoulders even on
+    // a session with plenty of room for them (gauntlet catch 2026-07-18). The
+    // shoulders come from the shared helper, so they step down on a genuinely
+    // starved swim; only when even the steady main would fall below a couple
+    // of minutes does the whole thing become a single block.
+    const dsh = swimShoulders(pc, budget, 300, 200);
+    const mainSec = budget - ((dsh[0] + dsh[1]) / 100) * pc.swim.easy;
+    if (mainSec >= 2 * 60) {
+      const m = Math.max(100, Math.round(mainSec / pc.swim.steady) * 100);
+      segs = [wuSeg(dsh[0]), ...steadyMetres(pc, m, ' · steady and relaxed'), cdSeg(dsh[1])];
+    } else {
+      const m = Math.max(100, Math.round(dur * 60 / pc.swim.steady) * 100);
+      segs = steadyMetres(pc, m, ' · steady and relaxed');
+    }
   }
   const dist = swimDistance(segs); // exact: summed prescribed metres, not a flat overhead guess
   return { title: title, segments: segs, distance: dist, unit: 'km' };

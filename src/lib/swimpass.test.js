@@ -597,6 +597,20 @@ describe('swim floors yield to the budget (sizing gauntlet round 3, 2026-07-18)'
     });
   });
 
+  it('a degraded swim keeps its warm-up and cool-down, never collapses to a bare block with room to spare', () => {
+    // The overrun-degrade must not strip the shoulders off a session that had
+    // room for them: an elite endurance swim at the one duration where the
+    // rep count rounds up used to drop straight to a bare set (gauntlet catch
+    // 2026-07-18). It now keeps a warm-up and cool-down like fitFlex does.
+    const p = generatePlan({ name: 'S', raceType: 'olympic', fitness: 'elite', fivekSec: 1100, css100Sec: 85, ftp: 300, weightKg: 70, daysPerWeek: 6, trainingDays: [0, 1, 3, 4, 5, 6], longDay: 5, startDate: '2026-06-01', raceDate: '2027-03-14' });
+    const wk = p.weeks.find(x => x.phase === 'Build' && !x.isRecovery && x.index % 2 === 0) || p.weeks.find(x => x.phase === 'Build' && !x.isRecovery);
+    for (let d = 55; d <= 90; d++) {
+      const w = addCustomWorkout(p, { discipline: 'swim', type: 'Endurance', durationMin: d, dateISO: wk.start }).workout;
+      expect(/^Warm-up/.test(w.segments[0].label), d + 'min ' + w.segments.map(s => s.label).join('/')).toBe(true);
+      expect(/^Cool-down/.test(w.segments[w.segments.length - 1].label), d + 'min').toBe(true);
+    }
+  });
+
   it('no swim prescribes an uncoachable continuous block or mega-rep, even at 240 custom min', () => {
     const p = generatePlan({ ...slow(90), fitness: 'elite', raceType: 'full', raceDate: '2027-03-14' });
     const wk = p.weeks.find(x => x.phase === 'Build' && !x.isRecovery);
