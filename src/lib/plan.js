@@ -567,6 +567,21 @@ function swimShoulders(pc, budgetSec, wuM, cdM, floorWu) {
   const steps = [[wuM, cdM], [Math.max(200, floorWu || 0), 100], [floorWu || 100, 100]];
   return steps.find(s => ((s[0] + s[1]) / 100) * pc.swim.easy <= budgetSec * 0.45) || steps[steps.length - 1];
 }
+// One steady aerobic volume, always within the continuous ceiling: a single
+// block when it fits, otherwise the same metres broken into ~1000 m reps.
+// Every place a large steady chunk can appear routes through here, so no
+// branch can smuggle an uncoachable 6 km continuous swim past the ceiling the
+// Race/Endurance main enforces (gauntlet catch 2026-07-18).
+const STEADY_CEILING = 3000;
+function steadyMetres(pc, m, note) {
+  const detail = swimDetail(pc, 'steady', 'Z2') + (note || '');
+  if (m <= STEADY_CEILING) {
+    return [{ label: m + ' m continuous', detail: detail, ...swimBlock(pc, 'steady', 'Z2', m) }];
+  }
+  const n = Math.max(2, Math.round(m / 1000));
+  const repM = Math.max(100, Math.round(m / n / 100) * 100);
+  return [{ label: n + ' × ' + repM + ' m steady', detail: detail + ' · 30 s rest', ...swimRep(pc, 'steady', 'Z2', n, repM, 30) }];
+}
 
 // `role` is the workout's slot in the week (easy/quality/long, or custom for a
 // user-added session). It exists here purely as a discriminator of last resort:
@@ -720,7 +735,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
       const n = clamp(Math.round(avail / perRep('fast', 50, 20)), 4, 24);
       const absorbM = Math.floor((avail - n * perRep('fast', 50, 20)) / pc.swim.steady) * 100;
       mains = [{ label: n + ' × 50 m fast', detail: swimDetail(pc, 'fast', 'Z5') + ' · 20 s rest', ...swimRep(pc, 'fast', 'Z5', n, 50, 20) }];
-      if (absorbM >= 300) mains.push({ label: absorbM + ' m steady', detail: swimDetail(pc, 'steady', 'Z2'), ...swimBlock(pc, 'steady', 'Z2', absorbM) });
+      if (absorbM >= 300) mains.push(...steadyMetres(pc, absorbM));
     }
     segs = [wuSeg(sh[0]), ...mains, cdSeg(sh[1])];
   } else if (type === 'Open Water') {
@@ -735,25 +750,34 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
     // 400 m — so the rest of the session is real race-specific volume at a
     // sane rep count. The block stays unstructured: skills are drilled by
     // feel, not by the clock, but it carries its minutes so the card sums.
-    const skillsSec = clamp(avail * 0.15, 6 * 60, 12 * 60);
-    // Race effort takes about 60% of the post-shoulder time and no more: an
-    // open-water day is race rehearsal, not a time trial, so whatever the
-    // reps and the skills block leave over is swum as aerobic support rather
-    // than lengthening the hard set.
+    // Skills take a slice of the post-shoulder time within a 6-12 min band,
+    // but never more than a third of it: on a starved session the band would
+    // otherwise swallow the whole swim. The block carries EXACTLY this slice
+    // as its minutes — earlier it took the session residual, which silently
+    // rounded to zero at ordinary paces (a coaching block advertising work it
+    // did not account for) and ballooned to 17 min at slow ones (gauntlet
+    // catches 2026-07-18). Race effort takes ~60%, its reps lengthening 200 to
+    // 400 m; whatever the reps and skills leave is aerobic support.
+    const skillsSec = Math.min(clamp(avail * 0.15, 6 * 60, 12 * 60), avail / 3);
     const raceSec = Math.min(avail - skillsSec, avail * 0.6);
     let repM = 200, n = Math.round(raceSec / perRep('css', 200, 30));
     if (n > 6) { repM = 400; n = Math.round(raceSec / perRep('css', 400, 30)); }
     n = Math.max(2, n);
     const raceSet = { label: n + ' × ' + repM + ' m @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes', ...swimRep(pc, 'css', 'Z4', n, repM, 30) };
     const easySec = avail - skillsSec - n * perRep('css', repM, 30);
-    const easyM = Math.floor(easySec / pc.swim.steady) * 100;
-    const skillsMin = Math.max(0, Math.round(dur - sumMinutes([wuSeg(sh[0]), raceSet, cdSeg(sh[1])])
-      - (easyM >= 300 ? (easyM / 100) * pc.swim.steady / 60 : 0)));
+    const easyM = easySec > 0 ? Math.round(easySec / pc.swim.steady) * 100 : 0;
+    // The aerobic block soaks the residual down to 200 m; anything smaller
+    // folds into the skills minutes so no time is lost off the card (it would
+    // otherwise vanish, a sub-300 m gap that undershot a 45-min swim by 3 min
+    // — gauntlet catch 2026-07-18). Skills stays near its band: the fold is at
+    // most one steady rep.
+    const hasEasy = easyM >= 200;
+    const skillsMin = Math.max(3, Math.round((skillsSec + (hasEasy ? 0 : Math.max(0, easySec))) / 60));
     segs = [
       wuSeg(sh[0]),
       raceSet,
-      ...(easyM >= 300 ? [{ label: easyM + ' m steady', detail: swimDetail(pc, 'steady', 'Z2') + ' · relaxed, keep sighting', ...swimBlock(pc, 'steady', 'Z2', easyM) }] : []),
-      { label: 'Open-water skills', detail: 'Deep-water start, drafting, buoy turns — practise swimming straight', ...(skillsMin ? { min: skillsMin } : {}) },
+      ...(hasEasy ? steadyMetres(pc, easyM, ' · relaxed, keep sighting') : []),
+      { label: 'Open-water skills', detail: 'Deep-water start, drafting, buoy turns — practise swimming straight', min: skillsMin },
       cdSeg(sh[1]),
     ];
   } else { // Endurance / Race Pace
@@ -772,11 +796,15 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
       // on a 50 m grid rather than 100 m because on a short session the
       // coarser grid cannot get close enough: three reps each rounded down a
       // half-length is most of the shortfall on a 20-minute swim, and every
-      // pool this prescribes for is 25 m or 50 m anyway.
-      const third = Math.max(50, Math.round((avail - 90) / pc.swim.steady * 2 / 3) * 50);
+      // pool this prescribes for is 25 m or 50 m anyway. The rep count grows
+      // past three once a third of the volume would exceed the continuous
+      // ceiling, so a huge custom session never prescribes a 6 km "rep"
+      // (gauntlet catch 2026-07-18).
+      const reps = Math.max(3, Math.ceil((avail - 90) / pc.swim.steady * 100 / 9000) * 3);
+      const third = Math.max(50, Math.round((avail - reps * 30) / pc.swim.steady / reps * 2) * 50);
       segs = [
         wuSeg(sh[0]),
-        { label: '3 × ' + third + ' m steady · 30 s rest', detail: swimDetail(pc, 'steady', 'Z2'), ...swimRep(pc, 'steady', 'Z2', 3, third, 30) },
+        { label: reps + ' × ' + third + ' m steady · 30 s rest', detail: swimDetail(pc, 'steady', 'Z2'), ...swimRep(pc, 'steady', 'Z2', reps, third, 30) },
         cdSeg(sh[1]),
       ];
     } else {
@@ -805,6 +833,19 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
         ];
       }
     }
+  }
+  // Degrade floor, the swim analogue of fitFlex's collapse-to-one-block: on a
+  // session too short for its structured shape at the athlete's pace, the
+  // fixed-metre floors (a real warm-up, a two-rep minimum, a skills slice)
+  // can jointly cost more seconds than the budget holds, and no single one of
+  // them yields. Rather than let the card silently swell past its stated
+  // minutes (gauntlet blocker 2026-07-18), the whole session collapses to one
+  // honest steady swim of its own length — respecting the same continuous
+  // ceiling as every other steady block. Deterministic and pure: only reached
+  // when the built shape overruns, and sized from dur alone.
+  if (sumMinutes(segs) > dur * 1.12) {
+    const m = Math.max(100, Math.round(dur * 60 / pc.swim.steady) * 100);
+    segs = steadyMetres(pc, m, ' · steady and relaxed');
   }
   const dist = swimDistance(segs); // exact: summed prescribed metres, not a flat overhead guess
   return { title: title, segments: segs, distance: dist, unit: 'km' };
