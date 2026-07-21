@@ -87,8 +87,23 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
   const maxN = Math.max(1, ...series.map(s => s.values.length));
   const X = i => (maxN <= 1 ? W / 2 : pad + (i / (maxN - 1)) * (W - 2 * pad));
   const Y = v => H - pad - ((v - min) / range) * (H - 2 * pad);
-  const line = vs => vs.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
-  const area = vs => line(vs) + ' L' + X(vs.length - 1).toFixed(1) + ' ' + (H - pad) + ' L' + X(0).toFixed(1) + ' ' + (H - pad) + ' Z';
+  // Null-aware: a null value breaks the path instead of feeding NaN into
+  // the SVG. Sparse series (weekly body-mass means) render their gaps as
+  // gaps rather than smoothly bridging silence (design panel 2026-07-21).
+  const line = vs => {
+    let out = '', pen = false;
+    vs.forEach((v, i) => {
+      if (v == null) { pen = false; return; }
+      out += (pen ? ' L' : ' M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1);
+      pen = true;
+    });
+    return out.trim();
+  };
+  const area = vs => {
+    const solid = vs.filter(v => v != null);
+    if (solid.length !== vs.length) return null; // sparse series draw no area fill
+    return line(vs) + ' L' + X(vs.length - 1).toFixed(1) + ' ' + (H - pad) + ' L' + X(0).toFixed(1) + ' ' + (H - pad) + ' Z';
+  };
   const zoneRects = (zones || [])
     .map(z => ({ ...z, lo: Math.max(z.lo, min), hi: Math.min(z.hi, max) }))
     .filter(z => z.hi > z.lo);
@@ -190,7 +205,13 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
               the zone its CURRENT value sits in (Jon, 2026-07-17), passed as
               s.color from the caller, not per segment */}
           <path d={line(s.values)} fill="none" stroke={s.color} strokeWidth={s.width || 2.2} strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx={X(s.values.length - 1)} cy={Y(s.values[s.values.length - 1])} r="3" fill={s.color} />
+          {(() => {
+            // the endpoint dot sits on the last REAL point: trailing nulls in
+            // a sparse series otherwise paint it at NaN (gauntlet 2026-07-21)
+            let li = s.values.length - 1;
+            while (li >= 0 && s.values[li] == null) li--;
+            return li >= 0 ? <circle cx={X(li)} cy={Y(s.values[li])} r="3" fill={s.color} /> : null;
+          })()}
         </g>
       ))}
       {/* the occupied zone's name renders ABOVE the data lines, with a card-colour

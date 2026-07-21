@@ -7,7 +7,7 @@ import { AthleteStateStrip } from '@/features/wellness/AthleteStateStrip.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, activities, coach, durability, wellness, runLoad, recovery, onSupport, onWhatIf }) {
+export function ProgressView({ plan, log, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -159,7 +159,7 @@ export function ProgressView({ plan, log, activities, coach, durability, wellnes
                 <span className="du-date">{T.fmtDate(e.date, { day: 'numeric', month: 'short' })}</span>
                 <span className="du-disc">{e.discipline === 'bike' ? 'Ride' : 'Run'} · {T.fmtDuration(e.durationMin)}</span>
                 <span className={'coach-pill' + (e.read.band === 'held-strong' ? ' progress' : e.read.band === 'faded-hard' ? ' recover' : '')}>{T.DURABILITY_BAND_LABELS[e.read.band]}</span>
-                <span className="du-nums">{outputBit(e)} · {hrBit(e)}{e.read.efDropPct != null && e.read.efDropPct > 0 ? ' · efficiency ' + pct(e.read.efDropPct) + ' down' : ''}</span>
+                <span className="du-nums">{outputBit(e)} · {hrBit(e)}{e.read.efDropPct != null && e.read.efDropPct > 0 ? ' · efficiency ' + pct(e.read.efDropPct) + ' down' : ''}{fuelLog && fuelLog[e.activityId] ? ' · fuel: ' + T.FUEL_LEVELS[fuelLog[e.activityId].level].toLowerCase() : ''}</span>
               </div>
             ))}
             <div className="du-note">Laps only tell part of it: hills, heat, wind and fuelling are invisible here, so read the pattern across weeks, never one session.</div>
@@ -176,6 +176,9 @@ export function ProgressView({ plan, log, activities, coach, durability, wellnes
         // retained raceType is nulled so the lib never claims a share of a
         // race that is not scheduled, and the action line speaks about the
         // NEXT plan instead of one that does not exist.
+        // the LATEST single weigh-in feeds W/kg here; the Body mass card
+        // below shows weekly averages, and both say which window they use
+        // so the two numbers can differ without reading as a bug
         const w = [...(wellness || [])].reverse().find(r => r.weightKg);
         const wl = T.weakestLink({ profile: { ...plan.profile, raceType: tracker ? null : plan.profile.raceType, weightKg: w ? w.weightKg : plan.profile.weightKg } });
         if (!wl) return null;
@@ -253,6 +256,38 @@ export function ProgressView({ plan, log, activities, coach, durability, wellnes
                 </div>
               ))}
             </div>}
+          </div>
+        </>;
+      })()}
+
+      {(() => {
+        // Body mass: shown only when a weigh-in exists or a goal was set.
+        // Without a goal this card is a number and a line, and it never
+        // says a judging word (design panel 2026-07-21). Zero data and no
+        // goal renders nothing at all, the durability precedent.
+        const goal = plan.profile.massGoal || null;
+        const trend = T.massTrend(wellness, todayISO);
+        if (!trend && !goal) return null;
+        if (!trend) return null;
+        const status = T.goalStatus(trend, goal);
+        // With a goal, the number shown IS the number judged (one source, no
+        // pill-vs-figure contradiction). Without a goal there is no rate
+        // line at all: a signed weekly figure is judgment-adjacent, and the
+        // goalless card is a number and a line, nothing more (gauntlet
+        // safety catches 2026-07-21).
+        const rate = status ? T.fmtRateGrams(status.judgedRateKg) : null;
+        return <>
+          <div className="section-title">Body mass <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(weekly averages)</span></div>
+          <div className="card">
+            <div className="bm-head">
+              <div><b>{trend.avgKg != null ? trend.avgKg + ' kg' : trend.latestKg + ' kg'}</b>
+                <span className="muted"> {trend.avgKg != null ? '7-day average' : 'latest weigh-in, ' + T.fmtDate(trend.latestDate, { day: 'numeric', month: 'short' })}</span></div>
+              {status && <span className={'coach-pill' + (status.key === 'on' ? ' progress' : '')}>{status.label}</span>}
+            </div>
+            {rate && <div className="bm-rate">{rate} <span className="muted">last completed week</span></div>}
+            {status && <div className="bm-note">{status.detail}</div>}
+            {trend.series.some(v => v != null) && <TrendChart height={90} series={[{ values: trend.series, color: '#8b95a7' }]} />}
+            <div className="bm-note">Scales are noisy and weigh-in times vary; the weekly averages and the monthly rate carry more truth than any single reading.</div>
           </div>
         </>;
       })()}

@@ -86,3 +86,41 @@ input needs its own design panel first.
 Excluded on purpose: a brick's run leg (it starts pre-fatigued by design;
 reserved for the deferred brick comparison), swim durability (pool laps
 confound drift with prescribed rest).
+
+## Pass 3: body mass and fuelling
+
+The safety rule outranks everything: without a declared goal the app
+tracks weight and never judges it. No status, no gain or loss language, no
+advice, and an athlete who never opens the optional goal disclosure never
+meets weight-goal language anywhere. Pass 3 ships exactly one goal, gaining
+on purpose; losing and holding each need their own band design and safety
+review before they exist.
+
+The weekly rate is a least-squares slope over a 28-day window of every
+weigh-in, because the design panel did the arithmetic: scale noise near
+half a kilogram per reading cannot resolve a sixty-gram-wide target band
+through window-mean differences. Judgments additionally need two
+consecutive scoreable Monday-anchored weeks; an unscoreable week resets
+the count. The gain band scales with body weight, calibrated to reproduce
+the spec's absolute figures at its author's 64 kg; that linearity is a
+documented product simplification, not physiology.
+
+Capture: the morning readiness sheet gains an optional weight field, and
+the sheet now MERGES onto the day's existing record instead of replacing
+it, fixing a live bug where a manual save silently wiped synced fields.
+Fuelling is four one-tap chips on done long sessions with a matched
+recording, subordinate to the feel chips, keyed by activity id only (the
+store spans plans like durability and the calibration diary).
+
+Mass status renders live on its Progress card only: it is never baked into
+frozen weekly decisions, so clearing the goal removes every judgment
+everywhere at once. Fuel answers annotate durability rows.
+
+Deferred, said plainly: fuel capture for tracker-mode recordings (their
+long sessions have durability rows but no plan detail sheet; the capture
+surface there is the recap or the manual entry sheet, its own design).
+
+Backend asks: massGoal as a profile field (device-local until then; the
+plan's profile JSON round-trips it, so only a fresh-device recovery via
+the subset profile loses it), and a fuel field on a future sessions
+endpoint.

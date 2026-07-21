@@ -179,12 +179,20 @@ export function deleteActivityFile(getToken, id) {
    (lib/wellness.js) consumes these the same whether the backend stores manual
    entries or proxies them from intervals.icu. See docs/WELLNESS_ENDPOINT.md. */
 
+// The wire name is `weight`; the client's is `weightKg` (gauntlet catch
+// 2026-07-21: without this mapping, synced weights never reached any
+// client consumer and manual weights never reached the server; the
+// weakest-link card had silently fallen back to the profile value).
+const toClientWellness = r => (r && r.weight != null && r.weightKg == null ? { ...r, weightKg: r.weight } : r);
+const toWireWellness = r => (r && r.weightKg != null ? { ...r, weight: r.weightKg } : r);
+const mapWellnessList = res => (res.ok && Array.isArray(res.body) ? { ...res, body: res.body.map(toClientWellness) } : res);
+
 export function getWellness(getToken) {
-  return request('/api/wellness', { getToken });
+  return request('/api/wellness', { getToken }).then(mapWellnessList);
 }
 
 export function putWellness(getToken, rec) {
-  return request('/api/wellness/' + encodeURIComponent(rec.date), { getToken, method: 'PUT', body: rec });
+  return request('/api/wellness/' + encodeURIComponent(rec.date), { getToken, method: 'PUT', body: toWireWellness(rec) });
 }
 
 export function deleteWellness(getToken, date) {
@@ -197,7 +205,7 @@ export function deleteWellness(getToken, date) {
 // predates the parameter ignores it and does its normal ~60-day sync.
 export function syncWellness(getToken, days) {
   const query = days ? '?days=' + encodeURIComponent(days) : '';
-  return request('/api/wellness/sync' + query, { getToken, method: 'POST' });
+  return request('/api/wellness/sync' + query, { getToken, method: 'POST' }).then(mapWellnessList);
 }
 
 /* ---------------- integrations (intervals.icu) ----------------

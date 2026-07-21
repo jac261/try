@@ -102,6 +102,21 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'durability', JSON.stringify(capped)); } catch (e) {}
       return capped;
     },
+    // One-tap fuel answers for long sessions, keyed by ACTIVITY id only:
+    // activity ids are the sync provider's and stable, so this store, like
+    // durability and the calibration diary, spans plans and must NOT join
+    // clear()'s removal list. No workout-id keying, no reshape wiring.
+    loadFuel() { try { return JSON.parse(localStorage.getItem(ns + 'fuel') || '{}'); } catch (e) { return {}; } },
+    saveFuel(activityId, level, at) {
+      const m = this.loadFuel();
+      if (level == null) delete m[activityId]; else m[activityId] = { level, at };
+      // evict OLDEST answers by timestamp: object key order is insertion
+      // order, not time order (gauntlet catch 2026-07-21)
+      const ids = Object.keys(m).sort((a, b) => ((m[a].at || '') < (m[b].at || '') ? -1 : 1));
+      ids.slice(0, Math.max(0, ids.length - 80)).forEach(id => delete m[id]);
+      try { localStorage.setItem(ns + 'fuel', JSON.stringify(m)); } catch (e) {}
+      return m;
+    },
     loadFeels,
     saveFeel(date, value) {
       const m = loadFeels();

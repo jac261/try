@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { ProgressView } from './ProgressView.jsx';
 import { generatePlan, buildTrackerPlan } from '@/lib/plan.js';
+import { iso } from '@/lib/date.js';
 
 /* A render smoke test for the Progress tab. It exists because the run pass
    briefly shipped JSX referencing variables a dropped write never declared:
@@ -82,5 +83,36 @@ describe('ProgressView renders in every mode', () => {
     const t = buildTrackerPlan(generatePlan(profile), '2026-07-13T10:00:00.000Z');
     const html = await mount({ plan: t, activities: [run('2026-07-14', 8)] });
     expect(html).toContain('Run volume');
+  });
+});
+
+describe('the body mass card is safety-gated', () => {
+  const weighIns = kg => Array.from({ length: 30 }, (_, i) => ({
+    date: iso(new Date(Date.now() - (29 - i) * 864e5)), weightKg: kg + ((i * 37 % 13) - 6) / 20,
+  }));
+
+  it('without a goal: averages and a chart, no pill, no rate, no judgment words', async () => {
+    const html = await mount({ plan: generatePlan(profile), activities: null, wellness: weighIns(70) });
+    expect(html).toContain('Body mass');
+    expect(html).toContain('7-day average');
+    expect(html).not.toContain('target range');
+    expect(html).not.toContain('g a week');
+    expect(html).not.toMatch(/gain|loss|under|over the/i);
+  });
+
+  it('with a gain goal: the pill and the rate render from one judged number', async () => {
+    const plan = generatePlan({ ...profile, massGoal: 'gain' });
+    const rising = Array.from({ length: 42 }, (_, i) => ({
+      date: iso(new Date(Date.now() - (41 - i) * 864e5)), weightKg: 64 + (i / 41) * 0.8 + ((i * 37 % 13) - 6) / 30,
+    }));
+    const html = await mount({ plan, activities: null, wellness: rising });
+    expect(html).toContain('target range');
+    expect(html).toContain('g a week');
+    expect(html).toContain('last completed week');
+  });
+
+  it('zero weigh-ins renders no card at all', async () => {
+    const html = await mount({ plan: generatePlan(profile), activities: null, wellness: [] });
+    expect(html).not.toContain('Body mass');
   });
 });

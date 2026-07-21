@@ -733,3 +733,14 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 
 .coach-row-wrap { margin: 6px 0 10px; }
 .coach-row-wrap .coach-ev { margin-left: 46px; }
+
+/* Fuel chips: subordinate to the feel row above them */
+.fuel-q { font-size: 11.5px; font-weight: 600; color: var(--muted); margin: 10px 0 6px; }
+.feel-row.fuel .feelbtn { font-size: 11.5px; padding: 6px 0; opacity: .92; }
+.fuel-cap { font-size: 10.5px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+/* Body mass card */
+.bm-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 15px; }
+.bm-head .muted { font-size: 11.5px; }
+.bm-rate { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.bm-note { font-size: 11.5px; color: var(--muted); margin: 8px 0; line-height: 1.45; }

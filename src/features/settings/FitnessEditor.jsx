@@ -5,12 +5,14 @@ import { useSheetFocus } from '@/utils/useSheetFocus.js';
 
 export function FitnessEditor({ profile, onClose, onSave, noPlan }) {
   const lvl0 = T.FITNESS[profile.fitness] ? profile.fitness : 'intermediate';
+  const [goalOpen, setGoalOpen] = useState(false);
   const [f, setF] = useState({
     fitness: lvl0,
     fivek: profile.fivekSec ? T.fmtPace(profile.fivekSec) : '',
     css100: profile.css100Sec ? T.fmtPace(profile.css100Sec) : '',
     ftp: profile.ftp || '',
     weightKg: profile.weightKg || '',
+    massGoal: profile.massGoal || null,
   });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
   const sheetRef = useSheetFocus(onClose);
@@ -42,12 +44,25 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan }) {
           <input value={f.ftp} placeholder={'e.g. ' + (T.saneWeightKg(f.weightKg) ? Math.round(T.FITNESS[f.fitness].estWkg * T.saneWeightKg(f.weightKg)) : 200)} inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
         <label className="field"><span className="lab">Weight <span className="hint">optional · kg — lets the bike join the weakest-link scale (W/kg)</span></span>
           <input value={f.weightKg} placeholder="e.g. 70" inputMode="decimal" onChange={e => set('weightKg', e.target.value)} /></label>
+        {/* Closed by default on purpose: an athlete who never opens this
+            never meets weight-goal language at all. Without a declared goal
+            the app tracks weight and never judges it (design panel
+            2026-07-21). */}
+        {!goalOpen && <a className="reset" role="button" {...tap(() => setGoalOpen(true))}>Body-mass goal (optional)</a>}
+        {goalOpen && <>
+          <label className="field" style={{ marginTop: 8 }}><span className="lab">Body-mass goal <span className="hint">optional</span></span></label>
+          <div className="choice">
+            <div className={'opt' + (!f.massGoal ? ' on' : '')} {...tap(() => set('massGoal', null))}>No goal<small>Weight is tracked but never judged.</small></div>
+            <div className={'opt' + (f.massGoal === 'gain' ? ' on' : '')} {...tap(() => set('massGoal', 'gain'))}>Gaining on purpose<small>Shows a weekly rate against a gradual gain target.</small></div>
+          </div>
+        </>}
         <button className="btn primary" onClick={() => onSave({
           fitness: f.fitness,
           fivekSec: T.parseTimeToSec(f.fivek),
           css100Sec: T.parseTimeToSec(f.css100),
           ftp: f.ftp ? Number(f.ftp) : null,
           weightKg: f.weightKg ? Number(f.weightKg) : null,
+          massGoal: f.massGoal || null,
         })}>{noPlan ? 'Save to fitness history' : 'Save & re-target plan'}</button>
       </div>
     </div>

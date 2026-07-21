@@ -458,6 +458,8 @@ export function App({ storage, getToken, user }) {
   // told to make (design panel 2026-07-20). A network failure stores
   // nothing and retries next load; only a fetched-but-unreadable recording
   // is remembered as read: null (gauntlet catch: the two must never blur).
+  const [fuelLog, setFuelLog] = useState(() => storage.loadFuel());
+  const answerFuel = (activityId, level) => setFuelLog(storage.saveFuel(activityId, level, new Date().toISOString()));
   const [durability, setDurability] = useState(() => storage.loadDurability());
   const durabilityRef = useRef(durability);
   durabilityRef.current = durability;
@@ -1121,7 +1123,7 @@ export function App({ storage, getToken, user }) {
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} coach={coachNow} durability={durability} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
@@ -1159,9 +1161,9 @@ export function App({ storage, getToken, user }) {
 
       {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
-      {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} />}
+      {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}
 
-      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed}
+      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel}
         activity={log[detail.id] ? recordingFor(detail) : null}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}

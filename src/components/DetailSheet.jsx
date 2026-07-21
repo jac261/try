@@ -38,7 +38,7 @@ const WHY_DISC = {
   'swim:Long': 'Steady, patient distance work. An even rhythm from the first length to the last: the volume does the work when your form holds it together.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed, fuelLog, onFuel }) {
   // The rep table: lazily fetch the recording's interval analysis once the
   // session is done and matched. null → loading/none; [] handled by the lib.
   const [reps, setReps] = useState(null);
@@ -88,6 +88,24 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             {[['easy', 'Easy'], ['right', 'Just right'], ['hard', 'Hard']].map(([k, lab]) =>
               <button key={k} className={'feelbtn' + (feel === k ? ' on ' + k : '')} onClick={() => onFeel(w.id, k)}>{lab}</button>)}
           </div>
+          {/* Fuel, deliberately SUBORDINATE to feel (the one thing a finished
+              session asks comes first): long sessions with a matched
+              recording only, keyed by the recording, always optional. */}
+          {onFuel && activity && (w.role === 'long' || w.discipline === 'brick') && (() => {
+            // answered-state and save target resolve from the SAME activity
+            // prop and the raw map, so an eased rebuild can never read one
+            // recording and write another (gauntlet catch 2026-07-21)
+            const fuel = fuelLog && fuelLog[activity.id] && fuelLog[activity.id].level;
+            return <>
+              <div className="fuel-q">Fuel on board?</div>
+              <div className="feel-row fuel">
+                {Object.entries(T.FUEL_LEVELS).map(([k, lab]) =>
+                  <button key={k} className={'feelbtn' + (fuel === k ? ' on right' : '')}
+                    onClick={() => onFuel(activity.id, fuel === k ? null : k)}>{lab}</button>)}
+              </div>
+              <div className="fuel-cap">{T.FUEL_CAPTION}</div>
+            </>;
+          })()}
         </div>}
         {w.eased && <div className="testnote"><Icon name="heartrate" size={18} /><span>Eased from your planned {w.easedFrom} session for recovery. {onRestore && <a className="reset" {...tap(onRestore)}>Restore the hard session</a>}</span></div>}
         {w.trimmed && <div className="testnote"><Icon name="trend" size={18} /><span>Trimmed from {T.fmtDuration(w.trimmedFrom)} by the adaptive engine to protect you from overload. {onRestore && <a className="reset" {...tap(onRestore)}>Restore full volume</a>}</span></div>}

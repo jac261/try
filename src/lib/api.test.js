@@ -160,6 +160,20 @@ describe('request layer', () => {
     expect(global.fetch.mock.calls[0][0]).toContain('/api/wellness');
   });
 
+  it('wellness weight maps between the wire name and the client name in both directions', async () => {
+    // the wire says `weight`; the client says `weightKg`. Without this
+    // mapping, synced weights never reached any consumer and manual
+    // weights never reached the server (gauntlet critical 2026-07-21).
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify([{ date: '2026-07-01', weight: 70.4 }]) }));
+    const r = await getWellness(getToken);
+    expect(r.body[0].weightKg).toBe(70.4);
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, text: async () => '{}' }));
+    await putWellness(getToken, { date: '2026-07-02', weightKg: 70.6, hrv: 55 });
+    const sent = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(sent.weight).toBe(70.6);
+    expect(sent.hrv).toBe(55);
+  });
+
   it('putWellness upserts a record at its date', async () => {
     global.fetch = vi.fn(async () => ({ ok: true, status: 200, text: async () => '{}' }));
     await putWellness(getToken, { date: '2026-07-02', hrv: 55, sleepH: 7 });
