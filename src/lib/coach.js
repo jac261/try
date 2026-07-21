@@ -165,7 +165,7 @@ function runScoped(proposal, sessions) {
 // { decision, headline, evidence: [{signal, reading}], conflicting: [] }.
 // `prevWeeks` is an array of earlier stored decisions (newest first), used
 // only for the repeat rule. Pure and deterministic.
-export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, todayISO, weekMonday, prevWeeks }) {
+export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, todayISO, weekMonday, prevWeeks, durabilityByDiscipline }) {
   const tracker = !plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length;
   if (tracker) return decideTrackerWeek({ activities, wellness, plan, todayISO, weekMonday });
 
@@ -272,6 +272,13 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
     if (wl && wl.weakest === d && !clean && strained) {
       ev.push({ signal: 'repeatability', reading: 'a session missed under strain resets the clean-week count' });
     }
+    // Durability context, pass 2: EVIDENCE ONLY. The read never changes a
+    // decision here; using it as a decision input needs its own design
+    // panel first (documented in docs/COACH_BRAIN.md).
+    const du = durabilityByDiscipline && durabilityByDiscipline[d];
+    if (du && du.read) {
+      ev.push({ signal: 'late-session durability', reading: ({ 'held-strong': 'your long session held up strongly to the end', 'faded-a-little': 'your long session faded a little in its final stretch', 'faded-hard': 'your long session faded hard in its final stretch' })[du.read.band] });
+    }
     disciplines[d] = { decision, headline, evidence: ev, clean };
   });
 
@@ -316,7 +323,11 @@ function decideTrackerWeek({ activities, wellness, plan, todayISO, weekMonday })
   }
   const wl = plan && plan.profile ? weakestLink({ profile: plan.profile }) : null;
   return {
-    weekMonday, ruleVersion: COACH_RULE_VERSION, tracker: true, planCreatedAt: null,
+    // the tracker sentinel carries a real createdAt, and the freeze guard
+    // and digest read compare against it: a null stamp made every stored
+    // tracker decision look foreign, refreezing forever and never rendering
+    // (gauntlet catch 2026-07-20)
+    weekMonday, ruleVersion: COACH_RULE_VERSION, tracker: true, planCreatedAt: (plan && plan.createdAt) || null,
     overall: { ...overall, evidence, conflicting },
     disciplines,
     progression: wl && wl.weakest ? { discipline: wl.weakest, what: PROGRESSION[wl.weakest] } : null,

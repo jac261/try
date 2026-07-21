@@ -7,7 +7,7 @@ import { AthleteStateStrip } from '@/features/wellness/AthleteStateStrip.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, activities, coach, wellness, runLoad, recovery, onSupport, onWhatIf }) {
+export function ProgressView({ plan, log, activities, coach, durability, wellness, runLoad, recovery, onSupport, onWhatIf }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -132,6 +132,42 @@ export function ProgressView({ plan, log, activities, coach, wellness, runLoad, 
       </>}
 
       {(() => {
+        // Durability: how the long sessions ended, from their recorded laps.
+        // Trends are strictly per discipline (a run/ride mix-shift must
+        // never masquerade as a fitness trend); a read that saw no heart
+        // rate says so; bike output is power, not pace, and the wording
+        // follows. One read is never a claim.
+        const reads = [...(durability || [])].reverse().filter(e => e.read);
+        if (!reads.length) return null;
+        const pct = v => '~' + Math.abs(v) + '%';
+        const outputBit = e => e.read.outputDropPct === 0
+          ? (e.discipline === 'bike' ? 'power level late' : 'pace level late')
+          : e.discipline === 'bike'
+            ? 'power ' + pct(e.read.outputDropPct) + (e.read.outputDropPct > 0 ? ' down late' : ' up late')
+            : pct(e.read.outputDropPct) + (e.read.outputDropPct > 0 ? ' slower late' : ' quicker late');
+        const hrBit = e => e.read.hrMissing ? 'no heart rate data'
+          : e.read.hrDriftPct === 0 ? 'HR level late'
+            : 'HR ' + pct(e.read.hrDriftPct) + (e.read.hrDriftPct > 0 ? ' up' : ' down');
+        const trends = ['run', 'bike'].map(d => ({ d, t: T.durabilityTrend(reads.filter(e => e.discipline === d)) }))
+          .filter(x => x.t);
+        return <>
+          <div className="section-title">Durability <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(how the long sessions ended)</span></div>
+          <div className="card">
+            {trends.map(x => <div className="du-trend" key={x.d}>{x.d === 'bike' ? 'Long rides: ' : 'Long runs: '}{x.t}</div>)}
+            {reads.slice(0, 5).map(e => (
+              <div className="du-row" key={e.activityId}>
+                <span className="du-date">{T.fmtDate(e.date, { day: 'numeric', month: 'short' })}</span>
+                <span className="du-disc">{e.discipline === 'bike' ? 'Ride' : 'Run'} · {T.fmtDuration(e.durationMin)}</span>
+                <span className={'coach-pill' + (e.read.band === 'held-strong' ? ' progress' : e.read.band === 'faded-hard' ? ' recover' : '')}>{T.DURABILITY_BAND_LABELS[e.read.band]}</span>
+                <span className="du-nums">{outputBit(e)} · {hrBit(e)}{e.read.efDropPct != null && e.read.efDropPct > 0 ? ' · efficiency ' + pct(e.read.efDropPct) + ' down' : ''}</span>
+              </div>
+            ))}
+            <div className="du-note">Laps only tell part of it: hills, heat, wind and fuelling are invisible here, so read the pattern across weeks, never one session.</div>
+          </div>
+        </>;
+      })()}
+
+      {(() => {
         // Weakest link: the three sports on one experience scale, and what the
         // plan does about the one lagging behind. Quiet claims only — with too
         // little data (no FTP or weight for the bike) it says so.
@@ -205,10 +241,15 @@ export function ProgressView({ plan, log, activities, coach, wellness, runLoad, 
             {coach && (Object.keys(coach.disciplines).length > 0 || coach.overall) && <div className="coach-week">
               <div className="coach-week-head">This week so far <span className="muted">{T.DECISION_LABELS[coach.overall.decision]}</span></div>
               {Object.entries(coach.disciplines).map(([d, v]) => (
-                <div className="coach-row" key={d}>
-                  <span className="coach-d">{NAME[d] || d}</span>
-                  <span className={'coach-pill ' + v.decision}>{T.DECISION_LABELS[v.decision]}</span>
-                  <span className="coach-why">{v.headline}</span>
+                <div className="coach-row-wrap" key={d}>
+                  <div className="coach-row">
+                    <span className="coach-d">{NAME[d] || d}</span>
+                    <span className={'coach-pill ' + v.decision}>{T.DECISION_LABELS[v.decision]}</span>
+                    <span className="coach-why">{v.headline}</span>
+                  </div>
+                  {(v.evidence || []).map((e, n) => (
+                    <div className="coach-ev" key={n}><span className="coach-sig">{e.signal}</span>{e.reading}</div>
+                  ))}
                 </div>
               ))}
             </div>}

@@ -23,7 +23,10 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
   // absent. Never recomputed here; a recompute presented as the original
   // call would be a lie on a card whose whole job is the honest record
   // (design panel 2026-07-20).
-  const coach = coachLog && coachLog[weekMonday];
+  const stored = coachLog && coachLog[weekMonday];
+  // Only the CURRENT plan's frozen decision is quotable: one from a replaced
+  // plan is a record about a different reality (re-verify catch 2026-07-20).
+  const coach = stored && (stored.planCreatedAt ?? null) === ((plan && plan.createdAt) || null) ? stored : null;
 
   return (
     <>
@@ -77,9 +80,18 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
           </div>
         )}
 
-        {/* an engine call already quoted inside the decision card must not
-            render a second time below it (gauntlet catch 2026-07-20) */}
-        {!d.tracker && d.engine.filter(e => !(coach && coach.overall.evidence.some(ev => ev.reading === e.headline))).map((e, n) => (
+        {/* the ONE engine call quoted inside the decision card must not
+            render again below it; identity is headline plus why, and only
+            the first match is hidden, so an unrelated call reusing the same
+            template headline still shows (re-verify catch 2026-07-20) */}
+        {!d.tracker && (() => {
+          const rows = d.engine.slice();
+          if (coach && coach.quotedEngine) {
+            const i = rows.findIndex(e => e.headline === coach.quotedEngine.headline && (e.why || null) === (coach.quotedEngine.why || null));
+            if (i >= 0) rows.splice(i, 1);
+          }
+          return rows;
+        })().map((e, n) => (
           <div className="testnote" key={n} style={{ marginTop: 10 }}>
             <Icon name="heartrate" size={18} />
             <span><b>{e.headline}</b>{e.why ? '. ' + e.why : ''}</span>

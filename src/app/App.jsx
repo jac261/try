@@ -124,7 +124,7 @@ export function App({ storage, getToken, user }) {
   const actSeq = useRef(0);
   const fetchActivities = days => {
     const seq = ++actSeq.current;
-    sync.loadActivities(days).then(a => { if (a && seq === actSeq.current) setActivities(a); });
+    return sync.loadActivities(days).then(a => { if (a && seq === actSeq.current) setActivities(a); });
   };
   const [thresholds, setThresholds] = useState(null); // intervals.icu per-sport thresholds (fitness watcher)
   // True once the post-hydration activity and wellness round-trips have
@@ -386,7 +386,7 @@ export function App({ storage, getToken, user }) {
     // refresh pulls from intervals.icu first when connected (plain GET otherwise),
     // then we merge server + local (server wins per date) and migrate any
     // local-only days up.
-    sync.refreshWellness().then(serverRecs => {
+    const wellnessP = sync.refreshWellness().then(serverRecs => {
       if (cancelled || !serverRecs) return; // null → offline/error, keep local cache
       applyServerWellness(serverRecs);
       // Self-healing history: connected but the fitness record only reaches
@@ -408,8 +408,15 @@ export function App({ storage, getToken, user }) {
     // instead of the spotting window — otherwise the calendar shows months of
     // false blanks. (Sequence-guarded via fetchActivities against the deep
     // refetch that entering tracker fires.)
-    fetchActivities(plan && plan.race === 'tracker' ? TRACKER_FEED_DAYS : undefined);
+    // Plan mode fetches deep enough for the durability backfill's candidate
+    // window (the spotting matcher narrows itself internally, so a deeper
+    // raw feed is safe for every other consumer).
+    const activitiesP = fetchActivities(plan && plan.race === 'tracker' ? TRACKER_FEED_DAYS : 80);
     sync.loadThresholds().then(t => { if (!cancelled && t) setThresholds(t); });
+    // The coach freeze and the durability backfill wait for both round-trips
+    // to settle either way: a failure settles too, only an in-flight fetch
+    // holds them back.
+    Promise.allSettled([wellnessP, activitiesP]).then(() => { if (!cancelled) setFetchesSettled(true); });
     return () => { cancelled = true; };
   }, [sync]); // eslint-disable-line react-hooks/exhaustive-deps -- didHydrate-guarded: runs once
 
@@ -442,6 +449,98 @@ export function App({ storage, getToken, user }) {
     return () => { cancelled = true; };
   }, [plan, activities, log, moves, cssTest, sync]);
 
+  // Durability (coach brain pass 2): reads for matched long sessions,
+  // computed from each recording's laps, cached per activity id. Bounded
+  // backfill: at most two fetches per app load, the reviewed week's own
+  // sessions first (the weekly freeze waits for them), then newest-first
+  // history for the trend. Only steady-bodied planned sessions qualify: a
+  // scripted fast finish would read as a durability signal the athlete was
+  // told to make (design panel 2026-07-20). A network failure stores
+  // nothing and retries next load; only a fetched-but-unreadable recording
+  // is remembered as read: null (gauntlet catch: the two must never blur).
+  const [durability, setDurability] = useState(() => storage.loadDurability());
+  const durabilityRef = useRef(durability);
+  durabilityRef.current = durability;
+  // true once this load's backfill budget is spent (either way): the freeze
+  // stops waiting for a reviewed-week read that is not coming this session
+  const [durabilityDone, setDurabilityDone] = useState(false);
+  const durabilityBusy = useRef(false);
+  const durabilityCandidates = () => {
+    if (!Array.isArray(activities)) return [];
+    const store = durabilityRef.current;
+    const have = new Set(store.map(e => e.activityId));
+    // once the store is full, candidates older than its oldest entry would
+    // evict-and-refetch forever; they are simply out of the window now
+    const floor = store.length >= 40 ? store[0].date : null;
+    const out = [];
+    if (plan && plan.race !== 'tracker' && Array.isArray(plan.weeks) && plan.weeks.length) {
+      plan.weeks.flatMap(w => w.workouts)
+        .filter(w => ((w.role === 'long' && (w.discipline === 'run' || w.discipline === 'bike')) || w.discipline === 'brick') && log[w.id])
+        .forEach(w => {
+          if (w.discipline === 'brick') {
+            // the BIKE leg only, judged by ITS OWN segments: a brick's run
+            // leg starts pre-fatigued by design and is deferred
+            if (!T.planBodySteady(w, 'bike')) return;
+            const pair = T.brickPairFor({ workout: w, activities, moves });
+            if (pair && !have.has(pair.ride.id)) out.push({ activity: pair.ride, discipline: 'bike' });
+          } else {
+            if (!T.planBodySteady(w)) return;
+            const a = T.activityFor({ workout: w, activities, moves });
+            if (a && !have.has(a.id)) out.push({ activity: a, discipline: w.discipline });
+          }
+        });
+    } else if (!plan || plan.race === 'tracker') {
+      activities.forEach(a => {
+        const d = T.DISCIPLINE[a.type];
+        if ((d === 'run' || d === 'bike') && !a.manual && !have.has(a.id)
+          && (a.movingTimeSec || 0) >= T.DURABILITY_GATES[d].minMovingSec) out.push({ activity: a, discipline: d });
+      });
+    }
+    const bounded = floor ? out.filter(c => c.activity.date >= floor) : out;
+    const wm = T.iso(T.startOfWeekMonday(new Date()));
+    const reviewed = T.reviewedWeekMonday(T.iso(new Date()), new Date().getHours());
+    const inReviewed = c => reviewed && c.activity.date >= reviewed && c.activity.date < wm;
+    return bounded.sort((a, b) =>
+      (inReviewed(b) ? 1 : 0) - (inReviewed(a) ? 1 : 0)
+      || (a.activity.date < b.activity.date ? 1 : -1));
+  };
+  useEffect(() => {
+    if (!hydrated || !fetchesSettled || durabilityBusy.current || durabilityDone) return;
+    if (!Array.isArray(activities)) { setDurabilityDone(true); return; }
+    const picks = durabilityCandidates().slice(0, 2);
+    if (!picks.length) { setDurabilityDone(true); return; }
+    durabilityBusy.current = true;
+    (async () => {
+      try {
+        for (const c of picks) {
+          const rows = await sync.loadActivityIntervals(c.activity.id).catch(() => null);
+          // null means the FETCH failed (offline, error): store nothing so a
+          // later load retries. An array, even empty, is a real answer.
+          if (rows === null) continue;
+          const read = T.durabilityRead({ rows, discipline: c.discipline, movingTimeSec: c.activity.movingTimeSec });
+          setDurability(storage.saveDurabilityRead({
+            activityId: c.activity.id, date: c.activity.date, discipline: c.discipline,
+            durationMin: Math.round((c.activity.movingTimeSec || 0) / 60), read,
+          }));
+        }
+      } finally {
+        durabilityBusy.current = false;
+        setDurabilityDone(true);
+      }
+    })();
+    // deps deliberately EXCLUDE durability (read via ref): the store write
+    // inside the loop must not cancel its own second fetch
+  }, [hydrated, fetchesSettled, activities, plan, log, moves, durabilityDone, storage, sync]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the reviewed (or open) week's newest read per discipline, for the coach
+  const durabilityFor = weekMonday => {
+    const end = T.iso(T.addDays(weekMonday, 6));
+    const out = {};
+    [...durability].reverse().forEach(e => {
+      if (e.date >= weekMonday && e.date <= end && e.read && !out[e.discipline]) out[e.discipline] = e;
+    });
+    return out;
+  };
   // Freeze the coach brain's weekly decision at the digest's own boundary:
   // the first render that sees a reviewed week with no stored decision writes
   // it once; every later render quotes the store. Progress shows the OPEN
@@ -466,16 +565,22 @@ export function App({ storage, getToken, user }) {
     // wrong forever (gauntlet catch). Any dep change re-arms the timer with
     // fresher data; the write happens at most once per week regardless.
     if (!T.digestWindowOpen(weekMonday, todayISO)) return;
+    if (!fetchesSettled) return;
+    // hold for the reviewed week's own durability read while this load's
+    // backfill can still land it (it fetches that week first); once the
+    // budget is spent the freeze proceeds with what exists
+    if (!durabilityDone && Object.keys(durabilityFor(weekMonday)).length === 0) return;
     const t = setTimeout(() => {
       const prevWeeks = Object.keys(coachLog).sort().reverse().map(k => coachLog[k]);
       const decision = T.decideWeek({
         plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
         missedReasons, todayISO, weekMonday, prevWeeks,
+        durabilityByDiscipline: durabilityFor(weekMonday),
       });
       setCoachLog(storage.saveCoachDecision(weekMonday, decision));
-    }, 6000);
+    }, 2000);
     return () => clearTimeout(t);
-  }, [hydrated, plan, log, moves, adjust, adjustLog, recs, displayActivities, missedReasons, coachLog, storage]);
+  }, [hydrated, fetchesSettled, durability, durabilityDone, plan, log, moves, adjust, adjustLog, recs, displayActivities, missedReasons, coachLog, storage]);
 
   // Fold a server wellness list into local state + the offline cache (server wins
   // per date; local-only days are pushed up). Also called when the Settings page
@@ -818,6 +923,7 @@ export function App({ storage, getToken, user }) {
     missedReasons, todayISO: T.iso(new Date()),
     weekMonday: T.iso(T.startOfWeekMonday(new Date())),
     prevWeeks: Object.keys(coachLog).sort().reverse().map(k => coachLog[k]),
+    durabilityByDiscipline: durabilityFor(T.iso(T.startOfWeekMonday(new Date()))),
   });
   const applyEftp = () => { if (eftp) retarget(eftp.retarget); };
   const logSpotted = () => {
@@ -1015,7 +1121,7 @@ export function App({ storage, getToken, user }) {
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} coach={coachNow} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} coach={coachNow} durability={durability} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}

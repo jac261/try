@@ -283,3 +283,29 @@ Two notes on the strings, so we never repaint them:
 
 Duathlon and aquathlon are a later conversation; not batching them in until
 the product design exists.
+
+
+---
+
+## Ask — 20 July 2026: per-lap fields for the durability dashboard
+
+The durability surface ships computing from the interval rows you already
+pass through. Four small additive fields on the per-interval DTO would make
+it meaningfully better, all already present in intervals.icu's raw lap
+payload (verified live):
+
+1. **`average_gradient`** (or `total_elevation_gain`): the one confounder we
+   could actually gate on. A final third that is a real climb currently
+   reads as fading, and copy hedging is the only defence.
+2. **`decoupling`**: intervals.icu's own per-lap Pw:Hr decoupling, the
+   vetted native version of the drift metric we derive; a cross-check and
+   eventual replacement.
+3. **`average_cadence`**: late-session cadence decay is a durability signal
+   we currently cannot see at all.
+4. **`average_temp`**: heat is the other big confounder worth hedging with
+   data instead of words.
+
+Note: the per-ride `NormalizedWatts` from PR #23 is the whole-activity
+number; the durability windows would additionally benefit from per-interval
+normalized power if intervals.icu exposes it per lap, but that is a
+nice-to-have behind the four above.

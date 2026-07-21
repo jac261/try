@@ -54,12 +54,28 @@ describe('ProgressView renders in every mode', () => {
     const coach = {
       weekMonday: '2026-07-13', ruleVersion: 1, tracker: false,
       overall: { decision: 'hold', headline: 'Hold steady. This workload is doing its job', evidence: [], conflicting: [] },
-      disciplines: { run: { decision: 'hold', headline: 'Hold steady', evidence: [], clean: true } },
+      disciplines: { run: { decision: 'hold', headline: 'Doing its job', evidence: [{ signal: 'late-session durability', reading: 'your long session held up strongly to the end' }], clean: true } },
       progression: null,
     };
     const html = await mount({ plan, activities: null, coach });
     expect(html).toContain('This week so far');
-    expect(html).toContain('Hold steady');
+    // evidence must actually RENDER: it shipped once as data with no UI
+    // consumer, and only inspection caught it (gauntlet 2026-07-20)
+    expect(html).toContain('held up strongly to the end');
+    expect(html).toContain('late-session durability');
+  });
+
+  it('renders durability rows with honest per-discipline wording', async () => {
+    const plan = generatePlan(profile);
+    const durability = [
+      { activityId: 'r1', date: '2026-07-14', discipline: 'run', durationMin: 95, read: { band: 'held-strong', outputDropPct: 2.1, hrDriftPct: 3.0, efDropPct: null, hrMissing: false } },
+      { activityId: 'b1', date: '2026-07-12', discipline: 'bike', durationMin: 160, read: { band: 'faded-a-little', outputDropPct: 5.2, hrDriftPct: null, efDropPct: null, hrMissing: true } },
+    ];
+    const html = await mount({ plan, activities: null, durability });
+    expect(html).toContain('Durability');
+    expect(html).toContain('slower late');          // run wording is pace
+    expect(html).toContain('power ~5.2% down late'); // bike wording is power
+    expect(html).toContain('no heart rate data');    // hrMissing says so
   });
 
   it('tracker mode renders', async () => {

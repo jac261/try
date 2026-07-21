@@ -210,10 +210,23 @@ export function makeSync(getToken) {
     // The interval/lap rows for one recording (the rep table). null when not
     // connected, offline, or on a backend that predates the endpoint — the
     // review simply shows no table.
-    loadActivityIntervals: async activityId => {
-      const res = await getIntervalsActivityIntervals(getToken, activityId);
-      return res.ok && Array.isArray(res.body) ? res.body : null;
-    },
+    loadActivityIntervals: (activityId => {
+      // One activity's laps are now wanted by three consumers (the rep
+      // table, auto-CSS, durability): memoise per app load so they share a
+      // single round-trip. Failures are NOT cached, so a flaky request can
+      // retry on the next open (durability's own store handles its
+      // fail-closed caching separately).
+      const cache = new Map();
+      return async activityId2 => {
+        if (cache.has(activityId2)) return cache.get(activityId2);
+        const p = getIntervalsActivityIntervals(getToken, activityId2)
+          .then(res => (res.ok && Array.isArray(res.body) ? res.body : null));
+        cache.set(activityId2, p);
+        const rows = await p;
+        if (rows === null) cache.delete(activityId2);
+        return rows;
+      };
+    })(),
 
     // The GPS track for one recording, as [lat, lng] pairs for the recap's
     // route map. null when there is no drawable route for ANY reason — not

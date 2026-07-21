@@ -88,6 +88,20 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'coachLog', JSON.stringify(m)); } catch (e) {}
       return m;
     },
+    // Durability reads, keyed by activity id. Like calibration and the
+    // manual diary this is an append-only record of facts about PAST
+    // recordings, spanning plans by design: it must NOT join clear()'s
+    // removal list. read is null for a fetched-but-unreadable recording
+    // (fail-closed: never refetched).
+    loadDurability() { try { return JSON.parse(localStorage.getItem(ns + 'durability') || '[]'); } catch (e) { return []; } },
+    saveDurabilityRead(entry) {
+      const list = this.loadDurability().filter(e => e.activityId !== entry.activityId);
+      list.push(entry);
+      list.sort((a, b) => (a.date < b.date ? -1 : 1));
+      const capped = list.slice(-40);
+      try { localStorage.setItem(ns + 'durability', JSON.stringify(capped)); } catch (e) {}
+      return capped;
+    },
     loadFeels,
     saveFeel(date, value) {
       const m = loadFeels();

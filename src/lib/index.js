@@ -23,3 +23,4 @@ export * from './profile.js';
 export * from './eftp.js';
 export * from './runstats.js';
 export * from './coach.js';
+export * from './durability.js';

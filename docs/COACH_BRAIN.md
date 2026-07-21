@@ -61,3 +61,28 @@ body-mass and fuelling domain, block objects and templates, a 1 to 10 RPE
 scale (Try's three-point feel is a deliberate contract), calendar
 write-back, illness detection (Try cannot distinguish a cold from
 overreaching in the data and must not pretend to).
+
+## Pass 2: durability (shipped alongside this doc's update)
+
+src/lib/durability.js reads a long session's recorded laps and compares its
+first and final thirds: output, heart rate, and efficiency where both
+signals exist. Every mean is time-weighted (power and heart rate live in
+the time domain; distance weighting favours fast easy laps, backwards for a
+fatigue read), embedded-stop laps are filtered against the session's median
+speed, a window dominated by one lap voids the read, and a planned session
+whose own card scripts a late pace change never qualifies: the athlete
+following a fast-finish instruction is not fading.
+
+Reads are cached per activity id, device-local, surviving plan changes (a
+read is a fact about a past recording). The backfill fetches at most two
+recordings per app load, the reviewed week's sessions first, sharing one
+memoised intervals fetch with the rep table and auto-CSS.
+
+The Progress card leads with the pattern and hedges the rest: laps cannot
+see hills, heat, wind or fuelling, so one read is never a claim. The coach
+brain gains a durability EVIDENCE line only; using the read as a decision
+input needs its own design panel first.
+
+Excluded on purpose: a brick's run leg (it starts pre-fatigued by design;
+reserved for the deferred brick comparison), swim durability (pool laps
+confound drift with prescribed rest).

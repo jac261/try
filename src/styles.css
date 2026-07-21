@@ -722,3 +722,14 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* Four missed-session chips wrap two-up so long labels stay readable */
 .feel-row.missed { flex-wrap: wrap; }
 .feel-row.missed .feelbtn { flex: 1 1 45%; }
+
+/* Durability card */
+.du-trend { font-size: 12.5px; font-weight: 600; margin-bottom: 10px; }
+.du-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 12px; flex-wrap: wrap; }
+.du-date { flex: 0 0 46px; color: var(--muted); }
+.du-disc { flex: 0 0 auto; font-weight: 600; }
+.du-nums { color: var(--muted); font-variant-numeric: tabular-nums; }
+.du-note { font-size: 11.5px; color: var(--muted); margin-top: 10px; line-height: 1.45; }
+
+.coach-row-wrap { margin: 6px 0 10px; }
+.coach-row-wrap .coach-ev { margin-left: 46px; }
