@@ -10,7 +10,7 @@ const D = T.DISCIPLINES;
 /* The plan tab owns the whole programme: the phase overview, then every week
    as an expandable card (moved here from the old calendar tab, which is now a
    real month calendar). */
-export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onSupport, onEditPlan, onStartMaintenance }) {
+export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onSupport, onEditPlan, onStartMaintenance , onFocus }) {
   // Tracker mode: no programme to show, just the way back into one.
   if (plan.race === 'tracker') return (
     <>
@@ -37,16 +37,11 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
   // the "N-week build" headline — the build is the build.
   const hasRecoveryWeek = !race.noRace && plan.weeks.length > 0 && plan.weeks[plan.weeks.length - 1].isRecovery;
   const buildLen = plan.totalWeeks - (hasRecoveryWeek ? 1 : 0);
-  const phaseGroups = useMemo(() => {
-    const g = [];
-    plan.weeks.forEach(w => {
-      const disp = hasRecoveryWeek && w.index === plan.weeks.length - 1 ? 'Recovery' : w.phase;
-      const last = g[g.length - 1];
-      if (last && last.phase === disp) { last.weeks++; last.min += w.totalMin; }
-      else g.push({ phase: disp, weeks: 1, min: w.totalMin, start: w.index });
-    });
-    return g;
-  }, [plan, hasRecoveryWeek]);
+  const phaseGroups = useMemo(() => T.phaseGroups(plan), [plan]);
+  // display-and-coach-only: the declared focus labels blocks; the limiter
+  // keeps actuating, and when they disagree both are said plainly
+  const fx = T.resolveFocus(plan.profile, T.weakestLink({ profile: plan.profile }));
+  const [fxOpen, setFxOpen] = useState(false);
   const totalHrs = Math.round(plan.weeks.reduce((a, b) => a + b.totalMin, 0) / 60);
 
   return (
@@ -64,7 +59,10 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
           return (
             <div className="seg" key={i} style={{ alignItems: 'center' }}>
               <div className="bar" style={{ background: pi.color, height: 38 }} />
-              <div><div className="l">{g.phase} <span className="muted">· {g.weeks} {g.weeks === 1 ? 'week' : 'weeks'}</span></div>
+              <div><div className="l">{g.phase} <span className="muted">· {g.weeks} {g.weeks === 1 ? 'week' : 'weeks'}</span>{(() => {
+                const fc = T.focusClause(g.phase, fx.focus);
+                return fc ? <span className="muted"> · {fc}</span> : null;
+              })()}</div>
                 <div className="d">{pi.blurb}</div></div>
               <div className="m">{T.fmtDuration(g.min)}</div>
             </div>
@@ -75,6 +73,14 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
             <div className="li" key={k}><i style={{ background: D[k].color }} />{D[k].name}</div>
           ))}
         </div>
+        {fx.diverges && <div className="focus-note">Focus: {T.FOCUS_OPTIONS[fx.focus]}, your call. The plan's extra work still goes to {T.FOCUS_OPTIONS[fx.derived]}, your limiter.</div>}
+        {onFocus && !fxOpen && <a className="reset" role="button" {...tap(() => setFxOpen(true))} style={{ display: 'inline-block', marginTop: 6 }}>Change what this plan is about</a>}
+        {onFocus && fxOpen && <div className="feel-row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+          {Object.entries(T.FOCUS_OPTIONS)
+            .filter(([k]) => k === 'general' || plan.profile.excludedDiscipline !== k)
+            .map(([k, lab]) => <button key={k} className="feelbtn" style={{ flex: '1 1 45%' }}
+              onClick={() => { onFocus(k === 'general' ? null : k); setFxOpen(false); }}>{k === 'general' ? 'Everything evenly' : 'Focus on ' + lab}</button>)}
+        </div>}
       </div>
 
       <div className="section-title"><InfoLink onOpen={onSupport} topic="workout-library" />Week by week</div>

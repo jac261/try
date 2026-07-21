@@ -34,6 +34,7 @@ import { runLoadSignal, runLoadFromActivities, RUN_RAMP_RULES } from './runload.
 import { weakestLink } from './weakest.js';
 import { wellness as W } from './wellness.js';
 import { effDate } from './schedule.js';
+import { weekPhaseLabel } from './plan.js';
 import { iso, addDays } from './date.js';
 
 // Bump when decision logic changes: stored decisions carry the version they
@@ -69,6 +70,34 @@ const PROGRESSION = {
 // successfully" made concrete. Documented here because it is a NEW rule, not
 // borrowed from the engine.
 export const REPEAT_WEEKS = 2;
+
+/* ---- the block focus (pass 4, display-and-coach-only) ----
+ * The limiter machinery keeps actuating exactly as before: a declared focus
+ * NEVER feeds weakBias or the frequency swap (it would bypass the noise
+ * gates weakest.js exists for), never renames the progression variable when
+ * it diverges from the limiter (the named progression describes what the
+ * plan really does next), and changes nothing about generation. It labels
+ * blocks, scopes the block review, and where it disagrees with the derived
+ * limiter every surface says both plainly (design panel 2026-07-21). */
+export const FOCUS_OPTIONS = { swim: 'the swim', bike: 'the bike', run: 'the run', general: 'everything evenly' };
+// phase-gated verb: a focus clause never claims building during a taper
+export function focusClause(phase, focus) {
+  if (!focus || focus === 'general') return phase === 'Maintain' ? 'keeping everything ticking' : null;
+  const name = FOCUS_OPTIONS[focus];
+  if (!name) return null;
+  if (phase === 'Base' || phase === 'Build') return 'building ' + name;
+  if (phase === 'Peak') return 'sharpening ' + name;
+  if (phase === 'Maintain') return 'minding ' + name;
+  return null; // Taper and Recovery are not about any one discipline
+}
+// The effective focus: declared wins for LABELS; the derived limiter keeps
+// actuating regardless. Returns {focus, derived, diverges}.
+export function resolveFocus(profile, wl) {
+  const derived = wl && wl.weakest ? wl.weakest : 'general';
+  const declared = profile && profile.blockFocus && FOCUS_OPTIONS[profile.blockFocus] ? profile.blockFocus : null;
+  const focus = declared || derived;
+  return { focus, derived, declared, diverges: !!declared && declared !== derived && derived !== 'general' };
+}
 
 /* ---- completion classification (spec section 4, derived not asked) ---- */
 
@@ -289,8 +318,14 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
   if (progressed && (overall.decision === 'hold') && boostClean) {
     overall = { decision: 'progress', headline: 'The load is landing well' };
   }
+  const planWeek = plan.weeks.find(w2 => w2.start === weekMonday);
   return {
     weekMonday, ruleVersion: COACH_RULE_VERSION, tracker: false, planCreatedAt: plan.createdAt || null,
+    // the phase as it stood when the week froze: block boundaries derive
+    // from stored decisions, never re-derived against a since-reshaped plan.
+    // The terminal post-race week freezes as 'Recovery' so the stamp matches
+    // what the athlete sees, and so a recovery tail never reads as Maintain.
+    phase: weekPhaseLabel(plan, planWeek),
     quotedEngine,
     overall: { ...overall, evidence, conflicting },
     disciplines,
@@ -323,6 +358,7 @@ function decideTrackerWeek({ activities, wellness, plan, todayISO, weekMonday })
   }
   const wl = plan && plan.profile ? weakestLink({ profile: plan.profile }) : null;
   return {
+    phase: null,
     // the tracker sentinel carries a real createdAt, and the freeze guard
     // and digest read compare against it: a null stamp made every stored
     // tracker decision look foreign, refreezing forever and never rendering

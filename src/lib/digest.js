@@ -35,6 +35,81 @@ export function digestWindowOpen(weekMonday, todayISO) {
 
 const inRange = (d, a, b) => d >= a && d <= b;
 
+/* ---- the block review (pass 4) ----
+ * Fires when the reviewed week CLOSES a block: its stored phase differs
+ * from the next week's, judged from the frozen decisions plus the plan's
+ * current structure only for the week ahead. Maintain-only plans and the
+ * tracker have no boundaries, so they review every fourth reviewed week
+ * instead (the spec's own cadence). The summary is at most two sentences,
+ * built from FROZEN decisions and the server-backed fitness history, and
+ * it states its own coverage when the device-local decision store has
+ * gaps: partial local data must never present as the whole block's story
+ * (design panel 2026-07-21). */
+export function buildBlockReview({ plan, coachLog, weekMonday, focus, lastReviewedMonday }) {
+  if (!plan || !coachLog) return null;
+  const stored = coachLog[weekMonday];
+  if (!stored) return null;
+  const tracker = !Array.isArray(plan.weeks) || !plan.weeks.length;
+  const decisions = Object.keys(coachLog).sort().map(k => coachLog[k])
+    .filter(d => d.planCreatedAt === ((plan && plan.createdAt) || null));
+
+  // Everything below reads ONLY frozen decisions. The live plan's week
+  // layout is untrustworthy here: an ordinary settings edit reshapes every
+  // week while keeping createdAt, so the phases stamped at freeze time are
+  // the one true record of the block as the athlete actually trained it.
+  const idx = decisions.findIndex(d => d.weekMonday === weekMonday);
+  if (idx < 0) return null;
+  const prev = idx > 0 ? decisions[idx - 1] : null;
+
+  let trigger = null, blockPhase = null, blockWeeks = [];
+  if (!tracker && prev && prev.phase && stored.phase && prev.phase !== stored.phase
+      && (!lastReviewedMonday || prev.weekMonday >= lastReviewedMonday)) {
+    // The first decision of a new phase just froze: the previous block is
+    // done. Its weeks are the trailing run of stored decisions sharing its
+    // phase; the run break IS the block boundary, so a stray decision from
+    // an earlier block can never fold in.
+    trigger = 'boundary'; blockPhase = prev.phase;
+    for (let i = idx - 1; i >= 0 && decisions[i].phase === blockPhase; i--) blockWeeks.unshift(decisions[i]);
+  }
+  if (!trigger) {
+    // cadence fallback: every 4th reviewed week inside a boundary-less run
+    // (tracker, or an open-ended Maintain block; the terminal post-race week
+    // freezes as 'Recovery' and never lands here). Same-phase weeks only,
+    // capped at the last four: a first fire after a long quiet stretch reads
+    // as the last few weeks, not a season in one breath.
+    const boundaryless = tracker || (stored.phase === 'Maintain');
+    if (boundaryless) {
+      const since = decisions.filter(d => (!lastReviewedMonday || d.weekMonday > lastReviewedMonday)
+        && d.weekMonday <= weekMonday && (d.phase || null) === (stored.phase || null));
+      if (since.length >= 4) { trigger = 'cadence'; blockPhase = stored.phase || null; blockWeeks = since.slice(-4); }
+    }
+  }
+  if (!trigger || !blockWeeks.length) return null;
+
+  const counts = { hold: 0, progress: 0, recover: 0, 'reduce-volume': 0, 'ease-intensity': 0 };
+  blockWeeks.forEach(d => { counts[d.overall.decision] = (counts[d.overall.decision] || 0) + 1; });
+  const focusClean = focus && focus !== 'general'
+    ? blockWeeks.filter(d => d.disciplines && d.disciplines[focus] && d.disciplines[focus].clean).length : null;
+  // coverage honesty, from stored data alone: Mondays spanned by the frozen
+  // run vs decisions this device actually holds. A lower bound; weeks missed
+  // at the block's edges are unknowable without trusting the live layout.
+  const expected = Math.round((Date.parse(blockWeeks[blockWeeks.length - 1].weekMonday) - Date.parse(blockWeeks[0].weekMonday)) / 6048e5) + 1;
+  const partial = blockWeeks.length < expected;
+
+  const bits = [];
+  const n = blockWeeks.length;
+  bits.push(n + (n === 1 ? ' week' : ' weeks')
+    + (counts.progress ? ', progressed ' + counts.progress : '')
+    + (counts.recover || counts['reduce-volume'] ? ', pulled back ' + (counts.recover + counts['reduce-volume']) : '')
+    + (counts.hold === n ? (n === 1 ? ', held steady' : ', held steady throughout') : '') + '.');
+  if (focusClean != null) bits.push('The ' + focus + ' came through clean in ' + focusClean + ' of ' + n + '.');
+  return {
+    trigger, phase: blockPhase, weekMonday,
+    summary: bits.join(' '),
+    coverage: partial ? blockWeeks.length + ' of ' + expected + ' weeks were logged on this device.' : null,
+  };
+}
+
 export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday }) {
   if (!weekMonday) return null;
   const weekEnd = iso(addDays(weekMonday, 6));

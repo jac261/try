@@ -459,6 +459,20 @@ export function App({ storage, getToken, user }) {
   // nothing and retries next load; only a fetched-but-unreadable recording
   // is remembered as read: null (gauntlet catch: the two must never blur).
   const [fuelLog, setFuelLog] = useState(() => storage.loadFuel());
+  const [focusLog, setFocusLog] = useState(() => storage.loadFocusLog());
+  const [blockReviewed, setBlockReviewed] = useState(() => storage.loadBlockReviewed());
+  // The one narrow write a focus change is allowed: patch the single field,
+  // bump updatedAt, push the same plan. Never generatePlan, never a
+  // fitness-history snapshot, no overlay touched (design panel 2026-07-21:
+  // reshape and retarget both do far too much for a label change).
+  const setBlockFocus = focus => {
+    const np = { ...plan, profile: { ...plan.profile, blockFocus: focus || null }, updatedAt: new Date().toISOString() };
+    setPlan(np);
+    setFocusLog(storage.saveFocusChange({ at: new Date().toISOString(), from: plan.profile.blockFocus || null, to: focus || null, planCreatedAt: plan.createdAt || null }));
+    saveProfileBoth(np.profile);
+    if (plan.race !== 'tracker') sync.replacePlan(np).then(adoptRes(np.createdAt));
+  };
+  const markBlockReviewed = wm => setBlockReviewed(storage.saveBlockReviewed(wm));
   const answerFuel = (activityId, level) => setFuelLog(storage.saveFuel(activityId, level, new Date().toISOString()));
   const [durability, setDurability] = useState(() => storage.loadDurability());
   const durabilityRef = useRef(durability);
@@ -1120,9 +1134,9 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} storage={storage} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
-      {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} />}
+      {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditFitness={() => setEditFitness(true)}

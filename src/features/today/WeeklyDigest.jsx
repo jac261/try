@@ -10,7 +10,7 @@ import { Icon } from '@/components/Icon.jsx';
  * 2026-07-15). Shows from Sunday evening through Wednesday, then lapses on
  * its own; dismiss hides this week's for good. Content is recomputed live —
  * only the seen flag persists. */
-export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, storage, todayISO, coachLog }) {
+export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, storage, todayISO, coachLog, blockReviewed, onBlockReviewed, onFocus }) {
   const [gone, setGone] = useState(false);
   const weekMonday = T.reviewedWeekMonday(todayISO, new Date().getHours());
   const seen = storage.load('digestSeenWeek', null);
@@ -27,6 +27,13 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
   // Only the CURRENT plan's frozen decision is quotable: one from a replaced
   // plan is a record about a different reality (re-verify catch 2026-07-20).
   const coach = stored && (stored.planCreatedAt ?? null) === ((plan && plan.createdAt) || null) ? stored : null;
+  // The block review: fires when this reviewed week closes a block (or on
+  // the four-week cadence where no boundaries exist). One summary, one
+  // optional one-tap question, never the spec's seven-question form.
+  const fx = T.resolveFocus(plan && plan.profile, plan && plan.profile ? T.weakestLink({ profile: plan.profile }) : null);
+  const review = coach && blockReviewed !== weekMonday
+    ? T.buildBlockReview({ plan, coachLog, weekMonday, focus: fx.focus, lastReviewedMonday: blockReviewed }) : null;
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   return (
     <>
@@ -62,6 +69,25 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
           </div>
         ))}
 
+        {review && (
+          <div className="coach-card block-review">
+            <div className="coach-head"><span className="coach-pill">Block review</span>
+              <b>{review.phase === 'Maintain' || !review.phase ? 'The last few weeks' : 'That ' + review.phase + ' block is done'}</b></div>
+            <div className="coach-ev"><span className="coach-sig">the block</span>{review.summary}</div>
+            {review.coverage && <div className="coach-ev conflicting"><span className="coach-sig">coverage</span>{review.coverage}</div>}
+            {onBlockReviewed && !reviewOpen && <div className="feel-row" style={{ marginTop: 8 }}>
+              <button className="feelbtn" onClick={() => onBlockReviewed(weekMonday)}>Keep the focus</button>
+              <button className="feelbtn" onClick={() => setReviewOpen(true)}>Change it</button>
+              <button className="feelbtn" onClick={() => onBlockReviewed(weekMonday)}>Not sure yet</button>
+            </div>}
+            {reviewOpen && onFocus && <div className="feel-row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+              {Object.entries(T.FOCUS_OPTIONS)
+                .filter(([k]) => k === 'general' || !(plan.profile && plan.profile.excludedDiscipline === k))
+                .map(([k, lab]) => <button key={k} className="feelbtn" style={{ flex: '1 1 45%' }}
+                  onClick={() => { onFocus(k === 'general' ? null : k); onBlockReviewed(weekMonday); }}>{k === 'general' ? 'Everything evenly' : 'Focus on ' + lab}</button>)}
+            </div>}
+          </div>
+        )}
         {coach && (
           <div className="coach-card">
             <div className="coach-head">
@@ -74,7 +100,7 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
             {coach.overall.conflicting.map((c, n) => (
               <div className="coach-ev conflicting" key={'c' + n}><span className="coach-sig">worth noting</span>{c}</div>
             ))}
-            {coach.progression && (
+            {coach.progression && !review && (
               <div className="coach-ev"><span className="coach-sig">next up</span>{'when the ' + coach.progression.discipline + ' stays clean: ' + coach.progression.what}</div>
             )}
           </div>

@@ -124,3 +124,41 @@ Backend asks: massGoal as a profile field (device-local until then; the
 plan's profile JSON round-trips it, so only a fresh-device recovery via
 the subset profile loses it), and a fuel field on a future sessions
 endpoint.
+
+## Pass 4: block objectives
+
+Blocks are the plan's contiguous phase groups, now shared as one exported
+definition (phaseGroups, including the recovery-week relabel) rather than
+two drifting reimplementations. Each block wears a focus clause with a
+phase-gated verb: building in Base and Build, sharpening in Peak, silent
+through Taper and Recovery, because a focus line that claims building
+during a taper would be a lie.
+
+The focus is display-and-coach-only, by firm panel verdict. The limiter
+machinery keeps actuating exactly as before: a declared focus never feeds
+the volume bias or the frequency swap (it would bypass the noise gates the
+limiter board exists for), never renames the progression variable when it
+diverges from the limiter (that text describes what the plan really does
+next), and changing it is a single-field patch that never regenerates the
+plan or snapshots fitness history. Where a declared focus disagrees with
+the derived limiter, the surfaces say both plainly: your call, and the
+plan's own extra work, named side by side.
+
+The block review derives from frozen decisions alone. The boundary fires
+when the first decision of a new phase freezes (a phase change between
+consecutive stored decisions); the cadence fallback, every fourth reviewed
+week where no boundaries exist (maintenance, tracker), is phase-filtered
+and capped at the last four weeks. The live plan layout is never consulted
+because a settings-edit reshape regenerates every week while keeping the
+plan identity; the phase stamped at freeze time is the only trustworthy
+record of the block as trained, and the terminal post-race week freezes as
+Recovery via the same weekPhaseLabel the display uses. Coverage is Monday
+gap math over the stored run, a lower bound stated honestly. The summary
+is two sentences and one optional one-tap question: keep the focus, change
+it, or not sure. Never the spec's seven-question form. Known residual: a
+boundary review lapses with its digest week like everything else in the
+digest, so a week the athlete never opens loses that block's review.
+
+Focus changes journal in their own store: the engine journal is scanned by
+the decision layer for accepted proposals, and a focus entry there would
+be quoted as an engine call.

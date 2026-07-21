@@ -1477,6 +1477,35 @@ export const upgradePlanSegments = function (plan) {
   return changed ? Object.assign({}, plan, { weeks: weeks }) : plan;
 };
 
+// The plan's contiguous phase groups: the app's honest notion of a training
+// BLOCK (progression spec section 3.3; a block is where the plan already
+// changes character, never a new scheduling layer). Includes PlanView's
+// Recovery relabel of a scheduled final recovery week, so every consumer
+// shares one boundary definition (design panel 2026-07-21: two independent
+// reimplementations had already begun to drift).
+export function weekPhaseLabel(plan, week) {
+  // The one place the terminal post-race week earns its 'Recovery' label
+  // (the backend phase catalog has no 'Recovery'; the raw phase stays
+  // 'Maintain'). Mid-plan recovery weeks keep their real phase: relabelling
+  // them would shatter contiguous blocks.
+  if (!week || !plan || !Array.isArray(plan.weeks) || !plan.weeks.length) return week ? week.phase : null;
+  const race = RACES[plan.race] || {};
+  const hasRecoveryWeek = !race.noRace && plan.weeks[plan.weeks.length - 1].isRecovery;
+  return hasRecoveryWeek && week.index === plan.weeks.length - 1 ? 'Recovery' : week.phase;
+}
+
+export function phaseGroups(plan) {
+  if (!plan || !Array.isArray(plan.weeks) || !plan.weeks.length) return [];
+  const g = [];
+  plan.weeks.forEach(w => {
+    const disp = weekPhaseLabel(plan, w);
+    const last = g[g.length - 1];
+    if (last && last.phase === disp) { last.weeks++; last.min += w.totalMin; }
+    else g.push({ phase: disp, weeks: 1, min: w.totalMin, start: w.index });
+  });
+  return g;
+}
+
 /* ---- phase plan across the whole block ---- */
 function computePhases(totalWeeks, taperWeeks) {
   const taper = Math.min(taperWeeks, Math.max(1, totalWeeks - 3));

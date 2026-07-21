@@ -117,6 +117,20 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'fuel', JSON.stringify(m)); } catch (e) {}
       return m;
     },
+    // Block-focus changes journal in their OWN store: coach.js's
+    // weekProposal scans adjustLog for any entry with a headline and
+    // defaults a kind-less match to a trim, so a focus entry there would be
+    // quoted as an accepted engine call (design panel 2026-07-21).
+    loadFocusLog() { try { return JSON.parse(localStorage.getItem(ns + 'focusLog') || '[]'); } catch (e) { return []; } },
+    saveFocusChange(entry) {
+      const list = this.loadFocusLog().concat([entry]).slice(-20);
+      try { localStorage.setItem(ns + 'focusLog', JSON.stringify(list)); } catch (e) {}
+      return list;
+    },
+    // the last week a block review was shown, so the cadence fallback
+    // cannot re-fire weekly once it starts
+    loadBlockReviewed() { try { return localStorage.getItem(ns + 'blockReviewed') || null; } catch (e) { return null; } },
+    saveBlockReviewed(weekMonday) { try { localStorage.setItem(ns + 'blockReviewed', weekMonday); } catch (e) {} return weekMonday; },
     loadFeels,
     saveFeel(date, value) {
       const m = loadFeels();
