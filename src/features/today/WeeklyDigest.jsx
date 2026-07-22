@@ -30,7 +30,8 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
   // The block review: fires when this reviewed week closes a block (or on
   // the four-week cadence where no boundaries exist). One summary, one
   // optional one-tap question, never the spec's seven-question form.
-  const fx = T.resolveFocus(plan && plan.profile, plan && plan.profile ? T.weakestLink({ profile: plan.profile }) : null);
+  const solo = (T.RACES[plan && plan.race] || {}).solo || null;
+  const fx = T.resolveFocus(plan && plan.profile, plan && plan.profile ? T.weakestLink({ profile: plan.profile }) : null, solo);
   const review = coach && blockReviewed !== weekMonday
     ? T.buildBlockReview({ plan, coachLog, weekMonday, focus: fx.focus, lastReviewedMonday: blockReviewed }) : null;
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -75,12 +76,16 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
               <b>{review.phase === 'Maintain' || !review.phase ? 'The last few weeks' : 'That ' + review.phase + ' block is done'}</b></div>
             <div className="coach-ev"><span className="coach-sig">the block</span>{review.summary}</div>
             {review.coverage && <div className="coach-ev conflicting"><span className="coach-sig">coverage</span>{review.coverage}</div>}
-            {onBlockReviewed && !reviewOpen && <div className="feel-row" style={{ marginTop: 8 }}>
-              <button className="feelbtn" onClick={() => onBlockReviewed(weekMonday)}>Keep the focus</button>
-              <button className="feelbtn" onClick={() => setReviewOpen(true)}>Change it</button>
-              <button className="feelbtn" onClick={() => onBlockReviewed(weekMonday)}>Not sure yet</button>
-            </div>}
-            {reviewOpen && onFocus && <div className="feel-row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+            {onBlockReviewed && !reviewOpen && (solo
+              ? <div className="feel-row" style={{ marginTop: 8 }}>
+                <button className="feelbtn" onClick={() => onBlockReviewed(weekMonday)}>Got it</button>
+              </div>
+              : <div className="feel-row" style={{ marginTop: 8 }}>
+                <button className="feelbtn" onClick={() => onBlockReviewed(weekMonday)}>Keep the focus</button>
+                <button className="feelbtn" onClick={() => setReviewOpen(true)}>Change it</button>
+                <button className="feelbtn" onClick={() => onBlockReviewed(weekMonday)}>Not sure yet</button>
+              </div>)}
+            {reviewOpen && !solo && onFocus && <div className="feel-row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
               {Object.entries(T.FOCUS_OPTIONS)
                 .filter(([k]) => k === 'general' || !(plan.profile && plan.profile.excludedDiscipline === k))
                 .map(([k, lab]) => <button key={k} className="feelbtn" style={{ flex: '1 1 45%' }}

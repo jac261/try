@@ -11,6 +11,20 @@ export const RACES = {
   half:    { key: 'half',    name: 'Half (70.3)',  swim: 1.9,  bike: 90,  run: 21.1, taperWeeks: 2, minWeeks: 12, maxWeeks: 32 },
   t100:    { key: 't100',    name: 'T100 (100k)',  swim: 2,    bike: 80,  run: 18,   taperWeeks: 2, minWeeks: 12, maxWeeks: 32 },
   full:    { key: 'full',    name: 'Full (140.6)', swim: 3.8,  bike: 180, run: 42.2, taperWeeks: 2, minWeeks: 16, maxWeeks: 40 },
+  // Standalone run races. `solo: 'run'` means the plan trains and races
+  // exactly one discipline, named by the value; absent means triathlon, so
+  // every existing entry (and plan) behaves bit-identically. It is a race
+  // property, never a profile field: it cannot go stale, and it round-trips
+  // the backend for free because the race key is a stored column. solo
+  // outranks excludedDiscipline and any locked limiter swap wherever the two
+  // could disagree. swim/bike stay numeric zeros (never undefined) because
+  // weakest.js's share math reads them. Names must stand alone in bare
+  // interpolation ("Training for the 5k Run on..."); 'Half Marathon' cannot
+  // collide with the tri Half, which keeps its (70.3) parenthetical.
+  run5k:       { key: 'run5k',       name: '5k Run',        solo: 'run', swim: 0, bike: 0, run: 5,    taperWeeks: 1, minWeeks: 6,  maxWeeks: 16 },
+  run10k:      { key: 'run10k',      name: '10k Run',       solo: 'run', swim: 0, bike: 0, run: 10,   taperWeeks: 1, minWeeks: 6,  maxWeeks: 20 },
+  runhalf:     { key: 'runhalf',     name: 'Half Marathon', solo: 'run', swim: 0, bike: 0, run: 21.1, taperWeeks: 1, minWeeks: 8,  maxWeeks: 24 },
+  runmarathon: { key: 'runmarathon', name: 'Marathon',      solo: 'run', swim: 0, bike: 0, run: 42.2, taperWeeks: 2, minWeeks: 12, maxWeeks: 28 },
   maintenance: { key: 'maintenance', name: 'Maintenance', swim: 0, bike: 0, run: 0, taperWeeks: 0, minWeeks: 4, maxWeeks: 52, noRace: true },
   // The no-plan / tracker state: no race, no weeks. noRace keeps it out of the
   // race pickers (which filter !noRace); tracker is the sole predicate for the
@@ -28,6 +42,10 @@ export const B_RACES = {
   olympic: { key: 'olympic', name: 'Olympic Triathlon', discipline: 'brick', durationMin: 150 },
   run5k:   { key: 'run5k',   name: '5k Run Race',       discipline: 'run',   durationMin: 30 },
   run10k:  { key: 'run10k',  name: '10k Run Race',      discipline: 'run',   durationMin: 55 },
+  // A raced half is a real event, not a parkrun: the easing pass widens its
+  // exit window (see the B-race pass in plan.js). No marathon entry on
+  // purpose; nobody races a marathon as a rehearsal.
+  runhalf: { key: 'runhalf', name: 'Half Marathon Race', discipline: 'run',  durationMin: 110 },
 };
 
 export const ZONES = {
@@ -63,10 +81,10 @@ export function saneWeightKg(weightKg) {
 // a strong runner reads high. That is why an estimated FTP never judges a
 // session in review (design panel 2026-07-18).
 export const FITNESS = {
-  beginner:     { key: 'beginner',     name: 'Beginner',     factor: 0.75, intensity: -1, recoveryEvery: 3, recoveryDepth: 0.6,  est5k: 2040, estCss: 140, estWkg: 2.0, blurb: 'New to multisport — build the base' },
-  intermediate: { key: 'intermediate', name: 'Intermediate', factor: 1.0,  intensity: 0,  recoveryEvery: 4, recoveryDepth: 0.72, est5k: 1620, estCss: 120, estWkg: 2.6, blurb: 'A few seasons in, training consistently' },
-  advanced:     { key: 'advanced',     name: 'Advanced',     factor: 1.2,  intensity: 1,  recoveryEvery: 4, recoveryDepth: 0.75, est5k: 1320, estCss: 105, estWkg: 3.2, blurb: 'Experienced & chasing a result' },
-  elite:        { key: 'elite',        name: 'Elite',        factor: 1.42, intensity: 2,  recoveryEvery: 4, recoveryDepth: 0.82, est5k: 1110, estCss: 90,  estWkg: 4.0, blurb: 'Semi-pro / front-of-pack age-grouper' },
+  beginner:     { key: 'beginner',     name: 'Beginner',     factor: 0.75, intensity: -1, recoveryEvery: 3, recoveryDepth: 0.6,  est5k: 2040, estCss: 140, estWkg: 2.0, blurb: 'New to multisport — build the base', runBlurb: 'New to structured running, build the base' },
+  intermediate: { key: 'intermediate', name: 'Intermediate', factor: 1.0,  intensity: 0,  recoveryEvery: 4, recoveryDepth: 0.72, est5k: 1620, estCss: 120, estWkg: 2.6, blurb: 'A few seasons in, training consistently', runBlurb: 'Running consistently, a few races in' },
+  advanced:     { key: 'advanced',     name: 'Advanced',     factor: 1.2,  intensity: 1,  recoveryEvery: 4, recoveryDepth: 0.75, est5k: 1320, estCss: 105, estWkg: 3.2, blurb: 'Experienced & chasing a result', runBlurb: 'Experienced and chasing a time' },
+  elite:        { key: 'elite',        name: 'Elite',        factor: 1.42, intensity: 2,  recoveryEvery: 4, recoveryDepth: 0.82, est5k: 1110, estCss: 90,  estWkg: 4.0, blurb: 'Semi-pro / front-of-pack age-grouper', runBlurb: 'Front of the pack, big weeks welcome' },
 };
 
 export const PHASE_INFO = {

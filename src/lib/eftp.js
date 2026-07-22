@@ -14,6 +14,7 @@
 import { daysBetween } from './date.js';
 import { fmtPace } from './units.js';
 import { DISCIPLINE } from './autolog.js';
+import { RACES } from './domain.js';
 
 export const EFTP_RULES = { minDriftPct: 0.03, freshDays: 10 };
 
@@ -74,13 +75,19 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
   const candidates = [];
   const profile = plan && plan.profile;
   const pc = plan && plan.paces;
+  // A solo plan trains one discipline; a proposal to retarget paces the plan
+  // does not train is noise however real the signal behind it (a leftover
+  // intervals.icu swim sport setting, a stray ride). Gate each branch by the
+  // sport it would retarget. Tracker and triathlon plans are never solo.
+  const solo = (RACES[plan && plan.race] || {}).solo || null;
+  const trains = sport => !solo || solo === sport;
 
   // Swim, from the athlete's own recorded CSS test (cssTest.test is a
   // cssFromTestIntervals result, fetched and cached by the app when the
   // plan's swim test is logged and matched). A directly measured effort
   // outranks every passive signal below, so it returns immediately instead
   // of competing on drift size.
-  if (cssTest && cssTest.test && pc && pc.swim) {
+  if (trains('swim') && cssTest && cssTest.test && pc && pc.swim) {
     const meas = cssTest.test.css100Sec;
     const drift = (pc.swim.css - meas) / pc.swim.css;
     if (meas > 55 && meas < 240 && Math.abs(drift) >= EFTP_RULES.minDriftPct) {
@@ -98,7 +105,7 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
 
   // Bike: rolling eFTP from the latest fresh ride.
   const ftp = profile && profile.ftp;
-  if (ftp && activities && activities.length) {
+  if (trains('bike') && ftp && activities && activities.length) {
     const latest = activities
       .filter(a => a.eftp && a.date && RIDE_TYPES.has(a.type) && daysBetween(a.date, todayISO) <= EFTP_RULES.freshDays)
       .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
@@ -118,7 +125,7 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
 
   // Run: configured threshold pace (m/s → s/km) vs the plan's threshold pace.
   const runV = thresholds && thresholds.runThresholdPace;
-  if (runV && pc && pc.run) {
+  if (trains('run') && runV && pc && pc.run) {
     const icuSec = 1000 / runV;
     const planSec = pc.run.threshold;
     if (icuSec > 150 && icuSec < 720) {
@@ -136,7 +143,7 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
 
   // Swim: configured threshold pace (m/s → s/100m) vs the plan's CSS.
   const swimV = thresholds && thresholds.swimThresholdPace;
-  if (swimV && pc && pc.swim) {
+  if (trains('swim') && swimV && pc && pc.swim) {
     const icuSec = 100 / swimV;
     const planSec = pc.swim.css;
     if (icuSec > 55 && icuSec < 240) {

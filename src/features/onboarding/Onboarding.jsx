@@ -25,6 +25,7 @@ export function Onboarding({ onCreate }) {
     if (name) setF(s => (s.name ? s : { ...s, name }));
   }, [user]);
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
+  const solo = (T.RACES[f.raceType] || {}).solo || null;
 
   // How the chosen date sits against the race's recommended build window.
   const runway = (() => {
@@ -53,13 +54,15 @@ export function Onboarding({ onCreate }) {
       css100Sec: f.excludedDiscipline === 'swim' ? null : T.parseTimeToSec(f.css100),
       ftp: f.ftp ? Number(f.ftp) : null, weightKg: f.weightKg ? Number(f.weightKg) : null,
       startDate: T.iso(new Date()),
-      excludedDiscipline: f.excludedDiscipline || null,
+      // A solo race cannot exclude its only discipline; cleared here as well
+      // as at selection time (render-time hiding alone leaves stale state).
+      excludedDiscipline: solo ? null : (f.excludedDiscipline || null),
     });
   }
 
   return (
     <div className="app">
-      <div className="topbar"><h1><Icon name="logo" size={24} /> Try</h1><div className="sub">Your personalised triathlon coach</div></div>
+      <div className="topbar"><h1><Icon name="logo" size={24} /> Try</h1><div className="sub">Your personalised endurance coach</div></div>
       <div className="card">
         {step === 0 && <>
           <h2>Let's build your plan</h2>
@@ -67,13 +70,29 @@ export function Onboarding({ onCreate }) {
           <label className="field"><span className="lab">What should we call you?</span>
             <input value={f.name} placeholder="Your name" onChange={e => set('name', e.target.value)} /></label>
           <label className="field"><span className="lab">Which race are you training for?</span></label>
+          {/* Selecting a run race clears any injury exclusion: a solo plan
+              cannot exclude its only discipline, and the injury step below
+              hides for solo races (finish() clears it again defensively). */}
+          <div className="lab muted" style={{ fontSize: 12, margin: '2px 0 6px' }}>Triathlon</div>
           <div className="choice">
-            {Object.values(T.RACES).filter(r => !r.noRace).map(r => (
+            {Object.values(T.RACES).filter(r => !r.noRace && !r.solo).map(r => (
               <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} {...tap(() => set('raceType', r.key))}>
                 {r.name}<small>{r.swim}k swim · {r.bike}k bike · {r.run}k run</small></div>
             ))}
+          </div>
+          <div className="lab muted" style={{ fontSize: 12, margin: '10px 0 6px' }}>Running</div>
+          <div className="choice">
+            {Object.values(T.RACES).filter(r => r.solo).map(r => (
+              <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} {...tap(() => setF(s2 => ({ ...s2, raceType: r.key, excludedDiscipline: null })))}>
+                {r.name}<small>{r.run} km</small></div>
+            ))}
+          </div>
+          {/* Outside both sport groups on purpose: maintenance is a
+              three-sport block, and under the Running header it read as
+              run-only maintenance (gauntlet catch). */}
+          <div className="choice" style={{ marginTop: 10 }}>
             <div className={'opt' + (f.raceType === 'maintenance' ? ' on' : '')} {...tap(() => set('raceType', 'maintenance'))}>
-              No race yet<small>A rolling 12-week block to stay fit until you pick one</small></div>
+              No race yet<small>A rolling 12-week block of all three sports to stay fit until you pick one</small></div>
           </div>
           <div style={{ height: 12 }} />
           <button className="btn primary" onClick={() => setStep(1)}>Continue</button>
@@ -90,6 +109,7 @@ export function Onboarding({ onCreate }) {
           {f.raceType === 'maintenance' && <p className="lead" style={{ fontSize: 13 }}>
             A 12-week keep-fit block: balanced swim, bike and run with a recovery week every few weeks.
             When you enter a race, the plan rebuilds around it.</p>}
+          {!solo && <>
           <label className="field" style={{ marginBottom: 4 }}><span className="lab">Any injury we should plan around?</span></label>
           <p className="lead" style={{ fontSize: 13, marginTop: 0 }}>
             This is not medical advice. If you are not sure whether to train at all, check with a doctor
@@ -115,6 +135,7 @@ export function Onboarding({ onCreate }) {
               With running out, swim and bike top out at five real sessions a week. Extra days you pick
               will stay free rather than being filled with padding.</p>
           )}
+          </>}
           <div style={{ height: 12 }} />
           <label className="field" style={{ marginBottom: 8 }}><span className="lab">Which days will you train?</span></label>
           <DaySelector days={f.trainingDays} longDay={f.longDay} onChange={(d, l) => setF(s => ({ ...s, trainingDays: d, longDay: l }))} />
@@ -122,7 +143,7 @@ export function Onboarding({ onCreate }) {
           <label className="field"><span className="lab">Experience level</span></label>
           <div className="choice">
             {Object.values(T.FITNESS).map(l => (
-              <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} {...tap(() => set('fitness', l.key))}>{l.name}<small>{l.blurb}</small></div>
+              <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} {...tap(() => set('fitness', l.key))}>{l.name}<small>{solo ? l.runBlurb : l.blurb}</small></div>
             ))}
           </div>
           <div style={{ height: 12 }} />
@@ -132,21 +153,22 @@ export function Onboarding({ onCreate }) {
 
         {step === 2 && <>
           <h2>Your current fitness <span className="hint" style={{ fontWeight: 500 }}>· optional</span></h2>
-          <p className="lead"><b>New to triathlon? You can skip all of these.</b> We'll then guide every session by effort (RPE / heart-rate zones), with ballpark paces estimated from your {T.FITNESS[f.fitness].name} level. Add any numbers you do know to make it precise.</p>
+          {solo ? <p className="lead">One number is enough: your 5k time sets every pace in the plan, from easy runs to race day. No recent 5k time? You can skip this. Every session is guided by effort, with ballpark paces estimated from your {T.FITNESS[f.fitness].name} level. Add a real time whenever you have one to make them precise.</p>
+            : <p className="lead"><b>New to triathlon? You can skip all of these.</b> We'll then guide every session by effort (RPE / heart-rate zones), with ballpark paces estimated from your {T.FITNESS[f.fitness].name} level. Add any numbers you do know to make it precise.</p>}
           {f.excludedDiscipline !== 'run' && <label className="field"><span className="lab">Recent 5 km run time <span className="hint">optional · mm:ss</span></span>
             <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>}
           {f.excludedDiscipline === 'run' && <p className="lead" style={{ fontSize: 13 }}>Running is out of your plan for now, so we will not ask for a run time.</p>}
-          {f.excludedDiscipline !== 'swim' && <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
+          {!solo && f.excludedDiscipline !== 'swim' && <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
             <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>}
           {f.excludedDiscipline === 'swim' && <p className="lead" style={{ fontSize: 13 }}>Swimming is out of your plan for now, so we will not ask for a swim pace.</p>}
-          <label className="field"><span className="lab">Cycling FTP <span className="hint">optional · watts</span></span>
+          {!solo && <label className="field"><span className="lab">Cycling FTP <span className="hint">optional · watts</span></span>
             <input value={f.ftp} placeholder={'e.g. ' + (T.saneWeightKg(f.weightKg) ? Math.round(T.FITNESS[f.fitness].estWkg * T.saneWeightKg(f.weightKg)) : 200)}
-              inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
+              inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>}
           {/* Weight belongs here, not only in Settings: without it a rider who
               skips the optional FTP gets no watt targets at all, which is the
               exact athlete the estimate exists for (gauntlet catch
               2026-07-18). */}
-          <label className="field"><span className="lab">Weight <span className="hint">optional · kg — lets us estimate your bike targets</span></span>
+          <label className="field"><span className="lab">Weight <span className="hint">{solo ? 'optional · kg · never judged' : 'optional · kg — lets us estimate your bike targets'}</span></span>
             <input value={f.weightKg} placeholder="e.g. 70" inputMode="decimal" onChange={e => set('weightKg', e.target.value)} /></label>
           <div className="row"><button className="btn ghost" onClick={() => setStep(1)}>Back</button>
             <button className="btn primary" onClick={finish}>Generate plan →</button></div>

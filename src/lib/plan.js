@@ -3,6 +3,7 @@ import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg } from './domain.js';
 import { weakBias, weakestLink } from './weakest.js';
+import { RIEGEL_EXP } from './runstats.js';
 
 /* ---- paces derived from the athlete's baselines ---- */
 function computePaces(profile) {
@@ -35,7 +36,10 @@ function computePaces(profile) {
     // ground (gauntlet catch 2026-07-18 — tying it to weight flattened every
     // weightless plan to one speed).
     bikeWkg: profile.ftp && kg ? profile.ftp / kg : lvl.estWkg,
-    run: { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8 },
+    // fivekPace rides along for the solo race-pace variants (Riegel needs the
+    // raw 5k pace, not an offset); plans stored before it existed simply fall
+    // to effort wording via the null guard in racePaceKm.
+    run: { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8, fivekPace: p },
     swim: { easy: css + 12, steady: css + 6, css: css, fast: css - 6 },
   };
 }
@@ -188,7 +192,15 @@ function swimRep(pc, key, zone, n, repM, restSec) {
   };
 }
 
-function buildRun(type, dur, pc, seed, phase, intensity = 0) {
+// Race pace per km straight off the athlete's 5k pace via Riegel: pace(d) =
+// p x (d/5)^(exp-1), the same projection Progress shows. Only quoted when the
+// 5k is real (a projection of a guess is noise wearing a number); estimated
+// paces fall silent to effort wording in the variant below.
+function racePaceKm(pc, km, exp) {
+  return pc.run && pc.run.fivekPace ? pc.run.fivekPace * Math.pow(km / 5, exp - 1) : null;
+}
+
+function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
   const v = n => (seed || 0) % n;
   // Durability: intervals on tired legs at the end of the long session build
   // fatigue resistance — a Build/Peak tool, never Base or recovery weeks, and
@@ -204,18 +216,65 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0) {
   let segs = [], title = 'Run';
   if (type === 'Long') {
     title = 'Long Run';
-    segs = [
+    const menu = [
       [{ label: 'Steady aerobic', min: dur, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' }],
       [
         { label: 'Steady aerobic', min: Math.max(5, dur - 15), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
         { label: 'Fast finish', min: 15, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
       ],
-      [
-        { label: 'Steady aerobic', min: Math.max(5, dur - 25), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
-        { label: '4 × (3 min threshold / 2 min easy) — on tired legs', min: 20, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(4, 3, 'Z4', 2, 'Z2') },
-        { label: 'Ease home', min: 5, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
-      ],
-    ][v(durability ? 3 : 2)];
+    ];
+    if (durability) menu.push([
+      { label: 'Steady aerobic', min: Math.max(5, dur - 25), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+      { label: '4 × (3 min threshold / 2 min easy) — on tired legs', min: 20, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(4, 3, 'Z4', 2, 'Z2') },
+      { label: 'Ease home', min: 5, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+    ]);
+    // Distance specificity for the standalone half and marathon: the long run
+    // rehearses race effort in Build and Peak. Recovery weeks pin seed 0 and
+    // land on variant 0, the pure steady long, so the gate needs no recovery
+    // branch. Pace is quoted (with a tilde: it is a projection) only from a
+    // real 5k; estimated paces stay silent and the copy speaks in effort.
+    // Race-pace details quote ONE tilde pace, the same 1.06 projection the
+    // Progress tab leads with. The 1.15 marathon exponent stays a finish-time
+    // bracket only: as a pace band its slow end sat below the card's own
+    // steady-aerobic pace (gauntlet catch). Fallback wording per distance:
+    // marathon effort sits between long and tempo pace; half effort sits at
+    // tempo, and claiming otherwise contradicted the quoted number.
+    let hasRacePace = false;
+    if (raceType === 'runmarathon' && (phase === 'Build' || phase === 'Peak')) {
+      hasRacePace = true;
+      const mp = pc.runEstimated ? null : racePaceKm(pc, 42.195, RIEGEL_EXP);
+      menu.push([
+        { label: 'Steady aerobic', min: Math.max(5, dur - 35), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+        {
+          label: 'Final 35 min at your marathon effort', min: 35, zone: 'Z3',
+          detail: mp ? '~' + fmtPace(mp) + ' /km · smooth and controlled'
+            : 'Between your long run and tempo pace, smooth and controlled',
+        },
+      ]);
+    } else if (raceType === 'runhalf' && (phase === 'Build' || phase === 'Peak')) {
+      hasRacePace = true;
+      const hp = pc.runEstimated ? null : racePaceKm(pc, 21.0975, RIEGEL_EXP);
+      menu.push([
+        { label: 'Steady aerobic', min: Math.max(5, dur - 35), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+        {
+          label: '25 min at your half marathon effort', min: 25, zone: 'Z3',
+          detail: hp ? '~' + fmtPace(hp) + ' /km · settle in, do not chase it'
+            : 'Around your tempo pace, controlled',
+        },
+        { label: 'Ease home', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+      ]);
+    }
+    // The recovery-cadence selector trap, third sighting: flat seed % len
+    // strands whichever slot the cadence never reaches. Beginners recover
+    // every 3rd week, so their non-recovery seeds are never 2 mod 3 and a
+    // flat % 3 could NEVER pick the race-pace slot (gauntlet catch). The
+    // stepped walk applies whenever the race-pace variant is in the menu;
+    // menus without it keep their historic selectors so triathlon and
+    // 5k/10k output stays untouched.
+    const s0 = seed || 0;
+    segs = menu.length === 4 || (menu.length === 3 && hasRacePace)
+      ? menu[(s0 + Math.floor(s0 / menu.length)) % menu.length]
+      : menu[v(menu.length)];
   } else if (type === 'Easy') {
     title = 'Easy Run';
     const half = Math.round(dur / 2);
@@ -1010,7 +1069,22 @@ const TEST_ROTATION = ['run5k', 'bikeFtp', 'swimCss'];
 const TEST_DISC = { run5k: 'run', bikeFtp: 'bike', swimCss: 'swim' };
 
 /* ---- base session durations (minutes, intermediate athlete) ---- */
-const LONG_RUN = { sprint: 55, olympic: 70, half: 95, t100: 100, full: 120, maintenance: 70 };
+const LONG_RUN = {
+  sprint: 55, olympic: 70, half: 95, t100: 100, full: 120, maintenance: 70,
+  // Standalone run races. LONG_BIKE/LONG_BRICK/LONG_SWIM deliberately get no
+  // entries for these keys: no bike, brick or swim token can ever appear in a
+  // run-only template, and the swap machinery is inert on solo plans.
+  run5k: 60, run10k: 75, runhalf: 100, runmarathon: 140,
+};
+// Long runs stop earning past ~3 hours; the volume multiplier chain (level
+// factor x week load) is unclamped and elite marathoners would otherwise be
+// handed a 235 minute run. Solo plans only, so triathlon output stays
+// byte-identical. Mirrors LONG_SWIM_CAP below.
+const LONG_RUN_CAP = 180;
+// A marathon taper that still schedules a 2 hour run 7 days out is the first
+// thing a marathon buyer inspects. Solo Taper weeks before race week cap the
+// long run; race week demotes it to a shakeout entirely.
+const SOLO_TAPER_LONG_CAP = 90;
 const LONG_BIKE = { sprint: 70, olympic: 100, half: 160, t100: 170, full: 210, maintenance: 100 };
 const LONG_BRICK = { sprint: 70, olympic: 95, half: 135, t100: 145, full: 165, maintenance: 90 };
 // The long swim only enters a week via the limiter frequency swap (no base
@@ -1057,9 +1131,28 @@ const TEMPLATES_NO_SWIM = {
   6: ['bike:easy', 'run:quality', 'bike:quality', 'run:easy', 'run:long', 'bike:long'],
   7: ['bike:easy', 'run:quality', 'bike:quality', 'run:easy', 'run:long', 'bike:long', 'brick:long'],
 };
+// Run-only templates (solo race types). These are the first templates to
+// carry duplicate disc:role tokens, so the house invariant is restated: the
+// rule is "never two byte-identical sessions in a week"; token uniqueness was
+// the old mechanism, occurrence differentiation (type rung + duration ladder)
+// plus the week-level dedupe pass is the new one. One long run always; two
+// quality sessions from 4 days up (a 5-day runner with 3 runs is not a
+// credible run app). 7 days means 7 runs: the user's day count is a promise,
+// and the fourth easy is a shakeout jog by the duration ladder.
+const TEMPLATES_RUN_ONLY = {
+  3: ['run:quality', 'run:easy', 'run:long'],
+  4: ['run:quality', 'run:quality', 'run:easy', 'run:long'],
+  5: ['run:quality', 'run:quality', 'run:easy', 'run:easy', 'run:long'],
+  6: ['run:quality', 'run:quality', 'run:easy', 'run:easy', 'run:easy', 'run:long'],
+  7: ['run:quality', 'run:quality', 'run:easy', 'run:easy', 'run:easy', 'run:easy', 'run:long'],
+};
 // Unrecognised values fall back to the full template: fail safe, never crash.
-function disciplineTemplate(days, excluded) {
-  const t = excluded === 'run' ? TEMPLATES_NO_RUN : excluded === 'swim' ? TEMPLATES_NO_SWIM : TEMPLATES;
+// solo is checked before excluded: a stale injured flag must never resolve a
+// run race to TEMPLATES_NO_RUN, which would be a run plan with zero runs.
+function disciplineTemplate(days, excluded, solo) {
+  const t = solo === 'run' ? TEMPLATES_RUN_ONLY
+    : excluded === 'run' ? TEMPLATES_NO_RUN
+    : excluded === 'swim' ? TEMPLATES_NO_SWIM : TEMPLATES;
   return t[clamp(days, 3, 7)];
 }
 
@@ -1128,7 +1221,10 @@ export function swapForLimiter(template, wl, phase) {
 export function detectLimiterSwap(plan) {
   if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
   const profile = plan.profile || {};
-  const template = disciplineTemplate(profile.daysPerWeek, profile.excludedDiscipline);
+  // Solo plans have one discipline: every week signature equals the base
+  // template and the search below correctly proves "no swap".
+  const template = disciplineTemplate(profile.daysPerWeek, profile.excludedDiscipline,
+    (RACES[profile.raceType] || {}).solo || null);
   if (!template) return null;
   const sig = a => a.slice().sort().join('|');
   const base = sig(template);
@@ -1169,7 +1265,16 @@ const INTENSITY_LADDER = {
 // beginners get structured play (Fartlek / Tempo Ride) instead of jumping
 // straight to hard reps, elites top out at VO2 on the bike too.
 const LADDER_ANCHOR = { Base: 0, Build: 2, Peak: 3, Maintain: 1 };
-function typeFor(discipline, role, phase, isRecovery, intensity) {
+// Distance flavour for solo run plans, applied to the primary quality slot
+// only: a 5k or 10k plan climbs one extra rung (an intermediate 5k plan peaks
+// at VO2 Intervals, genuinely 5k work; Threshold is genuinely 10k work). The
+// half peaks at Threshold, correct for the distance; the marathon keeps
+// Tempo/Threshold and gets its specificity from the long run instead.
+const RACE_QUALITY_BIAS = { run5k: 1, run10k: 1, runhalf: 0, runmarathon: 0 };
+// occ and raceBias are only ever non-zero for solo plans (the caller gates
+// them), so every triathlon plan builds byte-identically. occ 1 is the second
+// quality of the week: one rung adjacent to the first, easier when possible.
+function typeFor(discipline, role, phase, isRecovery, intensity, occ = 0, raceBias = 0) {
   // Templates encode bricks as 'brick:long' — the discipline, not the role,
   // is the brick signal, so it must win before the generic long check.
   if (discipline === 'brick') return 'Brick';
@@ -1186,15 +1291,20 @@ function typeFor(discipline, role, phase, isRecovery, intensity) {
   if (isRecovery) return discipline === 'swim' ? 'Technique' : (discipline === 'bike' ? 'Endurance' : 'Easy');
   const ladder = INTENSITY_LADDER[discipline] || ['Easy'];
   const anchor = LADDER_ANCHOR[phase] != null ? LADDER_ANCHOR[phase] : LADDER_ANCHOR.Peak;
-  const idx = clamp(anchor + (intensity || 0), 0, ladder.length - 1);
+  const idx = clamp(anchor + (intensity || 0) + (raceBias || 0), 0, ladder.length - 1);
+  if (occ) return ladder[idx > 0 ? idx - 1 : idx + 1];
   return ladder[idx];
 }
 
-function baseDuration(discipline, role, race) {
+// occ is read only by the run branch (solo plans are the only source of
+// duplicate tokens; the caller passes 0 everywhere else). The easy ladder
+// reads standard easy, aerobic, recovery jog, shakeout; the quality gap
+// mirrors the bike easy/quality precedent below.
+function baseDuration(discipline, role, race, occ = 0) {
   if (discipline === 'brick') return LONG_BRICK[race];
   if (role === 'long') return discipline === 'bike' ? LONG_BIKE[race] : (discipline === 'run' ? LONG_RUN[race] : LONG_SWIM[race] || 60);
   if (discipline === 'swim') return role === 'easy' ? 35 : 45;
-  if (discipline === 'run') return role === 'easy' ? 40 : 50;
+  if (discipline === 'run') return role === 'easy' ? [40, 35, 30, 25][Math.min(occ, 3)] : (occ ? 45 : 50);
   // An easy spin is shorter than a quality ride, and the gap also keeps a
   // recovery week's collapsed types (both map to Endurance there) from
   // producing two byte-identical sessions (injured-state templates carry
@@ -1213,7 +1323,7 @@ function intensityOf(profile) {
 // buildSwim reads it today (see its note). Any new rebuild path MUST pass the
 // stored w.role — omitting it silently rebuilds a quality swim as an easy one.
 function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0, raceType, role) {
-  if (discipline === 'run') return buildRun(type, dur, pc, seed, phase, intensity);
+  if (discipline === 'run') return buildRun(type, dur, pc, seed, phase, intensity, raceType);
   if (discipline === 'bike') return buildBike(type, dur, pc, seed, phase, intensity);
   if (discipline === 'swim') return buildSwim(type, dur, pc, seed, phase, intensity, role);
   if (discipline === 'brick') return buildBrick(dur, pc, phase, seed, raceType);
@@ -1228,7 +1338,7 @@ export const easeWorkout = function (w, plan) {
   if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
   const easyType = disc === 'swim' ? 'Technique' : (disc === 'bike' ? 'Endurance' : 'Easy');
   const dur = Math.max(25, round5(w.durationMin * 0.65));
-  const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), undefined, w.role);
+  const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role);
   return Object.assign({}, w, {
     type: easyType, title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
@@ -1245,7 +1355,10 @@ export const trimWorkout = function (w, plan, factor) {
   if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
   const dur = Math.max(20, round5(w.durationMin * factor));
   if (dur >= w.durationMin) return w;
-  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), undefined, w.role);
+  // raceType must ride along: the solo race-pace Long's variant menu is
+  // sized by it, and a rebuild without it would flip a stored session's
+  // format (the same class of bug as omitting w.role).
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role);
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
@@ -1261,10 +1374,16 @@ export const boostWorkout = function (w, plan, factor) {
   // The pool ceiling holds on every rebuild path, not just generation: a
   // capped swim long boosted by the F2 nudge must not creep past it
   // (gauntlet catch 2026-07-18).
-  const cap = disc === 'swim' && w.role === 'long' ? LONG_SWIM_CAP : Infinity;
+  const soloRun = (RACES[plan.race] || {}).solo === 'run';
+  const cap = disc === 'swim' && w.role === 'long' ? LONG_SWIM_CAP
+    : soloRun && disc === 'run' && w.role === 'long'
+      ? (w.phase === 'Taper' ? SOLO_TAPER_LONG_CAP : LONG_RUN_CAP) : Infinity;
   const dur = Math.min(round5(w.durationMin * factor), cap);
   if (dur <= w.durationMin) return w;
-  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), undefined, w.role);
+  // raceType must ride along: the solo race-pace Long's variant menu is
+  // sized by it, and a rebuild without it would flip a stored session's
+  // format (the same class of bug as omitting w.role).
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role);
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
@@ -1587,7 +1706,7 @@ export const generatePlan = function (profile, opts) {
   const prefDays = (profile.trainingDays && profile.trainingDays.length >= 3)
     ? profile.trainingDays.slice().sort((a, b) => a - b) : null;
   const days = prefDays ? prefDays.length : profile.daysPerWeek;
-  const template = disciplineTemplate(days, profile.excludedDiscipline);
+  const template = disciplineTemplate(days, profile.excludedDiscipline, race.solo || null);
   let longDay = profile.longDay;
   if (prefDays && (longDay === undefined || prefDays.indexOf(longDay) < 0)) {
     longDay = prefDays.indexOf(5) >= 0 ? 5 : (prefDays.indexOf(6) >= 0 ? 6 : prefDays[prefDays.length - 1]);
@@ -1596,7 +1715,9 @@ export const generatePlan = function (profile, opts) {
   // Weakest-link bias, derived deterministically from the profile's own
   // baselines (see lib/weakest.js) — {} when the sports are balanced or the
   // data can't say.
-  const bias = weakBias(profile);
+  // Solo plans have no cross-sport comparison to bias by; a stale triathlon
+  // baseline must never stretch or shrink the only discipline's sessions.
+  const bias = race.solo ? {} : weakBias(profile);
   // The frequency-swap verdict (see swapForLimiter). It changes WHICH
   // discipline sits at a workout id, so it must never flip on a mid-plan
   // retarget: ids are positional and the log/moves overlays join on them, so
@@ -1610,7 +1731,10 @@ export const generatePlan = function (profile, opts) {
   // The injured guard outranks a locked verdict: a stale lock naming the
   // excluded discipline would otherwise swap a session of it straight into
   // an injured-state plan (re-verify catch).
-  const swapWl = profile.excludedDiscipline ? null
+  // The solo guard outranks a locked verdict for the same reason the injured
+  // guard does: a stale lock naming swim or bike would otherwise splice a
+  // session of it straight into a run-only template.
+  const swapWl = race.solo || profile.excludedDiscipline ? null
     : opts && opts.lockedSwap !== undefined
       ? opts.lockedSwap
       : (() => {
@@ -1637,13 +1761,81 @@ export const generatePlan = function (profile, opts) {
   // No benchmark for a discipline the plan does not train (injured state):
   // same spread logic over the two remaining tests.
   const TEST_DISC = { run5k: 'run', bikeFtp: 'bike', swimCss: 'swim' };
-  const rotation = TEST_ROTATION.filter(t => TEST_DISC[t] !== profile.excludedDiscipline);
+  // Solo plans only ever test their one discipline, and with room they test
+  // it twice (early and late): the 5k is the sole pace source on a run plan,
+  // and the existing spread math puts two tests at roughly one quarter and
+  // three quarters of the eligible window.
+  let rotation = race.solo
+    ? TEST_ROTATION.filter(t => TEST_DISC[t] === race.solo)
+    : TEST_ROTATION.filter(t => TEST_DISC[t] !== profile.excludedDiscipline);
+  if (race.solo && eligibleTestWeeks.length >= 6) rotation = rotation.concat(rotation);
   const nTests = Math.min(rotation.length, eligibleTestWeeks.length);
   for (let i = 0; i < nTests; i++) {
     const pos = nTests === 1 ? Math.floor(eligibleTestWeeks.length / 2)
       : Math.round((i + 0.5) / nTests * (eligibleTestWeeks.length - 1));
     testByWeek[eligibleTestWeeks[pos]] = rotation[i];
   }
+
+  // Which week hosts race day (solo taper rules read it; -1 when no race).
+  const raceWeekIdx = maintenance ? -1 : Math.floor(daysBetween(iso(weekStart0), iso(profile.raceDate)) / 7);
+
+  // Solo quality spacing: token order alone cannot space two qualities on
+  // both day-assignment paths (qualities-first lands Tue/Thu on the legacy
+  // queue but stacks Mon+Tue for a Mon-to-Fri prefDays athlete). Rule, both
+  // paths: first quality on the earliest available day; the second on the
+  // day maximising its minimum calendar distance from the first quality AND
+  // from any long day (ties to the earlier day); easies fill the rest in
+  // day order. Deterministic, no seed.
+  const assignSoloMids = (midDays, mids, dayMap, longDays) => {
+    const days = midDays.slice().sort((a, b) => a - b).slice(0, mids.length);
+    const qs = mids.filter(m => m.role === 'quality');
+    const es = mids.filter(m => m.role !== 'quality');
+    const usedD = new Set();
+    if (qs[0] && days.length) { dayMap[days[0]] = qs[0]; usedD.add(days[0]); }
+    if (qs[1]) {
+      let best = null, bestDist = -1;
+      let bestQ1 = -1;
+      days.forEach(d => {
+        if (usedD.has(d)) return;
+        const dq1 = Math.abs(d - days[0]);
+        const dist = Math.min.apply(null, [dq1].concat(longDays.map(ld => Math.abs(d - ld))));
+        // ties break by MORE distance from the first quality, then by the
+        // earlier day: min-distance alone stacked Mon+Tue qualities for a
+        // four-consecutive-day athlete (gauntlet catch)
+        if (dist > bestDist || (dist === bestDist && dq1 > bestQ1)) { best = d; bestDist = dist; bestQ1 = dq1; }
+      });
+      if (best != null) { dayMap[best] = qs[1]; usedD.add(best); }
+    }
+    days.filter(d => !usedD.has(d)).forEach((d, i) => { if (es[i]) dayMap[d] = es[i]; });
+  };
+
+  // The week-level uniqueness pass for solo plans. Duplicate disc:role tokens
+  // are first differentiated by type rung and the duration ladder, but round5
+  // buckets are 5 minutes wide and the load multiplier can collapse two bases
+  // into one bucket (recovery weeks collapse types too). Rule restated: never
+  // two byte-identical sessions in a week. Same type + same duration at the
+  // week's pinned-or-shared seed IS byte-identical, so nudge the later one
+  // down in 5s (floor 20), then up, to the first free slot. Runs again after
+  // the B-race easing pass, which can floor two runs to 20.
+  const dedupeSoloWeek = wk => {
+    if (!race.solo) return;
+    const seen = [];
+    const taken = (t, m) => seen.some(x => x.t === t && x.m === m);
+    wk.workouts.forEach((wo, i) => {
+      if (wo.discipline !== race.solo || wo.race || wo.bRace || wo.test || wo.second) return;
+      let cur = wo;
+      if (taken(cur.type, cur.durationMin)) {
+        let m = null;
+        for (let d2 = cur.durationMin - 5; d2 >= 20; d2 -= 5) if (!taken(cur.type, d2)) { m = d2; break; }
+        for (let d2 = cur.durationMin + 5; m == null; d2 += 5) if (!taken(cur.type, d2)) m = d2;
+        const built = buildWorkout(cur.discipline, cur.type, m, pc, cur.phase, cur.seed, fitness.intensity, profile.raceType, cur.role);
+        cur = { ...cur, durationMin: m, title: built.title, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments };
+        wk.workouts[i] = cur;
+      }
+      seen.push({ t: cur.type, m: cur.durationMin });
+    });
+    wk.totalMin = wk.workouts.reduce((a, x) => a + (x.durationMin || 0), 0);
+  };
 
   const weeks = [];
   for (let w = 0; w < totalWeeks; w++) {
@@ -1683,7 +1875,16 @@ export const generatePlan = function (profile, opts) {
         // would be byte-identical (pre-existing on 6-7 day plans, widened by
         // the injured-state templates; gauntlet catch 2026-07-16).
         const d2 = disc === 'brick' ? 'bike' : disc;
-        if (!mids.some(m => m.disc === d2)) mids.push({ disc: d2, role: 'quality' });
+        // Solo plans have one discipline, so one-per-discipline degenerated
+        // the whole post-race week to a single jog; the occ duration ladder
+        // plus the dedupe pass now keep up to three gentle runs distinct.
+        // Extras carry role 'easy': the day assigner places at most two
+        // QUALITY slots, and the quality-role requirement here is a bike
+        // typing concern that cannot apply to a run-only week (re-verify
+        // catch: three quality-role slots yielded two runs and a rest day).
+        const capN = race.solo ? 3 : 1;
+        const have = mids.filter(m => m.disc === d2).length;
+        if (have < capN) mids.push({ disc: d2, role: have === 0 ? 'quality' : 'easy' });
         return;
       }
       (role === 'long' || role === 'brick' ? longs : mids).push({ disc, role });
@@ -1699,7 +1900,8 @@ export const generatePlan = function (profile, opts) {
       const used = {};
       longs.forEach((s, i) => { const d = longSlots[i]; if (d !== undefined) { dayMap[d] = s; used[d] = 1; } });
       const midSlots = prefDays.filter(d => !used[d]);
-      mids.forEach((s, i) => { const d = midSlots[i]; if (d !== undefined) dayMap[d] = s; });
+      if (race.solo) assignSoloMids(midSlots, mids, dayMap, Object.keys(used).map(Number));
+      else mids.forEach((s, i) => { const d = midSlots[i]; if (d !== undefined) dayMap[d] = s; });
     } else {
       const weekdayQueue = WEEKDAY_ORDER.slice();
       // Long/brick sessions take the weekend first; any overflow spills onto a weekday.
@@ -1707,10 +1909,24 @@ export const generatePlan = function (profile, opts) {
         if (WEEKEND[i] !== undefined) dayMap[WEEKEND[i]] = s;
         else { const wd = weekdayQueue.shift(); if (wd !== undefined) dayMap[wd] = s; }
       });
-      mids.forEach(s => { const wd = weekdayQueue.shift(); if (wd !== undefined) dayMap[wd] = s; });
+      if (race.solo) {
+        // The queue holds five weekdays; a 7-day run plan has six mids, so
+        // Sunday joins the pool (7 days means 7 runs, the day count is a
+        // promise). Preference order first, then the spacing rule places.
+        const longDays2 = Object.keys(dayMap).map(Number);
+        const pool = WEEKDAY_ORDER.concat([5, 6]).filter(d => longDays2.indexOf(d) < 0);
+        assignSoloMids(pool.slice(0, mids.length), mids, dayMap, longDays2);
+      } else {
+        mids.forEach(s => { const wd = weekdayQueue.shift(); if (wd !== undefined) dayMap[wd] = s; });
+      }
     }
 
     const workouts = [];
+    // Per-week occurrence counter for duplicate disc:role tokens (solo
+    // templates are the only source). Positional in day order, independent of
+    // seed, so nothing needs to survive the wire: type and durationMin are
+    // stored per workout and segment rebuilds read the stored values.
+    const occCount = {};
     for (let d = 0; d < 7; d++) {
       const date = iso(addDays(weekStart0, w * 7 + d));
       const s = dayMap[d];
@@ -1718,14 +1934,28 @@ export const generatePlan = function (profile, opts) {
         workouts.push({ id: w + '-' + d, week: w, phase: phase, date: date, discipline: 'rest', type: 'Rest', title: 'Rest', durationMin: 0, segments: [], distance: null });
         continue;
       }
-      const type = typeFor(s.disc, s.role, phase, isRecovery, fitness.intensity);
+      const okey = s.disc + ':' + s.role;
+      const occ0 = occCount[okey] || 0;
+      occCount[okey] = occ0 + 1;
+      // occ and raceBias reach typeFor/baseDuration only on solo plans, so
+      // triathlon weeks build byte-identically whatever the counter says.
+      const occ = race.solo ? occ0 : 0;
+      // Race week demotes the solo long to a shakeout jog: the race is the
+      // week's key session, and a long run days before it is the first thing
+      // a marathon buyer inspects. If the race lands on the long day itself,
+      // the race-day replacement below overwrites this slot anyway.
+      const soloShakeout = race.solo && s.role === 'long' && w === raceWeekIdx;
+      const roleOut = soloShakeout ? 'easy' : s.role;
+      const type = soloShakeout ? 'Easy'
+        : typeFor(s.disc, s.role, phase, isRecovery, fitness.intensity, occ,
+          race.solo ? (RACE_QUALITY_BIAS[race.key] || 0) : 0);
       // Lead-in Maintain weeks hold fitness, they don't rehearse the race:
       // long sessions cap at maintenance scale (a far-out full would otherwise
       // spend months on 3h+ "maintenance" rides). Standalone maintenance and
       // build phases use their own tables directly.
-      const raceScale = baseDuration(s.disc, s.role, race.key);
+      const raceScale = baseDuration(s.disc, s.role, race.key, occ);
       const durBase = phase === 'Maintain' && !maintenance
-        ? Math.min(raceScale, baseDuration(s.disc, s.role, 'maintenance'))
+        ? Math.min(raceScale, baseDuration(s.disc, s.role, 'maintenance', occ))
         : raceScale;
       // Weakest-link bias: the limiting sport earns extra time while building;
       // Peak and Taper keep their race-specific shape untouched.
@@ -1733,17 +1963,42 @@ export const generatePlan = function (profile, opts) {
       // by definition — the limiter gets its extra time while building.
       const wb = !postRaceWeek && (phase === 'Base' || phase === 'Build' || phase === 'Maintain') && bias[s.disc] ? bias[s.disc] : 1;
       // The swim long is the one long the multiplier chain can push somewhere
-      // silly (see LONG_SWIM_CAP); run/bike longs keep their historic scaling.
-      const dur = Math.min(round5(durBase * load * wb),
-        s.disc === 'swim' && s.role === 'long' ? LONG_SWIM_CAP : Infinity);
+      // silly (see LONG_SWIM_CAP); tri run/bike longs keep their historic
+      // scaling. Solo run longs cap at LONG_RUN_CAP always, and at
+      // SOLO_TAPER_LONG_CAP in Taper weeks before race week.
+      let cap = s.disc === 'swim' && s.role === 'long' ? LONG_SWIM_CAP : Infinity;
+      let dur;
+      if (race.solo && s.disc === 'run' && s.role === 'long') {
+        cap = Math.min(cap, LONG_RUN_CAP);
+        if (phase === 'Taper' && w !== raceWeekIdx) cap = Math.min(cap, SOLO_TAPER_LONG_CAP);
+        // The solo long is distance-driven, not level-driven: a beginner
+        // marathon long scaled by the 0.75 volume factor peaked at 2 hours,
+        // which any marathon shopper would call under-built. The marathon
+        // long floors at the full base (the distance does not shrink for a
+        // beginner; their midweek runs stay scaled); shorter races floor at
+        // 0.9. Levels at or above the floor keep their own scaling.
+        const lf = Math.max(fitness.factor, race.key === 'runmarathon' ? 1 : 0.9) / fitness.factor;
+        // Cap BEFORE the recovery reduction so a step-back week still steps
+        // back: applied after, the cap swallowed the reduction and elite
+        // recovery longs sat at the 180 ceiling like peak weeks.
+        const recDepth = isRecovery ? fitness.recoveryDepth : 1;
+        dur = soloShakeout ? 25
+          : round5(Math.min(round5(durBase * (load / recDepth) * lf * wb), cap) * recDepth);
+      } else {
+        dur = soloShakeout ? 25 : Math.min(round5(durBase * load * wb), cap);
+      }
+      // No solo run session under 20 minutes: beginner 7-day recovery weeks
+      // otherwise generate 10 and 15 minute jogs (the dedupe pass separates
+      // any collisions this floor creates).
+      if (race.solo && s.disc === 'run' && !soloShakeout) dur = Math.max(20, dur);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
-      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType, s.role);
+      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType, roleOut);
       workouts.push({
         id: w + '-' + d, week: w, phase: phase, date: date, seed: seed,
-        discipline: s.disc, role: s.role, type: type, title: built.title,
+        discipline: s.disc, role: roleOut, type: type, title: built.title,
         durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
-        segments: built.segments, key: s.role === 'long' || s.role === 'brick',
+        segments: built.segments, key: !soloShakeout && (s.role === 'long' || s.role === 'brick'),
       });
     }
 
@@ -1751,6 +2006,29 @@ export const generatePlan = function (profile, opts) {
     const raceISO = maintenance ? null : iso(profile.raceDate);
     workouts.forEach((wo, i) => {
       if (wo.date === raceISO) {
+        // Solo race day: one honest leg, discipline stamped as the real
+        // sport (keeps it out of brick styling and inside the watch-export
+        // race bucket). The marathon card carries a fuelling cue; the wider
+        // fuelling surface stays a deferred panel of its own.
+        if (race.solo) {
+          const segs = race.key === 'runmarathon' ? [
+            { label: 'Warm-up', detail: 'A few minutes of easy jogging, no more' },
+            { label: 'Run ' + race.run + ' km', detail: 'Start easier than feels right, fuel from the first 20 minutes, not when you fade' },
+          ] : race.key === 'runhalf' ? [
+            { label: 'Warm-up', detail: '10 min easy with a couple of strides' },
+            { label: 'Run ' + race.run + ' km', detail: 'Settle into your pace early and take fuel from the first station' },
+          ] : [
+            { label: 'Warm-up', detail: '15 min easy with a few strides' },
+            { label: 'Run ' + race.run + ' km', detail: 'Even early, strong late' },
+            { label: 'Cool-down', detail: '10 min very easy' },
+          ];
+          workouts[i] = {
+            id: wo.id, week: w, phase: 'Taper', date: raceISO, discipline: race.solo,
+            type: 'RACE', title: 'RACE DAY — ' + race.name, durationMin: 0, distance: null, unit: '',
+            segments: segs, race: true, key: true,
+          };
+          return;
+        }
         workouts[i] = {
           id: wo.id, week: w, phase: 'Taper', date: raceISO, discipline: 'brick',
           type: 'RACE', title: 'RACE DAY — ' + race.name, durationMin: 0, distance: null, unit: '',
@@ -1804,7 +2082,9 @@ export const generatePlan = function (profile, opts) {
     }
 
     const totalMin = workouts.reduce((a, b) => a + (b.durationMin || 0), 0);
-    weeks.push({ index: w, phase: phase, isRecovery: isRecovery, start: iso(addDays(weekStart0, w * 7)), totalMin: totalMin, workouts: workouts });
+    const wkObj = { index: w, phase: phase, isRecovery: isRecovery, start: iso(addDays(weekStart0, w * 7)), totalMin: totalMin, workouts: workouts };
+    dedupeSoloWeek(wkObj);
+    weeks.push(wkObj);
   }
 
   // Tune-up (B) races: drop each valid one onto its calendar day (replacing
@@ -1823,7 +2103,12 @@ export const generatePlan = function (profile, opts) {
     const bByDate = {}, easeDates = new Set();
     bValid.forEach(b => {
       bByDate[b.date] = b;
-      [-2, -1, 1].forEach(o => easeDates.add(iso(addDays(b.date, o))));
+      // A raced half is not a parkrun: long run tune-ups (90 min and up)
+      // ease a second day on the way out. Gated on discipline so the olympic
+      // tune-up (150 min, brick) keeps its historic window.
+      const spec = B_RACES[b.kind];
+      const win = spec.discipline === 'run' && spec.durationMin >= 90 ? [-2, -1, 1, 2] : [-2, -1, 1];
+      win.forEach(o => easeDates.add(iso(addDays(b.date, o))));
     });
     weeks.forEach(wk => {
       let touched = false;
@@ -1832,7 +2117,11 @@ export const generatePlan = function (profile, opts) {
         if (b && !wo.race && !wo.second) {
           touched = true;
           const spec = B_RACES[b.kind];
-          const legs = RACES[b.kind];
+          // Solo RACES entries share keys with run B races (run5k, run10k,
+          // runhalf): without the solo check, every parkrun tune-up in every
+          // triathlon plan would flip to the three-leg branch and render
+          // 'Swim 0 km'. Run tune-ups always take the race-it shape.
+          const legs = RACES[b.kind] && !RACES[b.kind].solo ? RACES[b.kind] : null;
           const segments = legs ? [
             { label: 'Swim ' + legs.swim + ' km', detail: 'Race effort, but settle early — this is a rehearsal too' },
             { label: 'Bike ' + legs.bike + ' km', detail: 'Race watts; practise fuelling exactly as you will on the day' },
@@ -1860,6 +2149,9 @@ export const generatePlan = function (profile, opts) {
         return wo;
       }).filter(Boolean);
       if (touched) wk.totalMin = wk.workouts.reduce((a, x) => a + (x.durationMin || 0), 0);
+      // Easing can floor two solo runs into the same type and duration; the
+      // uniqueness pass re-runs to keep the never-byte-identical invariant.
+      if (touched) dedupeSoloWeek(wk);
     });
   }
 

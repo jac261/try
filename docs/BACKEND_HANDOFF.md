@@ -261,6 +261,8 @@ today — the app degrades honestly when a field is missing.
 
 ## Ask — 18 July 2026 (evening): PlanCatalog race types for single-sport plans
 
+**Landed**: PR #23 merged to main on 20 July 2026; the four race types ship client-side in the Tier 2 pass.
+
 The next frontend milestone is standalone running race plans (5k, 10k, half
 marathon, marathon). `PlanCatalog.RaceTypes` is a closed set and rejects
 unknown strings with a 400, which trips the client's sync-failure banner, so

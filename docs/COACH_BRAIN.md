@@ -162,3 +162,33 @@ digest, so a week the athlete never opens loses that block's review.
 Focus changes journal in their own store: the engine journal is scanned by
 the decision layer for accepted proposals, and a focus entry there would
 be quoted as an engine call.
+
+
+## Tier 2: solo plans and the degenerate limiter
+
+Standalone run race plans (run5k, run10k, runhalf, runmarathon; `solo: 'run'`
+on the RACES entry) generalise the progression contract rather than special
+casing it: on a plan that trains exactly one discipline, that discipline is
+the limiter outright. decideWeek forces the weakest-link verdict null for
+solo plans at its own call site (weakest.js is untouched beyond silencing
+the race-share line for zeroed races) so a stale triathlon baseline can
+never name an untrained sport, and the progression variable becomes the solo
+discipline directly. Eligibility rules (two clean weeks, plan-identity
+adjacency, strain resets, hold default) are unchanged. Solo copy drops the
+word limiter, which would be a lie with one discipline. The focus feature
+collapses: resolveFocus returns the solo discipline with no divergence, the
+choosers hide, and the block review keeps its clean tally with zero new
+strings. eftp retarget proposals gate by the plan's discipline scope, so a
+leftover intervals.icu swim setting proposes nothing on a run plan.
+
+Known residuals, stated rather than hidden: an advanced or elite marathon
+long run sits at the 3 hour ceiling from mid-plan, so a progress decision's
+'extending the long run' promise has nothing left to extend there (the cap
+is the design; recovery weeks still step below it). Race-pace long run
+rehearsals follow the seed walk, so their spacing across Build and Peak is
+irregular rather than scheduled; a deterministic race-pace calendar is
+future work alongside the long-run curve. A reshape preserves plan identity
+by design, so a frozen decision from the week before a tri to run switch is
+quoted verbatim on the run plan (it is the honest record of that week) and
+a clean prior week carries into the progression count across the switch
+(run fitness is continuous through the switch; the engine agrees).

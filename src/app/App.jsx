@@ -1090,7 +1090,11 @@ export function App({ storage, getToken, user }) {
   if (!tracker && plan.race !== 'maintenance' && rawDaysToRace < 0) planEdge = {
     key: 'post-race', icon: 'trophy',
     title: 'Race day is behind you — congratulations!',
-    sub: 'Recover well, then keep the engine ticking. Tap to start a 12-week maintenance block →',
+    // Run-only maintenance is a deferred build; the prompt must not silently
+    // offer a marathon finisher swims, so solo plans get the honest line.
+    sub: (T.RACES[plan.race] || {}).solo
+      ? 'Recover well. Maintenance blocks keep all three sports ticking over. Pick a new race any time to stay running only. Tap to start →'
+      : 'Recover well, then keep the engine ticking. Tap to start a 12-week maintenance block →',
     act: () => rollMaintenance(true),
   };
   else if (plan.race === 'maintenance' && rawDaysToRace <= 14) planEdge = {
@@ -1126,7 +1130,7 @@ export function App({ storage, getToken, user }) {
           ? <span>Ready for your next plan?</span>
           : race.noRace
             ? <><span>Maintenance block</span><b>{Math.max(0, Math.ceil(rawDaysToRace / 7))}</b><span>weeks left</span></>
-            : <><span>{race.name} Triathlon</span><b>{daysToRace}</b><span>days to go</span></>}</div>
+            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span><b>{daysToRace}</b><span>days to go</span></>}</div>
       </div>
 
       {planSyncFailed && !tracker && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptRes(plan.createdAt)))}>
@@ -1173,7 +1177,7 @@ export function App({ storage, getToken, user }) {
       {whatIf && <WhatIfSheet plan={plan} log={log} moves={moves} adjust={adjust} wellness={recs}
         todayISO={T.iso(new Date())} initial={whatIf.initial} onClose={() => setWhatIf(null)} />}
 
-      {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
+      {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} solo={!tracker ? ((T.RACES[plan.race] || {}).solo || null) : null} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}
 

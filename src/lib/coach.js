@@ -35,6 +35,7 @@ import { weakestLink } from './weakest.js';
 import { wellness as W } from './wellness.js';
 import { effDate } from './schedule.js';
 import { weekPhaseLabel } from './plan.js';
+import { RACES } from './domain.js';
 import { iso, addDays } from './date.js';
 
 // Bump when decision logic changes: stored decisions carry the version they
@@ -92,7 +93,13 @@ export function focusClause(phase, focus) {
 }
 // The effective focus: declared wins for LABELS; the derived limiter keeps
 // actuating regardless. Returns {focus, derived, diverges}.
-export function resolveFocus(profile, wl) {
+export function resolveFocus(profile, wl, solo) {
+  // A solo plan's focus is its one discipline, structurally: a stale
+  // blockFocus from a previous triathlon plan is ignored, divergence cannot
+  // exist, and the callers hide the choosers. Callers pass solo from the
+  // PLAN's race entry, never from bare profile.raceType, so tracker mode
+  // (never solo) keeps the full resolution.
+  if (solo) return { focus: solo, derived: solo, declared: null, diverges: false };
   const derived = wl && wl.weakest ? wl.weakest : 'general';
   const declared = profile && profile.blockFocus && FOCUS_OPTIONS[profile.blockFocus] ? profile.blockFocus : null;
   const focus = declared || derived;
@@ -201,7 +208,13 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
   const sessions = weekSessions({ plan, log, moves, adjust, missedReasons, weekMonday, todayISO });
   const reds = redDays(wellness, weekMonday);
   const proposal = weekProposal({ plan, log, moves, adjust, adjustLog, wellness, weekMonday });
-  const wl = weakestLink({ profile: plan.profile });
+  // On a plan that trains exactly one discipline, that discipline is the
+  // limiter outright: the degenerate truth, not a special case. wl is forced
+  // null HERE (not in weakest.js) so a stale triathlon baseline can never
+  // name an untrained sport, while tracker mode keeps its limiter board.
+  const soloDisc = (RACES[plan.race] || {}).solo || null;
+  const wl = soloDisc ? null : weakestLink({ profile: plan.profile });
+  const progressVar = soloDisc || (wl && wl.weakest) || null;
 
   const allSessions = Object.values(sessions).flat();
   const missedTired = allSessions.filter(s => s.status === 'missed-tired').length;
@@ -237,7 +250,7 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
     evidence.push({ signal: 'pattern', reading: 'the same kind of answer twice in one week is worth taking seriously; if it keeps coming up, a professional opinion beats pushing through' });
   } else if (proposal && proposal.kind === 'trim-week' && proposal.factor != null && proposal.factor <= 0.6) {
     overall = { decision: 'recover', headline: 'A recovery week is the right call' };
-  } else if (proposal && proposal.kind === 'trim-week' && runScoped(proposal, sessions)) {
+  } else if (proposal && proposal.kind === 'trim-week' && !soloDisc && runScoped(proposal, sessions)) {
     overall = { decision: 'hold', headline: 'Hold overall, with the run pulled back' };
   } else if (proposal && proposal.kind === 'trim-week') {
     overall = { decision: 'reduce-volume', headline: 'Pull the volume back before building again' };
@@ -280,7 +293,7 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
       ev.push({ signal: 'run load', reading: 'building faster than your own recent normal' });
     } else if (overall.decision === 'recover') {
       headline = 'Easy week here too';
-    } else if (wl && wl.weakest === d && clean && overall.decision !== 'reduce-volume') {
+    } else if (progressVar === d && clean && overall.decision !== 'reduce-volume') {
       // the repeat rule: this discipline also completed everything in the
       // previously reviewed weeks (REPEAT_WEEKS including this one)
       // The prior week must be the literal previous calendar week, from the
@@ -292,13 +305,18 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
         && prev.disciplines && prev.disciplines[d] && prev.disciplines[d].clean;
       if (priorClean) {
         decision = 'progress'; headline = 'Ready to progress: ' + PROGRESSION[d];
-        ev.push({ signal: 'repeatability', reading: 'this is your limiter and the work has been landing for ' + REPEAT_WEEKS + ' weeks straight' });
+        // 'your limiter' is a lie with one discipline; solo copy names the work
+        ev.push({ signal: 'repeatability', reading: soloDisc
+          ? 'the work has been landing for ' + REPEAT_WEEKS + ' weeks straight'
+          : 'this is your limiter and the work has been landing for ' + REPEAT_WEEKS + ' weeks straight' });
       } else {
         headline = 'Landing well. One more clean week opens progression';
-        ev.push({ signal: 'repeatability', reading: 'your limiter needs ' + REPEAT_WEEKS + ' clean weeks in a row to progress; this one counts' });
+        ev.push({ signal: 'repeatability', reading: soloDisc
+          ? 'progression needs ' + REPEAT_WEEKS + ' clean weeks in a row; this one counts'
+          : 'your limiter needs ' + REPEAT_WEEKS + ' clean weeks in a row to progress; this one counts' });
       }
     }
-    if (wl && wl.weakest === d && !clean && strained) {
+    if (progressVar === d && !clean && strained) {
       ev.push({ signal: 'repeatability', reading: 'a session missed under strain resets the clean-week count' });
     }
     // Durability context, pass 2: EVIDENCE ONLY. The read never changes a

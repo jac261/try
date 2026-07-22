@@ -12,8 +12,12 @@
 import { DISCIPLINE } from './autolog.js';
 import { iso, addDays, startOfWeekMonday } from './date.js';
 
-const EXP = 1.06;           // Riegel exponent: solid 5k -> half marathon
-const EXP_MARATHON_HI = 1.15; // the realistic end once endurance is unproven
+// Exported so the plan builder's race-pace long runs quote the same
+// projection the Progress tab shows; two Riegel exponents would drift.
+export const RIEGEL_EXP = 1.06;           // solid 5k -> half marathon
+export const RIEGEL_MARATHON_HI = 1.15;   // the realistic end once endurance is unproven
+const EXP = RIEGEL_EXP;
+const EXP_MARATHON_HI = RIEGEL_MARATHON_HI;
 
 export function predictRaceTimes(profile) {
   if (!profile || !profile.fivekSec) return null;

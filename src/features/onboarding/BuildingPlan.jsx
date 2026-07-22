@@ -5,11 +5,14 @@ const D = T.DISCIPLINES;
 
 export function BuildingPlan({ plan, onDone }) {
   const p = plan.profile;
-  const race = (T.RACES[plan.race] || {}).name || 'race';
+  const raceEntry = T.RACES[plan.race] || {};
+  const race = raceEntry.name || 'race';
+  const solo = raceEntry.solo || null;
   const steps = [
     'Reading your goals…',
     'Mapping out your ' + race + ' race day…',
     'Periodising Base → Build → Peak → Taper…',
+    ...(solo ? ['Building your long run progression…'] : []),
     'Scheduling ' + p.daysPerWeek + ' sessions a week across ' + plan.totalWeeks + ' weeks…',
     'Setting your target paces…',
     'Your plan is ready',
@@ -26,7 +29,7 @@ export function BuildingPlan({ plan, onDone }) {
     <div className="building">
       <div className="building-inner">
         <div className={'build-tiles' + (last ? ' done' : '')}>
-          {['swim', 'bike', 'run'].map(k =>
+          {(solo ? [solo] : ['swim', 'bike', 'run']).map(k =>
             <span key={k} className="build-tile" style={{ background: D[k].grad }}>
               <Icon name={k} size={26} />
             </span>

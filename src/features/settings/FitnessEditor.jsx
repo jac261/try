@@ -3,7 +3,7 @@ import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { useSheetFocus } from '@/utils/useSheetFocus.js';
 
-export function FitnessEditor({ profile, onClose, onSave, noPlan }) {
+export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
   const lvl0 = T.FITNESS[profile.fitness] ? profile.fitness : 'intermediate';
   const [goalOpen, setGoalOpen] = useState(false);
   const [f, setF] = useState({
@@ -25,10 +25,13 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan }) {
         <p className="lead">{noPlan
           ? <>Logged a test, race or just got fitter? Update your numbers and they carry into your fitness history, ready for your next plan.</>
           : <>Logged a test, race or just got fitter? Update your numbers and every <b>upcoming</b> session re-targets to the new paces. Completed sessions and reschedules stay put.</>}</p>
+        {/* This sheet edits the athlete, not the plan, so every field stays
+            even on a run-only plan; the sentence says which one drives it. */}
+        {solo && <p className="lead" style={{ fontSize: 13, marginTop: -4 }}>Your run time drives this plan; swim and bike numbers are kept for your next multisport plan.</p>}
         <label className="field"><span className="lab">Experience level</span></label>
         <div className="choice">
           {Object.values(T.FITNESS).map(l => (
-            <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} {...tap(() => set('fitness', l.key))}>{l.name}<small>{l.blurb}</small></div>
+            <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} {...tap(() => set('fitness', l.key))}>{l.name}<small>{solo ? l.runBlurb : l.blurb}</small></div>
           ))}
         </div>
         <div style={{ height: 16 }} />

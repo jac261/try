@@ -68,8 +68,12 @@ export function weakestLink({ profile }) {
   // Rough race time share per sport (swim is slow per km, bike is fast).
   // Only meaningful with a real race on the calendar — a maintenance block
   // has no race for the limiter to be a share OF (field report 2026-07-12:
-  // "the swim is 33% of my race" on a plan with no race).
-  const mins = race && !race.noRace
+  // "the swim is 33% of my race" on a plan with no race). Solo races zero
+  // two of the three distances, which would read a nonsense 100%, so they
+  // take the same shareless shape. The verdict itself still returns: solo
+  // PLANS suppress it at their consumers, keyed on plan.race, so a tracker
+  // athlete whose profile keeps a solo raceType keeps their limiter board.
+  const mins = race && !race.noRace && !race.solo
     ? { swim: race.swim * 20, bike: race.bike * 1.8, run: race.run * 5 }
     : null;
   const total = mins ? mins.swim + mins.bike + mins.run : 0;

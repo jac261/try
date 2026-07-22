@@ -40,7 +40,8 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
   const phaseGroups = useMemo(() => T.phaseGroups(plan), [plan]);
   // display-and-coach-only: the declared focus labels blocks; the limiter
   // keeps actuating, and when they disagree both are said plainly
-  const fx = T.resolveFocus(plan.profile, T.weakestLink({ profile: plan.profile }));
+  const solo = race.solo || null;
+  const fx = T.resolveFocus(plan.profile, T.weakestLink({ profile: plan.profile }), solo);
   const [fxOpen, setFxOpen] = useState(false);
   const totalHrs = Math.round(plan.weeks.reduce((a, b) => a + b.totalMin, 0) / 60);
 
@@ -48,7 +49,7 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
     <>
       <div className="section-title"><InfoLink onOpen={onSupport} topic="plan-structure" />Plan overview</div>
       <div className="card">
-        <h2>{race.noRace ? 'Maintenance block' : race.name + ' Triathlon'}</h2>
+        <h2>{race.noRace ? 'Maintenance block' : race.name + (race.solo ? '' : ' Triathlon')}</h2>
         <p className="lead">{buildLen}-week {race.noRace ? 'block' : 'build'}{hasRecoveryWeek ? ' + recovery week' : ''} · {totalHrs} total training hours · {plan.profile.daysPerWeek} days/week</p>
         {plan.shortRunway && <p className="lead" style={{ color: '#fde68a', fontSize: 13 }}>
           Short runway: fewer weeks than the recommended minimum for this distance, so this plan sharpens what you have rather than building from scratch.</p>}
@@ -60,7 +61,7 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
             <div className="seg" key={i} style={{ alignItems: 'center' }}>
               <div className="bar" style={{ background: pi.color, height: 38 }} />
               <div><div className="l">{g.phase} <span className="muted">· {g.weeks} {g.weeks === 1 ? 'week' : 'weeks'}</span>{(() => {
-                const fc = T.focusClause(g.phase, fx.focus);
+                const fc = solo ? null : T.focusClause(g.phase, fx.focus);
                 return fc ? <span className="muted"> · {fc}</span> : null;
               })()}</div>
                 <div className="d">{pi.blurb}</div></div>
@@ -68,14 +69,20 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
             </div>
           );
         })}
-        <div className="legend" style={{ marginTop: 12 }}>
-          {['swim', 'bike', 'run', 'brick'].map(k => (
-            <div className="li" key={k}><i style={{ background: D[k].color }} />{D[k].name}</div>
-          ))}
-        </div>
+        {(() => {
+          // Legend keys only what the plan actually schedules; a run-only
+          // legend is one swatch explaining nothing, so it hides entirely.
+          const present = ['swim', 'bike', 'run', 'brick'].filter(k =>
+            plan.weeks.some(wk => wk.workouts.some(w => w.discipline === k)));
+          return present.length >= 2 ? <div className="legend" style={{ marginTop: 12 }}>
+            {present.map(k => (
+              <div className="li" key={k}><i style={{ background: D[k].color }} />{D[k].name}</div>
+            ))}
+          </div> : null;
+        })()}
         {fx.diverges && <div className="focus-note">Focus: {T.FOCUS_OPTIONS[fx.focus]}, your call. The plan's extra work still goes to {T.FOCUS_OPTIONS[fx.derived]}, your limiter.</div>}
-        {onFocus && !fxOpen && <a className="reset" role="button" {...tap(() => setFxOpen(true))} style={{ display: 'inline-block', marginTop: 6 }}>Change what this plan is about</a>}
-        {onFocus && fxOpen && <div className="feel-row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+        {onFocus && !solo && !fxOpen && <a className="reset" role="button" {...tap(() => setFxOpen(true))} style={{ display: 'inline-block', marginTop: 6 }}>Change what this plan is about</a>}
+        {onFocus && !solo && fxOpen && <div className="feel-row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
           {Object.entries(T.FOCUS_OPTIONS)
             .filter(([k]) => k === 'general' || plan.profile.excludedDiscipline !== k)
             .map(([k, lab]) => <button key={k} className="feelbtn" style={{ flex: '1 1 45%' }}

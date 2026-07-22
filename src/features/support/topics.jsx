@@ -90,8 +90,9 @@ export const TOPICS = [
     summary: 'Where Z1 to Z5 come from and how your personal numbers anchor them',
     body: <>
       <P>Every session prescribes an intensity zone from Z1 (recovery) to Z5 (VO2 max effort). The
-        zones are anchored to three personal numbers, one per sport: your recent 5 km run time,
-        your swim CSS pace (per 100 m), and your cycling FTP (watts).</P>
+        zones are anchored to a personal number per sport your plan trains: your recent 5 km run
+        time, your swim CSS pace (per 100 m), and your cycling FTP (watts). A run-only plan runs
+        entirely off the 5 km time.</P>
       <H>How each anchor works</H>
       <P><b>Run:</b> your 5 km time sets a reference pace; easy running sits well behind it,
         threshold work just off it, and VO2 intervals a touch beyond it. <b>Swim:</b> CSS is the
@@ -101,8 +102,8 @@ export const TOPICS = [
       <H>Estimated vs precise</H>
       <P>If you skipped a number during onboarding, the app estimates it from your experience level
         and marks paces with a tilde (~). Sessions then guide by effort and heart-rate zones
-        instead. The plan schedules benchmark tests (5 km run, 20-minute FTP, swim 400/200) at
-        sensible points so the estimates become measurements.</P>
+        instead. The plan schedules benchmark tests for the sports it trains (5 km run, 20-minute
+        FTP, swim 400/200) at sensible points so the estimates become measurements.</P>
       <H>When numbers drift</H>
       <P>Fitness changes. If your actual riding and running start pointing to a meaningfully
         different FTP or threshold pace, the app proposes a one-tap retarget;
@@ -172,8 +173,8 @@ export const TOPICS = [
         rather than pretending to build more. Further than the maximum and the plan opens with a
         maintenance lead-in, holding fitness at moderate volume until the real build begins.</P>
       <H>Your weakest link</H>
-      <P>Your three sports are placed on one experience scale using the same baselines that set
-        your paces. When one sits clearly behind the others, the Progress page names it and the
+      <P>On multisport plans, your sports are placed on one experience scale using the same
+        baselines that set your paces. When one sits clearly behind the others, the Progress page names it and the
         plan quietly tilts the building phases toward it: its sessions run longer, more so the
         bigger the gap, and where the week has room your strongest sport hands one of its
         sessions to the limiter. Peak and taper weeks keep their race shape untouched. Near-ties

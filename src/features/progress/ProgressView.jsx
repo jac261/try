@@ -45,12 +45,17 @@ export function ProgressView({ plan, log, activities, coach, durability, fuelLog
   // fitness progression (from fitnessHistory snapshots + current baselines)
   const startISO = plan.profile.startDate || (plan.createdAt || '').slice(0, 10) || todayISO;
   const series = fitnessSeries(plan.profile, startISO);
+  // A solo plan trains one sport: swim/bike trend rows and the weakest-link
+  // card suppress (the card's own have-two-baselines self-hide is not enough;
+  // run plus one stale triathlon baseline would render it). Numbers stay on
+  // the profile and return on the next tri plan.
+  const solo = (T.RACES[plan.race] || {}).solo || null;
   const METRICS = [
     { key: 'run', label: 'Run · 5k pace', fmt: v => T.fmtPace(v / 5) + ' /km', div: 5, color: D.run.color, betterDown: true },
     { key: 'swim', label: 'Swim · CSS', fmt: v => T.fmtPace(v) + ' /100m', div: 1, color: D.swim.color, betterDown: true },
     { key: 'bike', label: 'Bike · FTP', fmt: v => v + ' W', color: D.bike.color, betterDown: false },
   ];
-  const trends = METRICS.map(m => {
+  const trends = METRICS.filter(m => !solo || m.key === solo).map(m => {
     const pts = series[m.key];
     if (!pts.length) return null;
     const first = pts[0].value, latest = pts[pts.length - 1].value, changed = latest !== first;
@@ -114,9 +119,9 @@ export function ProgressView({ plan, log, activities, coach, durability, fuelLog
           {predict && <div className="predict">
             <div className="predict-title">Race projections <span className="muted">from your 5k time</span></div>
             <div className="predict-rows">
-              <div className="predict-row"><span className="pd">10k</span><b>~{T.fmtClock(predict.tenK)}</b></div>
-              <div className="predict-row"><span className="pd">Half marathon</span><b>~{T.fmtClock(predict.halfMarathon)}</b></div>
-              <div className="predict-row"><span className="pd">Marathon</span><b>~{T.fmtClock(predict.marathon.lo)} to {T.fmtClock(predict.marathon.hi)}</b></div>
+              <div className="predict-row"><span className="pd">10k{plan.race === 'run10k' ? <span className="muted"> · your race</span> : null}</span><b>~{T.fmtClock(predict.tenK)}</b></div>
+              <div className="predict-row"><span className="pd">Half marathon{plan.race === 'runhalf' ? <span className="muted"> · your race</span> : null}</span><b>~{T.fmtClock(predict.halfMarathon)}</b></div>
+              <div className="predict-row"><span className="pd">Marathon{plan.race === 'runmarathon' ? <span className="muted"> · your race</span> : null}</span><b>~{T.fmtClock(predict.marathon.lo)} to {T.fmtClock(predict.marathon.hi)}</b></div>
             </div>
             <div className="predict-note">Assumes each distance is trained for. The marathon range most of all: a 5k time says little about marathon endurance until the long runs are in.</div>
           </div>}
@@ -180,6 +185,7 @@ export function ProgressView({ plan, log, activities, coach, durability, fuelLog
         // below shows weekly averages, and both say which window they use
         // so the two numbers can differ without reading as a bug
         const w = [...(wellness || [])].reverse().find(r => r.weightKg);
+        if (solo) return null;
         const wl = T.weakestLink({ profile: { ...plan.profile, raceType: tracker ? null : plan.profile.raceType, weightKg: w ? w.weightKg : plan.profile.weightKg } });
         if (!wl) return null;
         const NAME = { run: 'Run', bike: 'Bike', swim: 'Swim' };
