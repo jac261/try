@@ -311,3 +311,14 @@ Note: the per-ride `NormalizedWatts` from PR #23 is the whole-activity
 number; the durability windows would additionally benefit from per-interval
 normalized power if intervals.icu exposes it per lap, but that is a
 nice-to-have behind the four above.
+
+
+## Ask - 22 July 2026: mass-goal fields
+
+`profile.massGoal` gains the value `'hold'` beside `'gain'` and null, and a
+new nullable ISO string `profile.massGoalSetAt` stamps when the goal last
+changed (the settling gate reads it). Both ride the opaque profile blob, so
+nothing 400s today; the ask is only that the typed UserProfileResponse
+subset eventually carries them so fresh-device recovery keeps the stamp.
+There is deliberately no `'lose'` value: the safety panel's no-ship verdict
+and its reopening conditions are recorded in src/lib/bodymass.js.

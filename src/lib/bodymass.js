@@ -33,7 +33,7 @@
 import { iso, addDays, startOfWeekMonday } from './date.js';
 import { saneWeightKg } from './domain.js';
 
-export const BODYMASS_RULE_VERSION = 1;
+export const BODYMASS_RULE_VERSION = 2; // v2: the hold goal and the settling gate
 
 // Regression window and its honesty gates.
 export const MASS_WINDOW_DAYS = 28;
@@ -47,6 +47,36 @@ export const GAIN_BAND = {
   onLo: 0.0016, onHi: 0.0025,
   floor: 0.0008,   // persistently under this: barely moving
   ceiling: 0.0039, // persistently over this: faster than the plan intends
+};
+
+// The hold band, as a fraction of current body weight per week.
+// on reuses GAIN_BAND.onLo (0.0016, ~0.10 kg/wk at 64 kg): tight enough that
+// a gain-band-paced drift never reads as holding, wide enough that the 28-day
+// OLS can actually resolve it (slope SE ~0.08 kg/wk for a daily weigher, up
+// to ~0.35 kg/wk at the minimum gates). Documented blind spot: drift slower
+// than ~0.10 kg/wk at 64 kg is invisible to the pill; the chart still shows
+// it. fast reuses the magnitude of GAIN_BAND.ceiling: two consecutive
+// evaluations at or beyond it downward escalate to the fuelling warning.
+// Product decision, not physiology, same as GAIN_BAND.
+//
+// Standing rules from the mass-goals safety panel (2026-07-22), written down
+// so they survive future passes:
+// - There is NO lose goal. Reopening it requires an external ED-informed
+//   review of the full copy set; the panel considers never-reopening an
+//   acceptable end state.
+// - Mass status never enters coach.js, digest.js, or any notification.
+// - No goal chooser in onboarding; direction only, never a target weight.
+// - The goalless card is silent and byte-stable: no pill, no signed rate,
+//   no conditional commentary whatever the trend does. That silence is the
+//   contract protecting the athlete who chose No goal to escape commentary.
+// - No praise for any downward rate; no progress styling on any hold state;
+//   banned vocabulary: cut, deficit, calorie, fat, race weight, burn,
+//   streaks, and unprompted illness or diagnosis words.
+// - The fuelling sentences under a DECLARED goal are the one sanctioned
+//   advice exception, directed at the training, never the body.
+export const HOLD_BAND = {
+  on: 0.0016,
+  fast: 0.0039,
 };
 
 // Least-squares slope in kg/day over the records' (dayIndex, weightKg)
@@ -125,7 +155,7 @@ export function massTrend(records, todayISO) {
   };
 }
 
-// goalStatus: gain goal only, and only with persistence. A single off-band
+// goalStatus: declared goals only (gain or hold), and only with persistence. A single off-band
 // evaluation is scale noise until it repeats; an unscoreable week resets
 // the count. Register is matter-of-fact: no praise, no alarm.
 // Every judgment reads COMPLETED Monday-anchored evaluations, never the
@@ -134,16 +164,55 @@ export function massTrend(records, todayISO) {
 // beside it because they share one source (gauntlet catches 2026-07-21).
 // judgedRateKg is that shared source; display it, never weeklyRateKg, next
 // to the pill.
-export function goalStatus(trend, goal) {
-  if (goal !== 'gain' || !trend || !trend.avgKg) return null;
+export function goalStatus(trend, goal, opts) {
+  if ((goal !== 'gain' && goal !== 'hold') || !trend || !trend.avgKg) return null;
   const latest = trend.weeklyRates[2];
   if (latest == null) return null; // no completed evaluation: nothing to judge
   const w = trend.avgKg;
+  let prior = trend.weeklyRates[1];
+
+  // The settling gate: an evaluation is judged only when its full 28-day
+  // window starts on or after the day the goal was set, so a goal change
+  // can never be judged against a trend the old goal shaped (day-one
+  // whiplash). A null setISO means a legacy goal with no stamp: judged
+  // exactly as before, no backdating, no judgment blackout.
+  const setISO = opts && opts.setISO;
+  const today = opts && opts.todayISO;
+  if (setISO && today) {
+    const monday = iso(startOfWeekMonday(today));
+    const winStart = sunday => iso(addDays(sunday, -(MASS_WINDOW_DAYS - 1)));
+    if (winStart(iso(addDays(monday, -1))) < setISO) {
+      return { key: 'settling', label: 'settling in', detail: 'The monthly trend still includes time before this goal. A fair read needs about four weeks.' };
+    }
+    if (winStart(iso(addDays(monday, -8))) < setISO) prior = null; // persistence resets
+  }
+
+  if (goal === 'hold') {
+    // No signed figures in any detail string: the rate line beside the pill
+    // already carries the number the athlete opted into. Down states carry
+    // the fuelling pointer, up states only goal-ownership wording: a
+    // declared holder has said they do not want to lose, so the downward
+    // pointer is invited; pressure cues upward are not.
+    const on = HOLD_BAND.on * w, fast = HOLD_BAND.fast * w;
+    if (prior != null && latest <= -fast && prior <= -fast) return { key: 'downFast', judgedRateKg: latest, label: 'coming down quickly', detail: 'Two weeks coming down quicker than drift. If this is not deliberate, fuelling around training is the first place to look; either way, someone qualified sees more than a chart does.' };
+    if (prior != null && latest < -on && prior < -on) return { key: 'driftDown', judgedRateKg: latest, label: 'drifting down', detail: 'Two weeks trending down. If losing is not the intent, fuelling around training is worth a look.' };
+    if (prior != null && latest > on && prior > on) return { key: 'driftUp', judgedRateKg: latest, label: 'drifting up', detail: 'Two weeks trending up. Only worth attention if holding is still the goal.' };
+    if (latest >= -on && latest <= on) return { key: 'on', judgedRateKg: latest, label: 'little change', detail: 'No clear drift either way across the month.' };
+    return { key: 'between', judgedRateKg: latest, label: 'roughly holding', detail: 'One week outside the range is usually scale noise. Two in a row is a pattern.' };
+  }
+
   const band = { onLo: GAIN_BAND.onLo * w, onHi: GAIN_BAND.onHi * w, floor: GAIN_BAND.floor * w, ceiling: GAIN_BAND.ceiling * w };
-  const prior = trend.weeklyRates[1];
   const bothBelow = prior != null && latest < band.floor && prior < band.floor;
   const bothAbove = prior != null && latest > band.ceiling && prior > band.ceiling;
-  if (bothBelow) return { key: 'below', judgedRateKg: latest, label: 'under the target range', detail: 'Two weeks running under it.' };
+  if (bothBelow) {
+    // Losing during a declared build is the spec's under-fuelling flag: the
+    // floor magnitude reused as the loss threshold (documented product
+    // decision), persistence inherited from the below state itself.
+    const detail = latest <= -band.floor
+      ? 'Two weeks running under it, and the trend points down, not flat. Losing during a build usually means fuelling is not keeping up with the training.'
+      : 'Two weeks running under it.';
+    return { key: 'below', judgedRateKg: latest, label: 'under the target range', detail };
+  }
   if (bothAbove) return { key: 'above', judgedRateKg: latest, label: 'over the target range', detail: 'Two weeks running over it. Quicker than a gradual build intends.' };
   if (latest >= band.onLo && latest <= band.onHi) return { key: 'on', judgedRateKg: latest, label: 'in the target range', detail: 'A gradual build, on plan.' };
   return { key: 'between', judgedRateKg: latest, label: 'near the target range', detail: 'One week outside the range is usually scale noise. Two in a row is a pattern.' };

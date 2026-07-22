@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
-import { massTrend, goalStatus, fmtRateGrams, GAIN_BAND, MASS_MIN_POINTS, FUEL_LEVELS, FUEL_CAPTION } from './bodymass.js';
+import { massTrend, goalStatus, fmtRateGrams, GAIN_BAND, HOLD_BAND, MASS_MIN_POINTS, BODYMASS_RULE_VERSION, FUEL_LEVELS, FUEL_CAPTION } from './bodymass.js';
 import { iso, addDays } from './date.js';
 import { storageForUser } from '@/app/storage.js';
 
@@ -64,10 +64,10 @@ describe('goalStatus', () => {
     return massTrend(rs, today);
   };
 
-  it('never judges without a gain goal', () => {
+  it('never judges without a declared goal', () => {
     const t = gaining(0.13);
     expect(goalStatus(t, null)).toBe(null);
-    expect(goalStatus(t, 'hold')).toBe(null);   // unshipped goals never judge
+    expect(goalStatus(t, 'lose')).toBe(null);   // no lose goal exists, by safety panel verdict
     expect(goalStatus(null, 'gain')).toBe(null);
   });
 
@@ -99,6 +99,97 @@ describe('goalStatus', () => {
           expect(s).not.toMatch(/great|bad|guilt|fail|shame|well done/i);
         });
       });
+  });
+});
+
+describe('the hold goal (safety panel 2026-07-22)', () => {
+  const trending = rate => {
+    const rs = daily(42, (i, days) => 64 + (i / (days - 1)) * (rate * 6));
+    return massTrend(rs, today);
+  };
+
+  it('rule version is 2 and there is no lose band anywhere', () => {
+    expect(BODYMASS_RULE_VERSION).toBe(2);
+    expect(HOLD_BAND.on).toBe(GAIN_BAND.onLo);
+    expect(HOLD_BAND.fast).toBe(GAIN_BAND.ceiling);
+  });
+
+  it('little change within the band, drift needs two weeks, direction words stay calm', () => {
+    const on = goalStatus(trending(0.0), 'hold');
+    expect(on.key).toBe('on');
+    expect(on.label).toBe('little change');
+    const up = goalStatus(trending(0.3), 'hold');
+    expect(up.key).toBe('driftUp');
+    expect(up.detail).toMatch(/holding is still the goal/);
+    // between the on band (0.10 at 64 kg) and the fast line (0.25)
+    const down = goalStatus(trending(-0.18), 'hold');
+    expect(down.key).toBe('driftDown');
+    expect(down.detail).toMatch(/fuelling around training/);
+  });
+
+  it('fast unintended loss escalates to the amber warning with the qualified-person line', () => {
+    const fast = goalStatus(trending(-0.5), 'hold');
+    expect(fast.key).toBe('downFast');
+    expect(fast.label).toBe('coming down quickly');
+    expect(fast.detail).toMatch(/someone qualified sees more than a chart does/);
+    // one fast week plus one drift week must not escalate
+    const rs = daily(42, (i, days) => {
+      const t2 = i / (days - 1);
+      return t2 < 0.67 ? 65 - t2 * 0.4 : 65 - 0.268 - (t2 - 0.67) * 3.5;
+    });
+    const mixed = goalStatus(massTrend(rs, today), 'hold');
+    expect(mixed.key).not.toBe('downFast');
+  });
+
+  it('no hold detail carries a signed figure or a banned word', () => {
+    [-0.5, -0.18, 0, 0.12, 0.18].forEach(r => {
+      const st = goalStatus(trending(r), 'hold');
+      [st.label, st.detail].forEach(sx => {
+        expect(sx).not.toMatch(/—/);
+        expect(sx).not.toMatch(/\b[A-Z]{3,}\b/);
+        expect(sx).not.toMatch(/\d/);
+        expect(sx).not.toMatch(/cut|deficit|calorie|fat\b|race weight|burn|streak/i);
+        expect(sx).not.toMatch(/great|bad|guilt|fail|shame|well done/i);
+      });
+    });
+  });
+});
+
+describe('the settling gate', () => {
+  const rs = daily(42, (i, days) => 64 + (i / (days - 1)) * 1.2); // gaining fast
+  const t = massTrend(rs, today);
+
+  it('a fresh goal is not judged against the trend the old goal shaped', () => {
+    const st = goalStatus(t, 'hold', { setISO: iso(addDays(today, -3)), todayISO: today });
+    expect(st.key).toBe('settling');
+    expect(st.judgedRateKg).toBeUndefined(); // the rate line hides mechanically
+  });
+
+  it('a stamp older than the full window judges normally; a null stamp is the legacy path', () => {
+    const judged = goalStatus(t, 'hold', { setISO: iso(addDays(today, -40)), todayISO: today });
+    expect(judged.key).not.toBe('settling');
+    const legacy = goalStatus(t, 'gain', { setISO: null, todayISO: today });
+    expect(legacy).toEqual(goalStatus(t, 'gain'));
+  });
+
+  it('a stamp inside the prior window resets persistence without gating the latest read', () => {
+    // window start of the PRIOR evaluation predates the stamp; the latest
+    // does not: prior treated null, so two-week states cannot fire
+    const st = goalStatus(massTrend(daily(42, () => 64 - 0), today), 'hold',
+      { setISO: iso(addDays(today, -32)), todayISO: today });
+    expect(st).toBeTruthy();
+    expect(['on', 'between', 'settling']).toContain(st.key);
+  });
+});
+
+describe('gain: losing during a build', () => {
+  it('a genuinely falling trend under a gain goal names fuelling; a stall keeps the shipped words', () => {
+    const falling = goalStatus(massTrend(daily(42, (i, days) => 65 - (i / (days - 1)) * 1.0), today), 'gain');
+    expect(falling.key).toBe('below');
+    expect(falling.detail).toMatch(/fuelling is not keeping up with the training/);
+    const stalled = goalStatus(massTrend(daily(42, () => 64), today), 'gain');
+    expect(stalled.key).toBe('below');
+    expect(stalled.detail).toBe('Two weeks running under it.');
   });
 });
 

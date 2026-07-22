@@ -275,20 +275,25 @@ export function ProgressView({ plan, log, activities, coach, durability, fuelLog
         const trend = T.massTrend(wellness, todayISO);
         if (!trend && !goal) return null;
         if (!trend) return null;
-        const status = T.goalStatus(trend, goal);
+        const status = T.goalStatus(trend, goal, { setISO: plan.profile.massGoalSetAt || null, todayISO });
         // With a goal, the number shown IS the number judged (one source, no
         // pill-vs-figure contradiction). Without a goal there is no rate
         // line at all: a signed weekly figure is judgment-adjacent, and the
         // goalless card is a number and a line, nothing more (gauntlet
         // safety catches 2026-07-21).
-        const rate = status ? T.fmtRateGrams(status.judgedRateKg) : null;
+        // settling carries no judgedRateKg, so the rate line hides
+        // mechanically rather than by wording
+        const rate = status && status.judgedRateKg != null ? T.fmtRateGrams(status.judgedRateKg) : null;
         return <>
           <div className="section-title">Body mass <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(weekly averages)</span></div>
           <div className="card">
             <div className="bm-head">
               <div><b>{trend.avgKg != null ? trend.avgKg + ' kg' : trend.latestKg + ' kg'}</b>
                 <span className="muted"> {trend.avgKg != null ? '7-day average' : 'latest weigh-in, ' + T.fmtDate(trend.latestDate, { day: 'numeric', month: 'short' })}</span></div>
-              {status && <span className={'coach-pill' + (status.key === 'on' ? ' progress' : '')}>{status.label}</span>}
+              {/* progress styling is gain-only by panel rule: bands may
+                  reward gain, they only report hold. downFast wears its own
+                  mass-warn class so a coach restyle can't touch it. */}
+              {status && <span className={'coach-pill' + (goal === 'gain' && status.key === 'on' ? ' progress' : status.key === 'downFast' ? ' mass-warn' : '')}>{status.label}</span>}
             </div>
             {rate && <div className="bm-rate">{rate} <span className="muted">last completed week</span></div>}
             {status && <div className="bm-note">{status.detail}</div>}

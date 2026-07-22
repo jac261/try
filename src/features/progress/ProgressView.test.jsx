@@ -115,4 +115,32 @@ describe('the body mass card is safety-gated', () => {
     const html = await mount({ plan: generatePlan(profile), activities: null, wellness: [] });
     expect(html).not.toContain('Body mass');
   });
+
+  it('hold: little-change pill never wears progress styling; fast loss wears the warning', async () => {
+    const steady = Array.from({ length: 42 }, (_, i) => ({
+      date: iso(new Date(Date.now() - (41 - i) * 864e5)), weightKg: 64 + ((i * 37 % 13) - 6) / 30,
+    }));
+    const holdPlan = generatePlan({ ...profile, massGoal: 'hold' });
+    const html = await mount({ plan: holdPlan, activities: null, wellness: steady });
+    expect(html).toContain('little change');
+    expect(html).not.toMatch(/coach-pill progress/); // reporting, never rewarding
+    const falling = Array.from({ length: 42 }, (_, i) => ({
+      date: iso(new Date(Date.now() - (41 - i) * 864e5)), weightKg: 66 - (i / 41) * 2.2 + ((i * 37 % 13) - 6) / 30,
+    }));
+    const html2 = await mount({ plan: holdPlan, activities: null, wellness: falling });
+    expect(html2).toContain('coming down quickly');
+    expect(html2).toMatch(/mass-warn/);
+    expect(html2).toContain('someone qualified sees more than a chart does');
+  });
+
+  it('a fresh goal stamp shows settling with no rate line', async () => {
+    const rising = Array.from({ length: 42 }, (_, i) => ({
+      date: iso(new Date(Date.now() - (41 - i) * 864e5)), weightKg: 64 + (i / 41) * 0.8,
+    }));
+    const plan = generatePlan({ ...profile, massGoal: 'hold' });
+    plan.profile.massGoalSetAt = iso(new Date(Date.now() - 2 * 864e5));
+    const html = await mount({ plan, activities: null, wellness: rising });
+    expect(html).toContain('settling in');
+    expect(html).not.toContain('g a week');
+  });
 });

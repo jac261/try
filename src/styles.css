@@ -710,6 +710,10 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
   background: rgba(148, 163, 184, .18); color: #cbd5e1; }
 .coach-pill.progress { background: rgba(45, 212, 191, .16); color: #2dd4bf; }
 .coach-pill.recover, .coach-pill.reduce-volume, .coach-pill.ease-intensity { background: rgba(251, 146, 60, .14); color: #fb923c; }
+/* A safety warning's styling must not depend on coach decision keys: this
+   alias duplicates the recover amber so a coach-brain restyle cannot
+   silently restyle the body-mass fast-loss warning. */
+.coach-pill.mass-warn { background: rgba(251, 146, 60, .14); color: #fb923c; }
 .coach-ev { display: flex; gap: 8px; font-size: 12px; color: var(--muted); margin: 4px 0; line-height: 1.45; }
 .coach-ev.conflicting { opacity: .85; font-style: italic; }
 .coach-sig { flex: 0 0 auto; font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; opacity: .7; padding-top: 1px; }

@@ -5,7 +5,12 @@ import { useSheetFocus } from '@/utils/useSheetFocus.js';
 
 export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
   const lvl0 = T.FITNESS[profile.fitness] ? profile.fitness : 'intermediate';
-  const [goalOpen, setGoalOpen] = useState(false);
+  // Closed only for an athlete who never set a goal: they never meet
+  // weight-goal language. But a returning athlete WITH a goal must see it
+  // open, or the collapsed link is indistinguishable from No goal and
+  // clearing the goal (the whole escape hatch) has hidden friction
+  // (gauntlet catch 2026-07-22).
+  const [goalOpen, setGoalOpen] = useState(!!profile.massGoal);
   const [f, setF] = useState({
     fitness: lvl0,
     fivek: profile.fivekSec ? T.fmtPace(profile.fivekSec) : '',
@@ -56,6 +61,7 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
           <label className="field" style={{ marginTop: 8 }}><span className="lab">Body-mass goal <span className="hint">optional</span></span></label>
           <div className="choice">
             <div className={'opt' + (!f.massGoal ? ' on' : '')} {...tap(() => set('massGoal', null))}>No goal<small>Weight is tracked but never judged.</small></div>
+            <div className={'opt' + (f.massGoal === 'hold' ? ' on' : '')} {...tap(() => set('massGoal', 'hold'))}>Holding steady<small>Shows the weekly rate against staying level.</small></div>
             <div className={'opt' + (f.massGoal === 'gain' ? ' on' : '')} {...tap(() => set('massGoal', 'gain'))}>Gaining on purpose<small>Shows a weekly rate against a gradual gain target.</small></div>
           </div>
         </>}

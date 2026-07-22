@@ -883,6 +883,12 @@ export function App({ storage, getToken, user }) {
   // history, refreshes the numbers and paces, and the sentinel stays a
   // sentinel (Phase 0 of docs/NO_PLAN_WORKFLOW.md — the benchmark window).
   const updateFitness = fields => {
+    // The settling gate keys off when the GOAL changed, so the stamp moves
+    // only on a real value change; an FTP edit that resubmits the same goal
+    // never restamps (a restamp would re-gate four weeks of judgment).
+    if ('massGoal' in fields && (fields.massGoal || null) !== (plan.profile.massGoal || null)) {
+      fields = { ...fields, massGoalSetAt: T.iso(new Date()) };
+    }
     if (plan.race === 'tracker') {
       const np = T.applyTrackerFitness(plan, fields, new Date().toISOString());
       np.profile = withWeight(np.profile);
