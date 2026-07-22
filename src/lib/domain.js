@@ -62,7 +62,14 @@ export const ZONES = {
 //   recoveryEvery — a step-back recovery week every N weeks
 //   recoveryDepth — how much volume drops on a recovery week (lower = bigger cut)
 //   est5k/estCss  — fallback baselines (5k time in sec, swim /100m in sec) used to
-//                   estimate paces when the athlete leaves the fitness fields blank
+//                   estimate paces when the athlete leaves the fitness fields blank.
+//   runEst5k      — the same 5k fallback but calibrated to RUNNERS, used only on
+//                   solo run race plans (RACES solo:'run'). est5k stays
+//                   triathlete-scaled because it also sets the weakest.js run
+//                   ladder rungs, a triathlon-only comparison; the two roles
+//                   diverge in opposite directions at the ends, so the runner
+//                   scale is a second field, never a shift of the first
+//                   (design panel 2026-07-22, anchors signed off by Jon).
 // A weight the app is willing to compute with. Anything outside human range
 // is a typo (pounds entered as kilos, a stray minus) and every consumer must
 // refuse it identically: the plan's watt estimate, the limiter board's W/kg
@@ -81,10 +88,10 @@ export function saneWeightKg(weightKg) {
 // a strong runner reads high. That is why an estimated FTP never judges a
 // session in review (design panel 2026-07-18).
 export const FITNESS = {
-  beginner:     { key: 'beginner',     name: 'Beginner',     factor: 0.75, intensity: -1, recoveryEvery: 3, recoveryDepth: 0.6,  est5k: 2040, estCss: 140, estWkg: 2.0, blurb: 'New to multisport — build the base', runBlurb: 'New to structured running, build the base' },
-  intermediate: { key: 'intermediate', name: 'Intermediate', factor: 1.0,  intensity: 0,  recoveryEvery: 4, recoveryDepth: 0.72, est5k: 1620, estCss: 120, estWkg: 2.6, blurb: 'A few seasons in, training consistently', runBlurb: 'Running consistently, a few races in' },
-  advanced:     { key: 'advanced',     name: 'Advanced',     factor: 1.2,  intensity: 1,  recoveryEvery: 4, recoveryDepth: 0.75, est5k: 1320, estCss: 105, estWkg: 3.2, blurb: 'Experienced & chasing a result', runBlurb: 'Experienced and chasing a time' },
-  elite:        { key: 'elite',        name: 'Elite',        factor: 1.42, intensity: 2,  recoveryEvery: 4, recoveryDepth: 0.82, est5k: 1110, estCss: 90,  estWkg: 4.0, blurb: 'Semi-pro / front-of-pack age-grouper', runBlurb: 'Front of the pack, big weeks welcome' },
+  beginner:     { key: 'beginner',     name: 'Beginner',     factor: 0.75, intensity: -1, recoveryEvery: 3, recoveryDepth: 0.6,  est5k: 2040, runEst5k: 2160, estCss: 140, estWkg: 2.0, blurb: 'New to multisport — build the base', runBlurb: 'New to structured running, build the base' },
+  intermediate: { key: 'intermediate', name: 'Intermediate', factor: 1.0,  intensity: 0,  recoveryEvery: 4, recoveryDepth: 0.72, est5k: 1620, runEst5k: 1680, estCss: 120, estWkg: 2.6, blurb: 'A few seasons in, training consistently', runBlurb: 'Running consistently, a few races in' },
+  advanced:     { key: 'advanced',     name: 'Advanced',     factor: 1.2,  intensity: 1,  recoveryEvery: 4, recoveryDepth: 0.75, est5k: 1320, runEst5k: 1320, estCss: 105, estWkg: 3.2, blurb: 'Experienced & chasing a result', runBlurb: 'Experienced and chasing a time' },
+  elite:        { key: 'elite',        name: 'Elite',        factor: 1.42, intensity: 2,  recoveryEvery: 4, recoveryDepth: 0.82, est5k: 1110, runEst5k: 1050, estCss: 90,  estWkg: 4.0, blurb: 'Semi-pro / front-of-pack age-grouper', runBlurb: 'Front of the pack, big weeks welcome' },
 };
 
 export const PHASE_INFO = {

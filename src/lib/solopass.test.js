@@ -4,6 +4,7 @@ import { RACES, B_RACES, FITNESS } from './domain.js';
 import { weakestLink } from './weakest.js';
 import { decideWeek, resolveFocus } from './coach.js';
 import { eftpProposal } from './eftp.js';
+import { tuneFields } from './tuning.js';
 import { iso, addDays } from './date.js';
 
 /* Tier 2: standalone run race plans. The house invariants under test:
@@ -334,6 +335,65 @@ describe('plan-scoped gates', () => {
     const run = eftpProposal({ activities: [], thresholds: { runThresholdPace: fast }, plan, todayISO: '2026-09-01' });
     expect(run).toBeTruthy();
     expect(run.sport).toBe('run');
+  });
+});
+
+describe('runner-calibrated experience levels (signed off 2026-07-22)', () => {
+  const RUN_ANCHOR = { beginner: 2160, intermediate: 1680, advanced: 1320, elite: 1050 };
+  const mk = (raceType, fitness, over) => generatePlan({
+    name: 'R', raceType, fitness, daysPerWeek: 5, trainingDays: null,
+    startDate: '2026-08-03', raceDate: '2026-11-22', ...over,
+  });
+
+  it('a blank-5k solo plan derives every pace from the RUNNER anchor', () => {
+    Object.keys(RUN_ANCHOR).forEach(lvl => {
+      const pc = mk('runmarathon', lvl).paces.run;
+      const p = RUN_ANCHOR[lvl] / 5;
+      expect(pc.fivekPace).toBe(p);
+      // the whole offset chain propagates from the anchor
+      expect(pc.easy).toBe(p + 70);
+      expect(pc.threshold).toBe(p + 12);
+      expect(pc.interval).toBe(p - 8);
+    });
+  });
+
+  it('a blank-5k triathlon plan still derives from the triathlete est5k', () => {
+    Object.keys(RUN_ANCHOR).forEach(lvl => {
+      expect(mk('olympic', lvl).paces.run.fivekPace).toBe(FITNESS[lvl].est5k / 5);
+    });
+  });
+
+  it('an entered 5k always wins, whatever the plan or level', () => {
+    expect(mk('runmarathon', 'elite', { fivekSec: 1500 }).paces.run.fivekPace).toBe(300);
+    expect(mk('olympic', 'beginner', { fivekSec: 1500 }).paces.run.fivekPace).toBe(300);
+  });
+
+  it('the runner anchor is a separate field: the weakest-link ladder is untouched', () => {
+    // weakest.js maps f.est5k by name; adding runEst5k must not perturb it
+    expect(Object.values(FITNESS).map(f => f.est5k)).toEqual([2040, 1620, 1320, 1110]);
+    // and the runner scale is slower at the bottom, faster at the top
+    expect(FITNESS.beginner.runEst5k).toBeGreaterThan(FITNESS.beginner.est5k);
+    expect(FITNESS.elite.runEst5k).toBeLessThan(FITNESS.elite.est5k);
+    // no runner rung faster than its triathlete twin except elite (the carried constraint)
+    ['beginner', 'intermediate', 'advanced'].forEach(lvl =>
+      expect(FITNESS[lvl].runEst5k).toBeGreaterThanOrEqual(FITNESS[lvl].est5k));
+  });
+
+  it('the pace tuner seeds from the runner anchor on solo, the triathlete anchor otherwise', () => {
+    const sug = [{ discipline: 'run', direction: 'faster' }];
+    expect(tuneFields({ raceType: 'runmarathon', fitness: 'intermediate' }, sug).fivekSec)
+      .toBe(Math.round(1680 * 0.98));
+    expect(tuneFields({ raceType: 'olympic', fitness: 'intermediate' }, sug).fivekSec)
+      .toBe(Math.round(1620 * 0.98));
+    // an entered time still wins through the tuner
+    expect(tuneFields({ raceType: 'runmarathon', fitness: 'intermediate', fivekSec: 1500 }, sug).fivekSec)
+      .toBe(Math.round(1500 * 0.98));
+  });
+
+  it('a tracker profile with no raceType keeps the triathlete anchor (no spurious runner scale)', () => {
+    // computePaces sees RACES[undefined] === {}, so soloRun is false
+    const pc = generatePlan({ name: 'T', raceType: 'maintenance', fitness: 'intermediate', horizonWeeks: 12, daysPerWeek: 5, startDate: '2026-08-03', raceDate: '2026-10-26' }).paces.run;
+    expect(pc.fivekPace).toBe(FITNESS.intermediate.est5k / 5);
   });
 });
 

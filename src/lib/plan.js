@@ -8,8 +8,13 @@ import { RIEGEL_EXP } from './runstats.js';
 /* ---- paces derived from the athlete's baselines ---- */
 function computePaces(profile) {
   const lvl = FITNESS[profile.fitness] || FITNESS.intermediate;
-  // Use the athlete's own numbers if given, otherwise estimate from their level.
-  const fivek = profile.fivekSec || lvl.est5k;
+  // Use the athlete's own numbers if given, otherwise estimate from their
+  // level. A solo run plan takes the runner-calibrated 5k anchor; triathlon,
+  // maintenance, tracker and absent raceType all fall to est5k unchanged, so
+  // RACES[undefined] === {} collapses this to the historic expression and
+  // triathlon paces stay byte-identical (design panel 2026-07-22).
+  const soloRun = (RACES[profile.raceType] || {}).solo === 'run';
+  const fivek = profile.fivekSec || (soloRun ? lvl.runEst5k : lvl.est5k);
   const p = fivek / 5;                             // sec per km at 5k effort
   const css = profile.css100Sec || lvl.estCss;
   // Bike watts: the athlete's own FTP, else a level x weight estimate so a new

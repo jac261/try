@@ -36,12 +36,12 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
         <label className="field"><span className="lab">Experience level</span></label>
         <div className="choice">
           {Object.values(T.FITNESS).map(l => (
-            <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} {...tap(() => set('fitness', l.key))}>{l.name}<small>{solo ? l.runBlurb : l.blurb}</small></div>
+            <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} {...tap(() => set('fitness', l.key))}>{l.name}<small>{solo ? <>{l.runBlurb} · ~{T.fmtPace(l.runEst5k)} 5k</> : l.blurb}</small></div>
           ))}
         </div>
         <div style={{ height: 16 }} />
         <label className="field"><span className="lab">Recent 5 km run time <span className="hint">optional · mm:ss</span></span>
-          <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>
+          <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(solo ? T.FITNESS[f.fitness].runEst5k : T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>
         <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
           <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>
         {/* Placeholder only, exactly like the run and swim estimates above:

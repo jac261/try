@@ -143,7 +143,7 @@ export function Onboarding({ onCreate }) {
           <label className="field"><span className="lab">Experience level</span></label>
           <div className="choice">
             {Object.values(T.FITNESS).map(l => (
-              <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} {...tap(() => set('fitness', l.key))}>{l.name}<small>{solo ? l.runBlurb : l.blurb}</small></div>
+              <div key={l.key} className={'opt' + (f.fitness === l.key ? ' on' : '')} {...tap(() => set('fitness', l.key))}>{l.name}<small>{solo ? <>{l.runBlurb} · ~{T.fmtPace(l.runEst5k)} 5k</> : l.blurb}</small></div>
             ))}
           </div>
           <div style={{ height: 12 }} />
@@ -156,7 +156,7 @@ export function Onboarding({ onCreate }) {
           {solo ? <p className="lead">One number is enough: your 5k time sets every pace in the plan, from easy runs to race day. No recent 5k time? You can skip this. Every session is guided by effort, with ballpark paces estimated from your {T.FITNESS[f.fitness].name} level. Add a real time whenever you have one to make them precise.</p>
             : <p className="lead"><b>New to triathlon? You can skip all of these.</b> We'll then guide every session by effort (RPE / heart-rate zones), with ballpark paces estimated from your {T.FITNESS[f.fitness].name} level. Add any numbers you do know to make it precise.</p>}
           {f.excludedDiscipline !== 'run' && <label className="field"><span className="lab">Recent 5 km run time <span className="hint">optional · mm:ss</span></span>
-            <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>}
+            <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(solo ? T.FITNESS[f.fitness].runEst5k : T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>}
           {f.excludedDiscipline === 'run' && <p className="lead" style={{ fontSize: 13 }}>Running is out of your plan for now, so we will not ask for a run time.</p>}
           {!solo && f.excludedDiscipline !== 'swim' && <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
             <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>}

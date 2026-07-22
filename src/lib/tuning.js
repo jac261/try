@@ -35,7 +35,12 @@ export function tuneFields(profile, suggestions) {
   suggestions.forEach(s => {
     const t = s.direction === 'faster' ? 0.98 : 1.02;   // run/swim: less time = faster
     const w = s.direction === 'faster' ? 1.02 : 0.98;   // bike: more watts = faster
-    if (s.discipline === 'run') fields.fivekSec = Math.round((profile.fivekSec || lvl.est5k) * t);
+    if (s.discipline === 'run') {
+      // seed from the runner anchor on a solo plan, or the pace fix leaks the
+      // moment an athlete accepts a run suggestion on a blank-5k plan
+      const soloRun = (T.RACES[profile.raceType] || {}).solo === 'run';
+      fields.fivekSec = Math.round((profile.fivekSec || (soloRun ? lvl.runEst5k : lvl.est5k)) * t);
+    }
     if (s.discipline === 'swim') fields.css100Sec = Math.round((profile.css100Sec || lvl.estCss) * t);
     if (s.discipline === 'bike' && profile.ftp) fields.ftp = Math.round(profile.ftp * w);
   });

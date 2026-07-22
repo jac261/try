@@ -38,18 +38,20 @@ automatically if it ever appears in the records.
 
 ## Calibration notes (honest ones)
 
-- **These are triathlete scales, not single-sport scales.** "Elite" here means
-  the front of a triathlon age-group field, in the context of training three
-  sports at once. A sub-20 open 5k is roughly the top few percent of parkrun
-  finishers and would be called elite in a running club; an 18:30 rung is
-  deliberately stricter because the label also drives Elite-level onboarding
-  estimates and plan intensity. If the rung feels too strict as a *scale*
-  (field observation 2026-07-12: "a sub-20 5k is elite"), the honest options
-  are (a) soften `est5k` for Elite to 1200 (20:00), which also softens the
-  paces an Elite-onboarding athlete receives, or (b) split the two roles so
-  the weakest-link ladder can be tuned without touching onboarding estimates.
-  Both are one-line changes; neither has been made yet — the coupled constants
-  are the current, deliberate state.
+- **`est5k` is the triathlete scale; `runEst5k` is the runner scale.** Option
+  (b) from the note below shipped on 2026-07-22 (design panel, anchors signed
+  off by Jon). `est5k` stays triathlete-calibrated (beginner 34:00,
+  intermediate 27:00, advanced 22:00, elite 18:30) because it also sets the
+  `weakest.js` run ladder rungs, a triathlon-only limiter comparison. A second
+  field `runEst5k` (beginner 36:00, intermediate 28:00, advanced 22:00, elite
+  17:30) is the fallback 5k on solo run race plans (`RACES` `solo:'run'`),
+  used only where the athlete leaves the 5k blank. The two scales diverge in
+  opposite directions at the ends — a run beginner reads slower than a
+  multisport beginner (newer to running, wide novice tail; slow errs safe),
+  a run elite reads faster (18:30 is "fast club runner", a notch below front
+  of pack) — so no single shift could serve both, which is why it is a
+  separate field rather than a softened `est5k`. Volume and intensity are
+  deliberately not runner-calibrated in that pass; it is pace-only.
 - **W/kg** follows the widely used cycling convention for a sustained hour
   effort: ~2.0 recreational, ~2.6 regular trainee, ~3.2 strong club rider,
   ~4.0 racing sharp. It needs a recent synced weight; without one the bike
