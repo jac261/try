@@ -553,7 +553,13 @@ export function App({ storage, getToken, user }) {
     const end = T.iso(T.addDays(weekMonday, 6));
     const out = {};
     [...durability].reverse().forEach(e => {
-      if (e.date >= weekMonday && e.date <= end && e.read && !out[e.discipline]) out[e.discipline] = e;
+      if (e.date >= weekMonday && e.date <= end && e.read && !out[e.discipline]) {
+        // The athlete's own fuel answer rides along: a fade they already
+        // explained as under-fuelled must not gate the progression call
+        // (coach.js consumes the boolean, never the fuel vocabulary).
+        const f = fuelLog[e.activityId];
+        out[e.discipline] = f && (f.level === 'none' || f.level === 'bit') ? { ...e, lowFuel: true } : e;
+      }
     });
     return out;
   };
@@ -596,7 +602,11 @@ export function App({ storage, getToken, user }) {
       setCoachLog(storage.saveCoachDecision(weekMonday, decision));
     }, 2000);
     return () => clearTimeout(t);
-  }, [hydrated, fetchesSettled, durability, durabilityDone, plan, log, moves, adjust, adjustLog, recs, displayActivities, missedReasons, coachLog, storage]);
+    // fuelLog is a real dependency since the lowFuel veto-disarm joined
+    // durabilityFor: a fuel answer moments before the freeze must re-arm this
+    // timer, or the frozen decision reads a stale closure (re-verify catch:
+    // the first fix landed on the fetch effect above, which never reads it).
+  }, [hydrated, fetchesSettled, durability, durabilityDone, plan, log, moves, adjust, adjustLog, recs, displayActivities, missedReasons, coachLog, fuelLog, storage]);
 
   // Fold a server wellness list into local state + the offline cache (server wins
   // per date; local-only days are pushed up). Also called when the Settings page

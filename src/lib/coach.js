@@ -35,12 +35,13 @@ import { weakestLink } from './weakest.js';
 import { wellness as W } from './wellness.js';
 import { effDate } from './schedule.js';
 import { weekPhaseLabel } from './plan.js';
+import { fadeCorroborated, fadeChannels } from './durability.js';
 import { RACES } from './domain.js';
 import { iso, addDays } from './date.js';
 
 // Bump when decision logic changes: stored decisions carry the version they
 // were made under, so an old stored call is never judged by new rules.
-export const COACH_RULE_VERSION = 1;
+export const COACH_RULE_VERSION = 2; // v2: the corroborated-fade progression veto
 
 // The one-tap answers for a missed session, in the athlete's own words.
 export const MISSED_REASONS = {
@@ -65,6 +66,7 @@ const PROGRESSION = {
   bike: 'more time in the hard aerobic work',
   run: 'extending the long run',
 };
+const LONG_SESSION = { run: 'long run', bike: 'long ride' };
 
 // The limiter must have completed its key sessions in this many consecutive
 // reviewed weeks before 'progress' is on the table: the spec's "repeated
@@ -223,6 +225,7 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
   const keyDone = keyPlanned.filter(doneish);
   const evidence = [];
   const conflicting = [];
+  let anyVeto = false;
 
   if (keyPlanned.length) evidence.push({
     signal: 'key sessions',
@@ -287,6 +290,15 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
     const clean = !strained && (keys.length ? keys.every(doneish) : done === ss.length);
     const ev = [{ signal: 'sessions', reading: done + ' of ' + ss.length + ' completed' + (keys.length ? ', key work ' + keys.filter(doneish).length + ' of ' + keys.length : '') }];
     let decision = 'hold', headline = 'Doing its job';
+    // Durability, pass 5: the read stays evidence, plus exactly ONE licensed
+    // decision effect, the corroborated-fade progression veto below. The
+    // evidential standard (output AND cardiac past the hard bands) lives in
+    // durability.js; this layer consumes booleans. An athlete's own low fuel
+    // answer disarms the veto: a fade they already explained does not gate.
+    const du = durabilityByDiscipline && durabilityByDiscipline[d];
+    const read = du && du.read ? du.read : null;
+    const fadeBlock = !!(read && fadeCorroborated(read) && !du.lowFuel);
+    let vetoed = false, forewarn = false, watching = null;
 
     if (d === 'run' && proposal && proposal.kind === 'trim-week' && runScoped(proposal, sessions)) {
       decision = 'reduce-volume'; headline = 'Pull the running back';
@@ -304,30 +316,80 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
         && !prev.tracker && prev.planCreatedAt === (plan.createdAt || null)
         && prev.disciplines && prev.disciplines[d] && prev.disciplines[d].clean;
       if (priorClean) {
-        decision = 'progress'; headline = 'Ready to progress: ' + PROGRESSION[d];
-        // 'your limiter' is a lie with one discipline; solo copy names the work
-        ev.push({ signal: 'repeatability', reading: soloDisc
-          ? 'the work has been landing for ' + REPEAT_WEEKS + ' weeks straight'
-          : 'this is your limiter and the work has been landing for ' + REPEAT_WEEKS + ' weeks straight' });
+        // One deferral per progression event: if the literal previous stored
+        // week (already adjacency- and identity-checked above) spent the
+        // veto, this week progresses whatever the laps say.
+        const capSpent = !!prev.disciplines[d].durabilityVeto;
+        if (fadeBlock && !capSpent && LONG_SESSION[d]) {
+          vetoed = true; anyVeto = true;
+          headline = 'Landing well. A steadier ' + LONG_SESSION[d] + ' finish opens progression';
+          ev.push({ signal: 'repeatability', reading: 'your clean weeks all count and nothing here resets them; only the progression call waits' });
+          ev.push({ signal: 'worth noting', reading: 'laps cannot see hills, heat, wind or fuelling, so this waits rather than pulls back; a clean week keeps progression on the table' });
+          // Only when the overall card is not already narrating a different
+          // non-progression story: two competing reasons on one card read as
+          // the app contradicting itself (gauntlet catch); the discipline
+          // row always carries the full veto copy either way.
+          if (!conflicting.length) evidence.push({ signal: 'late-session durability', reading: 'your ' + LONG_SESSION[d] + ' faded hard late, so the progression call waits rather than building on top of it; laps cannot see hills, heat, wind or fuelling, so it waits instead of pulling anything back' });
+        } else {
+          decision = 'progress'; headline = 'Ready to progress: ' + PROGRESSION[d];
+          // 'your limiter' is a lie with one discipline; solo copy names the work
+          ev.push({ signal: 'repeatability', reading: soloDisc
+            ? 'the work has been landing for ' + REPEAT_WEEKS + ' weeks straight'
+            : 'this is your limiter and the work has been landing for ' + REPEAT_WEEKS + ' weeks straight' });
+          if (read && read.band === 'faded-hard' && LONG_SESSION[d]) {
+            // One truth per case (gauntlet catch: a single string blamed a
+            // missing strap at athletes whose strap was on, and called an
+            // elevated heart rate picture unsupportive).
+            const ch = fadeChannels(read);
+            // Legacy stored reads carry only the band: with no channel data
+            // there is no honest sentence to speak, so none is spoken.
+            watching = du.lowFuel
+              ? 'your own fuel answer for that session was on the low side, so the late fade reads as fuelling, not fitness'
+              : (capSpent && fadeBlock)
+                ? 'progressing on your clean weeks; the long session fades are worth watching together'
+                : read.outputDropPct == null
+                  ? null
+                  : read.hrMissing
+                    ? 'that session recorded no heart rate, so the fade cannot be read either way and changes nothing'
+                    : ch.output && !ch.cardiac
+                      ? 'your heart rate did not climb the way real fatigue does while the pace fell, so it reads more like terrain or conditions'
+                      : ch.drift
+                        ? 'your heart rate climbed but the output held up, which reads more like heat or conditions than a real fade'
+                        : 'the output held up and only the efficiency picture slipped, which is worth watching but not a fade on its own';
+          }
+        }
       } else {
         headline = 'Landing well. One more clean week opens progression';
         ev.push({ signal: 'repeatability', reading: soloDisc
           ? 'progression needs ' + REPEAT_WEEKS + ' clean weeks in a row; this one counts'
           : 'your limiter needs ' + REPEAT_WEEKS + ' clean weeks in a row to progress; this one counts' });
+        if (fadeBlock && LONG_SESSION[d]) forewarn = true;
       }
     }
     if (progressVar === d && !clean && strained) {
       ev.push({ signal: 'repeatability', reading: 'a session missed under strain resets the clean-week count' });
     }
-    // Durability context, pass 2: EVIDENCE ONLY. The read never changes a
-    // decision here; using it as a decision input needs its own design
-    // panel first (documented in docs/COACH_BRAIN.md).
-    const du = durabilityByDiscipline && durabilityByDiscipline[d];
-    if (du && du.read) {
-      ev.push({ signal: 'late-session durability', reading: ({ 'held-strong': 'your long session held up strongly to the end', 'faded-a-little': 'your long session faded a little in its final stretch', 'faded-hard': 'your long session faded hard in its final stretch' })[du.read.band] });
+    if (read) {
+      ev.push({ signal: 'late-session durability', reading: forewarn
+        ? 'your ' + LONG_SESSION[d] + ' faded hard late; when progression comes up, how these sessions finish is part of what it reads'
+        : ({ 'held-strong': 'your long session held up strongly to the end', 'faded-a-little': 'your long session faded a little in its final stretch', 'faded-hard': 'your long session faded hard in its final stretch' })[read.band] });
+      if (watching) ev.push({ signal: 'worth noting', reading: watching });
     }
-    disciplines[d] = { decision, headline, evidence: ev, clean };
+    // durability stamps whenever a read exists (the honest record); the veto
+    // flag only when the outcome changed, and it is what the cap reads next
+    // week.
+    disciplines[d] = { decision, headline, evidence: ev, clean,
+      ...(read ? { durability: { band: read.band, hrMissing: !!read.hrMissing } } : {}),
+      ...(vetoed ? { durabilityVeto: true } : {}) };
   });
+
+  // A vetoed week must not read 'nothing here argues for changing course'
+  // next to the veto's own overall evidence line (the filler pushed at the
+  // overall stage predates the discipline loop).
+  if (anyVeto) {
+    const fi = evidence.findIndex(e => e.signal === 'the week');
+    if (fi >= 0) evidence.splice(fi, 1);
+  }
 
   const progressed = Object.entries(disciplines).find(([, v]) => v.decision === 'progress');
   // The overall call agrees with its rows: progress only when a discipline

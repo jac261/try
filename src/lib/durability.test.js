@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
-import { durabilityRead, durabilityTrend, planBodySteady, DURABILITY_GATES, DURABILITY_BAND_LABELS } from './durability.js';
+import { durabilityRead, durabilityTrend, planBodySteady, fadeCorroborated, DURABILITY_GATES, DURABILITY_BAND_LABELS } from './durability.js';
 import { decideWeek } from './coach.js';
 import { generatePlan } from './plan.js';
 import { storageForUser } from '@/app/storage.js';
@@ -124,7 +124,7 @@ describe('trend and labels', () => {
   });
 });
 
-describe('the coach evidence line never changes a decision', () => {
+describe('durability at the weekly decision', () => {
   const profile = {
     name: 'C', raceType: 'olympic', fitness: 'intermediate',
     fivekSec: 1500, css100Sec: 145, ftp: 300, weightKg: 75,
@@ -138,13 +138,213 @@ describe('the coach evidence line never changes a decision', () => {
     plan, log, moves: {}, adjust: {}, adjustLog: [], wellness: [], activities: [], missedReasons: {},
     todayISO: iso(new Date(new Date(wk.start + 'T00:00:00Z').getTime() + 8 * 864e5)), weekMonday: wk.start, prevWeeks: [],
   };
-  it('adds the line as evidence only', () => {
+  it('stays evidence only away from the progress-award point', () => {
+    // prevWeeks empty: no priorClean, so the veto branch is unreachable and
+    // pass-2 behaviour holds exactly
     const withoutRead = decideWeek(args);
     const withRead = decideWeek({ ...args, durabilityByDiscipline: { run: { read: { band: 'faded-hard' } } } });
     expect(withRead.disciplines.run.decision).toBe(withoutRead.disciplines.run.decision);
     expect(withRead.overall.decision).toBe(withoutRead.overall.decision);
     expect(withRead.disciplines.run.evidence.some(e => e.signal === 'late-session durability')).toBe(true);
     expect(withoutRead.disciplines.run.evidence.some(e => e.signal === 'late-session durability')).toBe(false);
+  });
+
+  /* The veto fixtures run on a solo marathon plan: the run is the
+     progression variable structurally, so the progress-award point is easy
+     to stand on. */
+  const mProfile = {
+    name: 'M', raceType: 'runmarathon', fitness: 'intermediate', fivekSec: 1500,
+    daysPerWeek: 5, trainingDays: [0, 1, 3, 5, 6], longDay: 5,
+    startDate: '2026-08-03', raceDate: '2026-12-20',
+  };
+  const mPlan = generatePlan(mProfile);
+  const mWk = mPlan.weeks.find(w => !w.isRecovery && w.index >= 2 && !w.workouts.some(x => x.test));
+  const mLog = Object.fromEntries(mWk.workouts.filter(x => x.discipline !== 'rest' && !x.race).map(x => [x.id, { done: true }]));
+  const prevMonday = iso(new Date(new Date(mWk.start + 'T00:00:00Z').getTime() - 7 * 864e5));
+  const atProgress = over => decideWeek({
+    plan: mPlan, log: mLog, moves: {}, adjust: {}, adjustLog: [], wellness: [], activities: [], missedReasons: {},
+    todayISO: iso(new Date(new Date(mWk.start + 'T00:00:00Z').getTime() + 8 * 864e5)), weekMonday: mWk.start,
+    prevWeeks: [{ weekMonday: prevMonday, tracker: false, planCreatedAt: mPlan.createdAt, disciplines: { run: { clean: true } } }],
+    ...over,
+  });
+  const corroborated = { band: 'faded-hard', outputDropPct: 12, hrDriftPct: 12, efDropPct: null, hrMissing: false };
+
+  it('a corroborated hard fade converts an earned progress to a one-week wait', () => {
+    const d = atProgress({ durabilityByDiscipline: { run: { read: corroborated } } });
+    expect(d.disciplines.run.decision).toBe('hold');
+    expect(d.disciplines.run.durabilityVeto).toBe(true);
+    expect(d.disciplines.run.clean).toBe(true); // the clean-week count is untouched
+    expect(d.disciplines.run.headline).toMatch(/steadier long run finish/);
+    expect(d.progression).toBe(null);
+    expect(d.overall.decision).toBe('hold');
+    expect(d.overall.evidence.some(e => e.signal === 'late-session durability')).toBe(true);
+    // no contradictory filler beside the veto line
+    expect(d.overall.evidence.some(e => e.signal === 'the week')).toBe(false);
+  });
+
+  it('the cap: a spent veto last week progresses whatever the laps say', () => {
+    const d = atProgress({
+      durabilityByDiscipline: { run: { read: corroborated } },
+      prevWeeks: [{ weekMonday: prevMonday, tracker: false, planCreatedAt: mPlan.createdAt, disciplines: { run: { clean: true, durabilityVeto: true } } }],
+    });
+    expect(d.disciplines.run.decision).toBe('progress');
+    expect(d.disciplines.run.durabilityVeto).toBeUndefined();
+    expect(d.disciplines.run.evidence.some(e => e.signal === 'worth noting' && /worth watching together/.test(e.reading))).toBe(true);
+  });
+
+  it('drift-only, output-only, hrMissing and faded-a-little never veto', () => {
+    [
+      { band: 'faded-hard', outputDropPct: 1, hrDriftPct: 12, efDropPct: null, hrMissing: false },
+      { band: 'faded-hard', outputDropPct: 12, hrDriftPct: null, efDropPct: null, hrMissing: true },
+      { band: 'faded-a-little', outputDropPct: 5, hrDriftPct: 6, efDropPct: null, hrMissing: false },
+    ].forEach(read => {
+      const d = atProgress({ durabilityByDiscipline: { run: { read } } });
+      expect(d.disciplines.run.decision).toBe('progress');
+      expect(d.disciplines.run.durabilityVeto).toBeUndefined();
+    });
+  });
+
+  it('a fade the athlete explained as under-fuelled never gates', () => {
+    const d = atProgress({ durabilityByDiscipline: { run: { read: corroborated, lowFuel: true } } });
+    expect(d.disciplines.run.decision).toBe('progress');
+    expect(d.disciplines.run.evidence.some(e => e.signal === 'worth noting' && /fuelling, not fitness/.test(e.reading))).toBe(true);
+  });
+
+  it('a legacy stored read without channel fields is byte-identical to no read in decision terms', () => {
+    const bare = atProgress({});
+    const legacy = atProgress({ durabilityByDiscipline: { run: { read: { band: 'faded-hard' } } } });
+    expect(legacy.disciplines.run.decision).toBe(bare.disciplines.run.decision);
+    expect(legacy.overall.decision).toBe(bare.overall.decision);
+  });
+
+  it('the week-one forewarn names what progression will read, without deciding anything', () => {
+    const d = decideWeek({
+      plan: mPlan, log: mLog, moves: {}, adjust: {}, adjustLog: [], wellness: [], activities: [], missedReasons: {},
+      todayISO: iso(new Date(new Date(mWk.start + 'T00:00:00Z').getTime() + 8 * 864e5)), weekMonday: mWk.start, prevWeeks: [],
+      durabilityByDiscipline: { run: { read: corroborated } },
+    });
+    expect(d.disciplines.run.decision).toBe('hold');
+    expect(d.disciplines.run.evidence.some(e => /part of what it reads/.test(e.reading))).toBe(true);
+  });
+
+  it('the durability stamp records the read honestly whenever one exists', () => {
+    const d = atProgress({ durabilityByDiscipline: { run: { read: { band: 'held-strong', outputDropPct: 1, hrDriftPct: 2, efDropPct: null, hrMissing: false } } } });
+    expect(d.disciplines.run.durability).toEqual({ band: 'held-strong', hrMissing: false });
+    expect(d.disciplines.run.decision).toBe('progress'); // held-strong adds no positive weight, it just fails to veto
+  });
+
+  it('ruleVersion stamps 2 and every new string obeys the copy rules', () => {
+    const d = atProgress({ durabilityByDiscipline: { run: { read: corroborated } } });
+    expect(d.ruleVersion).toBe(2);
+    const texts = [d.disciplines.run.headline]
+      .concat(d.disciplines.run.evidence.map(e => e.reading))
+      .concat(d.overall.evidence.map(e => e.reading));
+    texts.forEach(sx => {
+      expect(sx).not.toMatch(/—/);
+      expect(sx).not.toMatch(/\b[A-Z]{3,}\b/);
+    });
+    // no engine parameters leak into the durability strings specifically
+    // (session counts elsewhere are athlete-facing facts, not parameters)
+    const duTexts = [d.disciplines.run.headline]
+      .concat(d.disciplines.run.evidence.filter(e => e.signal !== 'sessions').map(e => e.reading))
+      .concat(d.overall.evidence.filter(e => e.signal === 'late-session durability').map(e => e.reading));
+    duTexts.forEach(sx => expect(sx).not.toMatch(/\d/));
+  });
+});
+
+describe('gauntlet round 1 pins (pass 5)', () => {
+  const profile = {
+    name: 'M', raceType: 'runmarathon', fitness: 'intermediate', fivekSec: 1500,
+    daysPerWeek: 5, trainingDays: [0, 1, 3, 5, 6], longDay: 5,
+    startDate: '2026-08-03', raceDate: '2026-12-20',
+  };
+  const plan2 = generatePlan(profile);
+  const wk2 = plan2.weeks.find(w => !w.isRecovery && w.index >= 2 && !w.workouts.some(x => x.test));
+  const log2 = Object.fromEntries(wk2.workouts.filter(x => x.discipline !== 'rest' && !x.race).map(x => [x.id, { done: true }]));
+  const prevM = iso(new Date(new Date(wk2.start + 'T00:00:00Z').getTime() - 7 * 864e5));
+  const at = read => decideWeek({
+    plan: plan2, log: log2, moves: {}, adjust: {}, adjustLog: [], wellness: [], activities: [], missedReasons: {},
+    todayISO: iso(new Date(new Date(wk2.start + 'T00:00:00Z').getTime() + 8 * 864e5)), weekMonday: wk2.start,
+    prevWeeks: [{ weekMonday: prevM, tracker: false, planCreatedAt: plan2.createdAt, disciplines: { run: { clean: true } } }],
+    durabilityByDiscipline: { run: { read } },
+  });
+  const watchingOf = d => (d.disciplines.run.evidence.find(e => e.signal === 'worth noting') || {}).reading || '';
+
+  it('each uncorroborated fade case gets its own truth', () => {
+    // HR below the fatigue signature while pace fell: terrain story, never
+    // a missing-strap claim, never an overclaim of settledness
+    const flat = watchingOf(at({ band: 'faded-hard', outputDropPct: 12, hrDriftPct: 6, efDropPct: null, hrMissing: false }));
+    expect(flat).toMatch(/did not climb the way real fatigue does/);
+    expect(flat).not.toMatch(/missing strap/);
+    // HR genuinely climbed but output held: heat story
+    const hot = watchingOf(at({ band: 'faded-hard', outputDropPct: 3, hrDriftPct: 12, efDropPct: null, hrMissing: false }));
+    expect(hot).toMatch(/climbed but the output held up/);
+    // EF-only cardiac trigger with a near-flat heart rate must NEVER be
+    // narrated as a climbing heart rate (re-verify catch)
+    const efOnly = watchingOf(at({ band: 'faded-hard', outputDropPct: 3, hrDriftPct: 3, efDropPct: 12, hrMissing: false }));
+    expect(efOnly).toMatch(/only the efficiency picture slipped/);
+    expect(efOnly).not.toMatch(/heart rate climbed/);
+    // no HR at all: absence named as absence
+    const strapless = watchingOf(at({ band: 'faded-hard', outputDropPct: 12, hrDriftPct: null, efDropPct: null, hrMissing: true }));
+    expect(strapless).toMatch(/recorded no heart rate/);
+    // a legacy stored read carries only the band: no channel data, no
+    // sentence, rather than a guessed one
+    const legacy = watchingOf(at({ band: 'faded-hard' }));
+    expect(legacy).toBe('');
+  });
+
+  it('the overall veto line steps aside when the card already carries conflict', () => {
+    // A REAL conflicting line: an accepted boost-week call governing the
+    // reviewed week (legacy adjustLog shape, timestamp in the prior week)
+    // routes the overall stage to the boost arm, and one undone non-run key
+    // session takes its not-clean fork, which pushes the conflict sentence.
+    // Needs a triathlon plan with run as the limiter, so the vetoed run row
+    // and the undone bike key can coexist.
+    const triProfile = {
+      name: 'T', raceType: 'olympic', fitness: 'intermediate',
+      fivekSec: 1800, css100Sec: 95, ftp: 320, weightKg: 70,
+      daysPerWeek: 5, trainingDays: [0, 1, 3, 5, 6], longDay: 5,
+      startDate: '2026-06-01', raceDate: '2026-09-27',
+    };
+    const triPlan = generatePlan(triProfile);
+    const triWk = triPlan.weeks.find(w => !w.isRecovery && w.index >= 2 && !w.workouts.some(x => x.test)
+      && w.workouts.some(x => x.discipline === 'bike' && x.key));
+    const bikeKey = triWk.workouts.find(x => x.discipline === 'bike' && x.key);
+    const triPrev = iso(new Date(new Date(triWk.start + 'T00:00:00Z').getTime() - 7 * 864e5));
+    const boost = { kind: 'boost-week', headline: 'Room to build', at: triPrev + 'T10:00:00Z' };
+    const veto = { run: { read: { band: 'faded-hard', outputDropPct: 12, hrDriftPct: 12, efDropPct: null, hrMissing: false } } };
+    const mk = over => decideWeek({
+      plan: triPlan,
+      log: Object.fromEntries(triWk.workouts
+        .filter(x => x.discipline !== 'rest' && !x.race && x.id !== (over.leaveUndone ? bikeKey.id : ''))
+        .map(x => [x.id, { done: true }])),
+      moves: {}, adjust: {}, adjustLog: over.adjustLog || [], wellness: [], activities: [], missedReasons: {},
+      todayISO: iso(new Date(new Date(triWk.start + 'T00:00:00Z').getTime() + 8 * 864e5)), weekMonday: triWk.start,
+      prevWeeks: [{ weekMonday: triPrev, tracker: false, planCreatedAt: triPlan.createdAt, disciplines: { run: { clean: true } } }],
+      durabilityByDiscipline: veto,
+    });
+    const conflicted = mk({ adjustLog: [boost], leaveUndone: true });
+    // the fixture must actually populate the conflicting line, or this test
+    // proves nothing (re-verify catch: the first version was vacuous)
+    expect(conflicted.overall.conflicting.length).toBeGreaterThan(0);
+    expect(conflicted.disciplines.run.durabilityVeto).toBe(true);
+    expect(conflicted.overall.evidence.some(e => e.signal === 'late-session durability')).toBe(false);
+    // and a plain veto week on the same plan still gets the overall line
+    const plain = mk({});
+    expect(plain.disciplines.run.durabilityVeto).toBe(true);
+    expect(plain.overall.evidence.some(e => e.signal === 'late-session durability')).toBe(true);
+  });
+});
+
+describe('fadeCorroborated (the veto evidential standard)', () => {
+  it('requires output AND a cardiac channel past the hard bands', () => {
+    expect(fadeCorroborated(null)).toBe(false);
+    expect(fadeCorroborated({ outputDropPct: 12, hrDriftPct: null })).toBe(false); // hrMissing shape
+    expect(fadeCorroborated({ outputDropPct: 12, hrDriftPct: 12 })).toBe(true);
+    expect(fadeCorroborated({ outputDropPct: 12, hrDriftPct: 3, efDropPct: 12 })).toBe(true); // bike EF path
+    expect(fadeCorroborated({ outputDropPct: 12, hrDriftPct: 3, efDropPct: 3 })).toBe(false);
+    expect(fadeCorroborated({ outputDropPct: 9, hrDriftPct: 12 })).toBe(false);  // at the band, not past it
+    expect(fadeCorroborated({ outputDropPct: 12, hrDriftPct: 10 })).toBe(false); // drift at the band
   });
 });
 

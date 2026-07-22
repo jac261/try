@@ -80,8 +80,8 @@ memoised intervals fetch with the rep table and auto-CSS.
 
 The Progress card leads with the pattern and hedges the rest: laps cannot
 see hills, heat, wind or fuelling, so one read is never a claim. The coach
-brain gains a durability EVIDENCE line only; using the read as a decision
-input needs its own design panel first.
+brain gained a durability EVIDENCE line only in pass 2; pass 5 (panel run
+2026-07-22) licensed exactly one decision effect, documented below.
 
 Excluded on purpose: a brick's run leg (it starts pre-fatigued by design;
 reserved for the deferred brick comparison), swim durability (pool laps
@@ -192,3 +192,37 @@ by design, so a frozen decision from the week before a tri to run switch is
 quoted verbatim on the run plan (it is the honest record of that week) and
 a clean prior week carries into the progression count across the switch
 (run fitness is continuous through the switch; the engine agrees).
+
+
+## Pass 5: durability at the weekly decision
+
+One licensed effect, nothing else anywhere: when a discipline has otherwise
+fully earned progress (limiter or solo discipline, clean week, prior-week
+adjacency, overall not recover or reduce-volume), a corroborated hard fade
+on that discipline's reviewed-week long session converts that single row to
+a hold, once per progression event. The clean-week count is untouched; the
+following clean week progresses whatever the laps say (the one-shot cap,
+read from the previous frozen decision's durabilityVeto flag).
+
+The evidential standard lives in durability.js (fadeCorroborated): output
+AND the cardiac picture both past the hard bands. By construction hrMissing
+reads can never veto (drift is null and EF needs HR), a drift-only fade
+(the classic heat signature) can never veto, faded-a-little never vetoes,
+and runs corroborate on drift alone since EF is bike-only, so heat passing
+on a run is the named residual, bounded by the cap. The athlete's own low
+fuel answer for that recording disarms the veto: a fade they already
+explained is fuelling, not fitness.
+
+What durability may never do: initiate any decision (pullbacks stay
+strain-owned), add positive weight (held-strong only fails to veto; it
+never shortens the clean-week requirement), outrank a strain signal, reset
+the clean-week count, touch swim or a brick's run leg, or gate when the
+signal is degraded (no read, hrMissing, uncorroborated: all fail silent
+toward pass-2 behaviour). A freeze that proceeds without a read fails open
+to no veto, a stated rule rather than an accident. The trend sentence stays
+display-only. Under a sustained corroborated fade the cap alternates:
+veto, progress, veto again on the next event. That is the intended bound,
+durability may slow progression but never stop it. Deferred until per-lap
+gradient lands: any conditions or hill
+tap (an appeal form offered at a moment of denial), feel-based disarms,
+escalation toward pull-back authority.

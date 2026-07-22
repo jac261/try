@@ -55,6 +55,28 @@ export const DURABILITY_BANDS = {
   drift: { strong: 5, faded: 10 },
 };
 
+// A fade the coach veto may trust: output AND the cardiac picture both past
+// the hard band. Pure predicate over a stored read, so rule-version-1 reads
+// qualify retroactively and DURABILITY_RULE_VERSION does not bump (no read
+// output changes). hrMissing can never pass (drift is null and EF needs HR).
+// Runs rest on drift alone (EF is bike-only): a hot day can still pass,
+// which is why the coach caps the cost at one deferred call per event.
+export function fadeChannels(read) {
+  const drift = !!(read && read.hrDriftPct != null && read.hrDriftPct > DURABILITY_BANDS.drift.faded);
+  const ef = !!(read && read.hrDriftPct != null && read.efDropPct != null && read.efDropPct > DURABILITY_BANDS.drift.faded);
+  return {
+    output: !!(read && read.outputDropPct > DURABILITY_BANDS.output.faded),
+    cardiac: drift || ef,
+    // which cardiac channel fired, so copy can tell the truth per case: an
+    // EF-only trigger must never be narrated as a climbing heart rate
+    drift,
+  };
+}
+export function fadeCorroborated(read) {
+  const c = fadeChannels(read);
+  return c.output && c.cardiac;
+}
+
 // The planned session's body is steady when every non-warmup, non-cooldown
 // segment shares one zone with no mixed-zone blocks. Fast-finish and
 // tired-legs variants fail this and are skipped on purpose.
