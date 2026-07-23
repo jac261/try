@@ -11,15 +11,26 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
   // clearing the goal (the whole escape hatch) has hidden friction
   // (gauntlet catch 2026-07-22).
   const [goalOpen, setGoalOpen] = useState(!!profile.massGoal);
+  const pool0 = T.sanePool(profile.pool) || T.DEFAULT_POOL;
   const [f, setF] = useState({
     fitness: lvl0,
     fivek: profile.fivekSec ? T.fmtPace(profile.fivekSec) : '',
-    css100: profile.css100Sec ? T.fmtPace(profile.css100Sec) : '',
+    // CSS is stored canonically per 100 m but shown/entered per 100 of the
+    // athlete's pool unit, so a yard swimmer's manual test number is honest.
+    css100: profile.css100Sec ? T.fmtPace(T.pacePer100ForDisplay(profile.css100Sec, pool0)) : '',
     ftp: profile.ftp || '',
     weightKg: profile.weightKg || '',
     massGoal: profile.massGoal || null,
+    pool: T.sanePool(profile.pool) || T.DEFAULT_POOL,
   });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
+  // Switching pool keeps the same physiological CSS but re-displays it in the
+  // new unit, so the number in the field always matches its label.
+  const pickPool = np => setF(s => {
+    const cur = T.parseTimeToSec(s.css100);
+    const css100 = cur != null ? T.fmtPace(T.pacePer100ForDisplay(T.css100mFromDisplay(cur, s.pool), np)) : s.css100;
+    return { ...s, pool: np, css100 };
+  });
   const sheetRef = useSheetFocus(onClose);
   return (
     <div className="scrim" onClick={onClose}>
@@ -42,8 +53,18 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
         <div style={{ height: 16 }} />
         <label className="field"><span className="lab">Recent 5 km run time <span className="hint">optional · mm:ss</span></span>
           <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>
-        <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
-          <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>
+        <label className="field"><span className="lab">Swim pace per 100 {f.pool.unit === 'yards' ? 'yd' : 'm'} <span className="hint">optional · mm:ss</span></span>
+          <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.pacePer100ForDisplay(T.FITNESS[f.fitness].estCss, f.pool))} onChange={e => set('css100', e.target.value)} /></label>
+        {/* The pool changes how swim work is written (lengths and unit), never
+            your CSS: a temporary pool swap needs no new test. Custom lengths
+            arrive with the fuller settings UX. */}
+        <label className="field" style={{ marginBottom: 4 }}><span className="lab">Pool <span className="hint">changes swim distances and display, not your fitness</span></span></label>
+        <div className="choice">
+          {T.POOL_PROFILES.map(r => (
+            <div key={r.key} className={'opt' + (f.pool.length === r.length && f.pool.unit === r.unit ? ' on' : '')}
+              {...tap(() => pickPool({ length: r.length, unit: r.unit }))}>{r.length} {r.unit === 'yards' ? 'yd' : 'm'}</div>
+          ))}
+        </div>
         {/* Placeholder only, exactly like the run and swim estimates above:
             pre-filling the level estimate into the field would let a guess
             become a saved, untilded FTP on a single tap (design panel
@@ -68,10 +89,13 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
         <button className="btn primary" onClick={() => onSave({
           fitness: f.fitness,
           fivekSec: T.parseTimeToSec(f.fivek),
-          css100Sec: T.parseTimeToSec(f.css100),
+          // convert the per-100-unit entry back to canonical per-100 m; a
+          // metre pool is the identity, so existing saves are unchanged
+          css100Sec: (() => { const d = T.parseTimeToSec(f.css100); return d != null ? Math.round(T.css100mFromDisplay(d, f.pool)) : null; })(),
           ftp: f.ftp ? Number(f.ftp) : null,
           weightKg: f.weightKg ? Number(f.weightKg) : null,
           massGoal: f.massGoal || null,
+          pool: f.pool,
         })}>{noPlan ? 'Save to fitness history' : 'Save & re-target plan'}</button>
       </div>
     </div>

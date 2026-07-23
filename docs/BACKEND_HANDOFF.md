@@ -322,3 +322,13 @@ nothing 400s today; the ask is only that the typed UserProfileResponse
 subset eventually carries them so fresh-device recovery keeps the stamp.
 There is deliberately no `'lose'` value: the safety panel's no-ship verdict
 and its reopening conditions are recorded in src/lib/bodymass.js.
+
+## Ask - 22 July 2026: pool profile field
+
+`profile.pool = { length: number, unit: 'metres' | 'yards' }` is a new
+athlete setting (swim build-out phase 2). It rides the opaque profile blob, so
+nothing 400s today; the ask is only that the typed UserProfileResponse subset
+eventually carry it so a fresh device keeps the athlete's pool. Absent or
+malformed, the client falls back to 25 m (the default that reproduces current
+output). It is display-and-construction only: CSS stays canonical in seconds
+per 100 m and the pool never changes it.

@@ -74,6 +74,31 @@ export function saneWeightKg(weightKg) {
   return n >= WEIGHT_KG.min && n <= WEIGHT_KG.max ? n : null;
 }
 
+// The athlete's pool. A DISPLAY-and-construction setting only: it changes how
+// swim work is expressed (lengths, unit), never the physiological threshold.
+// CSS stays canonical in seconds per 100 m whatever the pool. The default is
+// 25 m, which reproduces today's output exactly because every current swim
+// distance is already a multiple of 50 m (swim build-out phase 2, 2026-07-22).
+export const DEFAULT_POOL = { length: 25, unit: 'metres' };
+export const POOL_PROFILES = [
+  { key: '25m', length: 25, unit: 'metres', label: '25 m pool' },
+  { key: '50m', length: 50, unit: 'metres', label: '50 m pool' },
+  { key: '25yd', length: 25, unit: 'yards', label: '25 yd pool' },
+  // a custom length is stored directly as { length, unit }, no catalog entry.
+];
+// A pool length the app is willing to build with: 10-100 in either unit. An
+// out-of-range or malformed setting falls back to the default rather than
+// generating a partial or absurd length (the saneWeightKg pattern).
+export function sanePool(pool) {
+  if (!pool || (pool.unit !== 'metres' && pool.unit !== 'yards')) return null;
+  const n = Number(pool.length);
+  return n >= 10 && n <= 100 ? { length: n, unit: pool.unit } : null;
+}
+// The pool to build with for a profile: its own valid setting, or the default.
+export function poolFor(profile) {
+  return sanePool(profile && profile.pool) || DEFAULT_POOL;
+}
+
 // estWkg mirrors est5k/estCss for the bike, in watts per kilo. It matches the
 // weakest.js ladder so the two systems can never disagree about what a level
 // means. It is a WEAKER estimate than its run/swim siblings: profile.fitness

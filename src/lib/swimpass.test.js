@@ -738,3 +738,111 @@ describe('Phase 1: the swim generation matrix conforms and is covered', () => {
     expect(eftpProposal({ activities: [], thresholds: { swimThresholdPace: 1.4 }, plan: solo, todayISO: '2026-07-01' })).toBe(null);
   });
 });
+
+
+describe('Phase 2: the pool profile', () => {
+  const base = {
+    name: 'P', raceType: 'olympic', fitness: 'intermediate',
+    fivekSec: 1200, css100Sec: 150, ftp: 320, weightKg: 75,
+    daysPerWeek: 6, trainingDays: [0, 1, 2, 3, 5, 6], longDay: 5,
+    startDate: '2026-06-01', raceDate: '2026-09-27',
+  };
+  const gen = pool => generatePlan(pool ? { ...base, pool } : base);
+  const swimsOf = plan => plan.weeks.flatMap(w => w.workouts).filter(isTrainingSwim);
+  const Y25 = { length: 25, unit: 'yards' };
+
+  it('a yard pool gives yard-native, whole-length instructions and never a partial length', () => {
+    const swims = swimsOf(gen(Y25));
+    expect(swims.length).toBeGreaterThan(30);
+    let mLabels = 0, ydLabels = 0;
+    swims.forEach(x => x.segments.forEach(sg => {
+      if (/\b\d+ m\b/.test(sg.label)) mLabels++;
+      if (/\b\d+ yd\b/.test(sg.label)) ydLabels++;
+      if (sg.swim) {
+        const per = sg.swim.distM != null ? sg.swim.distM : sg.swim.repM;
+        if (per) expect(Math.abs(Math.round(per / 22.86) - per / 22.86)).toBeLessThan(1e-6); // whole lengths
+      }
+    }));
+    expect(mLabels).toBe(0);         // no stray metres in a yard plan
+    expect(ydLabels).toBeGreaterThan(50);
+  });
+
+  it('changing pool never alters CSS or the swim threshold (§8)', () => {
+    const m = gen(null), y = gen(Y25);
+    expect(y.profile.css100Sec).toBe(m.profile.css100Sec);
+    expect(y.paces.swim.css).toBe(m.paces.swim.css);
+    // the pool only rode along on paces for construction
+    expect(y.paces.pool).toEqual(Y25);
+    expect(m.paces.pool).toEqual({ length: 25, unit: 'metres' }); // default
+  });
+
+  it('a yard pool preserves session duration (counts re-derive from actual metres)', () => {
+    const y = swimsOf(gen(Y25));
+    y.forEach(x => {
+      const built = x.segments.reduce((a, sg) => a + segMinutes(sg), 0);
+      // within the same band the default sizing tests use, and NOT systematically short
+      expect(built).toBeGreaterThanOrEqual(x.durationMin * 0.85);
+      expect(built).toBeLessThanOrEqual(x.durationMin * 1.15);
+    });
+  });
+
+  it('an unset pool falls back to 25 m and is byte-identical (helpers are the identity there)', () => {
+    const noPool = swimsOf(generatePlan({ ...base, pool: undefined }));
+    const explicit25 = swimsOf(gen({ length: 25, unit: 'metres' }));
+    expect(noPool.map(x => x.segments.map(s => s.label))).toEqual(explicit25.map(x => x.segments.map(s => s.label)));
+    // a garbage pool also falls back, never generates a partial
+    const bad = swimsOf(generatePlan({ ...base, pool: { length: 0, unit: 'furlongs' } }));
+    expect(bad.map(x => x.segments.map(s => s.label))).toEqual(explicit25.map(x => x.segments.map(s => s.label)));
+  });
+
+  it('the CSS test protocol follows the pool, and stays canonical in seconds per 100', () => {
+    // the swim CSS test lands in a plan as a scheduled benchmark
+    const yTest = gen(Y25).weeks.flatMap(w => w.workouts).find(x => x.test && x.testKind === 'swimCss');
+    const mTest = gen(null).weeks.flatMap(w => w.workouts).find(x => x.test && x.testKind === 'swimCss');
+    if (yTest && mTest) {
+      expect(yTest.segments.some(s => /400 yd/.test(s.label))).toBe(true);
+      expect(mTest.segments.some(s => /400 m/.test(s.label))).toBe(true);
+    }
+  });
+});
+
+describe('Phase 2a gauntlet fixes', () => {
+  const base = {
+    name: 'G', raceType: 'olympic', fitness: 'intermediate',
+    fivekSec: 1200, css100Sec: 150, ftp: 320, weightKg: 75,
+    daysPerWeek: 6, trainingDays: [0, 1, 2, 3, 5, 6], longDay: 5,
+    startDate: '2026-06-01', raceDate: '2026-09-27',
+  };
+  const swimsOf = pool => ['beginner', 'intermediate', 'advanced', 'elite']
+    .flatMap(fitness => generatePlan({ ...base, fitness, pool }).weeks.flatMap(w => w.workouts).filter(isTrainingSwim));
+  const Y25 = { length: 25, unit: 'yards' };
+  const M50 = { length: 50, unit: 'metres' };
+
+  it('a yard pool shows pace per 100 yd on every swim line, never /100m', () => {
+    swimsOf(Y25).forEach(x => x.segments.forEach(sg => {
+      if (sg.detail) {
+        expect(sg.detail).not.toMatch(/\/100m/);
+        if (/\/100/.test(sg.detail)) expect(sg.detail).toMatch(/\/100yd/);
+      }
+      expect(sg.label).not.toMatch(/s\/100 m/);
+    }));
+  });
+
+  it('the Technique drill split is whole pool lengths that sum to the rep', () => {
+    [{ pool: null, len: 25 }, { pool: M50, len: 50 }, { pool: Y25, len: 25 }].forEach(({ pool, len }) => {
+      swimsOf(pool).filter(x => x.type === 'Technique').forEach(x => x.segments.forEach(sg => {
+        const m = sg.label.match(/(\d+) (?:m|yd) as (\d+) (?:m|yd) drill \/ (\d+) (?:m|yd) smooth/);
+        if (m) {
+          const rep = Number(m[1]), drill = Number(m[2]), smooth = Number(m[3]);
+          expect(drill + smooth).toBe(rep);
+          expect(drill % len).toBe(0);
+        }
+      }));
+    });
+  });
+
+  it('the 25 m Technique split is byte-identical to before', () => {
+    expect(swimsOf(null).some(x => x.segments.some(sg => /100 m as 25 m drill \/ 75 m smooth/.test(sg.label)))).toBe(true);
+  });
+});
+

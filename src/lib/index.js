@@ -5,6 +5,7 @@
 export * from './date.js';
 export * from './units.js';
 export * from './domain.js';
+export * from './swim-units.js';
 export * from './disciplines.js';
 export * from './plan.js';
 export * from './wellness.js';

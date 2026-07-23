@@ -65,3 +65,37 @@ describe('FitnessEditor body-mass goal chooser', () => {
     m.cleanup();
   });
 });
+
+describe('FitnessEditor pool control', () => {
+  it('a yard pool labels the CSS field per 100 yd and shows the stored css converted', async () => {
+    // css100Sec is canonical per 100 m; a 25 yd athlete should see it per 100 yd
+    const m = await mount({ ...base, css100Sec: 120, pool: { length: 25, unit: 'yards' } });
+    expect(m.el.textContent).toContain('Swim pace per 100 yd');
+    const css = m.el.querySelector('input[value]');
+    // 120 s/100m displays as ~1:50 /100yd (120 * 0.9144)
+    const shown = [...m.el.querySelectorAll('input')].map(i => i.value).join(' ');
+    expect(shown).toMatch(/1:50|1:49/);
+    m.cleanup();
+  });
+
+  it('saves the per-100-unit entry back as canonical per-100 m', async () => {
+    // enter a yard time; it must store SLOWER per 100 m, not verbatim
+    const m = await mount({ ...base, css100Sec: null, pool: { length: 25, unit: 'yards' } });
+    const cssInput = [...m.el.querySelectorAll('input')].find(i => /100 yd/.test(i.closest('label').textContent));
+    act(() => { const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(cssInput, '1:50'); cssInput.dispatchEvent(new Event('input', { bubbles: true })); });
+    m.click('Save');
+    // 1:50/100yd (110s) -> ~120 s/100m canonical, never stored as 110
+    expect(m.saved.css100Sec).toBeGreaterThan(118);
+    expect(m.saved.css100Sec).toBeLessThan(122);
+    expect(m.saved.pool).toEqual({ length: 25, unit: 'yards' });
+  });
+
+  it('a metre pool is unchanged: field says per 100 m and stores verbatim', async () => {
+    const m = await mount({ ...base, css100Sec: 120, pool: { length: 25, unit: 'metres' } });
+    expect(m.el.textContent).toContain('Swim pace per 100 m');
+    m.click('Save');
+    expect(m.saved.css100Sec).toBe(120);
+    m.cleanup();
+  });
+});
+

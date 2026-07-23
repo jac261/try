@@ -1,7 +1,8 @@
 /* Try — periodized plan generator + structured workout builder */
 import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
-import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg } from './domain.js';
+import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL } from './domain.js';
+import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
 import { weakBias, weakestLink } from './weakest.js';
 import { RIEGEL_EXP } from './runstats.js';
 
@@ -28,6 +29,9 @@ function computePaces(profile) {
   return {
     runEstimated: !profile.fivekSec,               // true when paces are level-based guesses
     swimEstimated: !profile.css100Sec,
+    // The athlete's pool rides along so buildSwim can round lengths and label
+    // in the pool's unit. Display/construction only; it never touches css.
+    pool: poolFor(profile),
     ftp: ftp,
     ftpEstimated: ftpEstimated,
     // Watts per kilo, for the distance model's speed scaling. This is already
@@ -51,8 +55,14 @@ function runDetail(pc, key, zone) {
 }
 function swimDetail(pc, key, zone) {
   const z = ZONES[zone];
-  if (pc.swimEstimated) return '~' + fmtPace(pc.swim[key]) + ' /100m · ' + zone + ' · ' + z.rpe;
-  return fmtPace(pc.swim[key]) + ' /100m · ' + zone;
+  // Pace shown per 100 of the pool's unit, so a yard card reads '/100yd' and
+  // never mixes units. Identity for a metre pool ('/100m'); the stored css
+  // per 100 m is untouched.
+  const pool = pc.pool || DEFAULT_POOL;
+  const pace = fmtPace(pacePer100ForDisplay(pc.swim[key], pool));
+  const per = ' /100' + unitShort(pool) + ' · ';
+  if (pc.swimEstimated) return '~' + pace + per + zone + ' · ' + z.rpe;
+  return pace + per + zone;
 }
 function bikeDetail(pc, lo, hi, zone) {
   const z = ZONES[zone];
@@ -180,15 +190,17 @@ function fitFlex(segs, dur, pos, fb) {
 // spread into its segment and also keeps the structural prescription (metres,
 // reps, rest, % of CSS speed) that the structured watch push emits as DSL.
 function swimBlock(pc, key, zone, distM, restPer100) {
+  const dm = pc.pool ? roundToPoolLength(distM, pc.pool) : distM;
   return {
-    blocks: [{ min: (distM / 100) * (pc.swim[key] + (restPer100 || 0)) / 60, zone: zone }],
-    swim: { distM: distM, pct: Math.round(pc.swim.css / pc.swim[key] * 100) },
+    blocks: [{ min: (dm / 100) * (pc.swim[key] + (restPer100 || 0)) / 60, zone: zone }],
+    swim: { distM: dm, pct: Math.round(pc.swim.css / pc.swim[key] * 100) },
   };
 }
 function swimRep(pc, key, zone, n, repM, restSec) {
+  const rm = pc.pool ? roundToPoolLength(repM, pc.pool) : repM;
   return {
-    blocks: rep(n, (repM / 100) * pc.swim[key] / 60, zone, (restSec || 0) / 60, 'Z1'),
-    swim: { n: n, repM: repM, restSec: restSec || 0, pct: Math.round(pc.swim.css / pc.swim[key] * 100) },
+    blocks: rep(n, (rm / 100) * pc.swim[key] / 60, zone, (restSec || 0) / 60, 'Z1'),
+    swim: { n: n, repM: rm, restSec: restSec || 0, pct: Math.round(pc.swim.css / pc.swim[key] * 100) },
   };
 }
 
@@ -644,8 +656,9 @@ function pickDrills(seed, intensity, n, salt, role) {
 // One segment per drill, so every drill carries its own focus cue (and names
 // its kit) instead of a comma list with nowhere to explain itself.
 function drillSegs(pc, drills) {
+  const P = pc.pool || DEFAULT_POOL;
   return drills.map(d => ({
-    label: '2 × 50 m ' + d.name,
+    label: '2 × ' + poolLabel(50, P) + ' ' + d.name,
     detail: d.cue + (d.gear ? ' · ' + d.gear : ''),
     ...swimRep(pc, 'easy', 'Z1', 2, 50, 15),
   }));
@@ -670,13 +683,14 @@ function swimShoulders(pc, budgetSec, wuM, cdM, floorWu) {
 // Race/Endurance main enforces (gauntlet catch 2026-07-18).
 const STEADY_CEILING = 3000;
 function steadyMetres(pc, m, note) {
+  const P = pc.pool || DEFAULT_POOL;
   const detail = swimDetail(pc, 'steady', 'Z2') + (note || '');
   if (m <= STEADY_CEILING) {
-    return [{ label: m + ' m continuous', detail: detail, ...swimBlock(pc, 'steady', 'Z2', m) }];
+    return [{ label: poolLabel(m, P) + ' continuous', detail: detail, ...swimBlock(pc, 'steady', 'Z2', m) }];
   }
   const n = Math.max(2, Math.round(m / 1000));
   const repM = Math.max(100, Math.round(m / n / 100) * 100);
-  return [{ label: n + ' × ' + repM + ' m steady', detail: detail + ' · 30 s rest', ...swimRep(pc, 'steady', 'Z2', n, repM, 30) }];
+  return [{ label: n + ' × ' + poolLabel(repM, P) + ' steady', detail: detail + ' · 30 s rest', ...swimRep(pc, 'steady', 'Z2', n, repM, 30) }];
 }
 
 // `role` is the workout's slot in the week (easy/quality/long, or custom for a
@@ -689,15 +703,24 @@ function steadyMetres(pc, m, note) {
 function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
   const v = n => (seed || 0) % n;
   const budget = dur * 60;
+  // Pool-aware building: rdm rounds a metre target to whole pool lengths so
+  // rep COUNTS derive from the metres actually swum (duration is preserved on
+  // a yard pool, not left short), and dl labels in the pool's unit. Both are
+  // the identity on the 25 m default pool, so existing output is byte-identical;
+  // a 50 m pool matches too except where a rep splits into sub-50 m pieces (the
+  // Technique drill/smooth), which correctly become whole 50 m lengths.
+  const P = pc.pool || DEFAULT_POOL;
+  const rdm = m => roundToPoolLength(m, P);
+  const dl = m => poolLabel(m, P);
   // Every type buys its main work from the session's own seconds, the way
   // Long always has: the old shared reps formula ignored the athlete's CSS
   // entirely, so a slow swimmer's stated minutes bought far more built time
   // than the card admitted (sizing catch 2026-07-18). The variant MENU never
   // moves with dur — same seed + same inputs is the same session, and a
   // trim/boost re-sizes inside the same format; only counts and metres flex.
-  const perRep = (key, m, rest) => (m / 100) * pc.swim[key] + rest;
-  const wuSeg = m => ({ label: 'Warm-up ' + m + ' m', detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', m) });
-  const cdSeg = m => ({ label: 'Cool-down ' + m + ' m', detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', m) });
+  const perRep = (key, m, rest) => (rdm(m) / 100) * pc.swim[key] + rest;
+  const wuSeg = m => ({ label: 'Warm-up ' + dl(m), detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', m) });
+  const cdSeg = m => ({ label: 'Cool-down ' + dl(m), detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', m) });
   let segs = [], title = 'Swim';
   if (type === 'Technique') {
     title = 'Technique Swim';
@@ -722,9 +745,18 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
     let repM = 100, rest = 10, reps = Math.round(mainSec / perRep('steady', 100, 10));
     if (reps > 16) { repM = 200; rest = 15; reps = Math.round(mainSec / perRep('steady', 200, 15)); }
     reps = Math.max(0, reps);
-    const mainLabel = v(2) === 0
-      ? reps + ' × ' + repM + ' m steady'
-      : reps + ' × ' + repM + ' m as ' + (repM / 4) + ' m drill / ' + (repM * 3 / 4) + ' m smooth';
+    // The drill/smooth split is whole pool lengths that SUM to the rep: on a
+    // 25 m pool a 100 m rep reads '25 m drill / 75 m smooth' (byte-identical
+    // to before), on a 50 m pool '50 m drill / 50 m smooth' — never the
+    // incoherent quarters a 50 m pool cannot swim (gauntlet catch 2026-07-22).
+    const splitLabel = () => {
+      const rm = rdm(repM), pm = poolLengthM(P);
+      if (rm < 2 * pm) return reps + ' × ' + dl(repM) + ' steady'; // too short to split
+      let drillM = Math.max(pm, roundToPoolLength(repM / 4, P));
+      if (drillM >= rm) drillM = rm - pm;                          // leave a length to swim smooth
+      return reps + ' × ' + dl(repM) + ' as ' + poolLabel(drillM, P) + ' drill / ' + poolLabel(rm - drillM, P) + ' smooth';
+    };
+    const mainLabel = v(2) === 0 ? reps + ' × ' + dl(repM) + ' steady' : splitLabel();
     segs = [
       wuSeg(sh[0]),
       ...drillSegs(pc, pickDrills(seed, intensity, nDrills, dur, role)),
@@ -763,7 +795,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
       // then call hot (gauntlet catch 2026-07-18).
       segs = [
         wuSeg(sh[0]),
-        { label: mainM + ' m continuous', detail: swimDetail(pc, 'steady', 'Z2') + ' · settle in and hold a smooth, even rhythm', ...swimBlock(pc, 'steady', 'Z2', mainM) },
+        { label: dl(mainM) + ' continuous', detail: swimDetail(pc, 'steady', 'Z2') + ' · settle in and hold a smooth, even rhythm', ...swimBlock(pc, 'steady', 'Z2', mainM) },
         cdSeg(sh[1]),
       ];
     } else if (variant === 1) {
@@ -780,7 +812,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
       const repM = metresIn((mainSec - n4 * rest) / n4);
       segs = [
         wuSeg(sh[0]),
-        { label: n4 + ' × ' + repM + ' m steady', detail: swimDetail(pc, 'steady', 'Z2') + ' · ' + rest + ' s rest', ...swimRep(pc, 'steady', 'Z2', n4, repM, rest) },
+        { label: n4 + ' × ' + dl(repM) + ' steady', detail: swimDetail(pc, 'steady', 'Z2') + ' · ' + rest + ' s rest', ...swimRep(pc, 'steady', 'Z2', n4, repM, rest) },
         cdSeg(sh[1]),
       ];
     } else {
@@ -798,7 +830,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
         ...steps.map((m, i) => {
           const rest = m >= 600 ? 30 : 20;
           return {
-            label: m + ' m steady', detail: swimDetail(pc, 'steady', 'Z2') + ' · ' + rest + ' s rest' + (i === steps.length - 1 ? ' · hold form to the end' : ''),
+            label: dl(m) + ' steady', detail: swimDetail(pc, 'steady', 'Z2') + ' · ' + rest + ' s rest' + (i === steps.length - 1 ? ' · hold form to the end' : ''),
             ...swimRep(pc, 'steady', 'Z2', 1, m, rest),
           };
         }),
@@ -815,7 +847,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
       let repM = 100, rest = 15, n = Math.round(avail / perRep('css', 100, 15));
       if (n > 16) { repM = 200; rest = 20; n = Math.round(avail / perRep('css', 200, 20)); }
       n = Math.max(3, n);
-      mains = [{ label: n + ' × ' + repM + ' m @ CSS', detail: swimDetail(pc, 'css', 'Z4') + ' · ' + rest + ' s rest', ...swimRep(pc, 'css', 'Z4', n, repM, rest) }];
+      mains = [{ label: n + ' × ' + dl(repM) + ' @ CSS', detail: swimDetail(pc, 'css', 'Z4') + ' · ' + rest + ' s rest', ...swimRep(pc, 'css', 'Z4', n, repM, rest) }];
     } else if (variant === 1) {
       let repM = 200, rest = 20, n = Math.round(avail / perRep('css', 200, 20));
       if (n > 12) { repM = 400; rest = 30; n = Math.round(avail / perRep('css', 400, 30)); }
@@ -823,14 +855,14 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
       // the budget cannot hold three of the longer rep, drop back to 100s and
       // keep a real set (gauntlet catch 2026-07-18).
       if (n < 3) { repM = 100; rest = 15; n = Math.max(3, Math.round(avail / perRep('css', 100, 15))); }
-      mains = [{ label: n + ' × ' + repM + ' m @ CSS + 2 s/100 m', detail: swimDetail(pc, 'css', 'Z4') + ' · ' + rest + ' s rest', ...swimRep(pc, 'css', 'Z4', n, repM, rest) }];
+      mains = [{ label: n + ' × ' + dl(repM) + ' @ CSS + 2 s/100 ' + unitShort(P), detail: swimDetail(pc, 'css', 'Z4') + ' · ' + rest + ' s rest', ...swimRep(pc, 'css', 'Z4', n, repM, rest) }];
     } else {
       // The sprint set caps at 24 × 50 m: past that the residual swims
       // steady — aerobic support after the fast work, never an ever-longer
       // string of all-out 50s.
       const n = clamp(Math.round(avail / perRep('fast', 50, 20)), 4, 24);
       const absorbM = Math.floor((avail - n * perRep('fast', 50, 20)) / pc.swim.steady) * 100;
-      mains = [{ label: n + ' × 50 m fast', detail: swimDetail(pc, 'fast', 'Z5') + ' · 20 s rest', ...swimRep(pc, 'fast', 'Z5', n, 50, 20) }];
+      mains = [{ label: n + ' × ' + dl(50) + ' fast', detail: swimDetail(pc, 'fast', 'Z5') + ' · 20 s rest', ...swimRep(pc, 'fast', 'Z5', n, 50, 20) }];
       if (absorbM >= 300) mains.push(...steadyMetres(pc, absorbM));
     }
     segs = [wuSeg(sh[0]), ...mains, cdSeg(sh[1])];
@@ -859,7 +891,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
     let repM = 200, n = Math.round(raceSec / perRep('css', 200, 30));
     if (n > 6) { repM = 400; n = Math.round(raceSec / perRep('css', 400, 30)); }
     n = Math.max(2, n);
-    const raceSet = { label: n + ' × ' + repM + ' m @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes', ...swimRep(pc, 'css', 'Z4', n, repM, 30) };
+    const raceSet = { label: n + ' × ' + dl(repM) + ' @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes', ...swimRep(pc, 'css', 'Z4', n, repM, 30) };
     const easySec = avail - skillsSec - n * perRep('css', repM, 30);
     const easyM = easySec > 0 ? Math.round(easySec / pc.swim.steady) * 100 : 0;
     // The aerobic block soaks the residual down to 200 m; anything smaller
@@ -900,7 +932,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
       const third = Math.max(50, Math.round((avail - reps * 30) / pc.swim.steady / reps * 2) * 50);
       segs = [
         wuSeg(sh[0]),
-        { label: reps + ' × ' + third + ' m steady · 30 s rest', detail: swimDetail(pc, 'steady', 'Z2'), ...swimRep(pc, 'steady', 'Z2', reps, third, 30) },
+        { label: reps + ' × ' + dl(third) + ' steady · 30 s rest', detail: swimDetail(pc, 'steady', 'Z2'), ...swimRep(pc, 'steady', 'Z2', reps, third, 30) },
         cdSeg(sh[1]),
       ];
     } else {
@@ -915,7 +947,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
       if (mainM <= ceiling) {
         segs = [
           wuSeg(sh[0]),
-          { label: mainM + ' m continuous', detail: swimDetail(pc, key, zone), ...swimBlock(pc, key, zone, mainM) },
+          { label: dl(mainM) + ' continuous', detail: swimDetail(pc, key, zone), ...swimBlock(pc, key, zone, mainM) },
           cdSeg(sh[1]),
         ];
       } else {
@@ -924,7 +956,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
         const n = Math.max(2, Math.round(avail / perRep(key, repM, rest)));
         segs = [
           wuSeg(sh[0]),
-          { label: n + ' × ' + repM + ' m ' + (type === 'Race Pace' ? 'at race pace' : 'steady'), detail: swimDetail(pc, key, zone) + ' · ' + rest + ' s rest', ...swimRep(pc, key, zone, n, repM, rest) },
+          { label: n + ' × ' + dl(repM) + ' ' + (type === 'Race Pace' ? 'at race pace' : 'steady'), detail: swimDetail(pc, key, zone) + ' · ' + rest + ' s rest', ...swimRep(pc, key, zone, n, repM, rest) },
           cdSeg(sh[1]),
         ];
       }
@@ -1052,16 +1084,17 @@ function buildTest(kind, pc) {
     };
   }
   // swimCss
+  const u = unitShort(pc.pool || DEFAULT_POOL);
   return {
     title: 'Fitness Test · Swim CSS', durationMin: 45, distance: 1.4, unit: 'km',
     segments: [
-      { label: 'Warm-up 400 m', detail: swimDetail(pc, 'easy', 'Z2') },
-      { label: '400 m time trial — all out', detail: 'Note your time (T400).' },
-      { label: 'Easy 200 m', detail: 'Recover fully.' },
-      { label: '200 m time trial — all out', detail: 'Note your time (T200).' },
-      { label: 'Cool-down 200 m', detail: swimDetail(pc, 'easy', 'Z1') },
+      { label: 'Warm-up 400 ' + u, detail: swimDetail(pc, 'easy', 'Z2') },
+      { label: '400 ' + u + ' time trial — all out', detail: 'Note your time (T400).' },
+      { label: 'Easy 200 ' + u, detail: 'Recover fully.' },
+      { label: '200 ' + u + ' time trial — all out', detail: 'Note your time (T200).' },
+      { label: 'Cool-down 200 ' + u, detail: swimDetail(pc, 'easy', 'Z1') },
     ],
-    note: 'CSS pace per 100 m = (T400 − T200) ÷ 2 in a metres pool. Enter it in Update fitness; with a connected watch the app can work it out from your recorded laps.',
+    note: 'CSS pace per 100 ' + u + ' = (T400 − T200) ÷ 2. Enter it in Update fitness; with a connected watch the app can work it out from your recorded laps, whatever the pool.',
   };
 }
 
