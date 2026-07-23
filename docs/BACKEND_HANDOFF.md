@@ -332,3 +332,13 @@ eventually carry it so a fresh device keeps the athlete's pool. Absent or
 malformed, the client falls back to 25 m (the default that reproduces current
 output). It is display-and-construction only: CSS stays canonical in seconds
 per 100 m and the pool never changes it.
+
+## Ask - 23 July 2026: recorded pool length on the activity DTO
+
+For swim build-out phase 2b, the review can flag when a recorded swim looks
+like it was done in a different pool than the athlete's setting (so the
+distance-derived pace is not trusted blindly). That needs the recorded pool
+length on the activity DTO, e.g. `poolLengthM` (metres) from intervals.icu's
+`pool_length`. The client already reads `a.poolLengthM` defensively: absent, it
+is a silent no-op; present and mismatched, it lowers review confidence and
+never silently reinterprets the distance. Additive, no closed set involved.

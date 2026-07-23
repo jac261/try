@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toMetres, fromMetres, poolLengthM, poolLengths, roundToPoolLength, unitShort, poolDisplay, poolLabel, pacePer100ForDisplay, css100mFromDisplay } from './swim-units.js';
+import { toMetres, fromMetres, poolLengthM, poolLengths, roundToPoolLength, unitShort, poolDisplay, poolLabel, pacePer100ForDisplay, css100mFromDisplay, swimPaceLabel } from './swim-units.js';
 
 /* Phase 2 pool maths. The load-bearing property is that for a 25 m or 50 m
    pool every helper is the identity on the current output (all distances are
@@ -69,5 +69,13 @@ describe('CSS display / storage round-trip', () => {
     [90, 110, 130].forEach(css => {
       expect(css100mFromDisplay(pacePer100ForDisplay(css, Y25), Y25)).toBeCloseTo(css, 6);
     });
+  });
+});
+
+describe('swimPaceLabel (the one shared display helper)', () => {
+  it('renders per-100-pool-unit, identity for metres', () => {
+    expect(swimPaceLabel(120, { length: 25, unit: 'metres' })).toBe('2:00 /100m');
+    expect(swimPaceLabel(120, { length: 25, unit: 'yards' })).toBe('1:50 /100yd'); // 120 * 0.9144 = 109.7 -> 1:50
+    expect(swimPaceLabel(120, { length: 50, unit: 'metres' })).toBe('2:00 /100m');
   });
 });

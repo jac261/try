@@ -14,7 +14,8 @@
 import { daysBetween } from './date.js';
 import { fmtPace } from './units.js';
 import { DISCIPLINE } from './autolog.js';
-import { RACES } from './domain.js';
+import { RACES, DEFAULT_POOL } from './domain.js';
+import { swimPaceLabel } from './swim-units.js';
 
 export const EFTP_RULES = { minDriftPct: 0.03, freshDays: 10 };
 
@@ -80,6 +81,7 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
   // intervals.icu swim sport setting, a stray ride). Gate each branch by the
   // sport it would retarget. Tracker and triathlon plans are never solo.
   const solo = (RACES[plan && plan.race] || {}).solo || null;
+  const swimPool = (pc && pc.pool) || DEFAULT_POOL;
   const trains = sport => !solo || solo === sport;
 
   // Swim, from the athlete's own recorded CSS test (cssTest.test is a
@@ -97,7 +99,7 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
         // Quote the RECORDED distances, not nominal 400/200: a yard-pool
         // test records 366 m and 183 m, and the banner must not dress those
         // up as metric splits.
-        why: 'Your CSS test worked out at ' + fmtPace(meas) + ' /100m (' + cssTest.test.d400 + ' m in ' + fmtPace(cssTest.test.t400Sec) + ', ' + cssTest.test.d200 + ' m in ' + fmtPace(cssTest.test.t200Sec) + '); the plan trains to ' + fmtPace(pc.swim.css) + ' /100m.',
+        why: 'Your CSS test worked out at ' + swimPaceLabel(meas, swimPool) + ' (' + cssTest.test.d400 + ' m in ' + fmtPace(cssTest.test.t400Sec) + ', ' + cssTest.test.d200 + ' m in ' + fmtPace(cssTest.test.t200Sec) + '); the plan trains to ' + swimPaceLabel(pc.swim.css, swimPool) + '.',
         retarget: { css100Sec: meas },
       };
     }
@@ -152,7 +154,7 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
         candidates.push({
           kind: 'eftp', sport: 'swim', drift: Math.abs(drift), up: drift > 0,
           headline: drift > 0 ? 'Your swim fitness has moved up' : 'Your swim paces may be set too hot',
-          why: 'Your CSS is now set at ' + fmtPace(icuSec) + ' /100m; the plan trains to ' + fmtPace(planSec) + ' /100m.',
+          why: 'Your CSS is now set at ' + swimPaceLabel(icuSec, swimPool) + '; the plan trains to ' + swimPaceLabel(planSec, swimPool) + '.',
           retarget: { css100Sec: Math.round(icuSec) },
         });
       }

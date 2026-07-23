@@ -110,7 +110,7 @@ export function watchSteps(w) {
 function swimWatchSteps(w) {
   const segs = w.segments || [];
   if (!segs.length || !segs.every(s => s.swim)) return null;
-  const km = m => m / 1000 + 'km';
+  const km = m => Math.round(m) / 1000 + 'km'; // whole metres: a yard rep reads 0.091km, not 0.09144km
   const sections = segs.map((s, i) => {
     const sw = s.swim;
     const label = (s.label || '').toLowerCase();

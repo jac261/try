@@ -88,3 +88,16 @@ describe('fitness watcher v2 (run and swim thresholds)', () => {
     expect(r.retarget).toEqual({ ftp: 265 });
   });
 });
+
+describe('eFTP swim retarget banner is pool-aware (phase 2b)', () => {
+  const swimPlan = pool => ({ race: 'olympic', profile: { raceType: 'olympic', pool }, paces: { swim: { css: 120 }, pool } });
+  it('a yard-pool athlete sees the retarget banner in /100yd, never /100m', () => {
+    // configured swim threshold that drifts from the plan's CSS
+    const thresholds = { swimThresholdPace: 100 / 132 }; // 1.32 m/s -> ~132 s/100m icu
+    const yd = eftpProposal({ activities: [], thresholds, plan: swimPlan({ length: 25, unit: 'yards' }), todayISO: '2026-07-06' });
+    const m = eftpProposal({ activities: [], thresholds, plan: swimPlan({ length: 25, unit: 'metres' }), todayISO: '2026-07-06' });
+    if (yd) { expect(yd.why).toContain('/100yd'); expect(yd.why).not.toContain('/100m'); }
+    if (m) { expect(m.why).toContain('/100m'); }
+  });
+});
+

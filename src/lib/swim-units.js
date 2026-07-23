@@ -1,3 +1,4 @@
+import { fmtPace } from './units.js';
 /* Try — swim pool-unit maths (swim build-out phase 2, 2026-07-22).
  *
  * The physiological truth is canonical and never moves: distance in metres,
@@ -76,4 +77,12 @@ export function pacePer100ForDisplay(css100mSec, pool) {
  */
 export function css100mFromDisplay(displaySec, pool) {
   return pool.unit === 'yards' ? displaySec / YARD_M : displaySec;
+}
+
+/** A swim pace string in the athlete's pool unit: '1:50 /100yd', '1:45 /100m'.
+ *  The one place every surface (review, recap, settings, detail, progress)
+ *  turns a canonical per-100-m pace into what the athlete reads, so a yard
+ *  athlete never sees two different numbers on two different screens. */
+export function swimPaceLabel(sec100m, pool) {
+  return fmtPace(pacePer100ForDisplay(sec100m, pool)) + ' /100' + unitShort(pool);
 }

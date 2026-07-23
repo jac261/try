@@ -2,6 +2,7 @@ import { useState } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { useSheetFocus } from '@/utils/useSheetFocus.js';
+import { PoolControl } from '@/components/PoolControl.jsx';
 
 export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
   const lvl0 = T.FITNESS[profile.fitness] ? profile.fitness : 'intermediate';
@@ -55,16 +56,9 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
           <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>
         <label className="field"><span className="lab">Swim pace per 100 {f.pool.unit === 'yards' ? 'yd' : 'm'} <span className="hint">optional · mm:ss</span></span>
           <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.pacePer100ForDisplay(T.FITNESS[f.fitness].estCss, f.pool))} onChange={e => set('css100', e.target.value)} /></label>
-        {/* The pool changes how swim work is written (lengths and unit), never
-            your CSS: a temporary pool swap needs no new test. Custom lengths
-            arrive with the fuller settings UX. */}
         <label className="field" style={{ marginBottom: 4 }}><span className="lab">Pool <span className="hint">changes swim distances and display, not your fitness</span></span></label>
-        <div className="choice">
-          {T.POOL_PROFILES.map(r => (
-            <div key={r.key} className={'opt' + (f.pool.length === r.length && f.pool.unit === r.unit ? ' on' : '')}
-              {...tap(() => pickPool({ length: r.length, unit: r.unit }))}>{r.length} {r.unit === 'yards' ? 'yd' : 'm'}</div>
-          ))}
-        </div>
+        <PoolControl pool={f.pool} onChange={pickPool} />
+        <p className="lead" style={{ fontSize: 13, marginTop: 4 }}>Your CSS stays the same whatever the pool, so a temporary change (a holiday pool, a different lane) needs no new test.</p>
         {/* Placeholder only, exactly like the run and swim estimates above:
             pre-filling the level estimate into the field would let a guess
             become a saved, untilded FTP on a single tap (design panel

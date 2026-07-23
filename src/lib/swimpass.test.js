@@ -846,3 +846,33 @@ describe('Phase 2a gauntlet fixes', () => {
   });
 });
 
+describe('Phase 2b: the CSS test rounds to whole lengths on any pool', () => {
+  const base = {
+    name: 'C', raceType: 'olympic', fitness: 'intermediate', fivekSec: 1200,
+    css100Sec: 150, ftp: 320, weightKg: 75, daysPerWeek: 6,
+    trainingDays: [0, 1, 2, 3, 5, 6], longDay: 5, startDate: '2026-06-01', raceDate: '2026-09-27',
+  };
+  const cssTest = pool => generatePlan({ ...base, pool }).weeks.flatMap(w => w.workouts).find(x => x.test && x.testKind === 'swimCss');
+
+  it('presets keep the 400/200 protocol (byte-identical)', () => {
+    [null, { length: 50, unit: 'metres' }, { length: 25, unit: 'yards' }].forEach(pool => {
+      const t = cssTest(pool);
+      if (t) {
+        const u = pool && pool.unit === 'yards' ? 'yd' : 'm';
+        expect(t.segments.some(sg => sg.label === '400 ' + u + ' time trial — all out')).toBe(true);
+        expect(t.note).toMatch(/÷ 2\b/);
+      }
+    });
+  });
+
+  it('a custom non-divisor pool rounds the test to whole lengths with an exact divisor', () => {
+    const t = cssTest({ length: 33, unit: 'metres' });
+    if (t) {
+      // 400 -> 12 lengths -> 396; 200 -> 6 -> 198; every distance a multiple of 33
+      const nums = (t.segments.map(sg => sg.label).join(' ').match(/\d+/g) || []).map(Number).filter(n => n > 50);
+      nums.forEach(n => expect(n % 33).toBe(0));
+      expect(t.note).toMatch(/T396 − T198.*÷ 1\.98/);
+    }
+  });
+});
+

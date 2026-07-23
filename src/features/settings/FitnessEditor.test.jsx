@@ -99,3 +99,27 @@ describe('FitnessEditor pool control', () => {
   });
 });
 
+describe('FitnessEditor custom pool length (phase 2b)', () => {
+  it('the Custom option reveals a length input and saves a custom pool', async () => {
+    const m = await mount({ ...base, pool: { length: 25, unit: 'metres' } });
+    expect(m.click('Custom')).toBe(true);
+    const lenInput = [...m.el.querySelectorAll('input')].find(i => i.placeholder === 'e.g. 33');
+    expect(lenInput).toBeTruthy();
+    act(() => { const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(lenInput, '33'); lenInput.dispatchEvent(new Event('input', { bubbles: true })); });
+    m.click('Save');
+    expect(m.saved.pool).toEqual({ length: 33, unit: 'metres' });
+    m.cleanup();
+  });
+
+  it('an out-of-range custom length never saves a partial (falls back)', async () => {
+    const m = await mount({ ...base, pool: { length: 25, unit: 'metres' } });
+    m.click('Custom');
+    const lenInput = [...m.el.querySelectorAll('input')].find(i => i.placeholder === 'e.g. 33');
+    act(() => { const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(lenInput, '5'); lenInput.dispatchEvent(new Event('input', { bubbles: true })); });
+    m.click('Save');
+    // 5 is below the 10-100 range, so the pool stays the last valid one, never {length:5}
+    expect(m.saved.pool.length).not.toBe(5);
+    m.cleanup();
+  });
+});
+

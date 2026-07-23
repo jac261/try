@@ -142,3 +142,26 @@ describe('buildWatchEvents v2 integration', () => {
     expect(owEv.movingTimeSec).toBe(40 * 60);
   });
 });
+
+describe('watch swim steps round the distance (phase 2b)', () => {
+  it('a yard-pool swim exports whole-metre km, never a long decimal', () => {
+    const p = generatePlan({
+      name: 'W', raceType: 'olympic', fitness: 'intermediate', fivekSec: 1200,
+      css100Sec: 150, ftp: 320, weightKg: 75, daysPerWeek: 6,
+      trainingDays: [0, 1, 2, 3, 5, 6], longDay: 5, startDate: '2026-06-01', raceDate: '2026-09-27',
+      pool: { length: 25, unit: 'yards' },
+    });
+    const swim = p.weeks.flatMap(w => w.workouts).find(x => x.discipline === 'swim' && x.segments.every(s => s.swim));
+    expect(swim).toBeTruthy();
+    const r = watchSteps(swim);
+    const dsl = r ? r.dsl : '';
+    const tokens = dsl.match(/[\d.]+km/g) || [];
+    expect(tokens.length).toBeGreaterThan(0); // it really is a distance-stepped swim
+    // km values are at most 3 decimals (whole metres / 1000), no 0.09144 tails
+    tokens.forEach(tok => {
+      const dec = (tok.replace('km', '').split('.')[1] || '');
+      expect(dec.length).toBeLessThanOrEqual(3);
+    });
+  });
+});
+

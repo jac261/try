@@ -99,3 +99,39 @@ describe('intervalRows (the rep table)', () => {
     expect(intervalRows({ workout: w, intervals: null, paces })).toBe(null);
   });
 });
+
+describe('swim review is pool-aware (phase 2b)', () => {
+  const sw = { discipline: 'swim', type: 'Endurance' };
+  const swimAct = (over = {}) => ({ id: 's1', date: '2026-07-11', movingTimeSec: 1800, distance: 1500, ...over });
+  const pcM = { ...paces, pool: { length: 25, unit: 'metres' } };
+  const pcY = { ...paces, pool: { length: 25, unit: 'yards' } };
+  const text = rv => (rv.stats || []).map(x => x[1]).concat((rv.verdicts || []).map(v => v.text)).join(' | ');
+
+  it('a metre pool reads /100m (byte-identical to no pool)', () => {
+    const withPool = text(reviewActivity({ workout: sw, activity: swimAct(), paces: pcM }));
+    const noPool = text(reviewActivity({ workout: sw, activity: swimAct(), paces }));
+    expect(withPool).toContain('/100m');
+    expect(withPool).not.toContain('/100yd');
+    expect(withPool).toBe(noPool);
+  });
+
+  it('a yard pool reads /100yd everywhere and never /100m', () => {
+    const t = text(reviewActivity({ workout: sw, activity: swimAct(), paces: pcY }));
+    expect(t).toContain('/100yd');
+    expect(t).not.toContain('/100m');
+  });
+
+  it('defensive §6: a recording in a mismatching pool lowers confidence and does not give a pace verdict', () => {
+    // a 25 yd recording (22.86 m) against a 25 m setting: distances disagree
+    const rv = reviewActivity({ workout: sw, activity: swimAct({ poolLengthM: 22.86 }), paces: pcM });
+    const t = text(rv);
+    expect(t).toMatch(/different|pool/i);
+    expect(rv.verdicts.some(v => /strong swimming|On target|Averaged .* guide/.test(v.text))).toBe(false);
+  });
+
+  it('no recorded pool length today: unchanged, a normal pace verdict', () => {
+    const rv = reviewActivity({ workout: sw, activity: swimAct(), paces: pcM });
+    expect(rv.verdicts.some(v => /\/100m/.test(v.text))).toBe(true); // real pace verdict, no mismatch path
+  });
+});
+

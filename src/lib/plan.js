@@ -1083,18 +1083,26 @@ function buildTest(kind, pc) {
       note: 'FTP ≈ 95% of your 20-min average power. Enter it in Update fitness.',
     };
   }
-  // swimCss
-  const u = unitShort(pc.pool || DEFAULT_POOL);
+  // swimCss. The test distances round to whole pool lengths (400/200 in the
+  // pool's own unit; a custom 33 m pool gets 396/198), so no time trial ends
+  // mid-length, and the manual divisor is derived from the actual distances so
+  // it stays exact on any pool. Byte-identical on 25/50 m and 25 yd (all divide
+  // 400/200). CSS is normalised from the recorded laps on the watch path.
+  const P = pc.pool || DEFAULT_POOL;
+  const u = unitShort(P);
+  const rnd = d => Math.max(P.length, Math.round(d / P.length) * P.length);
+  const d1 = rnd(400), d2 = rnd(200);
+  const div = Math.round((d1 - d2) / 100 * 100) / 100;
   return {
     title: 'Fitness Test · Swim CSS', durationMin: 45, distance: 1.4, unit: 'km',
     segments: [
-      { label: 'Warm-up 400 ' + u, detail: swimDetail(pc, 'easy', 'Z2') },
-      { label: '400 ' + u + ' time trial — all out', detail: 'Note your time (T400).' },
-      { label: 'Easy 200 ' + u, detail: 'Recover fully.' },
-      { label: '200 ' + u + ' time trial — all out', detail: 'Note your time (T200).' },
-      { label: 'Cool-down 200 ' + u, detail: swimDetail(pc, 'easy', 'Z1') },
+      { label: 'Warm-up ' + d1 + ' ' + u, detail: swimDetail(pc, 'easy', 'Z2') },
+      { label: d1 + ' ' + u + ' time trial — all out', detail: 'Note your time (T' + d1 + ').' },
+      { label: 'Easy ' + d2 + ' ' + u, detail: 'Recover fully.' },
+      { label: d2 + ' ' + u + ' time trial — all out', detail: 'Note your time (T' + d2 + ').' },
+      { label: 'Cool-down ' + d2 + ' ' + u, detail: swimDetail(pc, 'easy', 'Z1') },
     ],
-    note: 'CSS pace per 100 ' + u + ' = (T400 − T200) ÷ 2. Enter it in Update fitness; with a connected watch the app can work it out from your recorded laps, whatever the pool.',
+    note: 'CSS pace per 100 ' + u + ' = (T' + d1 + ' − T' + d2 + ') ÷ ' + div + '. Enter it in Update fitness; with a connected watch the app can work it out from your recorded laps, whatever the pool.',
   };
 }
 

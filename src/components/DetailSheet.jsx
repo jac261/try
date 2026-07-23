@@ -183,7 +183,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
                           <div className="d">
                             {T.fmtDuration(Math.round(r.timeSec / 60) || 1)}
                             {r.distance ? ' · ' + (r.distance / 1000).toFixed(2) + ' km' : ''}
-                            {r.paceSec ? ' · ' + T.fmtPace(r.paceSec) + (w.discipline === 'swim' ? ' /100m' : ' /km') : ''}
+                            {r.paceSec ? ' · ' + (w.discipline === 'swim' ? T.swimPaceLabel(r.paceSec, (plan.paces && plan.paces.pool) || T.DEFAULT_POOL) : T.fmtPace(r.paceSec) + ' /km') : ''}
                             {r.watts != null ? ' · ' + r.watts + ' W' : ''}
                             {r.hr != null ? ' · ' + r.hr + ' bpm' : ''}
                           </div></div>

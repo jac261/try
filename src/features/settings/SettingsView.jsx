@@ -188,7 +188,7 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
           const solo = !tracker && (T.RACES[p.raceType] || {}).solo;
           return <div className="statline">
             <div className="s"><b>{p.fivekSec ? T.fmtPace(p.fivekSec / 5) : '~' + T.fmtPace((T.FITNESS[p.fitness] || T.FITNESS.intermediate).est5k / 5)}</b><span>{p.fivekSec ? '5k pace/km' : '5k pace · est'}</span></div>
-            {!solo && <div className="s"><b>{p.css100Sec ? T.fmtPace(p.css100Sec) : '~' + T.fmtPace((T.FITNESS[p.fitness] || T.FITNESS.intermediate).estCss)}</b><span>{p.css100Sec ? 'swim /100m' : 'swim · est'}</span></div>}
+            {!solo && (() => { const pool = T.poolFor(p); const u = pool.unit === 'yards' ? 'yd' : 'm'; return <div className="s"><b>{p.css100Sec ? T.fmtPace(T.pacePer100ForDisplay(p.css100Sec, pool)) : '~' + T.fmtPace(T.pacePer100ForDisplay((T.FITNESS[p.fitness] || T.FITNESS.intermediate).estCss, pool))}</b><span>{p.css100Sec ? 'swim /100' + u : 'swim · est'}</span></div>; })()}
             {!solo && <div className="s"><b>{p.ftp || 'RPE'}</b><span>{p.ftp ? 'FTP watts' : 'bike by feel'}</span></div>}
             {solo && T.saneWeightKg(p.weightKg) ? <div className="s"><b>{T.saneWeightKg(p.weightKg)}</b><span>kg</span></div> : null}
           </div>;

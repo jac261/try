@@ -4,6 +4,7 @@ import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { DaySelector } from '@/components/DaySelector.jsx';
+import { PoolControl } from '@/components/PoolControl.jsx';
 
 // Best display name from the signed-in Clerk profile, or '' if none is set.
 function clerkDisplayName(user) {
@@ -17,7 +18,7 @@ export function Onboarding({ onCreate }) {
   // Pre-fill the name from the Clerk login (the app only renders this when signed in).
   const [f, setF] = useState(() => ({
     name: clerkDisplayName(user), raceType: 'olympic', fitness: 'intermediate', trainingDays: [0, 1, 3, 5, 6], longDay: 5,
-    raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '', css100: '', ftp: '', weightKg: '', excludedDiscipline: null,
+    raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '', css100: '', ftp: '', weightKg: '', excludedDiscipline: null, pool: T.DEFAULT_POOL,
   }));
   // If Clerk loads the profile a beat later, fill the name once — never over typed input.
   useEffect(() => {
@@ -25,6 +26,11 @@ export function Onboarding({ onCreate }) {
     if (name) setF(s => (s.name ? s : { ...s, name }));
   }, [user]);
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
+  const pickPool = np => setF(s => {
+    const cur = T.parseTimeToSec(s.css100);
+    const css100 = cur != null ? T.fmtPace(T.pacePer100ForDisplay(T.css100mFromDisplay(cur, s.pool), np)) : s.css100;
+    return { ...s, pool: np, css100 };
+  });
   const solo = (T.RACES[f.raceType] || {}).solo || null;
 
   // How the chosen date sits against the race's recommended build window.
@@ -51,7 +57,8 @@ export function Onboarding({ onCreate }) {
       // but a value typed BEFORE selecting the exclusion would still be in
       // state (gauntlet catch: type a 5k time, go back, exclude running)
       fivekSec: f.excludedDiscipline === 'run' ? null : T.parseTimeToSec(f.fivek),
-      css100Sec: f.excludedDiscipline === 'swim' ? null : T.parseTimeToSec(f.css100),
+      css100Sec: f.excludedDiscipline === 'swim' ? null : (() => { const d = T.parseTimeToSec(f.css100); return d != null ? Math.round(T.css100mFromDisplay(d, f.pool)) : null; })(),
+      pool: f.pool,
       ftp: f.ftp ? Number(f.ftp) : null, weightKg: f.weightKg ? Number(f.weightKg) : null,
       startDate: T.iso(new Date()),
       // A solo race cannot exclude its only discipline; cleared here as well
@@ -158,8 +165,12 @@ export function Onboarding({ onCreate }) {
           {f.excludedDiscipline !== 'run' && <label className="field"><span className="lab">Recent 5 km run time <span className="hint">optional · mm:ss</span></span>
             <input value={f.fivek} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].est5k)} onChange={e => set('fivek', e.target.value)} /></label>}
           {f.excludedDiscipline === 'run' && <p className="lead" style={{ fontSize: 13 }}>Running is out of your plan for now, so we will not ask for a run time.</p>}
-          {!solo && f.excludedDiscipline !== 'swim' && <label className="field"><span className="lab">Swim pace per 100 m <span className="hint">optional · mm:ss</span></span>
-            <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.FITNESS[f.fitness].estCss)} onChange={e => set('css100', e.target.value)} /></label>}
+          {!solo && f.excludedDiscipline !== 'swim' && <>
+            <label className="field"><span className="lab">Swim pace per 100 {f.pool.unit === 'yards' ? 'yd' : 'm'} <span className="hint">optional · mm:ss</span></span>
+              <input value={f.css100} placeholder={'e.g. ' + T.fmtPace(T.pacePer100ForDisplay(T.FITNESS[f.fitness].estCss, f.pool))} onChange={e => set('css100', e.target.value)} /></label>
+            <label className="field" style={{ marginBottom: 4 }}><span className="lab">Pool <span className="hint">changes swim distances and display, not your fitness</span></span></label>
+            <PoolControl pool={f.pool} onChange={pickPool} />
+          </>}
           {f.excludedDiscipline === 'swim' && <p className="lead" style={{ fontSize: 13 }}>Swimming is out of your plan for now, so we will not ask for a swim pace.</p>}
           {!solo && <label className="field"><span className="lab">Cycling FTP <span className="hint">optional · watts</span></span>
             <input value={f.ftp} placeholder={'e.g. ' + (T.saneWeightKg(f.weightKg) ? Math.round(T.FITNESS[f.fitness].estWkg * T.saneWeightKg(f.weightKg)) : 200)}

@@ -50,9 +50,10 @@ export function ProgressView({ plan, log, activities, coach, durability, fuelLog
   // run plus one stale triathlon baseline would render it). Numbers stay on
   // the profile and return on the next tri plan.
   const solo = (T.RACES[plan.race] || {}).solo || null;
+  const swimPool = T.poolFor(plan.profile);
   const METRICS = [
     { key: 'run', label: 'Run · 5k pace', fmt: v => T.fmtPace(v / 5) + ' /km', div: 5, color: D.run.color, betterDown: true },
-    { key: 'swim', label: 'Swim · CSS', fmt: v => T.fmtPace(v) + ' /100m', div: 1, color: D.swim.color, betterDown: true },
+    { key: 'swim', label: 'Swim · CSS', fmt: v => T.swimPaceLabel(v, swimPool), div: 1, color: D.swim.color, betterDown: true },
     { key: 'bike', label: 'Bike · FTP', fmt: v => v + ' W', color: D.bike.color, betterDown: false },
   ];
   const trends = METRICS.filter(m => !solo || m.key === solo).map(m => {

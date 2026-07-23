@@ -6,6 +6,8 @@
  * for tomorrow (decisions over dashboards, even in confetti form).
  */
 import { fmtPace } from './units.js';
+import { swimPaceLabel } from './swim-units.js';
+import { DEFAULT_POOL } from './domain.js';
 import { effDate } from './schedule.js';
 import { reviewActivity, intervalRows } from './review.js';
 
@@ -55,7 +57,7 @@ export function buildRecap({ workout, activity, intervals, route, paces, plan, l
       kind: 'splits', title: it.judged ? 'The reps' : 'The splits', big: it.summary,
       rows: it.rows.map(r => ({
         label: r.label || '#' + r.n,
-        value: r.paceSec ? fmtPace(r.paceSec) + (workout.discipline === 'swim' ? ' /100m' : ' /km')
+        value: r.paceSec ? (workout.discipline === 'swim' ? swimPaceLabel(r.paceSec, (paces && paces.pool) || DEFAULT_POOL) : fmtPace(r.paceSec) + ' /km')
           : r.watts != null ? r.watts + ' W' : fmtMin(r.timeSec),
         tone: r.tone || null,
         // Bar length: relative effort within the set (pace inverted: faster = longer).

@@ -24,7 +24,7 @@ function statBits(a, disc) {
   if (a.distance) bits.push((a.distance / 1000).toFixed(a.distance >= 10000 ? 0 : 1) + ' km');
   if (a.movingTimeSec && a.distance && !indoor) {
     if (disc === 'run') bits.push(T.fmtPace(a.movingTimeSec / (a.distance / 1000)) + ' /km');
-    if (disc === 'swim') bits.push(T.fmtPace(a.movingTimeSec / (a.distance / 100)) + ' /100m');
+    if (disc === 'swim') bits.push(T.swimPaceLabel(a.movingTimeSec / (a.distance / 100), T.poolFor(plan && plan.profile)));
     if (disc === 'bike') bits.push((a.distance / 1000 / (a.movingTimeSec / 3600)).toFixed(1) + ' km/h');
   }
   if (a.averageWatts) bits.push(Math.round(a.averageWatts) + ' W avg');

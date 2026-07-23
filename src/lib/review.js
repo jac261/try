@@ -10,6 +10,8 @@
  * as the readiness model.
  */
 import { fmtPace } from './units.js';
+import { pacePer100ForDisplay, unitShort, poolLengthM, fromMetres, swimPaceLabel } from './swim-units.js';
+import { DEFAULT_POOL } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { isIndoor } from './autolog.js';
 
@@ -29,6 +31,16 @@ const secPer100 = a => a.movingTimeSec / (a.distance / 100);
 export function reviewActivity({ workout, activity, paces, log }) {
   if (!workout || !activity || !activity.movingTimeSec) return null;
   const w = workout, a = activity, pc = paces || {};
+  // Swim pace shows and compares per 100 of the athlete's pool unit; the
+  // comparison thresholds stay canonical per 100 m, only the display converts.
+  const pool = pc.pool || DEFAULT_POOL;
+  const swimPace = v => swimPaceLabel(v, pool);
+  // Phase 2b defensive (§6): if a recording ever carries its own pool length
+  // (a backend field not passed today) and it disagrees with the athlete's
+  // setting, the distance-derived pace is uncertain. No such field exists yet,
+  // so this is a silent no-op until the backend adds it; it never reinterprets.
+  const recordedPoolM = a.poolLengthM || null;
+  const poolMismatch = recordedPoolM && Math.abs(recordedPoolM - poolLengthM(pool)) > 0.5;
   const stats = [];
   const verdicts = [];
   const actualMin = a.movingTimeSec / 60;
@@ -40,7 +52,7 @@ export function reviewActivity({ workout, activity, paces, log }) {
   // review sits one screen deeper and must agree (gauntlet catch 2026-07-18).
   const derived = a.distance && !isIndoor(a);
   if (derived && w.discipline === 'run') stats.push(['Avg pace', fmtPace(secPerKm(a)) + ' /km']);
-  if (derived && w.discipline === 'swim') stats.push(['Avg pace', fmtPace(secPer100(a)) + ' /100m']);
+  if (derived && w.discipline === 'swim') stats.push(['Avg pace', swimPace(secPer100(a))]);
   if (derived && w.discipline === 'bike') stats.push(['Avg speed', (a.distance / 1000 / (a.movingTimeSec / 3600)).toFixed(1) + ' km/h']);
   if (a.averageWatts) stats.push(['Avg power', Math.round(a.averageWatts) + ' W']);
   if (a.averageHeartrate) stats.push(['Avg HR', Math.round(a.averageHeartrate) + ' bpm']);
@@ -66,9 +78,10 @@ export function reviewActivity({ workout, activity, paces, log }) {
     }
     if (w.discipline === 'swim' && pc.swim[steadyKey]) {
       const actual = secPer100(a), target = pc.swim[steadyKey];
-      if (actual < target - 5) verdicts.push({ tone: 'good', text: 'Averaged ' + fmtPace(actual) + ' /100m, quicker than the ' + fmtPace(target) + ' /100m guide — strong swimming.' });
-      else if (actual > target + 8) verdicts.push({ tone: 'info', text: 'Averaged ' + fmtPace(actual) + ' /100m against a ' + fmtPace(target) + ' /100m guide. Open water, drills or a busy lane can all explain it.' });
-      else verdicts.push({ tone: 'good', text: 'On target: ' + fmtPace(actual) + ' /100m against ' + fmtPace(target) + ' /100m.' });
+      if (poolMismatch) verdicts.push({ tone: 'info', text: 'This looks recorded in a ' + Math.round(fromMetres(recordedPoolM, pool.unit)) + ' ' + unitShort(pool) + ' pool, not your ' + pool.length + ' ' + unitShort(pool) + ' setting, so the pace read may be off. Update your pool if that is your usual one.' });
+      else if (actual < target - 5) verdicts.push({ tone: 'good', text: 'Averaged ' + swimPace(actual) + ', quicker than the ' + swimPace(target) + ' guide — strong swimming.' });
+      else if (actual > target + 8) verdicts.push({ tone: 'info', text: 'Averaged ' + swimPace(actual) + ' against a ' + swimPace(target) + ' guide. Open water, drills or a busy lane can all explain it.' });
+      else verdicts.push({ tone: 'good', text: 'On target: ' + swimPace(actual) + ' against ' + swimPace(target) + '.' });
     }
   }
 
