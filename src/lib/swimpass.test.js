@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { generatePlan, swapForLimiter, detectLimiterSwap, addCustomWorkout, easeWorkout, boostWorkout, trimWorkout, upgradePlanSegments, segMinutes } from './plan.js';
 import { cssFromTestIntervals, cssTestActivityFor, eftpProposal } from './eftp.js';
 import { intervalRows } from './review.js';
+import { SWIM_TYPES, isSwimWorkout, swimWorkoutIssues, isTrainingSwim } from './swimschema.js';
 import { toClientState } from './api.js';
 
 /* The swim pass (2026-07-18): the limiter frequency swap can now grant a
@@ -678,5 +679,62 @@ describe('role survives the wire (the drill-divergence guarantee depends on it)'
       const lists = swims.map(x => JSON.stringify(x.segments));
       expect(new Set(lists).size, 'week ' + w.index).toBe(lists.length);
     });
+  });
+});
+
+
+describe('Phase 1: the swim generation matrix conforms and is covered', () => {
+  // Swim-limited so the frequency swap grants a Long and swim volume is high;
+  // spread across levels so the intensity ladder surfaces every rung.
+  const base = {
+    fivekSec: 1200, css100Sec: 150, ftp: 320, weightKg: 75,
+    trainingDays: [0, 1, 2, 3, 5, 6], longDay: 5, daysPerWeek: 6,
+    startDate: '2026-06-01', raceDate: '2026-09-27',
+  };
+  const LEVELS = ['beginner', 'intermediate', 'advanced', 'elite'];
+  const plans = [];
+  LEVELS.forEach(fitness => {
+    plans.push(generatePlan({ ...base, name: 'M', raceType: 'olympic', fitness }));
+    plans.push(generatePlan({ ...base, name: 'M', raceType: 'maintenance', horizonWeeks: 12, fitness }));
+  });
+
+  const swims = plans.flatMap(p => p.weeks.flatMap(w => w.workouts.map(x => ({ x, phase: w.phase, rec: w.isRecovery, plan: p }))))
+    .filter(e => isTrainingSwim(e.x));
+
+  it('every generated swim training session across levels, phases and roles conforms to the schema', () => {
+    expect(swims.length).toBeGreaterThan(50);
+    const bad = swims.map(e => ({ e, issues: swimWorkoutIssues(e.x) })).filter(r => r.issues.length);
+    expect(bad.map(r => r.e.x.type + ':' + r.issues.join(','))).toEqual([]);
+  });
+
+  it('the sweep actually exercises every swim type, every phase, and all three roles (not vacuous)', () => {
+    const typesSeen = new Set(swims.map(e => e.x.type));
+    const phasesSeen = new Set(swims.map(e => e.phase));
+    const rolesSeen = new Set(swims.map(e => e.x.role));
+    SWIM_TYPES.forEach(t => expect(typesSeen.has(t), 'type ' + t + ' never generated').toBe(true));
+    ['Base', 'Build', 'Peak', 'Taper', 'Maintain'].forEach(ph => expect(phasesSeen.has(ph), 'phase ' + ph + ' unseen').toBe(true));
+    ['easy', 'quality', 'long'].forEach(r => expect(rolesSeen.has(r), 'role ' + r + ' unseen').toBe(true));
+  });
+
+  it('holds the core weekly invariants at scale', () => {
+    // no Long swim exceeds the 90-minute cap
+    swims.filter(e => e.x.type === 'Long').forEach(e => expect(e.x.durationMin).toBeLessThanOrEqual(90));
+    // a Long swim only ever appears on a plan whose limiter swap granted swim
+    swims.filter(e => e.x.type === 'Long').forEach(e =>
+      expect(e.plan.limiterSwap && e.plan.limiterSwap.weakest).toBe('swim'));
+    // the Peak easy swim keeps its technique work; non-easy Peak swims are Open Water
+    swims.filter(e => e.phase === 'Peak' && !e.rec).forEach(e =>
+      expect(e.x.role === 'easy' ? e.x.type === 'Technique' : e.x.type === 'Open Water').toBe(true));
+    // two swims in any week are never byte-identical (type + duration)
+    plans.forEach(p => p.weeks.forEach(w => {
+      const sw = w.workouts.filter(isTrainingSwim).map(x => x.type + '|' + x.durationMin);
+      expect(new Set(sw).size).toBe(sw.length);
+    }));
+  });
+
+  it('swim retargeting stays disabled on a solo run plan (no swim plan to retarget)', () => {
+    const solo = generatePlan({ ...base, name: 'R', raceType: 'runmarathon', fitness: 'intermediate' });
+    // a live intervals.icu swim threshold must propose nothing on a run-only plan
+    expect(eftpProposal({ activities: [], thresholds: { swimThresholdPace: 1.4 }, plan: solo, todayISO: '2026-07-01' })).toBe(null);
   });
 });
