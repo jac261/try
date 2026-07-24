@@ -898,5 +898,17 @@ describe('Phase 3: cool-downs move to the Recovery zone', () => {
     });
     expect(checked).toBeGreaterThan(5);
   });
+
+  it('the CSS test cool-down is Recovery too, not the faster warm-up pace', () => {
+    // the fitness-test swim lives in a separate builder; its cool-down must
+    // follow the same Recovery rule so no cool-down in the app is an outlier
+    const test = p.weeks.flatMap(w => w.workouts).find(x => x.test && x.testKind === 'swimCss');
+    if (test) {
+      const pace = d => Number((String(d).match(/(\d+):(\d\d) \/100/) || []).slice(1).reduce((a, b, i) => i ? a + Number(b) : Number(b) * 60, 0));
+      const wu = test.segments.find(g => /Warm-up/.test(g.label));
+      const cd = test.segments.find(g => /Cool-down/.test(g.label));
+      expect(pace(cd.detail)).toBeGreaterThan(pace(wu.detail));
+    }
+  });
 });
 

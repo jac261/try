@@ -1104,7 +1104,7 @@ function buildTest(kind, pc) {
       { label: d1 + ' ' + u + ' time trial — all out', detail: 'Note your time (T' + d1 + ').' },
       { label: 'Easy ' + d2 + ' ' + u, detail: 'Recover fully.' },
       { label: d2 + ' ' + u + ' time trial — all out', detail: 'Note your time (T' + d2 + ').' },
-      { label: 'Cool-down ' + d2 + ' ' + u, detail: swimDetail(pc, 'easy', 'Z1') },
+      { label: 'Cool-down ' + d2 + ' ' + u, detail: swimDetail(pc, 'recovery', 'Z1') },
     ],
     note: 'CSS pace per 100 ' + u + ' = (T' + d1 + ' − T' + d2 + ') ÷ ' + div + '. Enter it in Update fitness; with a connected watch the app can work it out from your recorded laps, whatever the pool.',
   };
