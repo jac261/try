@@ -876,3 +876,27 @@ describe('Phase 2b: the CSS test rounds to whole lengths on any pool', () => {
   });
 });
 
+describe('Phase 3: cool-downs move to the Recovery zone', () => {
+  const p = generatePlan({
+    name: 'Z', raceType: 'olympic', fitness: 'intermediate', fivekSec: 1200,
+    css100Sec: 150, ftp: 320, weightKg: 75, daysPerWeek: 6,
+    trainingDays: [0, 1, 2, 3, 5, 6], longDay: 5, startDate: '2026-06-01', raceDate: '2026-09-27',
+  });
+  const swims = p.weeks.flatMap(w => w.workouts).filter(isTrainingSwim);
+
+  it('the cool-down swims slower than the warm-up (Recovery +20 vs Technique +12)', () => {
+    let checked = 0;
+    swims.forEach(x => {
+      const wu = x.segments.find(g => /Warm-up/.test(g.label));
+      const cd = x.segments.find(g => /Cool-down/.test(g.label));
+      if (wu && cd) {
+        // pace shows in the detail; recovery is a bigger sec/100m than technique
+        const pace = d => Number((d.match(/(\d+):(\d\d) \/100/) || []).slice(1).reduce((a, b, i) => i ? a + Number(b) : Number(b) * 60, 0));
+        expect(pace(cd.detail)).toBeGreaterThan(pace(wu.detail));
+        checked++;
+      }
+    });
+    expect(checked).toBeGreaterThan(5);
+  });
+});
+

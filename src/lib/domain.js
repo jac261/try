@@ -99,6 +99,23 @@ export function poolFor(profile) {
   return sanePool(profile && profile.pool) || DEFAULT_POOL;
 }
 
+// The canonical swim threshold (swim build-out phase 3). css100Sec stays the
+// physiological number every consumer reads (seconds per 100 m); this records
+// WHERE it came from and how much to trust it, WITHOUT replacing the number,
+// so no reader changes. The test workflow (phase 3b) writes profile.cssMeta.
+export const CSS_SOURCES = ['manual', 'estimated', 'try-test', 'intervals-icu'];
+export const CSS_CONFIDENCE = ['low', 'medium', 'high'];
+export function swimThreshold(profile) {
+  const meta = (profile && profile.cssMeta) || {};
+  const css = (profile && profile.css100Sec) || null;
+  return {
+    cssSecondsPer100m: css,
+    source: CSS_SOURCES.includes(meta.source) ? meta.source : (css ? 'manual' : 'estimated'),
+    measuredAt: meta.measuredAt || null,
+    confidence: CSS_CONFIDENCE.includes(meta.confidence) ? meta.confidence : null,
+  };
+}
+
 // estWkg mirrors est5k/estCss for the bike, in watts per kilo. It matches the
 // weakest.js ladder so the two systems can never disagree about what a level
 // means. It is a WEAKER estimate than its run/swim siblings: profile.fitness

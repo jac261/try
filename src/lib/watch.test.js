@@ -106,9 +106,10 @@ describe('watchSteps (structured DSL, v2)', () => {
   it('swims prescribe distance steps at % of CSS with rest steps (v3)', () => {
     const { dsl, seconds } = watchSteps(custom('CSS Intervals', 40, 'swim'));
     expect(seconds).toBe(null); // duration is the athlete's threshold's business
-    expect(dsl).toContain('Warmup\n- 0.4km 91% Pace');   // easy = CSS+12 at estimated CSS 120 → 91% of CSS speed
+    expect(dsl).toContain('Warmup\n- 0.4km 91% Pace');   // technique = CSS+12 at estimated CSS 120 → 91% of CSS speed
     expect(dsl).toContain('x\n- 0.1km 100% Pace\n- 15s rest');
-    expect(dsl).toContain('Cooldown\n- 0.2km 91% Pace');
+    // phase 3: cool-down is the Recovery zone (CSS+20), slower than the warm-up
+    expect(dsl).toContain('Cooldown\n- 0.2km 86% Pace');
   });
 
   it('open water keeps its skills segment and falls back to descriptive', () => {

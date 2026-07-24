@@ -3,6 +3,7 @@ import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL } from './domain.js';
 import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
+import { swimZoneTargets } from './swim-zones.js';
 import { weakBias, weakestLink } from './weakest.js';
 import { RIEGEL_EXP } from './runstats.js';
 
@@ -44,7 +45,10 @@ function computePaces(profile) {
     // raw 5k pace, not an offset); plans stored before it existed simply fall
     // to effort wording via the null guard in racePaceKm.
     run: { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8, fivekPace: p },
-    swim: { easy: css + 12, steady: css + 6, css: css, fast: css - 6 },
+    // Swim zones are defined once in swim-zones.js; pc.swim carries every
+    // zone target keyed by id, plus the legacy easy/steady/fast aliases so the
+    // builders and review keep reading the same keys (byte-identical values).
+    swim: (() => { const z = swimZoneTargets(css); return { ...z, easy: z.technique, steady: z.aerobic, fast: z.above }; })(),
   };
 }
 
@@ -720,7 +724,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
   // trim/boost re-sizes inside the same format; only counts and metres flex.
   const perRep = (key, m, rest) => (rdm(m) / 100) * pc.swim[key] + rest;
   const wuSeg = m => ({ label: 'Warm-up ' + dl(m), detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', m) });
-  const cdSeg = m => ({ label: 'Cool-down ' + dl(m), detail: swimDetail(pc, 'easy', 'Z1'), ...swimBlock(pc, 'easy', 'Z1', m) });
+  const cdSeg = m => ({ label: 'Cool-down ' + dl(m), detail: swimDetail(pc, 'recovery', 'Z1'), ...swimBlock(pc, 'recovery', 'Z1', m) });
   let segs = [], title = 'Swim';
   if (type === 'Technique') {
     title = 'Technique Swim';
