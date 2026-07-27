@@ -4,7 +4,7 @@ import { tap } from '@/utils/a11y.js';
 import { useSheetFocus } from '@/utils/useSheetFocus.js';
 import { PoolControl } from '@/components/PoolControl.jsx';
 
-export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
+export function FitnessEditor({ profile, onClose, onSave, noPlan, solo, fromTest }) {
   const lvl0 = T.FITNESS[profile.fitness] ? profile.fitness : 'intermediate';
   // Closed only for an athlete who never set a goal: they never meet
   // weight-goal language. But a returning athlete WITH a goal must see it
@@ -114,10 +114,10 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
             // clears the provenance with it — a dated swum measurement of
             // nothing is not a state this profile may hold.
             ...(css100Sec != null && css100Sec !== profile.css100Sec
-              ? { cssMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } }
+              ? { cssMeta: { source: fromTest === 'swimCss' ? 'try-test' : 'manual', measuredAt: T.iso(new Date()), confidence: fromTest === 'swimCss' ? 'high' : 'medium' } }
               : css100Sec == null && profile.css100Sec != null ? { cssMeta: null } : {}),
             ...(ftpNow != null && ftpNow !== profile.ftp
-              ? { ftpMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } }
+              ? { ftpMeta: { source: fromTest === 'bikeFtp' ? 'try-test' : 'manual', measuredAt: T.iso(new Date()), confidence: fromTest === 'bikeFtp' ? 'high' : 'medium' } }
               : ftpNow == null && profile.ftp != null ? { ftpMeta: null } : {}),
           });
         }}>{noPlan ? 'Save to fitness history' : 'Save & re-target plan'}</button>

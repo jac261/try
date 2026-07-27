@@ -13,13 +13,13 @@ const base = {
   ftp: 250, weightKg: 70, trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5,
 };
 
-const mount = async profile => {
+const mount = async (profile, extra = {}) => {
   const el = document.createElement('div');
   document.body.appendChild(el);
   const root = createRoot(el);
   let saved = null;
   await act(async () => {
-    root.render(<FitnessEditor profile={profile} onClose={() => {}} onSave={f => { saved = f; }} />);
+    root.render(<FitnessEditor profile={profile} onClose={() => {}} onSave={f => { saved = f; }} {...extra} />);
   });
   const click = text => {
     const nodes = [...el.querySelectorAll('.opt, a.reset, button.primary')];
@@ -164,3 +164,42 @@ describe('Phase 3b: the CSS provenance guard survives the yard display round tri
   });
 });
 
+
+
+describe('a result logged from the app own test carries try-test provenance', () => {
+  // The spec names try-test as a source, and before this it could never
+  // occur: the ramp test's Log result button opened this editor, which
+  // stamped manual, so an athlete who followed the protocol got provenance
+  // indistinguishable from a typed guess.
+  const setInput = (el, from, to) => act(() => {
+    const input = [...el.querySelectorAll('input')].find(i => i.value === from);
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    set.call(input, to); input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  it('an FTP entered after the ramp test stamps try-test at high confidence', async () => {
+    const m = await mount({ ...base, ftp: 250 }, { fromTest: 'bikeFtp' });
+    setInput(m.el, '250', '265');
+    m.click('Save');
+    expect(m.saved.ftp).toBe(265);
+    expect(m.saved.ftpMeta).toMatchObject({ source: 'try-test', confidence: 'high' });
+    m.cleanup();
+  });
+
+  it('the same edit without the test flow stays manual at medium', async () => {
+    const m = await mount({ ...base, ftp: 250 });
+    setInput(m.el, '250', '265');
+    m.click('Save');
+    expect(m.saved.ftpMeta).toMatchObject({ source: 'manual', confidence: 'medium' });
+    m.cleanup();
+  });
+
+  it('arriving from the swim test upgrades the CSS stamp, not the FTP one', async () => {
+    const m = await mount({ ...base, css100Sec: 110 }, { fromTest: 'swimCss' });
+    setInput(m.el, '1:50', '1:45'); // 110 s/100m displays as 1:50 on the default metre pool
+    m.click('Save');
+    expect(m.saved.cssMeta).toMatchObject({ source: 'try-test', confidence: 'high' });
+    expect(m.saved.ftpMeta).toBeUndefined();
+    m.cleanup();
+  });
+});

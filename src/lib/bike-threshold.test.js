@@ -3,7 +3,7 @@ import { generatePlan } from './plan.js';
 import { intervalRows } from './review.js';
 import { bikePowerAnchor, bikeThresholdHistory, hasRealFtp } from './domain.js';
 import { tuneFields } from './tuning.js';
-import { BIKE_ZONES, ZONE_VARIANTS, bandForType, zoneForType, wattsForZone } from './bike-zones.js';
+import { BIKE_ZONES, ZONE_VARIANTS, bandForType, zoneForType, wattsForZone, judgeBandForType } from './bike-zones.js';
 
 const base = {
   name: 'B', raceType: 'olympic', fitness: 'intermediate', fivekSec: 1200,
@@ -74,6 +74,35 @@ describe('one zone table, and the disagreement it fixes (§4)', () => {
   });
 });
 
+describe('the VO2 band change is declared, not silent', () => {
+  it('a rider far above the card now reads hot, where the old private band forgave them', () => {
+    // Deriving the review bands from the shared table changed VO2: the old
+    // review literal was 1.05-1.25, wider than any card (the cards say
+    // 1.06-1.20). Effective judged range moved from 1.02-1.28 to 1.03-1.23.
+    // That is the same alignment the Tempo fix made, but it changes historic
+    // verdicts for edge riders, so it is pinned here on purpose rather than
+    // left as a side effect: at 124 percent of FTP a VO2 rep used to read
+    // good and now reads warn, and the card agrees with warn.
+    let found = null;
+    ['beginner', 'intermediate', 'advanced', 'elite'].forEach(fitness =>
+      ['sprint', 'olympic', 'half', 't100', 'full'].forEach(raceType => {
+        if (found) return;
+        const p = generatePlan({ ...base, fitness, raceType });
+        const t = p.weeks.flatMap(w => w.workouts).find(w => w.discipline === 'bike' && w.type === 'VO2 Intervals');
+        if (t) found = { p, t };
+      }));
+    expect(found).toBeTruthy();
+    const { p, t } = found;
+    const toneAt = frac => intervalRows({
+      workout: t, paces: p.paces,
+      intervals: [{ type: 'WORK', movingTimeSec: 180, averageWatts: Math.round(p.paces.ftp * frac), distance: 2000 }],
+    }).rows[0].tone;
+    expect(toneAt(1.10)).toBe('good');
+    expect(toneAt(1.19)).toBe('good');
+    expect(toneAt(1.24)).toBe('warn');   // was good under the old 1.05-1.25 band
+  });
+});
+
 describe('FTP provenance at every write point (§1, §8)', () => {
   it('a manual entry, a model retarget and a feel tune each say what they are', () => {
     expect(bikePowerAnchor({ ftp: 250, ftpMeta: { source: 'manual' } }).source).toBe('manual');
@@ -118,5 +147,54 @@ describe('threshold history (§3)', () => {
     expect(bikeThresholdHistory({ fitness: 'elite', weightKg: 75 })).toEqual([]);
     expect(bikeThresholdHistory({})).toEqual([]);
     expect(bikeThresholdHistory(null)).toEqual([]);
+  });
+});
+
+
+describe('gauntlet fixes: the judge never contradicts any card', () => {
+  it('an over-under threshold rep near its own card floor reads good', () => {
+    // The over-under variant's card reads 90 to 105 percent, but Threshold
+    // was judged against the canonical 95 floor: a perfectly executed rep
+    // (whose honest average sits near 90 by design, two minutes under per
+    // minute over) was told it came in under. The judge now takes the union
+    // of that type's cards.
+    let found = null;
+    ['beginner', 'intermediate', 'advanced', 'elite'].forEach(fitness =>
+      ['sprint', 'olympic', 'half', 't100', 'full'].forEach(raceType => {
+        if (found) return;
+        const p = generatePlan({ ...base, fitness, raceType });
+        const t = p.weeks.flatMap(w => w.workouts).find(w => w.discipline === 'bike' && w.type === 'Threshold');
+        if (t) found = { p, t };
+      }));
+    expect(found).toBeTruthy();
+    const { p, t } = found;
+    const toneAt = frac => intervalRows({
+      workout: t, paces: p.paces,
+      intervals: [{ type: 'WORK', movingTimeSec: 600, averageWatts: Math.round(p.paces.ftp * frac), distance: 6000 }],
+    }).rows[0].tone;
+    [0.90, 0.905, 0.91, 0.92, 1.0].forEach(f => expect(toneAt(f), f + 'x FTP').toBe('good'));
+    expect(toneAt(0.85)).toBe('info');   // genuinely under every threshold card
+    expect(toneAt(1.15)).toBe('warn');   // genuinely over every threshold card
+  });
+
+  it('the judged band is the union of the cards, and only where variants exist', () => {
+    expect(judgeBandForType('Threshold')).toEqual([0.90, 1.08]);
+    expect(judgeBandForType('Tempo')).toEqual(bandForType('Tempo'));        // no variants
+    expect(judgeBandForType('Sweet Spot')).toEqual(bandForType('Sweet Spot'));
+    expect(judgeBandForType('VO2 Intervals')).toEqual([1.06, 1.20]);        // variant is inside canonical
+  });
+
+  it('a snapshot written on retarget keeps the superseded provenance', () => {
+    const h = bikeThresholdHistory({
+      ftp: 270, ftpMeta: { source: 'manual', measuredAt: '2026-07-20' },
+      fitnessHistory: [
+        { date: '2026-06-01', ftp: 250 },                                              // pre-phase-2: no meta, none claimed
+        { date: '2026-07-01', ftp: 260, ftpMeta: { source: 'try-test', confidence: 'high' } },
+      ],
+    });
+    expect(h[0].source).toBeUndefined();
+    expect(h[1].source).toBe('try-test');
+    expect(h[1].confidence).toBe('high');
+    expect(h[2]).toMatchObject({ ftpWatts: 270, source: 'manual', current: true });
   });
 });

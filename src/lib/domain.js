@@ -149,7 +149,12 @@ export function bikeThresholdHistory(profile) {
   const p = profile || {};
   const past = (p.fitnessHistory || [])
     .filter(h => h && h.ftp)
-    .map(h => ({ date: h.date, ftpWatts: h.ftp }));
+    .map(h => ({
+      date: h.date, ftpWatts: h.ftp,
+      // snapshots written since phase 2 carry the superseded value's own
+      // provenance; older ones simply have none, and none is shown as none
+      ...(h.ftpMeta ? { source: FTP_SOURCES.includes(h.ftpMeta.source) ? h.ftpMeta.source : 'manual', confidence: FTP_CONFIDENCE.includes(h.ftpMeta.confidence) ? h.ftpMeta.confidence : null } : {}),
+    }));
   const anchor = bikePowerAnchor(p);
   if (anchor.kind !== 'real') return past;
   const meta = p.ftpMeta || {};

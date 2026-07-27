@@ -878,7 +878,11 @@ export function App({ storage, getToken, user }) {
   };
   const retarget = fields => {
     const old = plan.profile;
-    const snapshot = { date: T.iso(new Date()), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness };
+    // The snapshot keeps the superseded values AND their provenance, so the
+    // threshold history can say where each past number came from rather
+    // than only what it was (phase 2 §3 auditability).
+    const snapshot = { date: T.iso(new Date()), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness,
+      ...(old.ftpMeta ? { ftpMeta: old.ftpMeta } : {}), ...(old.cssMeta ? { cssMeta: old.cssMeta } : {}) };
     const profile = withWeight(Object.assign({}, old, fields, { fitnessHistory: (old.fitnessHistory || []).concat([snapshot]) }));
     // Hold the frequency-swap verdict steady: a retarget keeps the structure,
     // and a flipped verdict would change disciplines at ids the log joins on.
@@ -1303,7 +1307,9 @@ export function App({ storage, getToken, user }) {
       {editTechnique && <TechniqueEditor profile={plan.profile}
         openWater={!(T.RACES[plan.race] || {}).solo && !(T.RACES[plan.race] || {}).noRace && plan.race !== 'tracker'}
         onClose={() => setEditTechnique(false)} onSave={saveTechnique} />}
-      {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} solo={!tracker ? ((T.RACES[plan.race] || {}).solo || null) : null} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
+      {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} solo={!tracker ? ((T.RACES[plan.race] || {}).solo || null) : null}
+        fromTest={(editFitness && editFitness.fromTest) || null}
+        onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}
 
@@ -1312,7 +1318,15 @@ export function App({ storage, getToken, user }) {
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}
-        onLogResult={() => { setDetail(null); setEditFitness(true); }}
+        onLogResult={() => {
+          // Arriving from a fitness test's own Log result button: the number
+          // about to be entered is the RESULT OF THAT PROTOCOL, so its
+          // provenance is try-test, not a hand guess (gauntlet pre-check
+          // 2026-07-27 — the spec's try-test source could never occur).
+          const kind = detail && detail.test ? detail.testKind : null;
+          setDetail(null);
+          setEditFitness(kind ? { fromTest: kind } : true);
+        }}
         onRemove={detail.custom ? () => removeWorkout(detail.id) : null} onLoadIntervals={sync.loadActivityIntervals} onSupport={t => { setDetail(null); openSupport(t); }}
         onWhatIf={tracker ? null : w => { setDetail(null); setWhatIf({ initial: { tab: 'miss', skipIds: [w.id], skipLabel: w.title || w.type } }); }}
         onReplayRecap={log[detail.id] && recordingFor(detail) ? () => { const w2 = detail; setDetail(null); setRecap({ workout: w2, activity: recordingFor(w2) }); } : null} />}

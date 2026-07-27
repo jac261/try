@@ -15,7 +15,7 @@ import { DEFAULT_POOL } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { isIndoor } from './autolog.js';
 import { swimReviewVerdict } from './swim-review.js';
-import { bandForType } from './bike-zones.js';
+import { judgeBandForType } from './bike-zones.js';
 
 // Session types whose whole intent is one steady band — the only ones an
 // average can judge. Everything else (reps, drills, bricks) is mixed.
@@ -161,7 +161,7 @@ const REP_BANDS = {
   // prescribed 76-85%, so a rider at 195 W against a 190-213 W card was
   // told they came in under (found 2026-07-27).
   bike: Object.fromEntries(['Threshold', 'Sweet Spot', 'VO2 Intervals', 'Tempo']
-    .map(t => [t, bandForType(t)]).filter(([, b]) => b)),
+    .map(t => [t, judgeBandForType(t)]).filter(([, b]) => b)),
 };
 
 export function intervalRows({ workout, intervals, paces }) {

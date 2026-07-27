@@ -183,18 +183,38 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
   const ftp = profile && profile.ftp;
   if (trains('bike') && ftp && activities && activities.length) {
     // Phase 2 §7 guardrails. An FTP is the number every bike target is built
-    // from, so weak evidence must not be able to move it. Each of these
+    // from, so weak evidence must not be able to move it. Each active check
     // rejects rather than downgrades: a proposal the athlete has to think
     // hard about is worse than no proposal.
+    //
+    // The §7 ledger, so a later audit can tell skipped from forgotten:
+    //   one isolated effort   covered by the nature of the evidence: eftp is
+    //                         intervals.icu's 42-day rolling model, not a
+    //                         single-effort estimate, so one anomalous file
+    //                         moves it only as far as a rolling model moves
+    //   short sprint          minRideSec below (tested)
+    //   incomplete power      eftp can only exist when the ride carried real
+    //                         power (the model is computed FROM power), so
+    //                         the field's presence is the completeness check.
+    //                         An explicit averageWatts guard was tried and
+    //                         was a no-op: undefined passed !== null, and
+    //                         real rides never carry an explicit null
+    //   estimated power       the tripwire below. Today no synced ride sets
+    //                         `estimated` (only manual entries do, and they
+    //                         never carry eftp), so it enforces nothing yet;
+    //                         it exists so a backend that later flags
+    //                         estimated power under this name is rejected
+    //                         without a client change
+    //   untrusted source /    NOT EXPRESSIBLE yet: needs the deviceName /
+    //   indoor-outdoor mix    deviceSource fields already asked of the
+    //                         backend in the stroke passthrough PR
+    //   low-confidence match  not applicable: this proposal reads the
+    //                         activity feed directly, never a matched pair
     const latest = activities
       .filter(a => a.eftp && a.date && RIDE_TYPES.has(a.type)
         && daysBetween(a.date, todayISO) <= EFTP_RULES.freshDays
-        // a sprint or a fragment cannot establish an hour power
         && (a.movingTimeSec || 0) >= EFTP_RULES.minRideSec
-        // an estimated ride power is not evidence about a real threshold
-        && !a.estimated
-        // a rolling model needs the ride's own power, not a proxy
-        && a.averageWatts !== null)
+        && !a.estimated)
       .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
     if (latest) {
       const eftp = Math.round(latest.eftp);

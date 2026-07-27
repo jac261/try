@@ -41,10 +41,29 @@ export const ZONE_VARIANTS = [
   { lo: 0.55, hi: 0.65, zone: 'Z2', why: 'warm-up, below endurance proper' },
   { lo: 0.83, hi: 0.90, zone: 'Z3', why: 'tempo surges inside a long ride' },
   { lo: 0.72, hi: 0.80, zone: 'Z3', why: 'low-cadence torque work, sub-tempo on purpose' },
-  { lo: 0.90, hi: 1.05, zone: 'Z4', why: 'threshold with a softer floor' },
-  { lo: 0.98, hi: 1.08, zone: 'Z4', why: 'threshold with a firmer floor' },
-  { lo: 1.06, hi: 1.15, zone: 'Z5', why: 'shorter VO2 variant' },
+  { lo: 0.90, hi: 1.05, zone: 'Z4', type: 'Threshold', why: 'over-unders: the honest rep average sits near the floor by design' },
+  { lo: 0.98, hi: 1.08, zone: 'Z4', type: 'Threshold', why: 'threshold with a firmer floor' },
+  { lo: 1.06, hi: 1.15, zone: 'Z5', type: 'VO2 Intervals', why: 'shorter VO2 variant' },
 ];
+
+/* The band the REVIEW judges a rep against: the union of every card that
+   session type actually prescribes. The canonical band alone re-created the
+   Tempo defect on the over-under Threshold variant, whose card reads 90 to
+   105 percent: a perfectly executed over-under rep averages near 90 by
+   design (two minutes under for every minute over) and was being told it
+   came in under. Where variants differ, the judge must be at least as
+   permissive as the most permissive card: erring lenient on the strict
+   variant is a smaller wrong than contradicting the athlete's own card. */
+export function judgeBandForType(type) {
+  const z = zoneForType(type);
+  if (!z) return null;
+  let lo = z.min, hi = z.max;
+  ZONE_VARIANTS.filter(v => v.type === type).forEach(v => {
+    lo = Math.min(lo, v.lo);
+    hi = Math.max(hi, v.hi);
+  });
+  return [lo, hi];
+}
 
 // Which zone a session type trains. The review reads this so it judges a
 // rep against the band the card actually asked for.
