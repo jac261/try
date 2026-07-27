@@ -99,7 +99,11 @@ export function saneWeightKg(weightKg) {
  * It reads the profile and nothing else, so it cannot disagree with
  * computePaces about what is real.
  */
-export const FTP_SOURCES = ['manual', 'eftp', 'ramp-test', 'intervals-icu'];
+// The sources a REAL threshold can have (phase 2 §1). 'activity-model' is a
+// rolling estimate from recorded rides: a real threshold, modelled rather
+// than tested. The level-times-weight guess is NOT in here, because it is
+// never a threshold at all.
+export const FTP_SOURCES = ['manual', 'try-test', 'activity-model', 'intervals-icu'];
 export function bikePowerAnchor(profile) {
   const p = profile || {};
   const meta = p.ftpMeta || {};
@@ -126,6 +130,36 @@ export function bikePowerAnchor(profile) {
 // The one question every consumer of a threshold actually wants to ask.
 export function hasRealFtp(profile) {
   return bikePowerAnchor(profile).kind === 'real';
+}
+
+export const FTP_CONFIDENCE = ['low', 'medium', 'high'];
+
+/* Phase 2 §3: the accepted real FTPs over time, newest last.
+ *
+ * Read from the same fitnessHistory the run and swim trends use, so there is
+ * one history rather than a private bike one. A history entry stores the
+ * value that was SUPERSEDED on that date, which is why the live value is
+ * appended as the final point: without that the trend ends on the number the
+ * athlete has just beaten (the swim dashboard had exactly this bug).
+ *
+ * Estimates never appear. Only a real FTP is ever written to the profile, so
+ * only real FTPs can be in here, but the filter is explicit rather than
+ * assumed. */
+export function bikeThresholdHistory(profile) {
+  const p = profile || {};
+  const past = (p.fitnessHistory || [])
+    .filter(h => h && h.ftp)
+    .map(h => ({ date: h.date, ftpWatts: h.ftp }));
+  const anchor = bikePowerAnchor(p);
+  if (anchor.kind !== 'real') return past;
+  const meta = p.ftpMeta || {};
+  return past.concat([{
+    date: anchor.measuredAt || null,
+    ftpWatts: anchor.ftpWatts,
+    source: anchor.source,
+    confidence: FTP_CONFIDENCE.includes(meta.confidence) ? meta.confidence : null,
+    current: true,
+  }]);
 }
 
 // The athlete's pool. A DISPLAY-and-construction setting only: it changes how

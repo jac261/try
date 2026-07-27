@@ -173,8 +173,8 @@ describe('the invariants that were won by bugs (§2)', () => {
 describe('the power anchor keeps the estimate away from everything real (§2, §4)', () => {
   it('names what kind of number it is holding', () => {
     expect(bikePowerAnchor({ ftp: 250 })).toMatchObject({ kind: 'real', ftpWatts: 250, source: 'manual' });
-    expect(bikePowerAnchor({ ftp: 250, ftpMeta: { source: 'eftp', measuredAt: '2026-07-01' } }))
-      .toMatchObject({ kind: 'real', source: 'eftp', measuredAt: '2026-07-01' });
+    expect(bikePowerAnchor({ ftp: 250, ftpMeta: { source: 'activity-model', measuredAt: '2026-07-01' } }))
+      .toMatchObject({ kind: 'real', source: 'activity-model', measuredAt: '2026-07-01' });
     const est = bikePowerAnchor({ fitness: 'intermediate', weightKg: 75 });
     expect(est.kind).toBe('estimated');
     expect(est.ftpWatts).toBe(Math.round(FITNESS.intermediate.estWkg * 75));

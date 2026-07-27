@@ -49,7 +49,13 @@ export function tuneFields(profile, suggestions) {
       // estimate now, dated to the nudge
       fields.cssMeta = { source: 'estimated', measuredAt: T.iso(new Date()), confidence: 'low' };
     }
-    if (s.discipline === 'bike' && profile.ftp) fields.ftp = Math.round(profile.ftp * w);
+    if (s.discipline === 'bike' && profile.ftp) {
+      fields.ftp = Math.round(profile.ftp * w);
+      // The fifth FTP write point. A feel-based nudge means the number is no
+      // longer whatever was tested, so the provenance must stop claiming it
+      // was: it is a model of how the rides have felt, at low confidence.
+      fields.ftpMeta = { source: 'activity-model', measuredAt: T.iso(new Date()), confidence: 'low' };
+    }
   });
   return fields;
 }

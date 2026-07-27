@@ -3,7 +3,10 @@ import { eftpProposal, EFTP_RULES } from './eftp.js';
 
 const TODAY = '2026-07-07';
 const plan = { profile: { ftp: 250 } };
-const act = (date, eftp, type = 'Ride') => ({ id: 'a' + date, date, type, eftp });
+// A real ride always carries a duration (movingTimeSec is on the activity
+// DTO), and the guardrails require one: a fragment cannot establish an hour
+// power. The fixtures say so rather than relying on the field being absent.
+const act = (date, eftp, type = 'Ride', movingTimeSec = 3600) => ({ id: 'a' + date, date, type, eftp, movingTimeSec });
 
 describe('eftpProposal (eFTP watcher)', () => {
   it('proposes a retarget when the estimate has moved up', () => {
@@ -85,7 +88,8 @@ describe('fitness watcher v2 (run and swim thresholds)', () => {
   it('bike-only callers keep working without thresholds', () => {
     const r = eftpProposal({ activities: [act('2026-07-05', 265)], plan: { profile: { ftp: 250 } }, todayISO: TODAY });
     expect(r.sport).toBe('bike');
-    expect(r.retarget).toEqual({ ftp: 265 });
+    // the retarget now carries provenance: a rolling activity model, dated
+    expect(r.retarget).toEqual({ ftp: 265, ftpMeta: { source: 'activity-model', measuredAt: '2026-07-05', confidence: 'medium' } });
   });
 });
 
@@ -101,3 +105,26 @@ describe('eFTP swim retarget banner is pool-aware (phase 2b)', () => {
   });
 });
 
+
+
+describe('guardrails: weak evidence cannot move an FTP (phase 2 §7)', () => {
+  it('refuses a ride too short to establish an hour power', () => {
+    const short = act('2026-07-05', 300, 'Ride', EFTP_RULES.minRideSec - 60);
+    expect(eftpProposal({ activities: [short], plan, todayISO: TODAY })).toBe(null);
+    // the same estimate from a real ride is accepted
+    const full = act('2026-07-05', 300, 'Ride', EFTP_RULES.minRideSec + 60);
+    expect(eftpProposal({ activities: [full], plan, todayISO: TODAY })).toBeTruthy();
+  });
+
+  it('refuses a ride whose load was estimated rather than recorded', () => {
+    const guessed = { ...act('2026-07-05', 300), estimated: true };
+    expect(eftpProposal({ activities: [guessed], plan, todayISO: TODAY })).toBe(null);
+  });
+
+  it('refuses to retarget an FTP the athlete does not actually have', () => {
+    // an estimated FTP lives on paces, never on the profile, so there is no
+    // real threshold here to move
+    const noFtp = { profile: { fitness: 'intermediate', weightKg: 75 } };
+    expect(eftpProposal({ activities: [act('2026-07-05', 300)], plan: noFtp, todayISO: TODAY })).toBe(null);
+  });
+});

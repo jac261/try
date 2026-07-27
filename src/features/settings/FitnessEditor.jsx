@@ -92,6 +92,10 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
           // stored value in the CURRENT pool (pickPool re-displays on
           // switch, so an untouched field always matches).
           const untouched = f.css100 === (profile.css100Sec ? T.fmtPace(T.pacePer100ForDisplay(profile.css100Sec, f.pool)) : '');
+          // FTP provenance, same rule as CSS: stamp only when the athlete
+          // actually changed the number, so a swim- or weight-only save
+          // cannot overwrite a tested source or restamp its date.
+          const ftpNow = f.ftp ? Number(f.ftp) : null;
           // convert the per-100-unit entry back to canonical per-100 m; a
           // metre pool is the identity, so existing saves are unchanged
           const css100Sec = untouched ? (profile.css100Sec || null)
@@ -100,7 +104,7 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
             fitness: f.fitness,
             fivekSec: T.parseTimeToSec(f.fivek),
             css100Sec,
-            ftp: f.ftp ? Number(f.ftp) : null,
+            ftp: ftpNow,
             weightKg: f.weightKg ? Number(f.weightKg) : null,
             massGoal: f.massGoal || null,
             pool: f.pool,
@@ -112,6 +116,9 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
             ...(css100Sec != null && css100Sec !== profile.css100Sec
               ? { cssMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } }
               : css100Sec == null && profile.css100Sec != null ? { cssMeta: null } : {}),
+            ...(ftpNow != null && ftpNow !== profile.ftp
+              ? { ftpMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } }
+              : ftpNow == null && profile.ftp != null ? { ftpMeta: null } : {}),
           });
         }}>{noPlan ? 'Save to fitness history' : 'Save & re-target plan'}</button>
       </div>

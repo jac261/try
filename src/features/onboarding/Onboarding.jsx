@@ -64,6 +64,8 @@ export function Onboarding({ onCreate }) {
       ...(css100Sec != null ? { cssMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } } : {}),
       pool: f.pool,
       ftp: f.ftp ? Number(f.ftp) : null, weightKg: f.weightKg ? Number(f.weightKg) : null,
+      // a hand-entered starting FTP is a manual source, dated to onboarding
+      ...(f.ftp ? { ftpMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } } : {}),
       startDate: T.iso(new Date()),
       // A solo race cannot exclude its only discipline; cleared here as well
       // as at selection time (render-time hiding alone leaves stale state).

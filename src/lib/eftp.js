@@ -18,7 +18,13 @@ import { RACES, DEFAULT_POOL } from './domain.js';
 import { swimPaceLabel, pacePer100ForDisplay, unitShort } from './swim-units.js';
 import { targetPaceForZone } from './swim-zones.js';
 
-export const EFTP_RULES = { minDriftPct: 0.03, freshDays: 10 };
+export const EFTP_RULES = {
+  minDriftPct: 0.03,
+  freshDays: 10,
+  // §7: a ride short enough to be a sprint or a fragment cannot establish an
+  // hour power, whatever the model says about it.
+  minRideSec: 20 * 60,
+};
 
 /* Derive CSS from a recorded swim test's interval analysis: the plan's CSS
    test prescribes a 400 then a 200 time trial, and the watch's lap data can
@@ -176,8 +182,19 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
   // Bike: rolling eFTP from the latest fresh ride.
   const ftp = profile && profile.ftp;
   if (trains('bike') && ftp && activities && activities.length) {
+    // Phase 2 §7 guardrails. An FTP is the number every bike target is built
+    // from, so weak evidence must not be able to move it. Each of these
+    // rejects rather than downgrades: a proposal the athlete has to think
+    // hard about is worse than no proposal.
     const latest = activities
-      .filter(a => a.eftp && a.date && RIDE_TYPES.has(a.type) && daysBetween(a.date, todayISO) <= EFTP_RULES.freshDays)
+      .filter(a => a.eftp && a.date && RIDE_TYPES.has(a.type)
+        && daysBetween(a.date, todayISO) <= EFTP_RULES.freshDays
+        // a sprint or a fragment cannot establish an hour power
+        && (a.movingTimeSec || 0) >= EFTP_RULES.minRideSec
+        // an estimated ride power is not evidence about a real threshold
+        && !a.estimated
+        // a rolling model needs the ride's own power, not a proxy
+        && a.averageWatts !== null)
       .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
     if (latest) {
       const eftp = Math.round(latest.eftp);
@@ -187,7 +204,9 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
           kind: 'eftp', sport: 'bike', ftp, eftp, drift: Math.abs(drift), up: eftp > ftp,
           headline: eftp > ftp ? 'Your bike fitness has moved up' : 'Your bike targets may be set too high',
           why: 'We now estimate your FTP at ' + eftp + ' W; the plan trains to ' + ftp + ' W.',
-          retarget: { ftp: eftp },
+          // an intervals.icu rolling model estimate: a real threshold, but
+          // modelled from rides rather than tested, so medium confidence
+          retarget: { ftp: eftp, ftpMeta: { source: 'activity-model', measuredAt: latest.date || todayISO, confidence: 'medium' } },
         });
       }
     }
