@@ -125,6 +125,56 @@ describe('the gating reaches real plans without breaking the card', () => {
   });
 });
 
+describe('every interval type is wired, not just the first one', () => {
+  const RACES = ['sprint', 'olympic', 'half', 't100', 'full'];
+  const ridesOfType = (fitness, type) => RACES.flatMap(raceType =>
+    generatePlan({ ...base, fitness, raceType }).weeks.flatMap(w => w.workouts)
+      .filter(w => isTrainingRide(w) && w.type === type));
+
+  it('a beginner and an elite get different efforts in every interval type', () => {
+    // the shape knobs the gate moves are on and off, so compare the rep
+    // labels that carry them
+    ['Tempo', 'Sweet Spot', 'Threshold', 'VO2 Intervals'].forEach(type => {
+      const beg = new Set(ridesOfType('beginner', type).flatMap(w => w.segments.map(s => s.label)));
+      const eli = new Set(ridesOfType('elite', type).flatMap(w => w.segments.map(s => s.label)));
+      if (!beg.size || !eli.size) return;                 // not every level reaches every type
+      expect([...eli].some(l => !beg.has(l)), type).toBe(true);
+    });
+  });
+
+  it('over-unders are unlocked at advanced and never given below it', () => {
+    const ou = fitness => ridesOfType(fitness, 'Threshold')
+      .filter(w => w.segments.some(s => /over-under/.test(s.label || ''))).length;
+    // measured: intermediate has 22 threshold sessions and none of them
+    // over-unders; before the gate about a third of them were
+    expect(ridesOfType('intermediate', 'Threshold').length).toBeGreaterThan(0);
+    expect(ou('beginner')).toBe(0);
+    expect(ou('intermediate')).toBe(0);
+    expect(ou('advanced')).toBeGreaterThan(0);
+  });
+
+  it('every wired type still sums, at every level and race', () => {
+    LEVELS.forEach(fitness => ['Tempo', 'Sweet Spot', 'Threshold', 'VO2 Intervals'].forEach(type => {
+      ridesOfType(fitness, type).forEach(w =>
+        expect(bikeWorkoutIssues(w), fitness + ' ' + type + ' ' + w.durationMin + 'min').toEqual([]));
+    }));
+  });
+
+  it('the progression reaches the card for each type somewhere', () => {
+    // Each type should show more than one distinct main-set shape, which is
+    // what progression plus the variant menu produces. Which LEVEL rides a
+    // given type is decided by the ladder, not by us: an elite never sees
+    // Tempo because their quality sessions sit higher up it, so each type is
+    // checked at whichever levels actually receive it.
+    ['Tempo', 'Sweet Spot', 'Threshold', 'VO2 Intervals'].forEach(type => {
+      const labels = new Set(LEVELS.flatMap(f => ridesOfType(f, type))
+        .filter(w => w.segments.some(s => s.blocks))
+        .flatMap(w => w.segments.filter(s => s.blocks).map(s => s.label)));
+      expect(labels.size, type + ' produced ' + labels.size + ' distinct shapes').toBeGreaterThan(1);
+    });
+  });
+});
+
 describe('§6: the long-ride cap holds at every race distance and lead-in', () => {
   const longsIn = (p, phase) => p.weeks.filter(w => w.phase === phase)
     .flatMap(w => w.workouts).filter(w => w.discipline === 'bike' && w.role === 'long')
