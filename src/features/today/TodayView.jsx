@@ -21,6 +21,9 @@ const saveWeeklyDismiss = v => { try { localStorage.setItem(WEEKLY_DISMISS, v); 
 // Phase 3b: the CSS retest nudge and the failed-test explanation dismiss the
 // same way the weekly proposal does — sticky per signature, so a dismissed
 // nudge stays quiet until the situation genuinely changes.
+const FTP_RETEST_DISMISS = 'try.ftpRetestDismissed';
+const loadFtpRetestDismiss = () => { try { return localStorage.getItem(FTP_RETEST_DISMISS); } catch (e) { return null; } };
+const saveFtpRetestDismiss = v => { try { localStorage.setItem(FTP_RETEST_DISMISS, v); } catch (e) { /* private mode */ } };
 const RETEST_DISMISS = 'try.cssRetestDismissed';
 const loadRetestDismiss = () => { try { return localStorage.getItem(RETEST_DISMISS); } catch (e) { return null; } };
 const saveRetestDismiss = v => { try { localStorage.setItem(RETEST_DISMISS, v); } catch (e) { /* private mode */ } };
@@ -88,7 +91,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, ftpRetest, onFtpRetest }) {
   const tracker = plan.race === 'tracker';
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
@@ -98,6 +101,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   const [coachIdx, setCoachIdx] = useState(0);
   const [weeklyDismissed, setWeeklyDismissed] = useState(loadWeeklyDismiss);
   const [retestDismissed, setRetestDismissed] = useState(loadRetestDismiss);
+  const [ftpRetestDismissed, setFtpRetestDismissed] = useState(loadFtpRetestDismiss);
   const [cssFailDismissed, setCssFailDismissed] = useState(loadCssFailDismiss);
   const [reviewToday, setReviewToday] = useState(false);
   const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile onToggle={() => onToggleWorkout(w.id)} />;
@@ -152,7 +156,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
     key: 'eftp', cls: eftp.up ? 'banner tune' : 'banner ramp', icon: 'trend', title: eftp.headline,
     // swim proposals open the evidence sheet instead of retargeting on the
     // spot (spec §6); the wording must not promise a one-tap change
-    sub: eftp.why + (eftp.sport === 'swim' ? ' Tap to review →' : ' Tap to retarget →'), act: onEftp,
+    sub: eftp.why + (eftp.sport === 'run' ? ' Tap to retarget →' : ' Tap to review →'), act: onEftp,
   });
   // Phase 3b (§7): the athlete swam a CSS test but no CSS came out of it.
   // Silence here would read as the feature being broken; say why, and point
@@ -168,6 +172,12 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   // opens the protocol sheet, and dismissing it sticks until its signature
   // moves. The update-proposal banner above always outranks it (App passes
   // retest as null while a swim proposal is live).
+  // §6: the FTP assessment nudge, dismissible per signature like the others.
+  if (!tracker && ftpRetest && ftpRetestDismissed !== ftpRetest.sig) coach.push({
+    key: 'ftp-retest', cls: 'banner', icon: 'trend', title: ftpRetest.headline,
+    sub: ftpRetest.why + ' Tap to enter a result →', act: onFtpRetest,
+    dismiss: () => { saveFtpRetestDismiss(ftpRetest.sig); setFtpRetestDismissed(ftpRetest.sig); },
+  });
   if (!tracker && retest && retestDismissed !== retest.sig) coach.push({
     key: 'retest', cls: 'banner', icon: 'pace', title: retest.headline,
     sub: retest.why + ' Tap for the protocol →', act: onRetest,

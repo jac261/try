@@ -16,6 +16,7 @@ import { fmtPace } from './units.js';
 import { DISCIPLINE } from './autolog.js';
 import { RACES, DEFAULT_POOL } from './domain.js';
 import { swimPaceLabel, pacePer100ForDisplay, unitShort } from './swim-units.js';
+import { zoneForType } from './bike-zones.js';
 import { targetPaceForZone } from './swim-zones.js';
 
 export const EFTP_RULES = {
@@ -138,6 +139,41 @@ export function cssProposalDetails({ proposal, plan, todayISO }) {
       cur: swimPaceLabel(cur, pool), next: swimPaceLabel(next, pool),
       band: swimPaceLabel(band.minSecondsPer100m, pool) + ' to ' + swimPaceLabel(band.maxSecondsPer100m, pool),
     },
+  };
+}
+
+/* Phase 2 §5: the evidence behind a bike FTP retarget, for the tap-through
+   sheet. Everything display-ready. The effect is the athlete's own next
+   quality ride, shown at its current and proposed watt targets, because a
+   percentage means nothing until it is the numbers on Tuesday's card. */
+export function ftpProposalDetails({ proposal, plan, todayISO }) {
+  if (!proposal || proposal.sport !== 'bike' || !proposal.retarget || proposal.retarget.ftp == null) return null;
+  const cur = plan && plan.profile && plan.profile.ftp;
+  if (!cur) return null;
+  const next = proposal.retarget.ftp;
+  const meta = proposal.retarget.ftpMeta || {};
+  const upcoming = (plan.weeks || []).flatMap(w => w.workouts)
+    .filter(w => w.discipline === 'bike' && !w.race && !w.test && w.role === 'quality' && w.date >= todayISO)
+    .sort((a, b) => (a.date < b.date ? -1 : 1))[0] || null;
+  // the hardest prescribed block on that card is the one worth quoting
+  const key = upcoming && (upcoming.segments || [])
+    .filter(s => s.zone && s.zone !== 'Z1')
+    .sort((a, b) => (b.zone > a.zone ? 1 : -1))[0];
+  const band = key ? zoneForType(upcoming.type) : null;
+  return {
+    currentWatts: cur,
+    proposedWatts: next,
+    deltaWatts: next - cur,
+    pct: Math.round(Math.abs(next - cur) / cur * 1000) / 10,
+    up: next > cur,
+    source: meta.source || null,
+    measuredAt: meta.measuredAt || null,
+    confidence: meta.confidence || null,
+    example: upcoming && band ? {
+      title: upcoming.title, date: upcoming.date, label: key.label,
+      cur: Math.round(cur * band.min) + ' to ' + Math.round(cur * band.max) + ' W',
+      next: Math.round(next * band.min) + ' to ' + Math.round(next * band.max) + ' W',
+    } : null,
   };
 }
 

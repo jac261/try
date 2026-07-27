@@ -14,6 +14,7 @@ import { RecapSlides } from '@/features/recap/RecapSlides.jsx';
 import { AddWorkoutSheet } from '@/components/AddWorkoutSheet.jsx';
 import { CssProposalSheet } from '@/components/CssProposalSheet.jsx';
 import { CssRetestSheet } from '@/components/CssRetestSheet.jsx';
+import { FtpProposalSheet } from '@/components/FtpProposalSheet.jsx';
 import { TechniqueEditor } from '@/features/settings/TechniqueEditor.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
 import { BuildingPlan } from '@/features/onboarding/BuildingPlan.jsx';
@@ -145,6 +146,7 @@ export function App({ storage, getToken, user }) {
   // the retest protocol (§4). Booleans/objects, not routes: they ride the
   // same scrim pattern as every other sheet.
   const [cssSheet, setCssSheet] = useState(null);
+  const [ftpSheet, setFtpSheet] = useState(null);
   const [retestOpen, setRetestOpen] = useState(false);
   // A failed plan write means this device and the account have diverged — the
   // catalog-drift incident proved that must never be silent again.
@@ -1013,7 +1015,13 @@ export function App({ storage, getToken, user }) {
   const applyEftp = () => { if (eftp) retarget(eftp.retarget); };
   // Phase 3b (§6): a swim CSS proposal opens the evidence sheet instead of
   // retargeting on the tap; bike and run keep the one-tap flow for now.
-  const onEftp = () => { if (eftp && eftp.sport === 'swim') setCssSheet(eftp); else applyEftp(); };
+  // A swim or bike threshold proposal opens its evidence sheet rather than
+  // retargeting on the tap; run keeps the one-tap flow for now.
+  const onEftp = () => {
+    if (eftp && eftp.sport === 'swim') setCssSheet(eftp);
+    else if (eftp && eftp.sport === 'bike') setFtpSheet(eftp);
+    else applyEftp();
+  };
   // §7's remaining branch (gauntlet catch 2026-07-27): the athlete logged
   // the CSS test but no recording ever matched it (wrong sport type on the
   // watch, missed upload) — without this the whole flow went silent. Only
@@ -1056,6 +1064,12 @@ export function App({ storage, getToken, user }) {
   );
   const retest = (!eftp || eftp.sport !== 'swim') && !cssFail
     ? T.cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()), unresolvedTest, reviewEvidence })
+    : null;
+  // §6: the FTP assessment nudge. Muted while a bike proposal is live, for
+  // the same reason the swim one is: measuring and updating are different
+  // things, but two banners about one number is nagging.
+  const ftpRetest = (!eftp || eftp.sport !== 'bike')
+    ? T.ftpRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()) })
     : null;
   const addCssTestToWeek = () => {
     const r = T.addCssTest(plan, T.iso(new Date()));
@@ -1258,7 +1272,7 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
@@ -1301,6 +1315,8 @@ export function App({ storage, getToken, user }) {
         todayISO={T.iso(new Date())} initial={whatIf.initial} onClose={() => setWhatIf(null)} />}
       {cssSheet && <CssProposalSheet proposal={cssSheet} plan={plan}
         onAccept={() => retarget(cssSheet.retarget)} onClose={() => setCssSheet(null)} />}
+      {ftpSheet && <FtpProposalSheet proposal={ftpSheet} plan={plan}
+        onAccept={() => retarget(ftpSheet.retarget)} onClose={() => setFtpSheet(null)} />}
       {retestOpen && <CssRetestSheet recommendation={retest || { headline: 'The CSS test', why: 'A fresh measurement keeps your swim paces honest.' }}
         plan={plan} onAddTest={addCssTestToWeek} onEditFitness={() => setEditFitness(true)} onClose={() => setRetestOpen(false)} />}
 
