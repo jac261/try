@@ -97,12 +97,12 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             const chosen = cueAnswer || null;
             return <>
               <div className="fuel-q">Which cue helped most today?</div>
-              <div className="feel-row fuel" style={{ flexWrap: 'wrap' }}>
+              <div className="feel-row fuel cue" style={{ flexWrap: 'wrap' }}>
                 {T.TECHNIQUE_FOCUS.concat([{ id: 'none', label: 'None of these' }]).map(f =>
                   <button key={f.id} className={'feelbtn' + (chosen === f.id ? ' on right' : '')}
                     onClick={() => onCue(w.id, chosen === f.id ? null : f.id)}>{f.label}</button>)}
               </div>
-              <div className="fuel-cap">This nudges which drills you get next. It is your word on what helped, not a stroke analysis.</div>
+              <div className="fuel-cap">Your answer is kept with the session. It is your word on what helped, not a stroke analysis.</div>
             </>;
           })()}
           {/* Fuel, deliberately SUBORDINATE to feel (the one thing a finished

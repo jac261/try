@@ -914,6 +914,39 @@ export function App({ storage, getToken, user }) {
     } else retarget(fields);
     setEditFitness(false);
   };
+  // Phase 5 (review catch 2026-07-27): technique settings are NOT a fitness
+  // update. Routing them through updateFitness appended a fitnessHistory
+  // snapshot and made Settings claim "Paces re-targeted today" with a zero
+  // delta every time somebody ticked a piece of kit. The plan still has to
+  // regenerate (the drills change), but nothing about the athlete's fitness
+  // has moved, so no snapshot and no fitnessUpdatedAt stamp.
+  //   Completed sessions also keep their segments: a retarget rewriting past
+  // PACES is defensible (a pace is a current estimate), but a drill list is
+  // the record of what the athlete actually did, and re-dealing it would
+  // change the card they swam from.
+  const saveTechnique = fields => {
+    const profile = Object.assign({}, plan.profile, fields);
+    if (plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) {
+      const np = Object.assign({}, plan, { profile: profile });
+      setPlan(np);
+      saveProfileBoth(profile);
+      setEditTechnique(false);
+      return;
+    }
+    const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan) });
+    np.createdAt = plan.createdAt;
+    np.updatedAt = new Date().toISOString();
+    np.serverId = plan.serverId;
+    const doneSegs = {};
+    plan.weeks.forEach(wk => wk.workouts.forEach(w => { if (log[w.id]) doneSegs[w.id] = w.segments; }));
+    np.weeks = np.weeks.map(wk => Object.assign({}, wk, {
+      workouts: wk.workouts.map(w => (doneSegs[w.id] ? Object.assign({}, w, { segments: doneSegs[w.id] }) : w)),
+    }));
+    setPlan(np);
+    sync.replacePlan(np).then(adoptRes(np.createdAt));
+    saveProfileBoth(np.profile);
+    setEditTechnique(false);
+  };
   const applyTune = () => { const s = paceSuggestions(plan, log); if (s.length) retarget(tuneFields(plan.profile, s)); };
   const setFeel = (id, feel) => {
     const at = (log[id] && log[id].at) || new Date().toISOString();
@@ -1225,7 +1258,9 @@ export function App({ storage, getToken, user }) {
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
-      {view === 'settings' && <SettingsView plan={plan} onEditTechnique={() => setEditTechnique(true)}
+      {view === 'settings' && <SettingsView plan={plan}
+        onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
+          && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
         onEnterTracker={endPlanToTracker} tracker={tracker}
@@ -1265,7 +1300,7 @@ export function App({ storage, getToken, user }) {
         plan={plan} onAddTest={addCssTestToWeek} onEditFitness={() => setEditFitness(true)} onClose={() => setRetestOpen(false)} />}
 
       {editTechnique && <TechniqueEditor profile={plan.profile}
-        onClose={() => setEditTechnique(false)} onSave={updateFitness} />}
+        onClose={() => setEditTechnique(false)} onSave={saveTechnique} />}
       {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} solo={!tracker ? ((T.RACES[plan.race] || {}).solo || null) : null} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}

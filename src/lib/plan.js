@@ -622,6 +622,9 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
 // pickDrills rotates modulo the pool, so an over-long request silently repeats
 // a drill (gauntlet catch 2026-07-18 — a beginner's pool is six, and a 70 min
 // custom Technique swim asked for seven).
+// How much of a focused technique session the focus block may own. A
+// majority, never the whole thing.
+const FOCUS_SHARE = 0.6;
 function drillPoolSize(intensity, tech) {
   return drillPool(intensity, tech).length;
 }
@@ -664,11 +667,21 @@ function pickDrills(seed, intensity, n, salt, role, tech) {
     return Array.from({ length: count }, (_, i) => at(i));
   };
   if (!matching) return walk(ordered, n);
-  // focus declared: fill from the focus block, then top up from the rest.
-  // Neither walk is allowed to wrap past its own list (which would repeat a
-  // drill), and n is capped at the whole pool by drillPoolSize.
+  // Focus declared: the session LEADS with focus work but is never filled
+  // with it. Taking the whole block collapsed variety below the undeclared
+  // baseline — a body-position athlete saw six distinct drills where an
+  // undeclared one saw ten, three of them in ~85% of sessions for four
+  // months (review catch 2026-07-27). Capping the block's share does two
+  // things: it leaves room for the rest of the catalogue, and because the
+  // window is now SMALLER than the block, the start rotation slides it
+  // across weeks instead of re-dealing the same drills every time.
   const head = ordered.slice(0, matching), tail = ordered.slice(matching);
-  const nHead = Math.min(n, head.length);
+  const share = Math.max(1, Math.round(n * FOCUS_SHARE));
+  // Never take the WHOLE block either: a window as wide as its block cannot
+  // slide, so a two-drill focus (sighting) would show both drills in every
+  // session for the entire plan. Leaving one out lets the rotation alternate.
+  const room = head.length > 1 ? head.length - 1 : 1;
+  const nHead = Math.min(n, tail.length ? Math.min(share, room) : head.length);
   const out = walk(head, nHead);
   if (n > nHead && tail.length) out.push(...walk(tail, Math.min(n - nHead, tail.length)));
   return out;
@@ -1612,6 +1625,16 @@ export const applyTrackerFitness = function (plan, fields, nowISO) {
 // current are left alone; the whole pass is a no-op on an up-to-date plan.
 export const upgradePlanSegments = function (plan) {
   if (!plan || !plan.weeks || !plan.paces) return plan;
+  // The wire drops anything the plan DTO does not type, so a hydrated plan
+  // can arrive with paces but no technique setting. Rebuilding swims from
+  // that would quietly strip a focused athlete's drills back to the default
+  // rotation until their next retarget. The profile is the source of truth,
+  // so backfill from it (review catch 2026-07-27) — the same defence the
+  // pool field already needed.
+  const pc = plan.paces.technique === undefined && plan.profile
+    ? { ...plan.paces, technique: saneTechnique(plan.profile.technique) }
+    : plan.paces;
+  if (pc !== plan.paces) plan = { ...plan, paces: pc };
   let changed = false;
   const weeks = plan.weeks.map(week => {
     const workouts = week.workouts.map(w => {

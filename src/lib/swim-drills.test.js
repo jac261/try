@@ -46,10 +46,22 @@ describe('the catalogue is metadata over an untouched list', () => {
 describe('saneTechnique: garbage never becomes a setting', () => {
   it('reads nothing declared as null, and keeps a declared empty kit', () => {
     [null, undefined, {}, 'x', { focus: [] }, { focus: 'catch' }].forEach(t => expect(saneTechnique(t)).toBe(null));
-    expect(saneTechnique({ kit: [] })).toEqual({ focus: [], kit: [], updatedAt: null });
+    expect(saneTechnique({ kit: [] })).toEqual({ focus: [], bias: [], kit: [], updatedAt: null });
     expect(saneTechnique({ focus: ['catch', 'nonsense'] }).focus).toEqual(['catch']);
     expect(saneTechnique({ focus: ['catch', 'kick', 'breathing'] }).focus.length).toBe(2);
     expect(saneTechnique({ kit: ['pull-buoy', 'jetpack'] }).kit).toEqual(['pull-buoy']);
+    expect(saneTechnique({ bias: ['catch', 'nope'] }).bias).toEqual(['catch']);
+  });
+
+  it('the cue bias is a real seam: it orders drills behind a declared focus', () => {
+    // two catch drills; the athlete said breathing cues help, and one of the
+    // catch-focus drills also serves breathing, so it leads
+    const pool = drillPool(1, { focus: ['catch'] });
+    const plain = focusOrder(pool, { focus: ['catch'] }).ordered.map(d => d.name);
+    const biased = focusOrder(pool, { focus: ['catch'], bias: ['timing'] }).ordered.map(d => d.name);
+    expect(biased).not.toEqual(plain);
+    // a bias alone (no declared focus) never reorders anything
+    expect(focusOrder(pool, { bias: ['timing'] }).matching).toBe(0);
   });
 });
 
@@ -125,6 +137,53 @@ describe('cueFocusBias: the athlete own-word signal, treated as weak evidence', 
     expect(cueFocusBias(['nonsense', 'kick'])).toEqual(['kick']);
     // a tie always resolves the same way: no coin-flip coaching
     expect(cueFocusBias(['kick', 'catch'])).toEqual(cueFocusBias(['catch', 'kick']));
+  });
+});
+
+describe('declaring a focus must not cost variety (§3, §8)', () => {
+  const kit = SWIM_EQUIPMENT.map(e => e.id);
+  const spread = technique => {
+    const p = generatePlan({ ...base, technique });
+    const counts = {};
+    let sessions = 0;
+    techSwims(p).forEach(w => {
+      sessions++;
+      drillLabels(w).forEach(l => {
+        const n = l.replace(/^2 × \d+ (?:m|yd) /, '');
+        counts[n] = (counts[n] || 0) + 1;
+      });
+    });
+    const top = Object.values(counts).sort((a, b) => b - a);
+    return { sessions, distinct: Object.keys(counts).length, top: top[0] || 0 };
+  };
+
+  it('a focused athlete sees at least as many distinct drills as an undeclared one', () => {
+    const plain = spread(undefined);
+    expect(plain.distinct).toBeGreaterThan(0);
+    TECHNIQUE_FOCUS.forEach(f => {
+      const s = spread({ focus: [f.id], kit });
+      // the original head-first fill dropped body-position and catch to 6
+      // distinct against the undeclared 10; that regression must not return
+      expect(s.distinct).toBeGreaterThanOrEqual(plain.distinct);
+    });
+  });
+
+  it('no single drill dominates a focused plan the way it did before the cap', () => {
+    TECHNIQUE_FOCUS.forEach(f => {
+      const s = spread({ focus: [f.id], kit });
+      // was 23-27 of 27 sessions for the worst focuses
+      expect(s.top / s.sessions).toBeLessThanOrEqual(0.75);
+    });
+  });
+
+  it('the focus still leads the session: the opening drill addresses it', () => {
+    const p = generatePlan({ ...base, technique: { focus: ['catch'], kit } });
+    const all = SWIM_DRILLS.concat(FOCUS_DRILLS);
+    techSwims(p).forEach(w => {
+      const first = drillLabels(w)[0];
+      const d = all.find(x => first.endsWith(' ' + x.name));
+      expect(d.focus).toContain('catch');
+    });
   });
 });
 

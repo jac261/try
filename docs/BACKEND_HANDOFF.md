@@ -366,7 +366,17 @@ write side and the stored reviews start feeding the retest recommendation.
 ### Extension - 27 July 2026: technique cue on the same log field
 
 Swim build-out phase 5 adds one post-session question on technique swims
-("which cue helped most today?"). The answer biases future drill selection.
+("which cue helped most today?"). The answer is intended to bias future
+drill selection.
+
+Note the field alone is not sufficient, and the client does not pretend
+otherwise. Plan generation reads the athlete PROFILE, never the log, so a
+cue answer stored on a log entry cannot reach drill selection by itself.
+The client side of that is already in place: `saneTechnique` accepts a
+derived `technique.bias` (an ordered focus list) and `focusOrder` uses it to
+order drills behind a declared focus. Once `techniqueCue` round-trips, the
+app derives that bias from recent answers and stores it on the profile. So
+this ask unblocks the loop; it does not close it on its own.
 It wants the same treatment as `swimReview` above: an optional
 `techniqueCue` string on the workout log DTO (one of the technique focus
 ids, or "none"), write-through on PUT and echoed on GET.

@@ -151,11 +151,16 @@ export function saneTechnique(t) {
   const ids = TECHNIQUE_FOCUS.map(f => f.id);
   const kitIds = SWIM_EQUIPMENT.map(e => e.id);
   const focus = Array.isArray(t.focus) ? t.focus.filter(f => ids.includes(f)).slice(0, 2) : [];
+  // What the athlete's own cue answers have said helps (cueFocusBias output,
+  // stored on the profile). It is weaker than a focus they set by hand and
+  // only ever breaks ties behind it, but it is a real seam: without one, a
+  // stored answer could never reach selection (review catch 2026-07-27).
+  const bias = Array.isArray(t.bias) ? t.bias.filter(f => ids.includes(f)) : [];
   // kit is DECLARED when it is an array, even an empty one: an athlete who
   // owns nothing has said something real. undefined means never asked.
   const kit = Array.isArray(t.kit) ? t.kit.filter(k => kitIds.includes(k)) : null;
-  if (!focus.length && kit === null) return null;
-  return { focus, kit, updatedAt: t.updatedAt || null };
+  if (!focus.length && kit === null && !bias.length) return null;
+  return { focus, bias, kit, updatedAt: t.updatedAt || null };
 }
 
 // The pool of drills this athlete can be given: level gate first (unchanged),
@@ -202,11 +207,17 @@ export function focusOrder(pool, tech) {
     const i = t.focus.findIndex(f => (d.focus || []).includes(f));
     return i < 0 ? -1 : i; // 0 = primary, 1 = secondary
   };
+  // among drills that serve the SAME declared focus, the athlete's own cue
+  // answers order them; a drill they said helped comes first
+  const biasRank = d => {
+    const i = (t.bias || []).findIndex(f => (d.focus || []).includes(f));
+    return i < 0 ? 99 : i;
+  };
   const hit = pool.filter(d => score(d) >= 0);
   const rest = pool.filter(d => score(d) < 0);
   // primary before secondary, then easiest first: a session reads as a
   // progression rather than a shuffle, and week to week the same focus
   // keeps returning the same family of drills
-  hit.sort((a, b) => score(a) - score(b) || (a.difficulty || 3) - (b.difficulty || 3));
+  hit.sort((a, b) => score(a) - score(b) || biasRank(a) - biasRank(b) || (a.difficulty || 3) - (b.difficulty || 3));
   return { ordered: hit.concat(rest), matching: hit.length };
 }

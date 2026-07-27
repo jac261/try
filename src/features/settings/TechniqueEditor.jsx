@@ -49,7 +49,7 @@ export function TechniqueEditor({ profile, onClose, onSave }) {
         <div className="choice" style={{ flexWrap: 'wrap' }}>
           {T.SWIM_EQUIPMENT.map(e => (
             <div key={e.id} className={'opt' + ((kit || []).includes(e.id) ? ' on' : '')}
-              {...tap(() => toggleKit(e.id))}>{e.label}</div>
+              {...tap(() => toggleKit(e.id))}>{e.label}{e.id === 'wetsuit' ? <small>open water, not pool drills</small> : null}</div>
           ))}
         </div>
         {kit !== null && !kit.length && <p className="lead" style={{ fontSize: 13, marginTop: 8 }}>Nothing selected: you will only get drills that need no kit, which is most of them.</p>}
