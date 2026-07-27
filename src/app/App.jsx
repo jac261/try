@@ -14,6 +14,7 @@ import { RecapSlides } from '@/features/recap/RecapSlides.jsx';
 import { AddWorkoutSheet } from '@/components/AddWorkoutSheet.jsx';
 import { CssProposalSheet } from '@/components/CssProposalSheet.jsx';
 import { CssRetestSheet } from '@/components/CssRetestSheet.jsx';
+import { TechniqueEditor } from '@/features/settings/TechniqueEditor.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
 import { BuildingPlan } from '@/features/onboarding/BuildingPlan.jsx';
 import { FitnessEditor } from '@/features/settings/FitnessEditor.jsx';
@@ -72,6 +73,7 @@ export function App({ storage, getToken, user }) {
   // { initial: { tab, skipIds, skipLabel } } from a workout's own sheet.
   const [whatIf, setWhatIf] = useState(null);
   const [editFitness, setEditFitness] = useState(false);
+  const [editTechnique, setEditTechnique] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
   const [building, setBuilding] = useState(false);
   const [wurm, setWurm] = useState(false);
@@ -1223,7 +1225,7 @@ export function App({ storage, getToken, user }) {
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
-      {view === 'settings' && <SettingsView plan={plan}
+      {view === 'settings' && <SettingsView plan={plan} onEditTechnique={() => setEditTechnique(true)}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
         onEnterTracker={endPlanToTracker} tracker={tracker}
@@ -1262,6 +1264,8 @@ export function App({ storage, getToken, user }) {
       {retestOpen && <CssRetestSheet recommendation={retest || { headline: 'The CSS test', why: 'A fresh measurement keeps your swim paces honest.' }}
         plan={plan} onAddTest={addCssTestToWeek} onEditFitness={() => setEditFitness(true)} onClose={() => setRetestOpen(false)} />}
 
+      {editTechnique && <TechniqueEditor profile={plan.profile}
+        onClose={() => setEditTechnique(false)} onSave={updateFitness} />}
       {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} solo={!tracker ? ((T.RACES[plan.race] || {}).solo || null) : null} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}

@@ -9,6 +9,7 @@ export * from './swim-units.js';
 export * from './swim-zones.js';
 export * from './css-retest.js';
 export * from './swim-review.js';
+export * from './swim-drills.js';
 export * from './disciplines.js';
 export * from './plan.js';
 export * from './wellness.js';

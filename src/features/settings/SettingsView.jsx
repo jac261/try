@@ -164,7 +164,7 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditPlan, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
+export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditTechnique, onEditPlan, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
@@ -201,6 +201,7 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
             {/* Tracker-safe: records a between-plans benchmark (a parkrun is a
                 5k test) into fitness history without generating a plan. */}
             <button className="btn ghost" onClick={onEditFitness}><Icon name="trend" size={18} /> Update fitness</button>
+            {onEditTechnique && <><div style={{ height: 10 }} /><button className="btn ghost" onClick={onEditTechnique}><Icon name="pace" size={18} /> Swim technique</button></>}
             {/* Gate on the profile's own fitness-update stamp, NOT plan.updatedAt:
                 merely entering tracker moves updatedAt, and this note must never
                 claim an update that did not happen. */}
@@ -213,6 +214,7 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
           </>
           : <>
             <button className="btn primary" onClick={onEditFitness}><Icon name="trend" size={18} /> Update fitness &amp; re-target</button>
+            {onEditTechnique && <><div style={{ height: 10 }} /><button className="btn ghost" onClick={onEditTechnique}><Icon name="pace" size={18} /> Swim technique</button></>}
             {plan.updatedAt && (() => {
               const prev = (p.fitnessHistory || []).slice(-1)[0];
               const delta = prev && prev.fivekSec && p.fivekSec

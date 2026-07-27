@@ -283,6 +283,9 @@ const toLogEntry = l => ({
   // once Jack adds it, stored reviews hydrate and the multi-session evidence
   // (swimReviewEvidence) starts speaking. Nothing is ever SENT until then.
   swimReview: l.swimReview || undefined,
+  // Phase 5: the technique cue answer rides the same filed ask. Read-only
+  // today for the same reason.
+  techniqueCue: l.techniqueCue || undefined,
 });
 // The server can return a log row for workouts that were never completed
 // (empty stubs from other write paths). An entry's EXISTENCE means "done"

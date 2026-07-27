@@ -38,7 +38,7 @@ const WHY_DISC = {
   'swim:Long': 'Steady, patient distance work. An even rhythm from the first length to the last: the volume does the work when your form holds it together.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed, fuelLog, onFuel }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed, fuelLog, onFuel, onCue, cueAnswer }) {
   // The rep table: lazily fetch the recording's interval analysis once the
   // session is done and matched. null → loading/none; [] handled by the lib.
   const [reps, setReps] = useState(null);
@@ -88,6 +88,23 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             {[['easy', 'Easy'], ['right', 'Just right'], ['hard', 'Hard']].map(([k, lab]) =>
               <button key={k} className={'feelbtn' + (feel === k ? ' on ' + k : '')} onClick={() => onFeel(w.id, k)}>{lab}</button>)}
           </div>
+          {/* Phase 5 (§5): one question after a technique session, and only
+              a technique session. It biases which drills come next; it makes
+              no claim to have measured anyone's stroke. Dormant until the
+              backend carries the field, so it is offered only when the app
+              can actually store the answer. */}
+          {onCue && w.type === 'Technique' && (() => {
+            const chosen = cueAnswer || null;
+            return <>
+              <div className="fuel-q">Which cue helped most today?</div>
+              <div className="feel-row fuel" style={{ flexWrap: 'wrap' }}>
+                {T.TECHNIQUE_FOCUS.concat([{ id: 'none', label: 'None of these' }]).map(f =>
+                  <button key={f.id} className={'feelbtn' + (chosen === f.id ? ' on right' : '')}
+                    onClick={() => onCue(w.id, chosen === f.id ? null : f.id)}>{f.label}</button>)}
+              </div>
+              <div className="fuel-cap">This nudges which drills you get next. It is your word on what helped, not a stroke analysis.</div>
+            </>;
+          })()}
           {/* Fuel, deliberately SUBORDINATE to feel (the one thing a finished
               session asks comes first): long sessions with a matched
               recording only, keyed by the recording, always optional. */}

@@ -4,6 +4,7 @@ import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL } from './domain.js';
 import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
 import { swimZoneTargets } from './swim-zones.js';
+import { drillPool, focusOrder, saneTechnique } from './swim-drills.js';
 import { weakBias, weakestLink } from './weakest.js';
 import { RIEGEL_EXP } from './runstats.js';
 
@@ -33,6 +34,11 @@ function computePaces(profile) {
     // The athlete's pool rides along so buildSwim can round lengths and label
     // in the pool's unit. Display/construction only; it never touches css.
     pool: poolFor(profile),
+    // Phase 5: what the athlete says they are working on and what kit they
+    // own. Rides the paces object exactly as pool does, so every build and
+    // rebuild path carries it without a signature change. null (nothing
+    // declared) is the byte-identical path through drill selection.
+    technique: saneTechnique(profile.technique),
     ftp: ftp,
     ftpEstimated: ftpEstimated,
     // Watts per kilo, for the distance model's speed scaling. This is already
@@ -590,20 +596,8 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
 // everyone, 0 standard, 1 needs an established stroke) against the athlete's
 // intensity dial. Backstroke earns its place as active recovery between
 // freestyle rep work, not as a scored stroke.
-const SWIM_DRILLS = [
-  { name: 'Catch-up', cue: 'one arm waits for the other, long body line', level: -1 },
-  { name: 'Single-arm', cue: 'off arm by your side, rotate to breathe', level: -1 },
-  { name: 'Scull', cue: 'slow figure-eights, feel the water on your palms', level: -1 },
-  { name: 'Fingertip drag', cue: 'trail your fingertips forward, high elbow', level: -1 },
-  { name: 'Kick on side', cue: 'bottom arm extended, steady relaxed kick', level: -1 },
-  { name: 'Backstroke lengths', cue: 'easy backstroke, open the shoulders and reset', level: -1 },
-  { name: 'Fist', cue: 'closed fists, press the water with your forearm', level: 0 },
-  { name: '6-1-6', cue: 'six kicks on your side, one stroke, six more', level: 0 },
-  { name: 'Doggy paddle', cue: 'head up, pull straight back under your body', level: 0 },
-  { name: 'Pull buoy swim', cue: 'buoy between thighs, hips high, long strokes', gear: 'pull buoy', level: 0 },
-  { name: 'Paddle pull', cue: 'firm catch, no slipping through the water', gear: 'paddles and pull buoy', level: 1 },
-  { name: 'Snorkel swim', cue: 'head perfectly still, balanced stroke both sides', gear: 'centre snorkel', level: 1 },
-];
+// (the catalogue itself now lives in swim-drills.js with its coaching
+// metadata; its order is still load-bearing for the rotation below)
 // Deterministic rotation over the drills this athlete is ready for: same
 // (seed, salt) means same drills, honouring the rebuild-stability contract
 // every variant menu in this file honours. The salt is the session's RAW
@@ -628,11 +622,21 @@ const SWIM_DRILLS = [
 // pickDrills rotates modulo the pool, so an over-long request silently repeats
 // a drill (gauntlet catch 2026-07-18 — a beginner's pool is six, and a 70 min
 // custom Technique swim asked for seven).
-function drillPoolSize(intensity) {
-  return SWIM_DRILLS.filter(d => d.level <= (intensity || 0)).length;
+function drillPoolSize(intensity, tech) {
+  return drillPool(intensity, tech).length;
 }
-function pickDrills(seed, intensity, n, salt, role) {
-  const pool = SWIM_DRILLS.filter(d => d.level <= (intensity || 0));
+/* Phase 5: the athlete's declared focus and kit shape the pool and its
+   order; with nothing declared drillPool returns exactly the old level
+   filter and focusOrder is the identity, so the arithmetic below runs on
+   the same list it always did and every existing athlete is byte-identical.
+   When a focus IS declared the same start-and-direction scheme runs over
+   the focus block first, then tops up from the rest — so the role
+   discriminator that keeps a week's two Technique swims apart survives:
+   a forward and a backward walk of the same block differ at the second
+   entry, and where the block holds only one drill the top-up differs. */
+function pickDrills(seed, intensity, n, salt, role, tech) {
+  const pool = drillPool(intensity, tech);
+  const { ordered, matching } = focusOrder(pool, tech);
   // The salt adds AFTER the multiply ((seed + salt) * n would collapse two
   // odd salts whenever n divides the pool size), and on the round5 grid:
   // durations are multiples of 5, so a raw-minute salt collides whenever a
@@ -653,17 +657,35 @@ function pickDrills(seed, intensity, n, salt, role) {
   // The shifted start is cosmetic, not the guarantee: it stops the week's two
   // Technique swims opening on the same drill. Direction is what makes them
   // provably different.
-  const start = ((seed || 0) * n + Math.round((salt || 0) / 5) + (back ? 1 : 0)) % pool.length;
-  const at = i => pool[(((start + (back ? -i : i)) % pool.length) + pool.length) % pool.length];
-  return Array.from({ length: n }, (_, i) => at(i));
+  const base = (seed || 0) * n + Math.round((salt || 0) / 5) + (back ? 1 : 0);
+  const walk = (list, count) => {
+    const start = base % list.length;
+    const at = i => list[(((start + (back ? -i : i)) % list.length) + list.length) % list.length];
+    return Array.from({ length: count }, (_, i) => at(i));
+  };
+  if (!matching) return walk(ordered, n);
+  // focus declared: fill from the focus block, then top up from the rest.
+  // Neither walk is allowed to wrap past its own list (which would repeat a
+  // drill), and n is capped at the whole pool by drillPoolSize.
+  const head = ordered.slice(0, matching), tail = ordered.slice(matching);
+  const nHead = Math.min(n, head.length);
+  const out = walk(head, nHead);
+  if (n > nHead && tail.length) out.push(...walk(tail, Math.min(n - nHead, tail.length)));
+  return out;
 }
 // One segment per drill, so every drill carries its own focus cue (and names
 // its kit) instead of a comma list with nowhere to explain itself.
 function drillSegs(pc, drills) {
   const P = pc.pool || DEFAULT_POOL;
+  // Phase 5 (§7): once an athlete has told us what they are working on, each
+  // drill also says WHY it is in the session. Athletes who have declared
+  // nothing keep exactly the card they had, so the purpose line can never
+  // silently rewrite an existing plan.
+  const t = saneTechnique(pc.technique);
+  const explain = !!(t && t.focus.length);
   return drills.map(d => ({
     label: '2 × ' + poolLabel(50, P) + ' ' + d.name,
-    detail: d.cue + (d.gear ? ' · ' + d.gear : ''),
+    detail: d.cue + (d.gear ? ' · ' + d.gear : '') + (explain && d.purpose ? ' · ' + d.purpose : ''),
     ...swimRep(pc, 'easy', 'Z1', 2, 50, 15),
   }));
 }
@@ -741,7 +763,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
     const drillBudget = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
     const base = v(2) === 0 ? 3 : 4;
     const affordable = Math.floor(drillBudget / perDrill);
-    const ceiling = Math.min(8, drillPoolSize(intensity), Math.max(2, affordable));
+    const ceiling = Math.min(8, drillPoolSize(intensity, pc.technique), Math.max(2, affordable));
     const nDrills = clamp(Math.max(base, Math.round(drillBudget * 0.35 / perDrill)), 2, Math.max(2, ceiling));
     const mainSec = drillBudget - nDrills * perDrill;
     // Rep distance scales so an elite hour keeps a sane count (the Long
@@ -763,7 +785,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
     const mainLabel = v(2) === 0 ? reps + ' × ' + dl(repM) + ' steady' : splitLabel();
     segs = [
       wuSeg(sh[0]),
-      ...drillSegs(pc, pickDrills(seed, intensity, nDrills, dur, role)),
+      ...drillSegs(pc, pickDrills(seed, intensity, nDrills, dur, role, pc.technique)),
       ...(reps > 0 ? [{ label: mainLabel, detail: swimDetail(pc, 'steady', 'Z3'), ...swimRep(pc, 'steady', 'Z3', reps, repM, rest) }] : []),
       cdSeg(sh[1]),
     ];

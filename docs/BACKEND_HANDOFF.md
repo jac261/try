@@ -362,3 +362,18 @@ The client already reads it defensively (absent = undefined, nothing
 breaks) and sends NOTHING until the field exists - the write path stays
 untouched so current log PUTs cannot 400. Once the field lands we wire the
 write side and the stored reviews start feeding the retest recommendation.
+
+### Extension - 27 July 2026: technique cue on the same log field
+
+Swim build-out phase 5 adds one post-session question on technique swims
+("which cue helped most today?"). The answer biases future drill selection.
+It wants the same treatment as `swimReview` above: an optional
+`techniqueCue` string on the workout log DTO (one of the technique focus
+ids, or "none"), write-through on PUT and echoed on GET.
+
+The athlete's own settings need nothing from you: the technique focus and
+equipment profile ride the opaque profile blob as `profile.technique =
+{ focus: string[], kit?: string[], updatedAt }`, the same additive-safe
+route `pool` and `cssMeta` took. As with those, a typed passthrough on
+UserProfileResponse would be welcome eventually so a fresh device keeps the
+setting, but nothing 400s without it.
