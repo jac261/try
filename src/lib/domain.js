@@ -81,6 +81,53 @@ export function saneWeightKg(weightKg) {
   return n >= WEIGHT_KG.min && n <= WEIGHT_KG.max ? n : null;
 }
 
+/* Phase 1 (bike): the power anchor, said out loud.
+ *
+ * The bike has always had two different numbers wearing the same name: the
+ * athlete's real FTP, and a level-times-weight estimate that exists only so
+ * a new rider sees watt ranges instead of RPE text. Keeping them apart is
+ * the module's oldest invariant (design panel 2026-07-18) and it is enforced
+ * by convention today: the estimate lives on paces and profile.ftp stays
+ * null, because weakest.js, eftp.js, tuning.js and the fitness-history trend
+ * all read profile.ftp directly and every one of them would be corrupted by
+ * a guess.
+ *
+ * This makes the distinction a value rather than a convention, so a caller
+ * can ask what kind of number it is holding instead of remembering to check.
+ * Only kind 'real' may drive review, tuning, weakness detection or history.
+ *
+ * It reads the profile and nothing else, so it cannot disagree with
+ * computePaces about what is real.
+ */
+export const FTP_SOURCES = ['manual', 'eftp', 'ramp-test', 'intervals-icu'];
+export function bikePowerAnchor(profile) {
+  const p = profile || {};
+  const meta = p.ftpMeta || {};
+  if (p.ftp) {
+    return {
+      kind: 'real',
+      ftpWatts: p.ftp,
+      source: FTP_SOURCES.includes(meta.source) ? meta.source : 'manual',
+      measuredAt: meta.measuredAt || null,
+    };
+  }
+  // No weight means no estimate at all: converting watts per kilo into watts
+  // needs a weight, and an unusable one (500 kg once read as a 975 W
+  // endurance ride) must fail closed rather than project a confident wrong
+  // number onto the card.
+  const kg = saneWeightKg(p.weightKg);
+  const lvl = FITNESS[p.fitness] || FITNESS.intermediate;
+  if (kg && lvl.estWkg) {
+    return { kind: 'estimated', ftpWatts: Math.round(lvl.estWkg * kg), levelWkg: lvl.estWkg, weightKg: kg };
+  }
+  return { kind: 'none' };
+}
+
+// The one question every consumer of a threshold actually wants to ask.
+export function hasRealFtp(profile) {
+  return bikePowerAnchor(profile).kind === 'real';
+}
+
 // The athlete's pool. A DISPLAY-and-construction setting only: it changes how
 // swim work is expressed (lengths, unit), never the physiological threshold.
 // CSS stays canonical in seconds per 100 m whatever the pool. The default is

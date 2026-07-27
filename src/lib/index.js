@@ -13,6 +13,7 @@ export * from './swim-drills.js';
 export * from './swim-open-water.js';
 export * from './swim-dashboard.js';
 export * from './swim-strokes.js';
+export * from './bikeschema.js';
 export * from './disciplines.js';
 export * from './plan.js';
 export * from './wellness.js';
