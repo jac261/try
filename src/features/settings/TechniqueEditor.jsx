@@ -12,6 +12,7 @@ export function TechniqueEditor({ profile, onClose, onSave }) {
   const cur = T.saneTechnique(profile.technique) || { focus: [], kit: null };
   const [focus, setFocus] = useState(cur.focus);
   const [kit, setKit] = useState(cur.kit);
+  const [owRace, setOwRace] = useState(!!profile.openWaterRace);
 
   // Two at most: a session that chases everything improves nothing. Picking a
   // third replaces the older choice rather than silently doing nothing.
@@ -54,8 +55,15 @@ export function TechniqueEditor({ profile, onClose, onSave }) {
         </div>
         {kit !== null && !kit.length && <p className="lead" style={{ fontSize: 13, marginTop: 8 }}>Nothing selected: you will only get drills that need no kit, which is most of them.</p>}
 
+        <div className="section-title" style={{ margin: '14px 0 6px' }}>Open water</div>
+        <p className="lead" style={{ fontSize: 13, marginTop: -2 }}>Open-water sessions always appear in your peak weeks. Turn this on and open-water skills start earlier, on your second quality swim of the week.</p>
+        <div className="choice">
+          <div className={'opt' + (owRace ? ' on' : '')} {...tap(() => setOwRace(true))}>My race swim is open water</div>
+          <div className={'opt' + (!owRace ? ' on' : '')} {...tap(() => setOwRace(false))}>Pool race, or not sure</div>
+        </div>
+
         <button className="btn primary" style={{ marginTop: 16 }}
-          onClick={() => { onSave({ technique: { focus, kit: kit === null ? undefined : kit, updatedAt: T.iso(new Date()) } }); onClose(); }}>
+          onClick={() => { onSave({ openWaterRace: owRace, technique: { focus, kit: kit === null ? undefined : kit, updatedAt: T.iso(new Date()) } }); onClose(); }}>
           Save
         </button>
         <button className="btn ghost" style={{ marginTop: 8 }} onClick={onClose}>Cancel</button>

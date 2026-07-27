@@ -5,6 +5,7 @@ import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL } f
 import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
 import { swimZoneTargets } from './swim-zones.js';
 import { drillPool, focusOrder, saneTechnique } from './swim-drills.js';
+import { OW_SKILLS, OW_SAFETY, OW_SKILL_CEILING, owCategory } from './swim-open-water.js';
 import { weakBias, weakestLink } from './weakest.js';
 import { RIEGEL_EXP } from './runstats.js';
 
@@ -760,7 +761,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
   const perRep = (key, m, rest) => (rdm(m) / 100) * pc.swim[key] + rest;
   const wuSeg = m => ({ label: 'Warm-up ' + dl(m), detail: swimDetail(pc, 'easy', 'Z2'), ...swimBlock(pc, 'easy', 'Z2', m) });
   const cdSeg = m => ({ label: 'Cool-down ' + dl(m), detail: swimDetail(pc, 'recovery', 'Z1'), ...swimBlock(pc, 'recovery', 'Z1', m) });
-  let segs = [], title = 'Swim';
+  let segs = [], title = 'Swim', safety = null;
   if (type === 'Technique') {
     title = 'Technique Swim';
     const sh = swimShoulders(pc, budget, 300, 200);
@@ -906,47 +907,67 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
     }
     segs = [wuSeg(sh[0]), ...mains, cdSeg(sh[1])];
   } else if (type === 'Open Water') {
-    title = 'Open Water Swim';
+    // Phase 6: one of five race-specific categories rather than a single
+    // fixed template. The category is chosen deterministically from the same
+    // (seed, duration, role) inputs the rest of the swim builder uses, so a
+    // rebuild is stable and a week's two swims cannot land on the same one.
+    //   Each category is a SHAPE (blocks with a share of the session); this
+    // turns it into real reps at the athlete's paces and pool. Every block
+    // carries its skills forward on seg.ow so the pool fallback can be
+    // derived from the session rather than written twice.
+    const cat = owCategory(seed, dur, role);
+    title = cat.title;
     const sh = swimShoulders(pc, budget, 300, 200, 200);
     const avail = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
-    // The skills block is a fixed slice of coaching, not the session's
-    // remainder: capping the race set at six 200s left an elite peak session
-    // two-thirds unstructured filler, in the race-prep swim that matters most
-    // (gauntlet catch 2026-07-18). Skills take ~15% of the post-shoulder time
-    // within a 6-12 min band, and the race-effort reps lengthen — 200 m to
-    // 400 m — so the rest of the session is real race-specific volume at a
-    // sane rep count. The block stays unstructured: skills are drilled by
-    // feel, not by the clock, but it carries its minutes so the card sums.
-    // Skills take a slice of the post-shoulder time within a 6-12 min band,
-    // but never more than a third of it: on a starved session the band would
-    // otherwise swallow the whole swim. The block carries EXACTLY this slice
-    // as its minutes — earlier it took the session residual, which silently
-    // rounded to zero at ordinary paces (a coaching block advertising work it
-    // did not account for) and ballooned to 17 min at slow ones (gauntlet
-    // catches 2026-07-18). Race effort takes ~60%, its reps lengthening 200 to
-    // 400 m; whatever the reps and skills leave is aerobic support.
-    const skillsSec = Math.min(clamp(avail * 0.15, 6 * 60, 12 * 60), avail / 3);
-    const raceSec = Math.min(avail - skillsSec, avail * 0.6);
-    let repM = 200, n = Math.round(raceSec / perRep('css', 200, 30));
-    if (n > 6) { repM = 400; n = Math.round(raceSec / perRep('css', 400, 30)); }
-    n = Math.max(2, n);
-    const raceSet = { label: n + ' × ' + dl(repM) + ' @ race effort', detail: swimDetail(pc, 'css', 'Z4') + ' · sight every 6–8 strokes', ...swimRep(pc, 'css', 'Z4', n, repM, 30) };
-    const easySec = avail - skillsSec - n * perRep('css', repM, 30);
-    const easyM = easySec > 0 ? Math.round(easySec / pc.swim.steady) * 100 : 0;
-    // The aerobic block soaks the residual down to 200 m; anything smaller
-    // folds into the skills minutes so no time is lost off the card (it would
-    // otherwise vanish, a sub-300 m gap that undershot a 45-min swim by 3 min
-    // — gauntlet catch 2026-07-18). Skills stays near its band: the fold is at
-    // most one steady rep.
-    const hasEasy = easyM >= 200;
-    const skillsMin = Math.max(3, Math.round((skillsSec + (hasEasy ? 0 : Math.max(0, easySec))) / 60));
-    segs = [
-      wuSeg(sh[0]),
-      raceSet,
-      ...(hasEasy ? steadyMetres(pc, easyM, ' · relaxed, keep sighting') : []),
-      { label: 'Open-water skills', detail: 'Deep-water start, drafting, buoy turns — practise swimming straight', min: skillsMin },
-      cdSeg(sh[1]),
-    ];
+    const mainsOw = [];
+    let spent = 0, skillSec = 0;
+    cat.blocks.forEach((b, bi) => {
+      // the last block absorbs the rounding residual so the card sums to the
+      // session, the same discipline every other swim branch keeps
+      const last = bi === cat.blocks.length - 1;
+      const sec = last ? Math.max(0, avail - spent) : avail * b.share;
+      if (sec <= 0) return;
+      if (b.kind === 'skill') {
+        // Skills are drilled by feel, never by the clock, so the block is
+        // unstructured — but it carries its minutes so the card still sums.
+        //   Hard ceiling on unstructured time (gauntlet invariant 2026-07-18,
+        // kept through phase 6): a race-prep session must be mostly race-
+        // specific swimming, never skills filler. The cap is on the SESSION,
+        // not the block, so a category with two skill blocks cannot creep
+        // past it either.
+        const room = Math.max(0, budget * OW_SKILL_CEILING - skillSec);
+        const min = Math.max(3, Math.round(Math.min(sec, room) / 60));
+        const names = b.skills.map(k => OW_SKILLS[k].label).join(', ');
+        const cues = b.skills.map(k => OW_SKILLS[k].cue).join(' · ');
+        mainsOw.push({ label: names, detail: cues, min: min, ow: { skills: b.skills, timed: true } });
+        skillSec += min * 60;
+        spent += min * 60;
+        return;
+      }
+      if (b.kind === 'steady') {
+        const m = Math.round(sec / pc.swim.steady) * 100;
+        if (m < 200) { spent += sec; return; }
+        const note = b.skill ? ' · ' + OW_SKILLS[b.skill].cue : '';
+        steadyMetres(pc, m, note).forEach(sg => mainsOw.push({ ...sg, ow: { skills: b.skill ? [b.skill] : [] } }));
+        spent += (m / 100) * pc.swim.steady;
+        return;
+      }
+      // reps: shrink the rep to what the share can actually afford rather
+      // than overrunning the session with a nominal distance
+      let repM = b.repM;
+      while (repM > 100 && perRep(b.key, repM, b.rest) * 2 > sec) repM = repM > 400 ? repM - 200 : repM - 50;
+      const n = Math.max(2, Math.round(sec / perRep(b.key, repM, b.rest)));
+      const cue = b.skill ? ' · ' + OW_SKILLS[b.skill].cue : '';
+      mainsOw.push({
+        label: n + ' × ' + dl(repM) + ' ' + b.label,
+        detail: swimDetail(pc, b.key, b.zone) + ' · ' + b.rest + ' s rest' + cue,
+        ...swimRep(pc, b.key, b.zone, n, repM, b.rest),
+        ow: { skills: b.skill ? [b.skill] : [] },
+      });
+      spent += n * perRep(b.key, repM, b.rest);
+    });
+    segs = [wuSeg(sh[0]), ...mainsOw, cdSeg(sh[1])];
+    safety = OW_SAFETY;
   } else { // Endurance / Race Pace
     title = type === 'Race Pace' ? 'Race-Pace Swim' : 'Endurance Swim';
     const key = type === 'Race Pace' ? 'css' : 'steady';
@@ -1029,7 +1050,10 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
     }
   }
   const dist = swimDistance(segs); // exact: summed prescribed metres, not a flat overhead guess
-  return { title: title, segments: segs, distance: dist, unit: 'km' };
+  // safety carries the open-water wording (phase 6); it is deliberately NOT
+  // `note`, which already means a test protocol. Every other swim leaves it
+  // null, so nothing else on the card changes.
+  return { title: title, segments: segs, distance: dist, unit: 'km', safety: safety };
 }
 
 // The peak run-off-the-bike anchor scales to the race: sprint/olympic race runs
@@ -1354,7 +1378,7 @@ const RACE_QUALITY_BIAS = { run5k: 1, run10k: 1, runhalf: 0, runmarathon: 0 };
 // occ and raceBias are only ever non-zero for solo plans (the caller gates
 // them), so every triathlon plan builds byte-identically. occ 1 is the second
 // quality of the week: one rung adjacent to the first, easier when possible.
-function typeFor(discipline, role, phase, isRecovery, intensity, occ = 0, raceBias = 0) {
+function typeFor(discipline, role, phase, isRecovery, intensity, occ = 0, raceBias = 0, owEarly = false, weekIdx = 0) {
   // Templates encode bricks as 'brick:long' — the discipline, not the role,
   // is the brick signal, so it must win before the generic long check.
   if (discipline === 'brick') return 'Brick';
@@ -1364,6 +1388,17 @@ function typeFor(discipline, role, phase, isRecovery, intensity, occ = 0, raceBi
   // Open Water made two-swim weeks byte-identical (pre-existing, widened by
   // the injured-state templates); the easy slot keeps its technique work.
   if (discipline === 'swim' && phase === 'Peak' && !isRecovery && role !== 'easy') return 'Open Water';
+  // Phase 6 (§7), opt-in only: an athlete who says their race swim is open
+  // water gets open-water skills in Build too, on the SECOND quality swim
+  // only. The first quality slot keeps its CSS/threshold work and the easy
+  // slot keeps technique, so the week still trains what it trained: this
+  // adds race specificity, it does not trade fitness away for it. Nothing
+  // moves for an athlete who has not asked.
+  // Alternate Build weeks, so half the block still trains the threshold work
+  // Build exists for. A second quality swim, where the week has one, takes it
+  // instead so the first keeps its CSS session every time.
+  if (owEarly && discipline === 'swim' && phase === 'Build' && !isRecovery && role !== 'easy'
+    && (occ ? true : (weekIdx % 2 === 1))) return 'Open Water';
   // bike has no 'Easy' builder branch (falling through would hand it the
   // Threshold else-branch, the recovery-week lesson) — Endurance IS its easy
   if (role === 'easy') return discipline === 'swim' ? 'Technique' : discipline === 'bike' ? 'Endurance' : 'Easy';
@@ -1422,6 +1457,7 @@ export const easeWorkout = function (w, plan) {
   return Object.assign({}, w, {
     type: easyType, title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
+    safety: built.safety || undefined,
     eased: true, easedFrom: w.type, key: false,
   });
 };
@@ -1442,6 +1478,7 @@ export const trimWorkout = function (w, plan, factor) {
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
+    safety: built.safety || undefined,
     trimmed: true, trimmedFrom: w.durationMin,
   });
 };
@@ -1467,6 +1504,7 @@ export const boostWorkout = function (w, plan, factor) {
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
+    safety: built.safety || undefined,
     boosted: true, boostedFrom: w.durationMin,
   });
 };
@@ -1494,7 +1532,7 @@ export const addCustomWorkout = function (plan, { discipline, type, durationMin,
     id: key + '-' + n, week: wk.index, seed: seed, phase: wk.phase, date: dateISO,
     discipline: discipline, role: 'custom', type: type, title: built.title,
     durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
-    segments: built.segments, custom: true,
+    segments: built.segments, safety: built.safety || undefined, custom: true,
   };
   const weeks = plan.weeks.map(w => w.index !== wk.index ? w
     : Object.assign({}, w, { workouts: w.workouts.concat([workout]), totalMin: w.totalMin + dur }));
@@ -1704,7 +1742,7 @@ export const upgradePlanSegments = function (plan) {
       const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType, w.role);
       if (!(built.segments || []).some(s => s.zone || s.blocks)) return w; // swims/strength stay as they are
       changed = true;
-      return Object.assign({}, w, { segments: built.segments, distance: built.distance, distEst: !!built.distEst });
+      return Object.assign({}, w, { segments: built.segments, distance: built.distance, distEst: !!built.distEst, safety: built.safety || undefined });
     });
     return Object.assign({}, week, { workouts: workouts });
   });
@@ -1772,6 +1810,9 @@ function loadFactor(phase, posInPhase, lenPhase) {
 /* ---- main entry ---- */
 export const generatePlan = function (profile, opts) {
   const race = RACES[profile.raceType];
+  // §7 opt-in: only meaningful on a plan that actually swims towards a race.
+  const owEarly = !!(profile.openWaterRace && race && !race.solo && !race.noRace
+    && profile.excludedDiscipline !== 'swim');
   const fitness = FITNESS[profile.fitness] || FITNESS.intermediate;
   const pc = computePaces(profile);
 
@@ -1944,7 +1985,7 @@ export const generatePlan = function (profile, opts) {
         for (let d2 = cur.durationMin - 5; d2 >= 20; d2 -= 5) if (!taken(cur.type, d2)) { m = d2; break; }
         for (let d2 = cur.durationMin + 5; m == null; d2 += 5) if (!taken(cur.type, d2)) m = d2;
         const built = buildWorkout(cur.discipline, cur.type, m, pc, cur.phase, cur.seed, fitness.intensity, profile.raceType, cur.role);
-        cur = { ...cur, durationMin: m, title: built.title, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments };
+        cur = { ...cur, durationMin: m, title: built.title, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments, safety: built.safety || undefined };
         wk.workouts[i] = cur;
       }
       seen.push({ t: cur.type, m: cur.durationMin });
@@ -2063,7 +2104,7 @@ export const generatePlan = function (profile, opts) {
       const roleOut = soloShakeout ? 'easy' : s.role;
       const type = soloShakeout ? 'Easy'
         : typeFor(s.disc, s.role, phase, isRecovery, fitness.intensity, occ,
-          race.solo ? (RACE_QUALITY_BIAS[race.key] || 0) : 0);
+          race.solo ? (RACE_QUALITY_BIAS[race.key] || 0) : 0, owEarly, w);
       // Lead-in Maintain weeks hold fitness, they don't rehearse the race:
       // long sessions cap at maintenance scale (a far-out full would otherwise
       // spend months on 3h+ "maintenance" rides). Standalone maintenance and
@@ -2113,7 +2154,8 @@ export const generatePlan = function (profile, opts) {
         id: w + '-' + d, week: w, phase: phase, date: date, seed: seed,
         discipline: s.disc, role: roleOut, type: type, title: built.title,
         durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
-        segments: built.segments, key: !soloShakeout && (s.role === 'long' || s.role === 'brick'),
+        segments: built.segments, safety: built.safety || undefined,
+        key: !soloShakeout && (s.role === 'long' || s.role === 'brick'),
       });
     }
 

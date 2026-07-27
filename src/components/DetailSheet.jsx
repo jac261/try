@@ -158,6 +158,22 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         </>}
         <div style={{ height: 16 }} />
         {w.test && w.note && <div className="testnote"><Icon name="stopwatch" size={18} /><span>{w.note}</span></div>}
+        {/* Phase 6: the safety wording rides every open-water session, and the
+            pool equivalent is always on the card — the athlete swaps the
+            water, not the session, so nothing has to be stored for it and
+            there is never a reason to skip. */}
+        {w.safety && <div className="testnote"><Icon name="heartrate" size={18} /><span>{w.safety}</span></div>}
+        {(() => {
+          const fb = T.poolFallback(w);
+          if (!fb || !fb.lines.length) return null;
+          return (
+            <div className="testnote" style={{ display: 'block' }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>{fb.title}</div>
+              <div className="lead" style={{ margin: '0 0 6px' }}>{fb.lead}</div>
+              {fb.lines.map((l, i) => <div key={i} className="lead" style={{ margin: '0 0 2px' }}>{l}</div>)}
+            </div>
+          );
+        })()}
         {w.test && onLogResult && <><button className="btn primary" onClick={onLogResult}><Icon name="trend" size={18} /> Log result &amp; re-target</button><div style={{ height: 10 }} /></>}
         {!w.race && <button className={'btn ' + (done ? 'done' : (w.test ? 'ghost' : 'primary'))} onClick={onToggle}>
           {done ? '✓ Completed — tap to undo' : 'Mark as complete'}</button>}

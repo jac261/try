@@ -355,8 +355,11 @@ describe('swim sizing honesty (sizing pass 2026-07-18)', () => {
     const p = generatePlan(swimWeak);
     const peak = p.weeks.find(x => x.phase === 'Peak' && !x.isRecovery);
     const ow = addCustomWorkout(p, { discipline: 'swim', type: 'Open Water', durationMin: 45, dateISO: peak.start }).workout;
-    const skills = ow.segments.find(s => /skills/.test(s.label));
-    expect(skills.min).toBeGreaterThan(0);
+    // phase 6: the skills block is identified by its structure (unstructured
+    // timed open-water work), not by a label that categories now vary
+    const skills = ow.segments.filter(s => (s.ow && s.ow.timed) || /skills/.test(s.label));
+    expect(skills.length).toBeGreaterThan(0);
+    skills.forEach(sk => expect(sk.min).toBeGreaterThan(0));
     const actual = ow.segments.reduce((a, s) => a + segMinutes(s), 0);
     expect(actual / 45).toBeGreaterThan(0.85);
     expect(actual / 45).toBeLessThan(1.15);
@@ -383,9 +386,10 @@ describe('swim coaching ceilings (sizing gauntlet 2026-07-18)', () => {
 
   it('an Open Water session is mostly race-specific swimming, not skills filler', () => {
     allSwims(elite).filter(x => x.type === 'Open Water').forEach(x => {
-      const skills = x.segments.find(s => /skills/.test(s.label));
+      const skills = x.segments.filter(s => (s.ow && s.ow.timed) || /skills/.test(s.label));
       const total = x.segments.reduce((a, s) => a + segMinutes(s), 0);
-      expect(segMinutes(skills) / total, x.durationMin + 'min').toBeLessThan(0.3);
+      const skillMin = skills.reduce((a, s) => a + segMinutes(s), 0);
+      expect(skillMin / total, x.durationMin + 'min').toBeLessThan(0.3);
     });
   });
 
