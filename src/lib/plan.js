@@ -1838,6 +1838,14 @@ export const generatePlan = function (profile, opts) {
   // §7 opt-in: only meaningful on a plan that actually swims towards a race.
   const owEarly = !!(profile.openWaterRace && race && !race.solo && !race.noRace
     && profile.excludedDiscipline !== 'swim');
+  // Who gets the second aerobic ride (Jon, 2026-07-27). A property of the
+  // athlete, not the week: an advanced or elite rider with enough days to
+  // absorb it. Below six days there is no room to double without crowding
+  // the week, and below advanced the extra hours are not what is limiting
+  // progression.
+  const volumeDouble = (profile.fitness === 'advanced' || profile.fitness === 'elite')
+    && (profile.daysPerWeek || (profile.trainingDays || []).length) >= 6
+    && !race.solo && profile.excludedDiscipline !== 'bike';
   const fitness = FITNESS[profile.fitness] || FITNESS.intermediate;
   const pc = computePaces(profile);
 
@@ -2243,6 +2251,43 @@ export const generatePlan = function (profile, opts) {
           // open-water session; a pool 400/200 must not inherit its safety
           // wording (review catch 2026-07-27).
           safety: undefined,
+        });
+      }
+    }
+
+    // VOLUME DOUBLE (Jon, 2026-07-27: "sessions shouldn't be capped per week
+    // if an athlete requires high volume for progression"). Total sessions
+    // used to equal training days, so a 7-day athlete could never ride more
+    // than twice however much volume they could absorb. An advanced or elite
+    // athlete with the days now gets a second aerobic ride stacked on their
+    // bike quality day, the same double mechanism strength already uses.
+    //
+    // Deliberately narrow, because volume that arrives as extra intensity is
+    // how people get hurt:
+    //   - Endurance only. A second quality session is never added.
+    //   - Base and Build only: Peak and Taper sharpen, they do not build.
+    //   - Never in a recovery week, which exists to remove load.
+    //   - Hosted on the bike quality day, so the aerobic hours land on a day
+    //     that is already a bike day and the easy days stay easy (the same
+    //     reasoning the strength double uses).
+    //   - Sized off that day's own quality ride, so it inherits every level,
+    //     phase and limiter scaling already applied rather than carrying its
+    //     own table.
+    if ((phase === 'Base' || phase === 'Build') && !isRecovery && volumeDouble) {
+      const host = workouts.find(x => x.discipline === 'bike' && x.role === 'quality' && !x.race && !x.test);
+      if (host) {
+        // A duplicate (discipline, type, duration) in one week builds a
+        // byte-identical card, because buildBike keys on seed and duration
+        // alone. Step the duration until it is this week's own ride.
+        const clash = d => workouts.some(x => x.discipline === 'bike' && x.type === 'Endurance' && x.durationMin === d);
+        let dur = clamp(round5(host.durationMin * 0.75), 40, 90);
+        while (clash(dur) && dur < 120) dur += 5;
+        const built = buildWorkout('bike', 'Endurance', dur, pc, phase, host.seed, fitness.intensity, profile.raceType, 'easy');
+        workouts.push({
+          id: w + '-' + host.id.split('-')[1] + '-2', week: w, phase: phase, date: host.date, seed: host.seed,
+          discipline: 'bike', role: 'easy', type: 'Endurance', title: built.title,
+          durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
+          segments: built.segments, second: true,
         });
       }
     }

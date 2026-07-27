@@ -64,14 +64,19 @@ describe('the matrix: every ride the engine can build is well formed (§1)', () 
     // A third ride exists for a bike-LIMITED athlete, and the frequency
     // change is applied during generation rather than by a later swap:
     // swapForLimiter returns the same plan because it is already swapped.
-    // FOUR rides a week is not reachable in this engine at all, so the
-    // spec's four-ride case has nothing to test.
     const limited = plan({ ftp: 110, weightKg: 85, fivekSec: 1020, css100Sec: 90, raceType: 'half' });
     const maxLimited = Math.max(...limited.weeks.map(wk => wk.workouts.filter(isTrainingRide).length));
     expect(maxLimited).toBe(3);
     expect(swapForLimiter(limited, 'bike')).toBe(limited);
     expect(detectLimiterSwap(limited)).toBeTruthy();
     ridesOf(limited).forEach(w => expect(bikeWorkoutIssues(w)).toEqual([]));
+
+    // and a FOURTH arrives once the volume double applies on top, which is
+    // the whole point of it: an athlete who can absorb the hours is no
+    // longer held to one session per day
+    const big = plan({ fitness: 'advanced', ftp: 110, weightKg: 85, fivekSec: 1020, css100Sec: 90,
+      raceType: 'half', daysPerWeek: 7, trainingDays: [0, 1, 2, 3, 4, 5, 6], longDay: 6 });
+    expect(Math.max(...big.weeks.map(wk => wk.workouts.filter(isTrainingRide).length))).toBe(4);
   });
 
   it('survives a far-out full-distance plan with a distant race date', () => {
@@ -276,5 +281,93 @@ describe('indoor rides keep what was measured and drop what was not (§2)', () =
     const outside = Object.fromEntries(reviewActivity({ workout: easy, activity: outdoor, paces: real.paces }).stats);
     expect(inside['Avg speed']).toBeUndefined();
     expect(outside['Avg speed']).toBeTruthy();
+  });
+});
+
+
+describe('the volume double: high volume is possible when an athlete can absorb it', () => {
+  const bigWeek = (over = {}) => plan({
+    daysPerWeek: 7, trainingDays: [0, 1, 2, 3, 4, 5, 6], longDay: 6, raceType: 'half', ...over,
+  });
+  const doublesOf = p => p.weeks.flatMap(w => w.workouts).filter(w => w.discipline === 'bike' && w.second);
+
+  it('reaches advanced and elite with the days, and nobody else', () => {
+    ['advanced', 'elite'].forEach(fitness => {
+      expect(doublesOf(bigWeek({ fitness })).length, fitness).toBeGreaterThan(0);
+    });
+    ['beginner', 'intermediate'].forEach(fitness => {
+      expect(doublesOf(bigWeek({ fitness })).length, fitness).toBe(0);
+    });
+    // and not without the days to absorb it
+    [3, 4, 5].forEach(days => {
+      const td = [0, 1, 2, 3, 4, 5, 6].slice(0, days);
+      expect(doublesOf(plan({ fitness: 'elite', daysPerWeek: days, trainingDays: td, longDay: td[td.length - 1] })).length, days + 'd').toBe(0);
+    });
+  });
+
+  it('adds aerobic volume only, never a second hard session', () => {
+    ['advanced', 'elite'].forEach(fitness => {
+      const d = doublesOf(bigWeek({ fitness }));
+      expect(d.length).toBeGreaterThan(0);
+      d.forEach(w => {
+        expect(w.type).toBe(BIKE_EASY_TYPE);
+        expect(w.role).toBe('easy');
+        expect(BIKE_POWER_TYPES).not.toContain(w.type);
+      });
+    });
+  });
+
+  it('never lands in a recovery week, a Peak week or a Taper week', () => {
+    ['advanced', 'elite'].forEach(fitness => {
+      const p = bigWeek({ fitness });
+      p.weeks.forEach(wk => {
+        const d = wk.workouts.filter(w => w.discipline === 'bike' && w.second);
+        if (wk.isRecovery || wk.phase === 'Peak' || wk.phase === 'Taper') {
+          expect(d.length, wk.phase + (wk.isRecovery ? ' recovery' : '')).toBe(0);
+        }
+      });
+    });
+  });
+
+  it('is never a byte-identical clone of another ride that week', () => {
+    // buildBike keys on seed and duration alone, so a same-type same-length
+    // second ride would build the same card
+    ['advanced', 'elite'].forEach(fitness => ['sprint', 'olympic', 'half', 'full'].forEach(raceType => {
+      bigWeek({ fitness, raceType }).weeks.forEach(wk => {
+        const cards = wk.workouts.filter(w => w.discipline === 'bike').map(w => JSON.stringify(w.segments));
+        expect(new Set(cards).size, fitness + '/' + raceType + ' week ' + wk.index).toBe(cards.length);
+      });
+    }));
+  });
+
+  it('is counted in the week total and is structurally sound', () => {
+    ['advanced', 'elite'].forEach(fitness => {
+      const p = bigWeek({ fitness });
+      p.weeks.forEach(wk => {
+        const sum = wk.workouts.reduce((t, w) => t + (w.durationMin || 0), 0);
+        expect(wk.totalMin).toBeCloseTo(sum, 5);
+      });
+      doublesOf(p).forEach(w => expect(bikeWorkoutIssues(w)).toEqual([]));
+    });
+  });
+
+  it('shares its host day with the quality ride rather than taking a rest day', () => {
+    const p = bigWeek({ fitness: 'elite' });
+    doublesOf(p).forEach(w => {
+      const sameDay = p.weeks[w.week].workouts.filter(x => x.date === w.date && x.discipline === 'bike' && !x.second);
+      expect(sameDay.length).toBe(1);
+      expect(sameDay[0].role).toBe('quality');
+    });
+  });
+
+  it('adds sessions without rewriting any existing one', () => {
+    // measured against main: 0 existing workouts changed, 164 added, all to
+    // advanced and elite. Here: an intermediate plan is untouched by the
+    // feature, and an advanced plan only ever GAINS ids.
+    const idsOf = p => new Set(p.weeks.flatMap(w => w.workouts).map(w => w.id));
+    const adv = bigWeek({ fitness: 'advanced' });
+    const advIds = idsOf(adv);
+    doublesOf(adv).forEach(w => expect(advIds.has(w.id)).toBe(true));
+    expect(doublesOf(bigWeek({ fitness: 'intermediate' })).length).toBe(0);
   });
 });
