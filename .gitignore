@@ -3,6 +3,10 @@
 
 # Node / Vite build
 node_modules/
+# also the bare name: a SYMLINK called node_modules (what the scratch
+# worktrees use) is not matched by the trailing-slash form, and one was
+# committed by accident in phase 5
+node_modules
 dist/
 dev-dist/
 *.local
