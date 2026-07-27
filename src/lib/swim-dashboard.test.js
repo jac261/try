@@ -154,6 +154,19 @@ describe('the dashboard over a real plan', () => {
     expect(d.status.history.map(h => h.css)).toEqual([130, 125]);
   });
 
+  it('a warm-up is never counted as the longest continuous swim', () => {
+    const plan = generatePlan(base);
+    const tech = plan.weeks.flatMap(w => w.workouts)
+      .find(w => w.discipline === 'swim' && w.type === 'Technique' && w.date <= today);
+    // a technique swim's only continuous blocks ARE its shoulders
+    const shoulders = tech.segments.filter(s => s.swim && s.swim.distM && !(s.swim.n > 1));
+    expect(shoulders.length).toBeGreaterThan(0);
+    const d = swimDashboard({ plan, log: { [tech.id]: { done: true } }, moves: {}, activities: [], todayISO: today });
+    expect(d.endurance.longestM.value).toBeFalsy();
+    // and so nothing beyond the short end gets an estimate off the back of it
+    expect(d.estimates.find(e => e.m === 1500).range).toBe(null);
+  });
+
   it('open-water readiness is tracked separately from pool volume (§8)', () => {
     const d = build({}, {}, [
       { id: 'a', type: 'OpenWaterSwim', date: '2026-07-10', movingTimeSec: 1800, distance: 1500 },

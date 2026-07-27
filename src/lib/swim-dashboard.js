@@ -126,10 +126,15 @@ function endurance({ plan, log, moves, activities, todayISO }) {
   const longestRecorded = recorded.reduce((m, a) => Math.max(m, a.distance || 0), 0);
   // the longest CONTINUOUS block prescribed in a completed swim, which is
   // the honest floor when no recording carries a distance
+  //   Shoulders are not endurance evidence: a 500 m warm-up is not the
+  // longest thing an athlete can swim, and letting one count would both
+  // overstate the endurance card and unlock estimates it should not
+  // (self-check 2026-07-27).
   const longestPrescribed = swimsOf(plan)
     .filter(w => log && log[w.id])
     .flatMap(w => w.segments || [])
-    .filter(s => s.swim && s.swim.distM && !(s.swim.n > 1))
+    .filter(s => s.swim && s.swim.distM && !(s.swim.n > 1)
+      && !/^(warm-up|cool-down)/i.test(s.label || ''))
     .reduce((m, s) => Math.max(m, s.swim.distM), 0);
   return {
     longestM: longestRecorded
