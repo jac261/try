@@ -81,9 +81,19 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
           </div>
         </>}
         <button className="btn primary" onClick={() => {
+          // An untouched field must save the stored value VERBATIM. The
+          // yard display rounds to whole seconds, so parsing the shown text
+          // back is not the identity for every canonical value (99 shows as
+          // 1:31 and would re-save as 100) — and a phantom 1 s change would
+          // stamp manual provenance over a swum test on an FTP-only save
+          // (gauntlet catch 2026-07-27). Compare against the display of the
+          // stored value in the CURRENT pool (pickPool re-displays on
+          // switch, so an untouched field always matches).
+          const untouched = f.css100 === (profile.css100Sec ? T.fmtPace(T.pacePer100ForDisplay(profile.css100Sec, f.pool)) : '');
           // convert the per-100-unit entry back to canonical per-100 m; a
           // metre pool is the identity, so existing saves are unchanged
-          const css100Sec = (() => { const d = T.parseTimeToSec(f.css100); return d != null ? Math.round(T.css100mFromDisplay(d, f.pool)) : null; })();
+          const css100Sec = untouched ? (profile.css100Sec || null)
+            : (() => { const d = T.parseTimeToSec(f.css100); return d != null ? Math.round(T.css100mFromDisplay(d, f.pool)) : null; })();
           onSave({
             fitness: f.fitness,
             fivekSec: T.parseTimeToSec(f.fivek),
@@ -94,10 +104,12 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
             pool: f.pool,
             // Stamp provenance only when the athlete actually changed CSS: an
             // FTP- or weight-only save must not overwrite a measured source
-            // (a swum test) or bump its date to today.
+            // (a swum test) or bump its date to today. Clearing the field
+            // clears the provenance with it — a dated swum measurement of
+            // nothing is not a state this profile may hold.
             ...(css100Sec != null && css100Sec !== profile.css100Sec
               ? { cssMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } }
-              : {}),
+              : css100Sec == null && profile.css100Sec != null ? { cssMeta: null } : {}),
           });
         }}>{noPlan ? 'Save to fitness history' : 'Save & re-target plan'}</button>
       </div>

@@ -71,14 +71,22 @@ export function prescribedSwim(w) {
   return { distM, sec };
 }
 
-function perfSignal({ plan, activities, log, moves, todayISO }) {
+function perfSignal({ plan, activities, log, moves, todayISO, sinceISO }) {
   const quality = plan.weeks.flatMap(w => w.workouts)
     .filter(w => w.discipline === 'swim' && !w.test && PERF_TYPES.includes(w.type))
     .filter(w => log[w.id])
     .map(w => ({ w, date: (moves && moves[w.id]) || w.date }))
     .filter(x => daysBetween(x.date, todayISO) >= 0 && daysBetween(x.date, todayISO) <= RETEST_RULES.lookbackDays)
+    // retarget regenerates the plan at the NEW paces while logs survive by
+    // id, so a swim executed before the current CSS was set would be judged
+    // against a prescription that did not exist when it was swum — and a
+    // just-retargeted athlete would be told their new CSS is wrong by their
+    // old swims (gauntlet catch 2026-07-27). Only reads on or after the
+    // current value's date can speak.
+    .filter(x => !sinceISO || x.date >= sinceISO)
     .sort((a, b) => (a.date < b.date ? 1 : -1));
   const reads = [];
+  const used = new Set();
   for (const x of quality) {
     if (reads.length >= RETEST_RULES.perfWindow) break;
     const a = activityFor({ workout: x.w, activities, moves });
@@ -86,6 +94,10 @@ function perfSignal({ plan, activities, log, moves, todayISO }) {
     // comparable, and a recording well off the prescribed distance is either
     // a wrong match or a cut session
     if (!a || !a.distance || !a.movingTimeSec || /OpenWater/.test(a.type || '')) continue;
+    // one recording, one read: activityFor has no claimed-set of its own, so
+    // two same-day quality swims must not both count the same activity
+    if (used.has(a.id)) continue;
+    used.add(a.id);
     const { distM, sec } = prescribedSwim(x.w);
     if (!distM || !sec) continue;
     if (a.distance < distM * 0.75 || a.distance > distM * 1.25) continue;
@@ -101,7 +113,7 @@ function perfSignal({ plan, activities, log, moves, todayISO }) {
   return null;
 }
 
-export function cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO }) {
+export function cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO, unresolvedTest }) {
   if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
   const profile = plan.profile || {};
   // §6's gate, applied to the nudge as well: a solo run or bike plan has no
@@ -112,12 +124,15 @@ export function cssRetestRecommendation({ plan, activities, thresholds, log, mov
   const t = swimThreshold(profile);
 
   // A recently swum test answers every question; one already on the
-  // calendar soon will. Either way a nudge is noise.
+  // calendar soon will. Either way a nudge is noise. EXCEPT when the caller
+  // knows that swum test resolved to nothing (no recording matched, laps
+  // unreadable): a test that answered no question must not buy four weeks
+  // of silence (gauntlet catch 2026-07-27).
   const tests = plan.weeks.flatMap(w => w.workouts).filter(w => w.test && w.testKind === 'swimCss');
   const swum = tests.filter(w => log && log[w.id])
     .map(w => (moves && moves[w.id]) || w.date)
     .filter(d => daysBetween(d, todayISO) >= 0 && daysBetween(d, todayISO) <= RETEST_RULES.recentTestDays);
-  if (swum.length) return null;
+  if (swum.length && !unresolvedTest) return null;
   const upcoming = tests.filter(w => !(log && log[w.id]))
     .map(w => (moves && moves[w.id]) || w.date)
     .filter(d => d >= todayISO && daysBetween(todayISO, d) <= RETEST_RULES.upcomingTestDays);
@@ -126,7 +141,7 @@ export function cssRetestRecommendation({ plan, activities, thresholds, log, mov
   const reasons = [];
   if (!t.cssSecondsPer100m) reasons.push({ key: 'missing' });
   if (t.cssSecondsPer100m) {
-    const perf = perfSignal({ plan, activities: activities || [], log: log || {}, moves, todayISO });
+    const perf = perfSignal({ plan, activities: activities || [], log: log || {}, moves, todayISO, sinceISO: t.measuredAt });
     if (perf) reasons.push(perf);
     if (t.measuredAt && daysBetween(t.measuredAt, todayISO) > RETEST_RULES.staleDays) reasons.push({ key: 'stale' });
     const swimV = thresholds && thresholds.swimThresholdPace;

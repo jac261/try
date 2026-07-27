@@ -123,3 +123,44 @@ describe('FitnessEditor custom pool length (phase 2b)', () => {
   });
 });
 
+describe('Phase 3b: the CSS provenance guard survives the yard display round trip', () => {
+  // 99 s/100m is one of the canonical values whose yard display ('1:31')
+  // parses back as 100 — the exact clobber case the gauntlet executed
+  const yardBase = {
+    ...base, css100Sec: 99, pool: { length: 25, unit: 'yards' },
+    cssMeta: { source: 'try-test', measuredAt: '2026-06-01', confidence: 'high' },
+  };
+  const setInput = (input, v) => act(() => {
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    set.call(input, v); input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const cssInput = (el, val) => [...el.querySelectorAll('input')].find(i => i.value === val);
+
+  it('an untouched field saves the stored value verbatim and never restamps', async () => {
+    const m = await mount(yardBase);
+    expect(cssInput(m.el, '1:31')).toBeTruthy(); // the lossy display is on screen
+    m.click('Save');
+    expect(m.saved.css100Sec).toBe(99);          // NOT 100
+    expect('cssMeta' in m.saved).toBe(false);    // measured source untouched
+    m.cleanup();
+  });
+
+  it('a real edit still stamps manual provenance', async () => {
+    const m = await mount(yardBase);
+    setInput(cssInput(m.el, '1:31'), '1:45');
+    m.click('Save');
+    expect(m.saved.css100Sec).not.toBe(99);
+    expect(m.saved.cssMeta && m.saved.cssMeta.source).toBe('manual');
+    m.cleanup();
+  });
+
+  it('clearing the field clears the provenance with the value', async () => {
+    const m = await mount(yardBase);
+    setInput(cssInput(m.el, '1:31'), '');
+    m.click('Save');
+    expect(m.saved.css100Sec).toBe(null);
+    expect(m.saved.cssMeta).toBe(null); // no dated swum measurement of nothing
+    m.cleanup();
+  });
+});
+

@@ -975,15 +975,36 @@ export function App({ storage, getToken, user }) {
   // Phase 3b (§6): a swim CSS proposal opens the evidence sheet instead of
   // retargeting on the tap; bike and run keep the one-tap flow for now.
   const onEftp = () => { if (eftp && eftp.sport === 'swim') setCssSheet(eftp); else applyEftp(); };
-  // Phase 3b (§5): the retest nudge. Muted while a swim update proposal is
-  // live — measuring versus updating is a distinction worth keeping, but two
-  // banners about the same number is nagging.
-  const retest = (!eftp || eftp.sport !== 'swim')
-    ? T.cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()) })
-    : null;
-  // §7: a fresh test swim whose laps did not yield a CSS, with the reason.
+  // §7's remaining branch (gauntlet catch 2026-07-27): the athlete logged
+  // the CSS test but no recording ever matched it (wrong sport type on the
+  // watch, missed upload) — without this the whole flow went silent. Only
+  // once the test day has fully passed, because uploads land late, and only
+  // when there is a feed to have searched.
+  const unmatchedTest = (() => {
+    if (plan.race === 'tracker' || !Array.isArray(plan.weeks) || !Array.isArray(activities) || !activities.length) return null;
+    const today = T.iso(new Date());
+    const t = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.test && w.testKind === 'swimCss' && log[w.id])
+      .map(w => ({ w, date: (moves && moves[w.id]) || w.date }))
+      .filter(x => x.date < today && T.daysBetween(x.date, today) <= T.EFTP_RULES.freshDays)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+    if (!t) return null;
+    return T.cssTestActivityFor({ activities, date: t.date }) ? null
+      : { sig: 'nomatch:' + t.w.id, issue: 'We could not find a swim recording on your test day.' };
+  })();
+  // §7: a fresh test swim whose laps did not yield a CSS, with the reason;
+  // otherwise the no-recording case above.
   const cssFail = cssFresh && cssTest && !cssTest.test && cssTest.issue
-    ? { sig: cssTest.actId, issue: cssTest.issue } : null;
+    ? { sig: cssTest.actId, issue: cssTest.issue }
+    : unmatchedTest;
+  // Phase 3b (§5): the retest nudge. Muted while a swim update proposal or a
+  // failure explanation is live — one message about the number at a time.
+  // unresolvedTest keeps the module's swum-a-test-recently suppression from
+  // counting a test that produced nothing as having answered the question.
+  const unresolvedTest = !!cssFail || !!(cssTest && !cssTest.test);
+  const retest = (!eftp || eftp.sport !== 'swim') && !cssFail
+    ? T.cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()), unresolvedTest })
+    : null;
   const addCssTestToWeek = () => {
     const r = T.addCssTest(plan, T.iso(new Date()));
     setPlan(r.plan);

@@ -36,7 +36,14 @@ export function tuneFields(profile, suggestions) {
     const t = s.direction === 'faster' ? 0.98 : 1.02;   // run/swim: less time = faster
     const w = s.direction === 'faster' ? 1.02 : 0.98;   // bike: more watts = faster
     if (s.discipline === 'run') fields.fivekSec = Math.round((profile.fivekSec || lvl.est5k) * t);
-    if (s.discipline === 'swim') fields.css100Sec = Math.round((profile.css100Sec || lvl.estCss) * t);
+    if (s.discipline === 'swim') {
+      fields.css100Sec = Math.round((profile.css100Sec || lvl.estCss) * t);
+      // a feel-based nudge is the fifth CSS write point (gauntlet catch
+      // 2026-07-27): the tuned number is no longer whatever was measured, so
+      // the provenance must not keep claiming a swum test — it is an
+      // estimate now, dated to the nudge
+      fields.cssMeta = { source: 'estimated', measuredAt: T.iso(new Date()), confidence: 'low' };
+    }
     if (s.discipline === 'bike' && profile.ftp) fields.ftp = Math.round(profile.ftp * w);
   });
   return fields;

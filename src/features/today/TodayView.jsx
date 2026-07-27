@@ -160,7 +160,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   if (!tracker && cssFail && cssFail.issue && cssFailDismissed !== cssFail.sig) coach.push({
     key: 'cssfail', cls: 'banner ramp', icon: 'pace',
     title: 'We could not read a CSS from your test swim',
-    sub: cssFail.issue + ' You can enter the result by hand — tap to update fitness →',
+    sub: cssFail.issue + ' You can enter the result by hand. Tap to update fitness →',
     act: onFixCss,
     dismiss: () => { saveCssFailDismiss(cssFail.sig); setCssFailDismissed(cssFail.sig); },
   });
