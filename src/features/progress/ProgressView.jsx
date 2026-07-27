@@ -5,9 +5,10 @@ import { fitnessSeries } from '@/features/progress/fitnessSeries.js';
 import { WellnessTrends } from '@/features/wellness/WellnessTrends.jsx';
 import { AthleteStateStrip } from '@/features/wellness/AthleteStateStrip.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
+import { SwimDashboard } from '@/features/progress/SwimDashboard.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf }) {
+export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -313,7 +314,13 @@ export function ProgressView({ plan, log, activities, coach, durability, fuelLog
           <div className="weekbar" style={{ height: 9 }}><span style={{ width: (twSess.length ? twDone / twSess.length * 100 : 0) + '%', background: 'var(--accent)' }} /></div>
         </div>
 
-        <div className="section-title">Discipline balance</div>
+        {/* Phase 7: the swim dashboard, for plans that actually swim. It sits
+          after the general progress views because it answers a narrower
+          question than they do. */}
+      {!tracker && !(T.RACES[plan.race] || {}).solo && plan.profile.excludedDiscipline !== 'swim'
+        && <SwimDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO} retest={retest} onSupport={onSupport} />}
+
+      <div className="section-title">Discipline balance</div>
         <div className="card center">
           <Donut segments={donut} size={170} />
           <div className="legend" style={{ justifyContent: 'center' }}>
