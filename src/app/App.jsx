@@ -12,6 +12,8 @@ import { DetailSheet } from '@/components/DetailSheet.jsx';
 import { WhatIfSheet } from '@/features/wellness/WhatIfSheet.jsx';
 import { RecapSlides } from '@/features/recap/RecapSlides.jsx';
 import { AddWorkoutSheet } from '@/components/AddWorkoutSheet.jsx';
+import { CssProposalSheet } from '@/components/CssProposalSheet.jsx';
+import { CssRetestSheet } from '@/components/CssRetestSheet.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
 import { BuildingPlan } from '@/features/onboarding/BuildingPlan.jsx';
 import { FitnessEditor } from '@/features/settings/FitnessEditor.jsx';
@@ -137,6 +139,11 @@ export function App({ storage, getToken, user }) {
   // fetch error or ambiguous laps), so the plan surface never re-fetches or
   // blocks on it. date is the test's effective day, for freshness gating.
   const [cssTest, setCssTest] = useState(null);
+  // Phase 3b: the two swim CSS sheets — the retarget evidence (spec §6) and
+  // the retest protocol (§4). Booleans/objects, not routes: they ride the
+  // same scrim pattern as every other sheet.
+  const [cssSheet, setCssSheet] = useState(null);
+  const [retestOpen, setRetestOpen] = useState(false);
   // A failed plan write means this device and the account have diverged — the
   // catalog-drift incident proved that must never be silent again.
   const [planSyncFailed, setPlanSyncFailed] = useState(false);
@@ -444,8 +451,15 @@ export function App({ storage, getToken, user }) {
     if (!a || (cssTest && cssTest.actId === a.id)) return;
     let cancelled = false;
     sync.loadActivityIntervals(a.id)
-      .then(rows => { if (!cancelled) setCssTest({ actId: a.id, date: tests[0].date, test: T.cssFromTestIntervals(rows) }); })
-      .catch(() => { if (!cancelled) setCssTest({ actId: a.id, date: tests[0].date, test: null }); });
+      // §7: when the laps do not parse as a test, keep WHY (cssTestIssues
+      // mirrors the calculator guard for guard) so the surface can explain
+      // instead of going silent
+      .then(rows => {
+        if (cancelled) return;
+        const test = T.cssFromTestIntervals(rows);
+        setCssTest({ actId: a.id, date: tests[0].date, test, issue: test ? null : T.cssTestIssues(rows) });
+      })
+      .catch(() => { if (!cancelled) setCssTest({ actId: a.id, date: tests[0].date, test: null, issue: 'The laps for that recording could not be loaded.' }); });
     return () => { cancelled = true; };
   }, [plan, activities, log, moves, cssTest, sync]);
 
@@ -958,6 +972,23 @@ export function App({ storage, getToken, user }) {
     durabilityByDiscipline: durabilityFor(T.iso(T.startOfWeekMonday(new Date()))),
   });
   const applyEftp = () => { if (eftp) retarget(eftp.retarget); };
+  // Phase 3b (§6): a swim CSS proposal opens the evidence sheet instead of
+  // retargeting on the tap; bike and run keep the one-tap flow for now.
+  const onEftp = () => { if (eftp && eftp.sport === 'swim') setCssSheet(eftp); else applyEftp(); };
+  // Phase 3b (§5): the retest nudge. Muted while a swim update proposal is
+  // live — measuring versus updating is a distinction worth keeping, but two
+  // banners about the same number is nagging.
+  const retest = (!eftp || eftp.sport !== 'swim')
+    ? T.cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()) })
+    : null;
+  // §7: a fresh test swim whose laps did not yield a CSS, with the reason.
+  const cssFail = cssFresh && cssTest && !cssTest.test && cssTest.issue
+    ? { sig: cssTest.actId, issue: cssTest.issue } : null;
+  const addCssTestToWeek = () => {
+    const r = T.addCssTest(plan, T.iso(new Date()));
+    setPlan(r.plan);
+    sync.replacePlan(r.plan).then(adoptRes(r.plan.createdAt));
+  };
   const logSpotted = () => {
     const at = new Date().toISOString();
     const entries = {};
@@ -1154,7 +1185,7 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={applyEftp} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
@@ -1192,6 +1223,10 @@ export function App({ storage, getToken, user }) {
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
       {whatIf && <WhatIfSheet plan={plan} log={log} moves={moves} adjust={adjust} wellness={recs}
         todayISO={T.iso(new Date())} initial={whatIf.initial} onClose={() => setWhatIf(null)} />}
+      {cssSheet && <CssProposalSheet proposal={cssSheet} plan={plan}
+        onAccept={() => retarget(cssSheet.retarget)} onClose={() => setCssSheet(null)} />}
+      {retestOpen && <CssRetestSheet recommendation={retest || { headline: 'The CSS test', why: 'A fresh measurement keeps your swim paces honest.' }}
+        plan={plan} onAddTest={addCssTestToWeek} onEditFitness={() => setEditFitness(true)} onClose={() => setRetestOpen(false)} />}
 
       {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} solo={!tracker ? ((T.RACES[plan.race] || {}).solo || null) : null} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}

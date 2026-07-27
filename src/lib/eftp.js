@@ -15,7 +15,8 @@ import { daysBetween } from './date.js';
 import { fmtPace } from './units.js';
 import { DISCIPLINE } from './autolog.js';
 import { RACES, DEFAULT_POOL } from './domain.js';
-import { swimPaceLabel } from './swim-units.js';
+import { swimPaceLabel, pacePer100ForDisplay, unitShort } from './swim-units.js';
+import { targetPaceForZone } from './swim-zones.js';
 
 export const EFTP_RULES = { minDriftPct: 0.03, freshDays: 10 };
 
@@ -67,6 +68,70 @@ export function cssFromTestIntervals(intervals) {
     css100Sec: Math.round(css),
     t400Sec: Math.round(a.movingTimeSec), t200Sec: Math.round(b.movingTimeSec),
     d400: Math.round(a.distance), d200: Math.round(b.distance),
+  };
+}
+
+/* Phase 3b (spec §7): why a recorded test swim did not produce a CSS.
+   Mirrors cssFromTestIntervals guard for guard, so the athlete gets the
+   actual reason instead of silence; returns null when the test parses. A
+   test pins the two functions to agreeing on every case. */
+export function cssTestIssues(intervals) {
+  if (!Array.isArray(intervals) || !intervals.length) return 'We could not read any laps from that recording.';
+  const work = intervals.filter(i => i && i.type === 'WORK' && i.movingTimeSec > 0 && i.distance > 0);
+  const band = (lo, hi) => work.filter(i => i.distance >= lo && i.distance <= hi);
+  const fours = band(320, 480), twos = band(150, 250);
+  if (fours.length === 0) return 'We could not find a 400 time trial in the laps.';
+  if (fours.length > 1) return 'More than one effort looked like the 400, so we could not tell which was the test.';
+  if (twos.length === 0) return 'We could not find a 200 time trial in the laps.';
+  if (twos.length > 1) return 'More than one effort looked like the 200, so we could not tell which was the test.';
+  const a = fours[0], b = twos[0];
+  const ratio = a.distance / b.distance;
+  if (ratio < 1.8 || ratio > 2.2) return 'The two efforts were not close to a 2 to 1 distance ratio.';
+  const paceA = a.movingTimeSec / (a.distance / 100);
+  const paceB = b.movingTimeSec / (b.distance / 100);
+  if (paceB > paceA + 1) return 'The 200 came out no faster than the 400, which does not happen in an all-out test.';
+  const css = (a.movingTimeSec - b.movingTimeSec) / ((a.distance - b.distance) / 100);
+  if (!(css > 55 && css < 240)) return 'The calculated CSS fell outside a plausible swimming range.';
+  return null;
+}
+
+/* The 400/200 protocol in the athlete's own pool: same whole-length rounding
+   and derived divisor as buildTest, for the retest sheet to explain. */
+export function cssTestProtocol(pc) {
+  const P = (pc && pc.pool) || DEFAULT_POOL;
+  const rnd = d => Math.max(P.length, Math.round(d / P.length) * P.length);
+  const d1 = rnd(400), d2 = rnd(200);
+  return { d1, d2, unit: unitShort(P), divisor: Math.round((d1 - d2) / 100 * 100) / 100 };
+}
+
+/* Phase 3b (spec §6): the evidence behind a swim CSS retarget proposal, for
+   the tap-through sheet. Everything display-ready and pool-aware; the delta
+   is per 100 of the pool unit so a yard athlete sees yard seconds. The
+   example is the next upcoming CSS Intervals swim, with the rep target band
+   from targetPaceForZone so the athlete sees the concrete effect. */
+export function cssProposalDetails({ proposal, plan, todayISO }) {
+  if (!proposal || proposal.sport !== 'swim' || !proposal.retarget || proposal.retarget.css100Sec == null) return null;
+  const pc = plan && plan.paces;
+  if (!pc || !pc.swim) return null;
+  const pool = pc.pool || DEFAULT_POOL;
+  const cur = pc.swim.css, next = proposal.retarget.css100Sec;
+  const deltaDisp = Math.round(pacePer100ForDisplay(next, pool) - pacePer100ForDisplay(cur, pool));
+  const meta = proposal.retarget.cssMeta || {};
+  const upcoming = (plan.weeks || []).flatMap(w => w.workouts || [])
+    .filter(w => w.discipline === 'swim' && w.type === 'CSS Intervals' && !w.race && w.date >= todayISO)
+    .sort((a, b) => (a.date < b.date ? -1 : 1))[0] || null;
+  const band = targetPaceForZone(next, 'css');
+  return {
+    curLabel: swimPaceLabel(cur, pool), nextLabel: swimPaceLabel(next, pool),
+    deltaDisp, unit: unitShort(pool),
+    pct: Math.round(Math.abs(next - cur) / cur * 1000) / 10,
+    faster: next < cur,
+    source: meta.source || null, measuredAt: meta.measuredAt || null, confidence: meta.confidence || null,
+    example: upcoming && {
+      title: upcoming.title, date: upcoming.date,
+      cur: swimPaceLabel(cur, pool), next: swimPaceLabel(next, pool),
+      band: swimPaceLabel(band.minSecondsPer100m, pool) + ' to ' + swimPaceLabel(band.maxSecondsPer100m, pool),
+    },
   };
 }
 

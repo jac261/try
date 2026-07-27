@@ -1466,6 +1466,31 @@ export const addCustomWorkout = function (plan, { discipline, type, durationMin,
   return { plan: Object.assign({}, plan, { weeks: weeks }), workout: workout };
 };
 
+// Phase 3b: the retest nudge can put a CSS test into the plan on demand. A
+// test is not a buildWorkout type, so addCustomWorkout cannot make one: this
+// mirrors its mechanics but builds the real 400/200 protocol and stamps
+// test/testKind, so the auto-CSS reader treats it exactly like a scheduled
+// benchmark. custom:true keeps it removable through removeCustomWorkout.
+export const addCssTest = function (plan, dateISO) {
+  const wk = plan.weeks.find(w => dateISO >= w.start && dateISO <= iso(addDays(w.start, 6)))
+    || plan.weeks[plan.weeks.length - 1];
+  const built = buildTest('swimCss', plan.paces);
+  const key = 'x-' + dateISO.split('-').join('');
+  const taken = new Set(wk.workouts.map(x => x.id));
+  let n = 0;
+  while (taken.has(key + '-' + n)) n++;
+  const workout = {
+    id: key + '-' + n, week: wk.index, seed: wk.isRecovery ? 0 : wk.index, phase: wk.phase, date: dateISO,
+    discipline: 'swim', role: 'custom', type: 'Test', title: built.title,
+    durationMin: built.durationMin, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
+    segments: built.segments, custom: true,
+    test: true, testKind: 'swimCss', note: built.note, key: true,
+  };
+  const weeks = plan.weeks.map(w => w.index !== wk.index ? w
+    : Object.assign({}, w, { workouts: w.workouts.concat([workout]), totalMin: w.totalMin + built.durationMin }));
+  return { plan: Object.assign({}, plan, { weeks: weeks }), workout: workout };
+};
+
 // Take a user-added session out again (plan-generated sessions are never removable).
 export const removeCustomWorkout = function (plan, id) {
   const weeks = plan.weeks.map(w => {
