@@ -186,7 +186,15 @@ export function swimReview({ workout, activity, intervals, paces, feel, evidence
   if (confidence === 'low') outcome = 'insufficient-data';
   else if (completion != null && completion < REVIEW_RULES.completionPoor) outcome = 'reduce';
   else if (!paceBlind && (failedReps >= 2 || hardFade)) outcome = 'reduce';
-  else if (paceBlind) outcome = done && feel !== 'hard' ? 'progress' : 'repeat';
+  // Pace-blind does not mean evidence-blind. Open-water sessions carry
+  // time-based skill blocks that prescribedSwim cannot count in metres, so
+  // completion alone reads high even when reps were skipped; when a credible
+  // pairing exists, the reps are the honest signal (review catch
+  // 2026-07-27).
+  else if (paceBlind) {
+    const shortReps = repsDone != null && m && m.planned.length && repsDone < m.planned.length;
+    outcome = done && !shortReps && feel !== 'hard' ? 'progress' : 'repeat';
+  }
   else if (evidence && evidence.direction && done && !softFade) outcome = 'retest-css';
   else if (done && !softFade && feel !== 'hard') outcome = 'progress';
   else outcome = 'repeat';

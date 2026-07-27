@@ -915,7 +915,7 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
     // turns it into real reps at the athlete's paces and pool. Every block
     // carries its skills forward on seg.ow so the pool fallback can be
     // derived from the session rather than written twice.
-    const cat = owCategory(seed, dur, role);
+    const cat = owCategory(seed, role);
     title = cat.title;
     const sh = swimShoulders(pc, budget, 300, 200, 200);
     const avail = budget - ((sh[0] + sh[1]) / 100) * pc.swim.easy;
@@ -946,7 +946,11 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
       }
       if (b.kind === 'steady') {
         const m = Math.round(sec / pc.swim.steady) * 100;
-        if (m < 200) { spent += sec; return; }
+        // Too small to be a block: give the time BACK so a later block or
+        // the residual can use it. Charging it and emitting nothing lost the
+        // minutes off the card, the same undershoot the 2026-07-18 sizing
+        // gauntlet caught in the old template (review catch 2026-07-27).
+        if (m < 200) return;
         const note = b.skill ? ' · ' + OW_SKILLS[b.skill].cue : '';
         steadyMetres(pc, m, note).forEach(sg => mainsOw.push({ ...sg, ow: { skills: b.skill ? [b.skill] : [] } }));
         spent += (m / 100) * pc.swim.steady;
@@ -956,7 +960,17 @@ function buildSwim(type, dur, pc, seed, phase, intensity = 0, role) {
       // than overrunning the session with a nominal distance
       let repM = b.repM;
       while (repM > 100 && perRep(b.key, repM, b.rest) * 2 > sec) repM = repM > 400 ? repM - 200 : repM - 50;
-      const n = Math.max(2, Math.round(sec / perRep(b.key, repM, b.rest)));
+      let n = Math.max(2, Math.round(sec / perRep(b.key, repM, b.rest)));
+      // Lengthen the rep rather than pile them up: every pool branch in this
+      // file caps its rep count for the same reason, and the template this
+      // replaced carried the same guard. Without it a 75 min peak session
+      // prescribed thirteen 100s at Z5 (review catch 2026-07-27).
+      const REP_CAP = b.zone === 'Z5' ? 8 : 10;
+      while (n > REP_CAP && repM < 800) {
+        repM = repM < 400 ? repM * 2 : repM + 200;
+        n = Math.max(2, Math.round(sec / perRep(b.key, repM, b.rest)));
+      }
+      n = Math.min(n, REP_CAP);
       const cue = b.skill ? ' · ' + OW_SKILLS[b.skill].cue : '';
       mainsOw.push({
         label: n + ' × ' + dl(repM) + ' ' + b.label,
@@ -1557,7 +1571,7 @@ export const addCssTest = function (plan, dateISO) {
     discipline: 'swim', role: 'custom', type: 'Test', title: built.title,
     durationMin: built.durationMin, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
     segments: built.segments, custom: true,
-    test: true, testKind: 'swimCss', note: built.note, key: true,
+    test: true, testKind: 'swimCss', note: built.note, key: true, safety: undefined,
   };
   const weeks = plan.weeks.map(w => w.index !== wk.index ? w
     : Object.assign({}, w, { workouts: w.workouts.concat([workout]), totalMin: w.totalMin + built.durationMin }));
@@ -1681,6 +1695,12 @@ export const upgradePlanSegments = function (plan) {
       // was silently corrupting them, 'RACE' being no builder's type).
       if (w.race || w.bRace || w.test || w.discipline === 'rest' || !w.durationMin) return w;
       const segsNow = w.segments || [];
+      // An open-water session stored before phase 6 has full blocks, so the
+      // `current` check below returns it untouched and it would never gain
+      // its safety wording or the metadata the pool fallback is derived
+      // from. That is exactly the workout the wording exists for, so a
+      // missing note makes it stale (review catch 2026-07-27).
+      const owStale = w.type === 'Open Water' && (!w.safety || !segsNow.some(sg => sg.ow));
       // Staleness signal (no schema field): a run/bike session whose segments
       // do not sum to its durationMin drifted under the old sizing, so re-derive
       // it — the fitted rebuild sums to durationMin (repairing the card/watch
@@ -1706,7 +1726,7 @@ export const upgradePlanSegments = function (plan) {
         && Math.abs(w.distance - bikeDistance(segsNow, plan.paces)) > 0.51;
       const current = segsNow.some(s => s.zone || s.blocks)
         && !(w.discipline === 'swim' && segsNow.some(s => s.blocks && !s.swim))
-        && !driftsRunBike && !brickStale && !bikeDistStale;
+        && !driftsRunBike && !brickStale && !bikeDistStale && !owStale;
       // distEst is not stored server-side: the plan DTO drops it, so a synced
       // workout comes back with the flag missing and its distance silently
       // loses the tilde. It is fully derivable, so backfill it here rather
@@ -2214,6 +2234,10 @@ export const generatePlan = function (profile, opts) {
           type: 'Test', title: built.title, durationMin: built.durationMin,
           distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
           test: true, testKind: testKind, note: built.note, key: true,
+          // The test overwrites a quality slot that may have been an
+          // open-water session; a pool 400/200 must not inherit its safety
+          // wording (review catch 2026-07-27).
+          safety: undefined,
         });
       }
     }
@@ -2301,7 +2325,7 @@ export const generatePlan = function (profile, opts) {
           const t = typeFor(wo.discipline, wo.role, wo.phase, true, fitness.intensity);
           const dur = Math.max(20, round5(wo.durationMin * 0.6));
           const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity, profile.raceType, wo.role);
-          return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments };
+          return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments, safety: built.safety || undefined };
         }
         return wo;
       }).filter(Boolean);

@@ -3,7 +3,7 @@ import { effDate } from './schedule.js';
 
 // ---- calendar (.ics) export ----
 function icsEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n'); }
-function buildICS(plan, moves) {
+export function buildICS(plan, moves) {
   const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Try//Triathlon//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
   const stamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
   plan.weeks.forEach(week => week.workouts.forEach(w => {
@@ -12,7 +12,11 @@ function buildICS(plan, moves) {
     const start = d.replace(/-/g, '');
     const end = T.iso(T.addDays(d, 1)).replace(/-/g, '');
     const sum = w.title + (w.durationMin ? ' (' + T.fmtDuration(w.durationMin) + ')' : '');
-    const desc = w.segments.map(s => s.label + (s.detail ? ' — ' + s.detail : '') + (s.min ? ' [' + s.min + ' min]' : '')).join('\n');
+    // The safety wording travels with the session. The calendar entry, not
+    // the app, is what an athlete reads standing at the water (review catch
+    // 2026-07-27).
+    const desc = w.segments.map(s => s.label + (s.detail ? ' — ' + s.detail : '') + (s.min ? ' [' + s.min + ' min]' : '')).join('\n')
+      + (w.safety ? '\n\n' + w.safety : '');
     L.push('BEGIN:VEVENT', 'UID:try-' + w.id + '@try.app', 'DTSTAMP:' + stamp,
       'DTSTART;VALUE=DATE:' + start, 'DTEND;VALUE=DATE:' + end,
       'SUMMARY:' + icsEsc(sum), 'DESCRIPTION:' + icsEsc(desc), 'END:VEVENT');

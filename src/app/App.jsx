@@ -1261,6 +1261,7 @@ export function App({ storage, getToken, user }) {
       {view === 'settings' && <SettingsView plan={plan}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}
+        openWaterCapable={!tracker && !(T.RACES[plan.race] || {}).solo && !(T.RACES[plan.race] || {}).noRace}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
         onEnterTracker={endPlanToTracker} tracker={tracker}
@@ -1300,6 +1301,7 @@ export function App({ storage, getToken, user }) {
         plan={plan} onAddTest={addCssTestToWeek} onEditFitness={() => setEditFitness(true)} onClose={() => setRetestOpen(false)} />}
 
       {editTechnique && <TechniqueEditor profile={plan.profile}
+        openWater={!(T.RACES[plan.race] || {}).solo && !(T.RACES[plan.race] || {}).noRace && plan.race !== 'tracker'}
         onClose={() => setEditTechnique(false)} onSave={saveTechnique} />}
       {editFitness && <FitnessEditor profile={plan.profile} noPlan={tracker} solo={!tracker ? ((T.RACES[plan.race] || {}).solo || null) : null} onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}

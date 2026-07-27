@@ -135,9 +135,15 @@ export const OW_SAFETY = 'Open water: never swim alone, use a supervised venue a
 // role) inputs the rest of the swim builder uses, so a rebuild is stable and
 // a week's two swims cannot land on the same one (role walks the list the
 // other way, the same argument pickDrills uses).
-export function owCategory(seed, salt, role) {
+export function owCategory(seed, role) {
   const list = OW_CATEGORIES;
-  const base = ((seed || 0) + Math.round((salt || 0) / 5)) % list.length;
+  // Deliberately NOT salted on duration. buildSwim's own contract is that
+  // the variant menu never moves with dur, because trim, boost and the
+  // de-collision resize all re-length a session and must return the SAME
+  // session, shorter. Salting on duration rotated the category on every
+  // five-minute step, so a 10% trim handed the athlete a different workout
+  // with different skills and a different intent (review catch 2026-07-27).
+  const base = (seed || 0) % list.length;
   // The role offsets the pick by exactly one. A reversed walk (the trick
   // pickDrills uses) does NOT work here, because only one item is chosen and
   // reversal collides whenever 2i is congruent to the list length minus one:
@@ -160,7 +166,9 @@ export function poolFallback(workout) {
   const lines = [];
   skills.forEach(id => {
     const sk = OW_SKILLS[id];
-    if (!sk || seen.has(id)) return;
+    // A skill with no pool equivalent is left OUT rather than printed as an
+    // instruction that instructs nothing (review catch 2026-07-27).
+    if (!sk || seen.has(id) || sk.poolNone) return;
     seen.add(id);
     lines.push(sk.label + ': ' + sk.pool);
   });
@@ -175,7 +183,7 @@ export function poolFallback(workout) {
    intentions, and reports only what it can see. Every field is derived, so
    nothing has to be stored and nothing can go stale. */
 export const OW_EXPOSURE = { recentDays: 42 };
-export function openWaterExposure({ activities, todayISO, days }) {
+export function openWaterExposure({ activities, todayISO, days, workouts, logged }) {
   const window = days || OW_EXPOSURE.recentDays;
   const list = (activities || []).filter(a => a && a.type === 'OpenWaterSwim' && a.date);
   const recent = list.filter(a => {
@@ -183,6 +191,22 @@ export function openWaterExposure({ activities, todayISO, days }) {
     return d >= 0 && d <= window;
   });
   const longest = recent.reduce((m, a) => Math.max(m, a.movingTimeSec || 0), 0);
+  // Which open-water WORK the athlete has actually done, from the sessions
+  // they logged against the plan. Counted per skill so race readiness can
+  // say what is missing rather than only how much was swum.
+  const drilled = {};
+  let racePace = 0;
+  (workouts || []).forEach(w => {
+    if (!w || w.type !== 'Open Water' || !logged || !logged[w.id]) return;
+    const seen = new Set();
+    (w.segments || []).forEach(sg => {
+      ((sg.ow && sg.ow.skills) || []).forEach(k => seen.add(k));
+      // race-pace exposure is a property of the SET, not of a skill: a
+      // session counts once if it held race effort at threshold or above
+    });
+    if ((w.segments || []).some(sg => (sg.blocks || []).some(b => b.zone === 'Z4' || b.zone === 'Z5'))) racePace++;
+    seen.forEach(k => { drilled[k] = (drilled[k] || 0) + 1; });
+  });
   const latest = list.map(a => a.date).sort().pop() || null;
   return {
     sessions: recent.length,
@@ -192,6 +216,12 @@ export function openWaterExposure({ activities, todayISO, days }) {
     lastDate: latest,
     daysSince: latest ? daysBetweenISO(latest, todayISO) : null,
     windowDays: window,
+    // §6's remaining bullets, each counted from sessions actually completed
+    wetsuitSessions: drilled.wetsuit || 0,
+    sightingSessions: drilled.sighting || 0,
+    startSessions: (drilled.start || 0) + (drilled.surges || 0),
+    racePaceSessions: racePace,
+    skills: drilled,
   };
 }
 function daysBetweenISO(a, b) {

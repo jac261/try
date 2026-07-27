@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan, segMinutes, addCustomWorkout, easeWorkout } from './plan.js';
+import { generatePlan, segMinutes, addCustomWorkout, easeWorkout, trimWorkout, boostWorkout, upgradePlanSegments } from './plan.js';
+import { buildICS } from './ics.js';
 import {
   OW_SKILLS, OW_CATEGORIES, OW_SAFETY, OW_SKILL_CEILING,
   owCategory, poolFallback, openWaterExposure,
@@ -36,12 +37,19 @@ describe('the catalogue and its categories (§1, §2)', () => {
       });
     });
   });
-  it('category choice is deterministic and a week pair cannot collide', () => {
-    expect(owCategory(3, 45, 'quality').id).toBe(owCategory(3, 45, 'quality').id);
+  it('category choice is deterministic, and the two roles can never collide', () => {
+    expect(owCategory(3, 'quality').id).toBe(owCategory(3, 'quality').id);
+    for (let seed = 0; seed < 24; seed++) {
+      expect(owCategory(seed, 'easy').id).not.toBe(owCategory(seed, 'quality').id);
+    }
+  });
+
+  it('the category does NOT move when a session is re-sized', () => {
+    // trim, boost and the de-collision resize all re-length a session and
+    // must hand back the same session, shorter (review catch 2026-07-27)
     for (let seed = 0; seed < 12; seed++) {
-      for (let dur = 30; dur <= 90; dur += 5) {
-        expect(owCategory(seed, dur, 'easy').id).not.toBe(owCategory(seed, dur, 'quality').id);
-      }
+      const id = owCategory(seed, 'quality').id;
+      [20, 35, 45, 60, 75, 90, 120].forEach(() => expect(owCategory(seed, 'quality').id).toBe(id));
     }
   });
 });
@@ -174,5 +182,77 @@ describe('open-water exposure is tracked from recordings, not intentions (§6)',
     expect(e.sessions).toBe(0);
     expect(e.lastDate).toBe(null);
     expect(e.daysSince).toBe(null);
+  });
+});
+
+
+describe('phase 6 review fixes', () => {
+  const plan = generatePlan(base);
+  const owAll = ow(plan);
+
+  it('re-sizing a session never swaps it for a different category', () => {
+    // trim, boost and the de-collision resize all re-length a session; the
+    // athlete asked for the same workout, shorter, not a different one
+    let rebuilds = 0;
+    owAll.forEach(x => {
+      [0.6, 0.7, 0.8, 0.9].forEach(f => {
+        const y = trimWorkout(x, plan, f);
+        if (y) { rebuilds++; expect(y.title).toBe(x.title); }
+      });
+      [1.1, 1.2, 1.3].forEach(f => {
+        const y = boostWorkout(x, plan, f);
+        if (y) { rebuilds++; expect(y.title).toBe(x.title); }
+      });
+    });
+    expect(rebuilds).toBeGreaterThan(0);
+  });
+
+  it('a pool fitness test never inherits the open-water safety wording', () => {
+    // reachable with the opt-in on: the Build quality swim it overwrites IS
+    // an open-water session
+    const on = generatePlan({ ...base, openWaterRace: true });
+    const tests = on.weeks.flatMap(w => w.workouts).filter(x => x.test);
+    expect(tests.length).toBeGreaterThan(0);
+    tests.forEach(x => expect(x.safety).toBeFalsy());
+  });
+
+  it('a plan stored before this phase gains its safety note and fallback on load', () => {
+    const stored = JSON.parse(JSON.stringify(plan));
+    stored.weeks.forEach(w => w.workouts.forEach(x => {
+      delete x.safety;
+      (x.segments || []).forEach(sg => delete sg.ow);
+    }));
+    const up = upgradePlanSegments(stored);
+    const upOw = up.weeks.flatMap(w => w.workouts).filter(x => x.type === 'Open Water');
+    expect(upOw.length).toBeGreaterThan(0);
+    upOw.forEach(x => {
+      expect(x.safety).toBe(OW_SAFETY);
+      expect(poolFallback(x).lines.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('rep counts stay coachable: the rep lengthens instead of piling up', () => {
+    ['beginner', 'intermediate', 'advanced', 'elite'].forEach(fitness => {
+      ['sprint', 'olympic', 'half', 'full'].forEach(raceType => {
+        const css = fitness === 'elite' ? 90 : fitness === 'beginner' ? 170 : 120;
+        const p = generatePlan({ ...base, fitness, raceType, css100Sec: css, openWaterRace: true });
+        ow(p).forEach(x => x.segments.forEach(sg => {
+          const m = /^(\d+) × /.exec(sg.label || '');
+          if (m) expect(+m[1], sg.label).toBeLessThanOrEqual(10);
+        }));
+      });
+    });
+  });
+
+  it('the safety wording travels to the calendar export', () => {
+    const ics = buildICS(plan);
+    expect(ics).toContain('never swim alone');
+  });
+
+  it('a skill with no pool equivalent is left out rather than instructing nothing', () => {
+    owAll.forEach(x => {
+      const fb = poolFallback(x);
+      fb.lines.forEach(l => expect(l).not.toMatch(/no pool equivalent/));
+    });
   });
 });
