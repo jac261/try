@@ -37,6 +37,7 @@ export const DASH_RULES = {
   weeks: 6,              // the window every rolling figure uses
   completionFloor: 0.7,  // below this, consistency is the limiter
   fadeConcern: 3,        // percent slower in the closing reps
+  minSessions: 4,        // below this there is no completion rate worth naming
   owRecentDays: 42,
   owRaceSoonDays: 56,    // an open-water race this close wants exposure
 };
@@ -59,20 +60,29 @@ function distribution({ plan, log, moves, todayISO }) {
   let planned = 0, done = 0;
   swimsOf(plan).forEach(w => {
     const date = (moves && moves[w.id]) || w.date;
-    if (date > todayISO) return;             // the future is not a completion record
+    // Today is not yet a miss: a session still ahead of the athlete must not
+    // be counted against them (review catch 2026-07-27, which had day one of
+    // every new plan announcing 0% completion).
+    if (date >= todayISO) return;
     const bucket = weeks.find(x => date >= x.start && date <= x.end);
+    // EVERY figure in this card is the six-week window the card is headed
+    // with. Counting completion all-time let one missed swim months ago pin
+    // the limiter forever, under six green weeks (review catch 2026-07-27).
+    if (!bucket) return;
     const isDone = !!(log && log[w.id]);
     planned++;
-    if (isDone) done++;
-    if (!bucket) return;
     bucket.planned++;
     if (!isDone) return;
+    done++;
     bucket.done++;
     bucket.minutes += w.durationMin || 0;
     bucket.metres += Math.round((w.distance || 0) * 1000);
     if (!w.test) mix[w.type] = (mix[w.type] || 0) + 1;
   });
-  const recent = weeks.filter(w => w.planned > 0);
+  // The current week is still in progress, so averaging it in as a whole
+  // week deflates every per-week figure every Monday.
+  const thisWeek = weeks[weeks.length - 1];
+  const recent = weeks.filter(w => w.planned > 0 && w !== thisWeek);
   const perWeek = recent.length ? recent.reduce((t, w) => t + w.done, 0) / recent.length : null;
   return {
     weeks,
@@ -80,18 +90,31 @@ function distribution({ plan, log, moves, todayISO }) {
     sessionsPerWeek: metric(perWeek == null ? null : Math.round(perWeek * 10) / 10, 'derived'),
     minutesPerWeek: metric(recent.length ? Math.round(recent.reduce((t, w) => t + w.minutes, 0) / recent.length) : null, 'derived'),
     metresPerWeek: metric(recent.length ? Math.round(recent.reduce((t, w) => t + w.metres, 0) / recent.length) : null, 'derived'),
-    completion: metric(planned ? Math.round(done / planned * 100) / 100 : null, 'derived',
-      planned ? done + ' of ' + planned + ' planned swims' : null),
+    // A handful of sessions is not a completion rate. Below the floor the
+    // metric reports itself as missing rather than letting one skipped swim
+    // in a new plan read as a consistency problem.
+    completion: metric(planned >= DASH_RULES.minSessions ? Math.round(done / planned * 100) / 100 : null, 'derived',
+      planned ? done + ' of ' + planned + ' planned swims in the last ' + DASH_RULES.weeks + ' weeks' : null),
   };
 }
 
 /* §6 quality execution, from the phase 4 review engine. Stored reviews are
    the only honest source here: without them the dashboard says so rather
    than guessing from whole-session averages. */
-function quality({ plan, log }) {
+function quality({ plan, log, moves, todayISO }) {
+  // Windowed and dated by when the swim was COMPLETED: the limiter copy
+  // speaks in the present tense, so a bad block months ago must not keep
+  // naming endurance (review catch 2026-07-27).
   const reviews = swimsOf(plan)
     .filter(w => log && log[w.id] && log[w.id].swimReview)
-    .map(w => ({ ...log[w.id].swimReview, date: w.date }))
+    .map(w => ({
+      ...log[w.id].swimReview,
+      date: (log[w.id].at || '').slice(0, 10) || (moves && moves[w.id]) || w.date,
+    }))
+    .filter(r => {
+      const age = daysBetween(r.date, todayISO);
+      return age >= 0 && age <= DASH_RULES.weeks * 7;
+    })
     .sort((a, b) => (a.date < b.date ? 1 : -1));
   if (!reviews.length) {
     return {
@@ -99,7 +122,7 @@ function quality({ plan, log }) {
       adherence: metric(null, 'missing'),
       fade: metric(null, 'missing'),
       consistency: metric(null, 'missing'),
-      note: 'Session reviews appear once your swims are matched to recordings.',
+      note: 'Per-session review needs your swims matched to watch recordings with lap data. Nothing here is guessed from averages in the meantime.',
     };
   }
   const usable = reviews.filter(r => r.confidence !== 'low');
@@ -119,7 +142,16 @@ function quality({ plan, log }) {
 /* §6 endurance readiness: the longest thing actually swum, not the longest
    thing planned. */
 function endurance({ plan, log, moves, activities, todayISO }) {
-  const longs = swimsOf(plan).filter(w => w.type === 'Long' && log && log[w.id]);
+  // Same window as everything else on the card: a swim from five months ago
+  // is not "recent" evidence, and it must not be trusted further back than a
+  // real recording is (review catch 2026-07-27).
+  const inWindow = w => {
+    const date = (moves && moves[w.id]) || w.date;
+    const age = daysBetween(date, todayISO);
+    return age >= 0 && age <= DASH_RULES.weeks * 7;
+  };
+  const completedRecently = swimsOf(plan).filter(w => log && log[w.id] && inWindow(w));
+  const longs = completedRecently.filter(w => w.type === 'Long');
   const recorded = (activities || [])
     .filter(a => a && (a.type === 'Swim' || a.type === 'OpenWaterSwim') && a.distance
       && daysBetween(a.date, todayISO) >= 0 && daysBetween(a.date, todayISO) <= DASH_RULES.weeks * 7);
@@ -130,8 +162,7 @@ function endurance({ plan, log, moves, activities, todayISO }) {
   // longest thing an athlete can swim, and letting one count would both
   // overstate the endurance card and unlock estimates it should not
   // (self-check 2026-07-27).
-  const longestPrescribed = swimsOf(plan)
-    .filter(w => log && log[w.id])
+  const longestPrescribed = completedRecently
     .flatMap(w => w.segments || [])
     .filter(s => s.swim && s.swim.distM && !(s.swim.n > 1)
       && !/^(warm-up|cool-down)/i.test(s.label || ''))
@@ -157,24 +188,43 @@ export const EST_DISTANCES = [
   { m: 1900, label: '1.9 km' },
   { m: 3800, label: '3.8 km' },
 ];
+// CSS is the pace a swimmer can hold for roughly this far, so it is the
+// anchor: shorter than this is swum FASTER than CSS, longer is slower. The
+// first cut anchored at 400 m, which made every 400 estimate slower than
+// the athlete's own measured 400 (CSS is defined as (t400-t200)/2 per 100,
+// which is always slower than t400/4) — the dashboard contradicting a
+// number the app itself prints (review catch 2026-07-27).
+export const CSS_ANCHOR_M = 1500;
 export function swimEstimates({ css, longestM, completion, owSessions }) {
   return EST_DISTANCES.map(d => {
     if (!css) return { ...d, range: null, why: 'Set or test your CSS and these appear.' };
-    // evidence gate: you have to have swum something within reach of it
-    const reach = d.m <= 500 ? 0 : d.m * 0.6;
+    // Evidence gate: you have to have swum something within reach of it.
+    // Nothing is exempt — a 400 quoted beside four withheld rows read as the
+    // best-evidenced number when it had none at all.
+    const reach = d.m * 0.6;
     if (longestM < reach) {
       return { ...d, range: null, why: 'Swim continuously past ' + Math.round(reach) + ' m and this appears.' };
     }
-    // pace drifts off CSS with distance; the band widens the further the
-    // estimate reaches past the evidence, and narrows when training has
-    // been consistent
-    const over = Math.max(0, Math.log(Math.max(d.m, 400) / 400) / Math.log(2));
-    const drift = 1 + 0.02 * over;
-    const spread = 0.02 + 0.02 * over * (completion != null && completion >= 0.8 ? 0.6 : 1);
+    const over = Math.log(d.m / CSS_ANCHOR_M) / Math.log(2);
+    const drift = Math.pow(2, 0.04 * over);   // 4% per doubling either side
+    // Uncertainty means the swim could go SLOWER than the middle estimate,
+    // never faster, so only the upside carries it. The downside is fixed:
+    // otherwise inconsistent training bought a faster best case, which is
+    // exactly backwards (review catch 2026-07-27).
+    const spread = 0.02 + 0.02 * Math.abs(over) * (completion != null && completion >= 0.8 ? 0.6 : 1);
+    const downSpread = 0.02 + 0.02 * Math.abs(over) * 0.6;
     const mid = (d.m / 100) * css * drift;
+    // The band widens UPWARD. Widening it symmetrically made the fast end
+    // quicker per 100 than CSS over 3.8 km, and worse, handed the LEAST
+    // consistent athlete the fastest best case, because low completion
+    // widened the band downward too.
+    let low = Math.round(mid * (1 - downSpread * 0.35));
+    const high = Math.round(mid * (1 + spread));
+    // and past the anchor, no best case is faster per 100 than CSS itself
+    if (d.m > CSS_ANCHOR_M) low = Math.max(low, Math.round((d.m / 100) * css));
     return {
       ...d,
-      range: [Math.round(mid * (1 - spread)), Math.round(mid * (1 + spread))],
+      range: [low, high],
       why: null,
       openWater: d.m >= 750 && owSessions === 0 ? 'Pool estimate: no open-water swims recorded.' : null,
     };
@@ -185,7 +235,7 @@ export function swimEstimates({ css, longestM, completion, owSessions }) {
    Ordered so the most actionable thing wins: a plan that is not being
    completed cannot be out-trained, and a missing threshold cannot be
    coached around. */
-export function swimLimiter(d) {
+export function swimLimiter(d, today) {
   const out = (id, headline, evidence, response) => ({ id, headline, evidence, response });
   const t = d.status.threshold;
   const comp = d.distribution.completion.value;
@@ -210,7 +260,7 @@ export function swimLimiter(d) {
       ['A CSS retest is recommended so the targets match you.',
         'Until then the plan repeats rather than progresses the CSS sets.']);
   }
-  if (d.quality.fade.value != null && d.quality.fade.value > DASH_RULES.fadeConcern) {
+  if (d.quality.fade && d.quality.fade.value != null && d.quality.fade.value > DASH_RULES.fadeConcern) {
     return out('endurance', 'Endurance is limiting your swim',
       ['Your pace fades by about ' + d.quality.fade.value + '% in the closing efforts.',
         d.endurance.longestM.value ? 'Longest continuous swim: ' + d.endurance.longestM.value + ' m.' : 'No long continuous swim recorded yet.'],
@@ -232,8 +282,15 @@ export function swimLimiter(d) {
       ['Drills are biased to your focus, hardest last so it reads as a progression.',
         'Your kit list keeps the selection to drills you can actually do.']);
   }
-  return out('none', 'Nothing is obviously limiting your swim',
-    ['Sessions are being completed and the quality work is landing on target.'],
+  // Only claim what there is evidence for: with no stored reviews the
+  // quality half of this sentence would be manufactured from absence
+  // (review catch 2026-07-27).
+  const hasQuality = !!(d.quality.adherence && d.quality.adherence.value != null);
+  return out('none', 'Nothing is obviously holding your swim back',
+    [d.distribution.completion && d.distribution.completion.value != null
+      ? 'You are completing your planned swims.'
+      : 'Not enough completed swims yet to name a limiter.',
+      ...(hasQuality ? ['Your quality sessions are landing on target.'] : [])],
     ['The plan continues to progress as written.']);
 }
 
@@ -244,7 +301,7 @@ export function swimDashboard({ plan, log, moves, activities, thresholds, todayI
   const t = swimThreshold(profile);
   const tech = saneTechnique(profile.technique);
   const dist = distribution({ plan, log, moves, todayISO: today });
-  const qual = quality({ plan, log });
+  const qual = quality({ plan, log, moves, todayISO: today });
   const end = endurance({ plan, log, moves, activities, todayISO: today });
   const exposure = openWaterExposure({
     activities, todayISO: today, workouts: swimsOf(plan), logged: log,
@@ -258,7 +315,16 @@ export function swimDashboard({ plan, log, moves, activities, thresholds, todayI
       source: t.source,
       measuredAt: t.measuredAt,
       confidence: t.confidence,
-      history: (profile.fitnessHistory || []).filter(h => h && h.css100Sec).map(h => ({ date: h.date, css: h.css100Sec })),
+      // A fitnessHistory entry holds the value that was SUPERSEDED on that
+      // date, which is why fitnessSeries.js appends the live value as the
+      // final point. Without that the chart ends on the number the athlete
+      // has just beaten, and a fresh test never shows (review catch
+      // 2026-07-27).
+      history: (() => {
+        const past = (profile.fitnessHistory || []).filter(h => h && h.css100Sec)
+          .map(h => ({ date: h.date, css: h.css100Sec }));
+        return t.cssSecondsPer100m ? past.concat([{ date: t.measuredAt || today, css: t.cssSecondsPer100m }]) : past;
+      })(),
       focus: (tech && tech.focus) || [],
     },
     distribution: dist,
@@ -280,6 +346,6 @@ export function swimDashboard({ plan, log, moves, activities, thresholds, todayI
     completion: dist.completion.value,
     owSessions: exposure.sessions,
   });
-  d.limiter = swimLimiter(d);
+  d.limiter = swimLimiter(d, today);
   return d;
 }

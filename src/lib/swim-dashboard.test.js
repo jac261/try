@@ -47,11 +47,15 @@ describe('estimates refuse false precision (§3)', () => {
     const est = swimEstimates({ css: 120, longestM: 800, completion: 1, owSessions: 1 });
     const byLabel = Object.fromEntries(est.map(e => [e.label, e]));
     expect(byLabel['400 m'].range).toBeTruthy();
+    // and nothing is exempt from the gate: an athlete who has swum nothing
+    // gets no estimate at all, not even the shortest
+    expect(swimEstimates({ css: 120, longestM: 0, completion: 1, owSessions: 0 })
+      .every(e => e.range === null)).toBe(true);
     expect(byLabel['750 m'].range).toBeTruthy();      // 800 m swum covers it
     expect(byLabel['3.8 km'].range).toBe(null);       // nothing like it swum
     expect(byLabel['3.8 km'].why).toMatch(/Swim continuously/);
   });
-  it('every quoted estimate is a range, never a single number, and widens with distance', () => {
+  it('every quoted estimate is a range, never a single number', () => {
     const est = swimEstimates({ css: 100, longestM: 4000, completion: 1, owSessions: 2 });
     const quoted = est.filter(e => e.range);
     expect(quoted.length).toBe(EST_DISTANCES.length);
@@ -59,8 +63,41 @@ describe('estimates refuse false precision (§3)', () => {
       expect(e.range[1]).toBeGreaterThan(e.range[0]);
       expect(e.range[0]).toBeGreaterThan(0);
     });
+  });
+
+  it('the band is tightest at the distance CSS actually describes, and widens either side', () => {
+    const est = swimEstimates({ css: 100, longestM: 4000, completion: 1, owSessions: 2 });
     const width = e => (e.range[1] - e.range[0]) / e.range[0];
-    expect(width(quoted[quoted.length - 1])).toBeGreaterThan(width(quoted[0]));
+    const anchor = est.find(e => e.m === 1500);
+    est.filter(e => e.range && e.m !== 1500).forEach(e => {
+      expect(width(e), e.label).toBeGreaterThan(width(anchor));
+    });
+  });
+
+  it('no best case is ever faster per 100 than CSS beyond the anchor, whatever the completion', () => {
+    [null, 0.2, 0.9].forEach(completion => {
+      swimEstimates({ css: 120, longestM: 4000, completion, owSessions: 1 })
+        .filter(e => e.range && e.m > 1500)
+        .forEach(e => expect(e.range[0] / (e.m / 100), e.label).toBeGreaterThanOrEqual(120));
+    });
+  });
+
+  it('a shorter distance is estimated FASTER per 100 than CSS, matching the measured test', () => {
+    // CSS is (t400 - t200) / 2 per 100, always slower than t400 / 4, so a
+    // 400 estimate built by multiplying CSS would contradict the athlete's
+    // own recorded test
+    const est = swimEstimates({ css: 105, longestM: 4000, completion: 1, owSessions: 1 });
+    const e400 = est.find(e => e.m === 400);
+    expect((e400.range[0] + e400.range[1]) / 2 / 4).toBeLessThan(105);
+  });
+
+  it('the least consistent athlete is never shown the fastest best case', () => {
+    const loose = swimEstimates({ css: 120, longestM: 4000, completion: 0.2, owSessions: 1 });
+    const tight = swimEstimates({ css: 120, longestM: 4000, completion: 0.95, owSessions: 1 });
+    loose.filter(e => e.range).forEach((e, i) => {
+      const t = tight.filter(x => x.range)[i];
+      expect(e.range[0], e.label).toBeGreaterThanOrEqual(t.range[0]);
+    });
   });
   it('estimates get slower per 100 as the distance grows: never a flat CSS multiply', () => {
     const est = swimEstimates({ css: 100, longestM: 4000, completion: 1, owSessions: 2 });
@@ -151,7 +188,9 @@ describe('the dashboard over a real plan', () => {
       { date: '2026-06-01', css100Sec: 125 },
       { date: '2026-06-15', ftp: 300 },
     ] });
-    expect(d.status.history.map(h => h.css)).toEqual([130, 125]);
+    // the live value is appended: a history entry holds the value that was
+    // superseded, so without it a fresh test never appears on the chart
+    expect(d.status.history.map(h => h.css)).toEqual([130, 125, 120]);
   });
 
   it('a warm-up is never counted as the longest continuous swim', () => {
@@ -174,5 +213,64 @@ describe('the dashboard over a real plan', () => {
     ]);
     expect(d.openWater.exposure.sessions).toBe(1);
     expect(d.endurance.longestM.value).toBe(2000); // pool swim still counts for endurance
+  });
+});
+
+
+describe('phase 7 review fixes: every window is the window the card claims', () => {
+  const long = { ...base, startDate: '2026-01-05' };
+
+  it('a miss months ago cannot pin the limiter under six completed weeks', () => {
+    const plan = generatePlan(long);
+    const log = {};
+    plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline === 'swim' && !w.race && w.date < today && w.date >= '2026-06-08')
+      .forEach(w => { log[w.id] = { done: true }; });
+    const d = swimDashboard({ plan, log, moves: {}, activities: [], todayISO: today });
+    expect(d.distribution.completion.value).toBe(1);
+    expect(d.limiter.id).not.toBe('consistency');
+  });
+
+  it('day one of a new plan does not accuse the athlete of missing anything', () => {
+    const plan = generatePlan({ ...base, startDate: today, raceDate: '2026-12-06' });
+    const d = swimDashboard({ plan, log: {}, moves: {}, activities: [], todayISO: today });
+    expect(d.distribution.completion.kind).toBe('missing');
+    expect(d.limiter.id).not.toBe('consistency');
+  });
+
+  it('a swim from outside the window is not recent endurance evidence', () => {
+    const plan = generatePlan(long);
+    const old = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline === 'swim' && !w.race && w.date < '2026-03-01');
+    expect(old.length).toBeGreaterThan(0);
+    const log = {};
+    old.forEach(w => { log[w.id] = { done: true }; });
+    const d = swimDashboard({ plan, log, moves: {}, activities: [], todayISO: today });
+    expect(d.endurance.longestM.value).toBeFalsy();
+    expect(d.endurance.longSwims.value).toBe(0);
+  });
+
+  it('the Long swim count only counts the window it is labelled with', () => {
+    const plan = generatePlan(long);
+    const log = {};
+    plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline === 'swim' && !w.race && w.date < today)
+      .forEach(w => { log[w.id] = { done: true }; });
+    const d = swimDashboard({ plan, log, moves: {}, activities: [], todayISO: today });
+    const longsInWindow = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline === 'swim' && w.type === 'Long' && w.date < today && w.date >= '2026-06-08').length;
+    expect(d.endurance.longSwims.value).toBe(longsInWindow);
+  });
+
+  it('the no-limiter answer never claims quality evidence it does not have', () => {
+    const plan = generatePlan(long);
+    const log = {};
+    plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline === 'swim' && !w.race && w.date < today && w.date >= '2026-06-08')
+      .forEach(w => { log[w.id] = { done: true }; });
+    const d = swimDashboard({ plan, log, moves: {}, activities: [], todayISO: today });
+    expect(d.limiter.id).toBe('none');
+    expect(d.quality.adherence.kind).toBe('missing');
+    expect(d.limiter.evidence.join(' ')).not.toMatch(/on target/i);
   });
 });

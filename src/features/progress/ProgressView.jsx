@@ -317,7 +317,8 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
         {/* Phase 7: the swim dashboard, for plans that actually swim. It sits
           after the general progress views because it answers a narrower
           question than they do. */}
-      {!tracker && !(T.RACES[plan.race] || {}).solo && plan.profile.excludedDiscipline !== 'swim'
+      {!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
+        && plan.profile.excludedDiscipline !== 'swim'
         && <SwimDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO} retest={retest} onSupport={onSupport} />}
 
       <div className="section-title">Discipline balance</div>

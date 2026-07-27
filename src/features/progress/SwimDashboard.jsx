@@ -17,11 +17,16 @@ function Src({ m }) {
   </span>;
 }
 
-function Stat({ label, value, unit }) {
+// §7 wants EVERY metric to say what it is, not one word per card standing
+// in for four different numbers (review catch 2026-07-27). The kind rides
+// the label, which is the only place there is room for it.
+const KIND_TAG = { recorded: 'recorded', derived: 'derived', reported: 'your answer', estimated: 'est', missing: null };
+function Stat({ label, value, unit, m }) {
+  const tag = m ? KIND_TAG[m.kind] : null;
   return (
     <div className="s">
       <b>{value == null ? '—' : value}{unit && value != null ? <small> {unit}</small> : null}</b>
-      <span>{label}</span>
+      <span>{label}{tag ? <span className="muted" style={{ textTransform: 'none' }}> · {tag}</span> : null}</span>
     </div>
   );
 }
@@ -34,7 +39,7 @@ export function SwimDashboard({ plan, log, moves, activities, todayISO, retest, 
 
   return (
     <>
-      <div className="section-title">Your swim</div>
+      <div className="section-title">Your swim <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(what is holding it back)</span></div>
 
       {/* §4 + §5: the answer first. Everything below is the evidence. */}
       <div className="card">
@@ -61,13 +66,10 @@ export function SwimDashboard({ plan, log, moves, activities, todayISO, retest, 
         {hist.length >= 2 && (
           <div style={{ marginTop: 10 }}>
             {/* CSS is a time, so lower is better */}
-            <Sparkline values={hist.map(h => h.css)} betterDown />
+            <Sparkline values={hist.map(h => h.css)} betterDown color="var(--swim)" />
             <div className="chart-legend"><span>CSS history, most recent last</span></div>
           </div>
         )}
-        {d.nextAction.retest && <div className="testnote" style={{ marginTop: 10 }}>
-          <span>{d.nextAction.retest.headline}. {d.nextAction.retest.why}</span>
-        </div>}
       </div>
 
       {/* §6 training distribution */}
@@ -127,6 +129,20 @@ export function SwimDashboard({ plan, log, moves, activities, todayISO, retest, 
             {d.openWater.exposure.wetsuitSessions ? ' Wetsuit worn in ' + d.openWater.exposure.wetsuitSessions + '.' : ''}
           </p>
         )}
+      </div>
+
+      {/* §6 next action: what is coming, and what Try suggests next. It was
+          computed and never rendered in the first cut. */}
+      <div className="section-title">Next action</div>
+      <div className="card">
+        {d.nextAction.nextKey
+          ? <p className="lead" style={{ margin: '0 0 6px' }}>
+            Next key swim: <b>{d.nextAction.nextKey.title}</b> on {T.fmtDate(d.nextAction.nextKey.date, { weekday: 'long', month: 'short', day: 'numeric' })}.
+          </p>
+          : <p className="lead" style={{ margin: '0 0 6px' }}>No key swim scheduled ahead.</p>}
+        {d.nextAction.retest
+          ? <div className="testnote"><span>{d.nextAction.retest.headline}. {d.nextAction.retest.why}</span></div>
+          : <p className="lead" style={{ margin: 0 }}>No CSS retest is due.</p>}
       </div>
 
       {/* §3: estimates, as ranges, and honest about what they need */}
