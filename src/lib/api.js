@@ -278,6 +278,11 @@ const actualFromNote = note => {
 const toLogEntry = l => ({
   done: !!l.completed, at: l.completedAtUtc || null, feel: l.feel || undefined,
   notes: l.notes || undefined, actualMin: actualFromNote(l.notes),
+  // Phase 4 (defensive read, like poolLengthM): a typed swim-review field on
+  // the log DTO is a filed backend ask. Absent today, so this maps nothing;
+  // once Jack adds it, stored reviews hydrate and the multi-session evidence
+  // (swimReviewEvidence) starts speaking. Nothing is ever SENT until then.
+  swimReview: l.swimReview || undefined,
 });
 // The server can return a log row for workouts that were never completed
 // (empty stubs from other write paths). An entry's EXISTENCE means "done"

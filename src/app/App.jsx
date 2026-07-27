@@ -1002,8 +1002,17 @@ export function App({ storage, getToken, user }) {
   // unresolvedTest keeps the module's swum-a-test-recently suppression from
   // counting a test that produced nothing as having answered the question.
   const unresolvedTest = !!cssFail || !!(cssTest && !cssTest.test);
+  // Phase 4: per-rep review evidence, when stored reviews exist on log
+  // entries (hydrated from the backend's typed field once Jack adds it —
+  // dormant until then). Newest first; the module applies §5's own gates.
+  const reviewEvidence = T.swimReviewEvidence(
+    plan.weeks && Array.isArray(plan.weeks) ? plan.weeks.flatMap(wk => wk.workouts)
+      .filter(w => w.discipline === 'swim' && log[w.id] && log[w.id].swimReview)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .map(w => log[w.id].swimReview) : []
+  );
   const retest = (!eftp || eftp.sport !== 'swim') && !cssFail
-    ? T.cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()), unresolvedTest })
+    ? T.cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()), unresolvedTest, reviewEvidence })
     : null;
   const addCssTestToWeek = () => {
     const r = T.addCssTest(plan, T.iso(new Date()));

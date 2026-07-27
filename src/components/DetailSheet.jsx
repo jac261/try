@@ -152,6 +152,14 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           // intent, with verdicts only where an average can judge fairly.
           const rv = T.reviewActivity({ workout: w, activity, paces: plan.paces, log: null });
           if (!rv) return null;
+          // Phase 4: the per-rep coaching read for swims, computed from the
+          // same laps the rep table shows. When it can speak, the generic
+          // "the average blurs work and recovery" note is redundant.
+          const sr = w.discipline === 'swim' && !w.adhoc && reps
+            ? T.swimReview({ workout: w, activity, intervals: reps, paces: plan.paces, feel }) : null;
+          const verdicts = sr && sr.outcome !== 'insufficient-data'
+            ? rv.verdicts.filter(v => !/average blurs/.test(v.text)) : rv.verdicts;
+          const OUTCOME_WORDS = { progress: 'Progress', repeat: 'Repeat this one', reduce: 'Ease the next one', 'retest-css': 'Retest your CSS', 'insufficient-data': 'No call' };
           return (
             <div className="review">
               <div className="section-title" style={{ margin: '14px 0 6px' }}>How it went
@@ -161,12 +169,18 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
               <div className="rd-pmc" style={{ marginTop: 0, flexWrap: 'wrap' }}>
                 {rv.stats.slice(0, 4).map(([k, v]) => <div key={k}><b style={{ fontSize: 15 }}>{v}</b><span>{k}</span></div>)}
               </div>
-              {rv.verdicts.map((v, i) => (
+              {verdicts.map((v, i) => (
                 <div className="testnote" key={i} style={{ marginTop: 8 }}>
                   <Icon name={v.tone === 'good' ? 'trophy' : v.tone === 'warn' ? 'heartrate' : 'trend'} size={18} />
                   <span>{v.text}</span>
                 </div>
               ))}
+              {sr && (
+                <div className="testnote" style={{ marginTop: 8 }}>
+                  <Icon name={sr.outcome === 'progress' ? 'trophy' : sr.outcome === 'reduce' ? 'heartrate' : 'trend'} size={18} />
+                  <span><b>{OUTCOME_WORDS[sr.outcome]}</b> · {sr.confidence} confidence. {sr.text}</span>
+                </div>
+              )}
               {(() => {
                 // Rep-by-rep (or km splits): honest per-interval numbers, with
                 // verdict dots only where the session type defines a target.

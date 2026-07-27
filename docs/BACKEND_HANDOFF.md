@@ -342,3 +342,23 @@ length on the activity DTO, e.g. `poolLengthM` (metres) from intervals.icu's
 `pool_length`. The client already reads `a.poolLengthM` defensively: absent, it
 is a silent no-op; present and mismatched, it lowers review confidence and
 never silently reinterprets the distance. Additive, no closed set involved.
+
+## Ask - 27 July 2026: typed swim-review field on the workout log DTO
+
+Swim build-out phase 4 computes a deterministic per-session review for
+structured swims (completion, pace adherence, consistency, fade, confidence,
+coaching outcome). Jon's call is to persist it as a typed field rather than a
+device-local cache or a notes-channel hack, so the multi-session evidence
+(three comparable quality sessions arguing together before a CSS retest is
+suggested) works across devices.
+
+Ask: an optional `swimReview` JSON object (or opaque JSON string) on the
+workout log DTO, write-through on PUT and echoed on GET. Shape today:
+
+  { completion, paceAdherence, consistency, fadePercent, perceivedEffort,
+    repsDone, repsPlanned, failedReps, confidence, outcome, type, text }
+
+The client already reads it defensively (absent = undefined, nothing
+breaks) and sends NOTHING until the field exists - the write path stays
+untouched so current log PUTs cannot 400. Once the field lands we wire the
+write side and the stored reviews start feeding the retest recommendation.

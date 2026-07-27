@@ -113,7 +113,7 @@ function perfSignal({ plan, activities, log, moves, todayISO, sinceISO }) {
   return null;
 }
 
-export function cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO, unresolvedTest }) {
+export function cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO, unresolvedTest, reviewEvidence }) {
   if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
   const profile = plan.profile || {};
   // §6's gate, applied to the nudge as well: a solo run or bike plan has no
@@ -141,8 +141,15 @@ export function cssRetestRecommendation({ plan, activities, thresholds, log, mov
   const reasons = [];
   if (!t.cssSecondsPer100m) reasons.push({ key: 'missing' });
   if (t.cssSecondsPer100m) {
-    const perf = perfSignal({ plan, activities: activities || [], log: log || {}, moves, todayISO, sinceISO: t.measuredAt });
-    if (perf) reasons.push(perf);
+    // Phase 4: per-rep review evidence (swimReviewEvidence over the last
+    // comparable quality sessions) outranks the whole-recording heuristic —
+    // it sees the actual reps, so when it speaks, perfSignal stays quiet.
+    if (reviewEvidence && reviewEvidence.direction) {
+      reasons.push({ key: reviewEvidence.direction === 'over' ? 'perf-fast' : 'perf-slow' });
+    } else {
+      const perf = perfSignal({ plan, activities: activities || [], log: log || {}, moves, todayISO, sinceISO: t.measuredAt });
+      if (perf) reasons.push(perf);
+    }
     if (t.measuredAt && daysBetween(t.measuredAt, todayISO) > RETEST_RULES.staleDays) reasons.push({ key: 'stale' });
     const swimV = thresholds && thresholds.swimThresholdPace;
     if (swimV) {
