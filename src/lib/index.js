@@ -16,6 +16,7 @@ export * from './swim-strokes.js';
 export * from './bikeschema.js';
 export * from './bike-zones.js';
 export * from './ftp-retest.js';
+export * from './bike-sizing.js';
 export * from './disciplines.js';
 export * from './plan.js';
 export * from './wellness.js';

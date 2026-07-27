@@ -5,6 +5,7 @@ import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL } f
 import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
 import { swimZoneTargets } from './swim-zones.js';
 import { drillPool, focusOrder, saneTechnique } from './swim-drills.js';
+import { bikeMainSet } from './bike-sizing.js';
 import { OW_SKILLS, OW_SAFETY, OW_SKILL_CEILING, owCategory } from './swim-open-water.js';
 import { weakBias, weakestLink } from './weakest.js';
 import { RIEGEL_EXP } from './runstats.js';
@@ -316,7 +317,11 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
         { label: 'First half · very relaxed', min: half, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: 'Second half · steady', min: dur - half, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
       ],
-    ][v(3)];
+    ][v(3)] || [
+      { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+      { label: clamp(dur - 25, 20, 40) + ' min continuous sweet spot', min: clamp(dur - 25, 20, 40), detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3' },
+      { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
+    ];
   } else if (type === 'Tempo') {
     title = 'Tempo Run';
     const main = Math.max(15, dur - 22);
@@ -493,11 +498,19 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
     const nines = clamp(Math.round((dur - 25) / 12), 3, 5);
     const block = clamp(dur - 25, 20, 40);
     segs = [
-      [
-        { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
-        { label: reps + ' × (12 min / 5 min easy)', min: reps * 17, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3', blocks: rep(reps, 12, 'Z3', 5, 'Z1') },
-        { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
-      ],
+      // Phase 3: the level-gated, progressing variant. The other two are
+      // untouched, so a session type still varies rather than becoming one
+      // shape that only ever grows.
+      (() => {
+        const ms = bikeMainSet({ type, intensity, seed, mainMin: Math.max(0, dur - 25) });
+        if (!ms) return null;
+        return [
+          { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+          { label: ms.reps + ' × (' + ms.on + ' min / ' + ms.off + ' min easy)' + (ms.cadence ? ' at ' + ms.cadence : ''),
+            min: ms.minutes, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3', blocks: rep(ms.reps, ms.on, 'Z3', ms.off, 'Z1') },
+          { label: 'Cool-down', min: dur - 15 - ms.minutes, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
+        ];
+      })(),
       [
         { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
         { label: nines + ' × (9 min / 3 min easy)', min: nines * 12, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3', blocks: rep(nines, 9, 'Z3', 3, 'Z1') },
@@ -508,7 +521,14 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
         { label: block + ' min continuous sweet spot', min: block, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3' },
         { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
-    ][v(3)];
+      // the progressing variant returns null when even two reps will not fit
+      // the time available, so the continuous block stands in for it rather
+      // than a set that overruns its own card
+    ][v(3)] || [
+      { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
+      { label: block + ' min continuous sweet spot', min: block, detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3' },
+      { label: 'Cool-down', min: Math.max(5, dur - 15 - block), detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
+    ];
   } else if (type === 'Tempo') {
     title = 'Tempo Ride';
     const blocks = clamp(Math.round((dur - 25) / 16), 2, 3);
