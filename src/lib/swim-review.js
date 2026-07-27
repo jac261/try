@@ -33,6 +33,9 @@ export const REVIEW_RULES = {
   restTol: 0.5,          // recorded recovery within 50% of planned = compliant
 };
 
+// Types whose whole point is not the clock, so pace never leads the read.
+const PACE_BLIND_TYPES = { 'Technique': 1, 'Open Water': 1 };
+
 // Planned main reps, in order, with their target pace recovered from the
 // stored prescription. swim.pct is round(css/pace*100), so the target comes
 // back as css*100/pct — within rounding of what the builder wrote, which is
@@ -71,9 +74,25 @@ export function matchSwimIntervals({ workout, intervals, paces }) {
   const planned = plannedSwimReps(workout, paces);
   if (!laps.length) return { laps, planned, pairs: [], confidence: 'low', why: 'no structured laps in the recording' };
   if (!planned.length) {
-    // block-built session: the laps are splits against one steady target,
-    // the Long-swim principle in its simplest form
-    return { laps, planned, pairs: [], splits: true, confidence: laps.length >= 3 ? 'medium' : 'low', why: 'continuous session read as splits' };
+    // No planned reps means one of three very different things, and only
+    // the first may be judged as a continuous swim (review catch
+    // 2026-07-27). Session TYPE cannot tell them apart: Race Pace and Long
+    // each ship both rep-built and continuous variants. The stored
+    // prescription can.
+    const segs = workout.segments || [];
+    const hasRepMeta = segs.some(s => s.swim && s.swim.repM && s.swim.n);
+    const hasSwimMeta = segs.some(s => s.swim);
+    const why = hasRepMeta ? 'the target paces for this session are not available'
+      : !hasSwimMeta ? 'the planned set for this session could not be read'
+        : 'continuous session read as splits';
+    // genuinely continuous (metadata present, no reps in it) is the only
+    // case a splits read is honest about
+    const continuous = hasSwimMeta && !hasRepMeta;
+    return {
+      laps, planned, pairs: [], splits: true,
+      confidence: continuous && laps.length >= 3 ? 'medium' : 'low',
+      why,
+    };
   }
   // walk both lists in order, pairing each planned rep with the next lap
   // within distance tolerance — order is evidence, so no global rematch
@@ -108,6 +127,12 @@ const pct1 = x => Math.round(x * 10) / 10;
    answers retest-css, because one swim is not a pattern (§5). */
 export function swimReview({ workout, activity, intervals, paces, feel, evidence }) {
   if (!workout || workout.discipline !== 'swim' || !activity) return null;
+  // A fitness test is a measurement, not a session to be graded: its
+  // segments carry no prescription to match against, so a review could only
+  // ever say "could not be matched" about the one swim that was never meant
+  // to be judged. The auto-CSS flow speaks for it instead (review catch
+  // 2026-07-27; perfSignal excludes tests for the same reason).
+  if (workout.test) return null;
   const pool = (paces && paces.pool) || DEFAULT_POOL;
   const type = workout.type;
   const m = matchSwimIntervals({ workout, intervals, paces });
@@ -153,7 +178,7 @@ export function swimReview({ workout, activity, intervals, paces, feel, evidence
 
   // §3/§4: the outcome, per session intent, most cautious rule first.
   // Technique and Open Water are never judged primarily by pace.
-  const paceBlind = type === 'Technique' || type === 'Open Water';
+  const paceBlind = !!PACE_BLIND_TYPES[type];
   const done = completion != null && completion >= REVIEW_RULES.completionFull;
   const softFade = fadePercent != null && fadePercent > REVIEW_RULES.fadeSoftPct;
   const hardFade = fadePercent != null && fadePercent > REVIEW_RULES.fadeHardPct;
@@ -194,8 +219,13 @@ function reviewText(r, { workout, pool, m }) {
   } else if (r.completion != null) {
     bits.push('You covered ' + Math.round(r.completion * 100) + '% of the planned distance.');
   }
-  if (r.type === 'Technique') {
-    bits.push('On a technique day the win is showing up and swimming it with intent, not the clock.');
+  if (PACE_BLIND_TYPES[r.type]) {
+    // the outcome rules already ignore pace for these; the copy must too, or
+    // it judges an open-water swim by a pool target in the same breath as
+    // saying it cannot (review catch 2026-07-27)
+    bits.push(r.type === 'Technique'
+      ? 'On a technique day the win is showing up and swimming it with intent, not the clock.'
+      : 'Open water is judged on getting it done, not on pace against pool targets.');
   } else if (r.paceAdherence != null) {
     if (Math.abs(r.paceAdherence) <= REVIEW_RULES.onTargetPct * 100) bits.push('Pace sat right on target.');
     else if (r.paceAdherence < 0) bits.push('Pace averaged ' + Math.abs(r.paceAdherence) + '% quicker than target.');
@@ -211,6 +241,23 @@ function reviewText(r, { workout, pool, m }) {
   }
   bits.push(NEXT_WORDS[r.outcome]);
   return bits.join(' ');
+}
+
+/* The review as one verdict line, in the same shape reviewActivity's own
+   verdicts use, so every surface (the workout sheet, the recap deck) speaks
+   with a single voice instead of pairing a whole-session average verdict
+   with a contradicting per-rep read (review catch 2026-07-27). Silent on a
+   read too weak to say anything. */
+const OUTCOME_WORDS = {
+  progress: 'Progress', repeat: 'Repeat this one', reduce: 'Ease the next one',
+  'retest-css': 'Retest your CSS', 'insufficient-data': 'No call',
+};
+export function swimReviewVerdict(review) {
+  if (!review || review.outcome === 'insufficient-data') return null;
+  return {
+    tone: review.outcome === 'progress' ? 'good' : review.outcome === 'reduce' ? 'warn' : 'info',
+    text: OUTCOME_WORDS[review.outcome] + ' · ' + review.confidence + ' confidence. ' + review.text,
+  };
 }
 
 /* §5: rolling evidence. Takes the last few reviews of comparable quality
@@ -229,7 +276,12 @@ export function swimReviewEvidence(reviews) {
   if (usable.filter(r => r.confidence === 'high').length < EVIDENCE_RULES.minHighConfidence) return null;
   const over = usable.every(r => r.paceAdherence <= -EVIDENCE_RULES.directionPct);
   const under = usable.every(r => r.paceAdherence >= EVIDENCE_RULES.directionPct);
-  if (over) return { direction: 'over', sessions: usable.length };
-  if (under) return { direction: 'under', sessions: usable.length };
+  // the newest contributing session's date, when the caller supplied dates:
+  // it is what makes a dismissed nudge speak again once genuinely new swims
+  // argue the same case, instead of staying silent until CSS itself moves
+  // (review catch 2026-07-27)
+  const latest = usable.map(r => r.date).filter(Boolean).sort().pop() || null;
+  if (over) return { direction: 'over', sessions: usable.length, latest };
+  if (under) return { direction: 'under', sessions: usable.length, latest };
   return null;
 }

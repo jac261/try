@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { generatePlan } from './plan.js';
 import { prescribedSwim, cssRetestRecommendation } from './css-retest.js';
 import {
-  plannedSwimReps, matchSwimIntervals, swimReview, swimReviewEvidence,
+  plannedSwimReps, matchSwimIntervals, swimReview, swimReviewEvidence, swimReviewVerdict,
   REVIEW_RULES, EVIDENCE_RULES,
 } from './swim-review.js';
+import { reviewActivity } from './review.js';
 
 /* Phase 4: the swim review engine. Everything is a pure function, so every
    coaching outcome here is pinned against synthesized laps whose paces are
@@ -156,6 +157,97 @@ describe('swimReviewEvidence (§5)', () => {
     const drills = { ...rv(true), type: 'Technique' };
     expect(swimReviewEvidence([cut, rv(true), rv(true), rv(true)]).direction).toBe('over');
     expect(swimReviewEvidence([drills, rv(true), rv(true)])).toBe(null); // only 2 usable
+  });
+});
+
+describe('Phase 4 review fixes: one coaching voice, and silence where nothing can be said', () => {
+  // a steady-band type (the average CAN judge it) that is built continuous,
+  // so the per-rep engine reads it as splits: the exact overlap where two
+  // instruments judged one swim
+  const steady = swims.find(w => (w.type === 'Endurance' || w.type === 'Race Pace') && !plannedSwimReps(w, plan.paces).length);
+  // even overall average, hard fade in the closing quarter
+  const splitLaps = w => {
+    const p = prescribedSwim(w);
+    return [0, 1, 2, 3].map(i => ({
+      type: 'WORK', distance: p.distM / 4, startTimeSec: i * 600,
+      movingTimeSec: (p.sec / 4) * (i === 3 ? 1.08 : 0.97),
+    }));
+  };
+
+  it('a whole-session average verdict never renders beside a contradicting per-rep read', () => {
+    expect(steady).toBeTruthy();
+    const laps = splitLaps(steady);
+    const act = activityFor2(steady);
+    const sr = swimReview({ workout: steady, activity: act, intervals: laps, paces: plan.paces });
+    expect(sr.outcome).toBe('reduce');
+    const withRead = reviewActivity({ workout: steady, activity: act, paces: plan.paces, swimReview: sr });
+    expect(withRead.verdicts.some(v => /On target|Averaged/.test(v.text))).toBe(false);
+    expect(withRead.verdicts.some(v => /Ease the next one/.test(v.text))).toBe(true);
+    expect(withRead.verdicts.filter(v => v.tone === 'good').length).toBe(0);
+    // and without a per-rep read the old average verdict still speaks
+    const without = reviewActivity({ workout: steady, activity: act, paces: plan.paces });
+    expect(without.verdicts.some(v => /On target|Averaged/.test(v.text))).toBe(true);
+  });
+
+  it('the generic average-blurs note yields to the real read, and returns without it', () => {
+    const laps = lapsFor(css);
+    const act = activityFor2(css);
+    const sr = swimReview({ workout: css, activity: act, intervals: laps, paces: plan.paces });
+    const withRead = reviewActivity({ workout: css, activity: act, paces: plan.paces, swimReview: sr });
+    expect(withRead.verdicts.some(v => /average blurs/.test(v.text))).toBe(false);
+    const without = reviewActivity({ workout: css, activity: act, paces: plan.paces });
+    expect(without.verdicts.some(v => /average blurs/.test(v.text))).toBe(true);
+  });
+
+  it('an insufficient-data read is not a voice: the average keeps speaking', () => {
+    const junk = [{ type: 'WORK', distance: 5000, movingTimeSec: 4000, startTimeSec: 0 }];
+    const act = activityFor2(steady);
+    const sr = swimReview({ workout: steady, activity: act, intervals: junk, paces: plan.paces });
+    expect(sr.outcome).toBe('insufficient-data');
+    expect(swimReviewVerdict(sr)).toBe(null);
+    const rv = reviewActivity({ workout: steady, activity: act, paces: plan.paces, swimReview: sr });
+    expect(rv.verdicts.some(v => /On target|Averaged/.test(v.text))).toBe(true);
+  });
+
+  it('a fitness test is never graded as a session', () => {
+    const test = plan.weeks.flatMap(w => w.workouts).find(w => w.test && w.testKind === 'swimCss');
+    expect(test).toBeTruthy();
+    const laps = [
+      { type: 'WORK', distance: 400, movingTimeSec: 400, startTimeSec: 0 },
+      { type: 'WORK', distance: 200, movingTimeSec: 190, startTimeSec: 900 },
+    ];
+    expect(swimReview({ workout: test, activity: { id: 'a', distance: 1400, movingTimeSec: 2700 }, intervals: laps, paces: plan.paces })).toBe(null);
+  });
+
+  it('a rep session whose planned set cannot be read is low confidence, not a continuous swim', () => {
+    const laps = [0, 1, 2, 3].map(i => ({ type: 'WORK', distance: 200, movingTimeSec: 240, startTimeSec: i * 600 }));
+    // a legacy stored plan: rep metadata absent from the segments
+    const stripped = { ...css, segments: css.segments.map(s => { const { swim, ...rest } = s; return rest; }) };
+    expect(matchSwimIntervals({ workout: stripped, intervals: laps, paces: plan.paces }).confidence).toBe('low');
+    // and a missing CSS cannot turn a rep session into a splits read
+    const noCss = { ...plan.paces, swim: { ...plan.paces.swim, css: null } };
+    const m = matchSwimIntervals({ workout: css, intervals: laps, paces: noCss });
+    expect(m.confidence).toBe('low');
+    // a genuinely continuous session still reads as splits
+    const cont = swims.find(w => !plannedSwimReps(w, plan.paces).length && w.type === 'Endurance');
+    if (cont) expect(matchSwimIntervals({ workout: cont, intervals: laps, paces: plan.paces }).confidence).toBe('medium');
+  });
+
+  it('open water copy never judges pool pace, the way its outcome never does', () => {
+    const ow = ofType('Open Water');
+    if (!ow) return;
+    const p = prescribedSwim(ow);
+    const laps = [0, 1, 2, 3].map(i => ({ type: 'WORK', distance: Math.max(1, p.distM / 4), movingTimeSec: (p.sec / 4) * 1.3, startTimeSec: i * 600 }));
+    const r = swimReview({ workout: ow, activity: { id: 'a', distance: p.distM, movingTimeSec: p.sec }, intervals: laps, paces: plan.paces });
+    expect(r.text).not.toMatch(/Pace averaged/);
+  });
+
+  it('evidence carries the newest contributing date so a dismissed nudge can speak again', () => {
+    const rv2 = (d, over) => ({ type: 'CSS Intervals', completion: 1, confidence: 'high', paceAdherence: over ? -4 : 4, date: d });
+    const e = swimReviewEvidence([rv2('2026-07-20', true), rv2('2026-07-13', true), rv2('2026-07-06', true)]);
+    expect(e.latest).toBe('2026-07-20');
+    // dateless reviews (nothing stored yet) still work, just without a date
+    expect(swimReviewEvidence([rv2(null, true), rv2(null, true), rv2(null, true)]).latest).toBe(null);
   });
 });
 

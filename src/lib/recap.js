@@ -10,6 +10,7 @@ import { swimPaceLabel } from './swim-units.js';
 import { DEFAULT_POOL } from './domain.js';
 import { effDate } from './schedule.js';
 import { reviewActivity, intervalRows } from './review.js';
+import { swimReview } from './swim-review.js';
 
 const fmtMin = sec => {
   const m = Math.round(sec / 60);
@@ -18,7 +19,12 @@ const fmtMin = sec => {
 
 export function buildRecap({ workout, activity, intervals, route, paces, plan, log, moves, todayISO }) {
   if (!workout || !activity || !activity.movingTimeSec) return null;
-  const rv = reviewActivity({ workout, activity, paces }) || { stats: [], verdicts: [] };
+  // Phase 4: the deck reads the same per-rep review the workout sheet does,
+  // so a recap cannot headline an in-band average minutes before the sheet
+  // says ease the next one (review catch 2026-07-27).
+  const sr = workout.discipline === 'swim' && !workout.adhoc && intervals
+    ? swimReview({ workout, activity, intervals, paces, feel: (log && log[workout.id] && log[workout.id].feel) || activity.feel }) : null;
+  const rv = reviewActivity({ workout, activity, paces, swimReview: sr }) || { stats: [], verdicts: [] };
   const it = intervalRows({ workout, intervals, paces });
   const slides = [];
 

@@ -145,7 +145,9 @@ export function cssRetestRecommendation({ plan, activities, thresholds, log, mov
     // comparable quality sessions) outranks the whole-recording heuristic —
     // it sees the actual reps, so when it speaks, perfSignal stays quiet.
     if (reviewEvidence && reviewEvidence.direction) {
-      reasons.push({ key: reviewEvidence.direction === 'over' ? 'perf-fast' : 'perf-slow' });
+      // latest rides along so the dismissal signature moves when new swims
+      // make the case again, exactly as perfSignal's does
+      reasons.push({ key: reviewEvidence.direction === 'over' ? 'perf-fast' : 'perf-slow', latest: reviewEvidence.latest || null });
     } else {
       const perf = perfSignal({ plan, activities: activities || [], log: log || {}, moves, todayISO, sinceISO: t.measuredAt });
       if (perf) reasons.push(perf);

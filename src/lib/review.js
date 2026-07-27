@@ -14,6 +14,7 @@ import { pacePer100ForDisplay, unitShort, poolLengthM, fromMetres, swimPaceLabel
 import { DEFAULT_POOL } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { isIndoor } from './autolog.js';
+import { swimReviewVerdict } from './swim-review.js';
 
 // Session types whose whole intent is one steady band — the only ones an
 // average can judge. Everything else (reps, drills, bricks) is mixed.
@@ -28,8 +29,14 @@ const secPer100 = a => a.movingTimeSec / (a.distance / 100);
 
 // The review: { stats: [[label, value]], verdicts: [{ tone, text }] } or null.
 // tone: 'good' | 'warn' | 'info'.
-export function reviewActivity({ workout, activity, paces, log }) {
+export function reviewActivity({ workout, activity, paces, log, swimReview }) {
   if (!workout || !activity || !activity.movingTimeSec) return null;
+  // Phase 4: when the per-rep swim engine can read this session, it is the
+  // single voice. A whole-session average verdict rendered beside it can
+  // flatly contradict it (an in-band average above a late-fade 'ease the
+  // next one'), and the spec's own line is intervals over averages wherever
+  // structure exists (review catch 2026-07-27).
+  const perRep = swimReview && swimReview.outcome !== 'insufficient-data' ? swimReview : null;
   const w = workout, a = activity, pc = paces || {};
   // Swim pace shows and compares per 100 of the athlete's pool unit; the
   // comparison thresholds stay canonical per 100 m, only the display converts.
@@ -69,7 +76,7 @@ export function reviewActivity({ workout, activity, paces, log }) {
 
   // Steady sessions: judge the average against its band.
   const steadyKey = (STEADY[w.discipline] || {})[w.type];
-  if (steadyKey && a.distance && pc[w.discipline === 'run' ? 'run' : 'swim']) {
+  if (steadyKey && !perRep && a.distance && pc[w.discipline === 'run' ? 'run' : 'swim']) {
     if (w.discipline === 'run' && pc.run[steadyKey]) {
       const actual = secPerKm(a), target = pc.run[steadyKey];
       if (actual < target - 20) verdicts.push({ tone: 'warn', text: 'Averaged ' + fmtPace(actual) + ' /km against an easy-day target around ' + fmtPace(target) + ' /km. Quicker than this session is meant to be — easy days do their job when they stay easy.' });
@@ -102,7 +109,7 @@ export function reviewActivity({ workout, activity, paces, log }) {
   // No promise of a rep table either: that view loads separately and can
   // legitimately be absent (no WORK laps, fetch failure), so this verdict
   // must stand alone without pointing at numbers that may never render.
-  if (!w.adhoc && !steadyKey && !EASY_INTENT[w.type] && (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim')) {
+  if (!w.adhoc && !perRep && !steadyKey && !EASY_INTENT[w.type] && (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim')) {
     verdicts.push({ tone: 'info', text: 'Interval session — the average blurs work and recovery together, so no pace verdict here.' });
   }
 
@@ -117,6 +124,13 @@ export function reviewActivity({ workout, activity, paces, log }) {
   // Perceived effort vs intent.
   if (EASY_INTENT[w.type] && a.rpe != null && a.rpe >= 7) {
     verdicts.push({ tone: 'warn', text: 'You rated this ' + Math.round(a.rpe) + '/10 — an easy session that felt hard. One-off is nothing; a pattern is worth a look at recovery.' });
+  }
+
+  // The per-rep coaching read closes the list: it is the verdict the others
+  // were standing in for, and it carries the next action.
+  if (perRep) {
+    const v = swimReviewVerdict(perRep);
+    if (v) verdicts.push(v);
   }
 
   return { stats, verdicts };

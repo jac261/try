@@ -1005,11 +1005,15 @@ export function App({ storage, getToken, user }) {
   // Phase 4: per-rep review evidence, when stored reviews exist on log
   // entries (hydrated from the backend's typed field once Jack adds it —
   // dormant until then). Newest first; the module applies §5's own gates.
+  // Ordered by when the swim actually HAPPENED (a moved or late-completed
+  // session keeps its planned date), and each review carries that date so a
+  // dismissed evidence nudge can speak again on genuinely new swims.
   const reviewEvidence = T.swimReviewEvidence(
     plan.weeks && Array.isArray(plan.weeks) ? plan.weeks.flatMap(wk => wk.workouts)
       .filter(w => w.discipline === 'swim' && log[w.id] && log[w.id].swimReview)
+      .map(w => ({ w, date: (log[w.id].at || '').slice(0, 10) || moves[w.id] || w.date }))
       .sort((a, b) => (a.date < b.date ? 1 : -1))
-      .map(w => log[w.id].swimReview) : []
+      .map(x => ({ ...log[x.w.id].swimReview, date: x.date })) : []
   );
   const retest = (!eftp || eftp.sport !== 'swim') && !cssFail
     ? T.cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()), unresolvedTest, reviewEvidence })
