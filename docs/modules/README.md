@@ -8,7 +8,7 @@ hypothesis, propose-never-impose, honest numbers, one thing by default) see
 
 Snapshot: React 18 + Vite 6 PWA, plain JS, Clerk-gated, per-user localStorage
 with a backend sync (Jack's ASP.NET Core service). intervals.icu is the
-activity source. 685 tests across 39 files at the time of writing.
+activity source. 879 tests across 49 files at the time of writing.
 
 ## The disciplines
 
@@ -17,7 +17,7 @@ Each leg is meant to stand up against a dedicated single-sport app, not just be
 
 | Module | What it covers | Doc |
 |---|---|---|
-| Swim | The swim workout library, CSS and auto-CSS, the limiter-granted long swim, drills | [swim.md](swim.md) |
+| Swim | The swim library, the pool profile, CSS with provenance and testing, per-session review, technique focus, open water, the swim dashboard | [swim.md](swim.md), deeper in [../SWIM_MODULE.md](../SWIM_MODULE.md) |
 | Bike | The bike library, FTP estimation and W/kg, honest distance, indoor handling | [bike.md](bike.md) |
 | Run | The run library, hill work, race projections, weekly volume, and standalone run race plans (Tier 2) | [run.md](run.md) |
 
