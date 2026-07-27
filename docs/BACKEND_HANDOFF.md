@@ -387,3 +387,47 @@ equipment profile ride the opaque profile blob as `profile.technique =
 route `pool` and `cssMeta` took. As with those, a typed passthrough on
 UserProfileResponse would be welcome eventually so a fresh device keeps the
 setting, but nothing 400s without it.
+
+## Ask - 27 July 2026: swim stroke fields (phase 8, validated against real data)
+
+Swim build-out phase 8 (stroke metrics) is written and tested but wired to
+nothing, because the fields do not reach the client. Before asking, the
+upstream data was checked against real Garmin pool swims in the athlete's
+own intervals.icu account, so this ask names fields that are known to exist
+rather than fields we hope exist.
+
+What intervals.icu already returns and the passthrough currently drops:
+
+  activity:  pool_length      (metres, e.g. 25.0)  -> poolLengthM
+             lengths          (e.g. 75)            -> lengths
+             average_cadence  (stroke rate)        -> averageCadence
+             average_stride   (distance per stroke)-> averageStride
+             device_name      (e.g. Garmin fenix 7 Pro) -> deviceName
+             source           (e.g. GARMIN_CONNECT)     -> deviceSource
+
+  per lap (the intervals endpoint, alongside the existing distance and
+  movingTimeSec):
+             average_cadence  -> averageCadence
+             average_stride   -> averageStride
+             max_cadence, min_cadence -> optional, useful for fatigue
+
+Note pool_length also satisfies the 23 July ask above, which asked for the
+same value under the same client name.
+
+NOT available upstream, so the client does not ask for them and does not
+compute them as if they were measured: SWOLF, stroke TYPE, and an explicit
+stroke count. SWOLF is derived client-side per length and labelled as our
+figure, because device SWOLF definitions differ.
+
+One finding worth passing on. On a real lap (100 m in 114 s), distance
+divided by average_stride gives 97 strokes while average_cadence multiplied
+by time gives 48 - a factor of two, because one field counts arm strokes and
+the other counts full cycles. Which is which is a device convention, not a
+property of the swim. Please pass BOTH fields through unmodified rather than
+normalising one into the other: the client cross-checks them, and where they
+disagree it reports no stroke count at all. Preserving the raw values is
+also what lets the analysis be recalculated later if a convention is pinned
+down.
+
+Nothing here changes any existing response. The client reads all of it
+defensively and the analysis stays behind a flag until the fields arrive.
