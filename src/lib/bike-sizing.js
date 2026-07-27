@@ -211,6 +211,6 @@ export function bikeMainSet({ type, intensity, seed, mainMin }) {
     // are deliberately NOT claimed on this object, because variant 0 renders
     // a plain rep set and a field saying otherwise would be a lie waiting
     // for its first consumer.
-    cadence: gate.cadence && type === 'Sweet Spot' ? 'a controlled cadence (85\u201395 rpm)' : null,
+    cadence: gate.cadence && type === 'Sweet Spot' ? 'a controlled cadence (85–95 rpm)' : null,
   };
 }
