@@ -5,7 +5,7 @@ import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL } f
 import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
 import { swimZoneTargets } from './swim-zones.js';
 import { drillPool, focusOrder, saneTechnique } from './swim-drills.js';
-import { bikeMainSet, levelGate } from './bike-sizing.js';
+import { bikeMainSet, levelGate, mainSetMinutes } from './bike-sizing.js';
 import { OW_SKILLS, OW_SAFETY, OW_SKILL_CEILING, owCategory } from './swim-open-water.js';
 import { weakBias, weakestLink } from './weakest.js';
 import { RIEGEL_EXP } from './runstats.js';
@@ -317,11 +317,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
         { label: 'First half · very relaxed', min: half, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: 'Second half · steady', min: dur - half, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
       ],
-    ][v(3)] || [
-      { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
-      { label: clamp(dur - 25, 20, 40) + ' min continuous sweet spot', min: clamp(dur - 25, 20, 40), detail: bikeDetail(pc, 0.84, 0.9, 'Z3'), zone: 'Z3' },
-      { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
-    ];
+    ][v(3)];
   } else if (type === 'Tempo') {
     title = 'Tempo Run';
     const main = Math.max(15, dur - 22);
@@ -502,7 +498,7 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
       // untouched, so a session type still varies rather than becoming one
       // shape that only ever grows.
       (() => {
-        const ms = bikeMainSet({ type, intensity, seed, mainMin: Math.max(0, dur - 25) });
+        const ms = bikeMainSet({ type, intensity, seed, mainMin: mainSetMinutes(type, dur) });
         if (!ms) return null;
         return [
           { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
@@ -536,7 +532,7 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
     const eights = clamp(Math.round((dur - 25) / 11), 2, 4);
     segs = [
       (() => {
-        const ms = bikeMainSet({ type, intensity, seed, mainMin: Math.max(0, dur - 25) });
+        const ms = bikeMainSet({ type, intensity, seed, mainMin: mainSetMinutes(type, dur) });
         if (!ms) return null;
         return [
           { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
@@ -569,7 +565,7 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
       rep(12, 0.5, 'Z5', 0.5, 'Z1').concat(i < sets - 1 ? [{ min: 2, zone: 'Z1' }] : []));
     segs = [
       (() => {
-        const ms = bikeMainSet({ type, intensity, seed, mainMin: Math.max(0, dur - 25) });
+        const ms = bikeMainSet({ type, intensity, seed, mainMin: mainSetMinutes(type, dur) });
         if (!ms) return null;
         return [
           { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
@@ -606,7 +602,7 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
       [{ min: 2, zone: 'Z3' }, { min: 1, zone: 'Z4' }, { min: 2, zone: 'Z3' }, { min: 1, zone: 'Z4' }, { min: 2, zone: 'Z3' }, { min: 1, zone: 'Z4' }, { min: 3, zone: 'Z1' }]);
     segs = [
       (() => {
-        const ms = bikeMainSet({ type, intensity, seed, mainMin: Math.max(0, dur - 25) });
+        const ms = bikeMainSet({ type, intensity, seed, mainMin: mainSetMinutes(type, dur) });
         if (!ms) return null;
         return [
           { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
@@ -624,9 +620,14 @@ function buildBike(type, dur, pc, seed, phase, intensity = 0) {
         { label: overs + ' × (9 min over-unders: 2 min low / 1 min high / 3 min easy)', min: overs * 12, detail: bikeDetail(pc, 0.9, 1.05, 'Z4'), zone: 'Z4', blocks: ou },
         { label: 'Cool-down', min: 10, detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ] : [
+        // NOT a copy of the next variant. Substituting the adjacent slot's
+        // card is how a three-shape menu quietly becomes a two-shape one,
+        // and for a rider below advanced this slot and the next one were
+        // rendering the identical session. These are the longer, plainer
+        // threshold reps: a different session, still without the structure.
         { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },
-        { label: shorts + ' × (5 min / 3 min easy)', min: shorts * 8, detail: bikeDetail(pc, 0.98, 1.08, 'Z4'), zone: 'Z4', blocks: rep(shorts, 5, 'Z4', 3, 'Z1') },
-        { label: 'Cool-down', min: Math.max(5, dur - 15 - shorts * 8), detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
+        { label: reps + ' × (8 min / 4 min easy)', min: reps * 12, detail: bikeDetail(pc, 0.95, 1.05, 'Z4'), zone: 'Z4', blocks: rep(reps, 8, 'Z4', 4, 'Z1') },
+        { label: 'Cool-down', min: Math.max(5, dur - 15 - reps * 12), detail: bikeDetail(pc, 0.5, 0.6, 'Z1'), zone: 'Z1' },
       ],
       [
         { label: 'Warm-up', min: 15, detail: bikeDetail(pc, 0.55, 0.65, 'Z2'), zone: 'Z2' },

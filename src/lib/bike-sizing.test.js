@@ -64,24 +64,104 @@ describe('§4: level gates are explicit and monotonic', () => {
   });
 });
 
+const TYPES = ['Tempo', 'Sweet Spot', 'Threshold', 'VO2 Intervals'];
+
 describe('§3: progression moves one variable at a time', () => {
   it('each step changes exactly one thing against the base', () => {
     const b = PROGRESSION_STEPS[0];
     expect(b.id).toBe('base');
     PROGRESSION_STEPS.slice(1).forEach(s => {
-      const moved = [s.on || 0, s.off || 0, s.addReps || 0].filter(x => x !== 0).length;
+      const moved = [s.reps || 0, s.off || 0].filter(x => x !== 0).length;
       expect(moved, s.id + ' moves ' + moved + ' variables').toBe(1);
       expect(s.why.length).toBeGreaterThan(10);
     });
   });
 
+  it('every step is OBSERVABLE: it changes the session, not just the table', () => {
+    // The test above asserts the table. The table can be perfectly coherent
+    // and still describe nothing: an earlier ladder added a repetition to a
+    // count that was already the largest one that fits, so the fitting
+    // arithmetic took it straight back off and two of the five rungs were
+    // byte-identical to the base rung at every legal input. A rung has to
+    // change the session an athlete is handed, so that is what is asserted.
+    const shape = m => (m ? m.reps + 'x' + m.on + '/' + m.off : 'none');
+    PROGRESSION_STEPS.forEach((st, i) => {
+      if (i === 0) return;
+      let differs = 0;
+      TYPES.forEach(type => [-1, 0, 1, 2].forEach(intensity => {
+        for (let mainMin = 10; mainMin <= 120; mainMin++) {
+          const base0 = bikeMainSet({ type, intensity, seed: 0, mainMin });
+          if (!base0) continue;
+          if (shape(bikeMainSet({ type, intensity, seed: i, mainMin })) !== shape(base0)) differs += 1;
+        }
+      }));
+      expect(differs, st.id + ' never changes the session it is given').toBeGreaterThan(0);
+    });
+  });
+
+  it('no step can change whether the session is intervals at all', () => {
+    // Progression changes the shape of a set at constant time. It must never
+    // decide there IS no set: a rung that pushed the session past the point
+    // where two efforts fit dropped the card through to the continuous
+    // fallback, so progressing DELETED the intervals, and a trim could flip
+    // a session's format on its way down. Buildability is judged on the base
+    // recovery, so the answer is the same on every rung.
+    TYPES.forEach(type => [-1, 0, 1, 2].forEach(intensity => {
+      for (let mainMin = 1; mainMin <= 150; mainMin++) {
+        const built = PROGRESSION_STEPS.map((_, i) =>
+          bikeMainSet({ type, intensity, seed: i, mainMin }) !== null);
+        expect(new Set(built).size, type + ' lv' + intensity + ' mainMin ' + mainMin
+          + ' builds a set on some rungs and not others').toBe(1);
+      }
+    }));
+  });
+
+  it('never prescribes an effort longer than the type can be ridden at', () => {
+    // A flat "+3 minutes to the effort" rung turned four-minute VO2
+    // repetitions into eight-minute ones still stamped at 106-120% FTP:
+    // not a harder session, an impossible one, and the review engine would
+    // then mark every repetition off target for the rest of the block.
+    const CEILING = { Tempo: 20, 'Sweet Spot': 20, Threshold: 18, 'VO2 Intervals': 6 };
+    TYPES.forEach(type => [-1, 0, 1, 2].forEach(intensity =>
+      PROGRESSION_STEPS.forEach((st, i) => {
+        for (let mainMin = 10; mainMin <= 200; mainMin++) {
+          const m = bikeMainSet({ type, intensity, seed: i, mainMin });
+          if (!m) continue;
+          expect(m.on, type + ' ' + st.id + ' asks for a ' + m.on + ' min effort').toBeLessThanOrEqual(CEILING[type]);
+          expect(m.on).toBeGreaterThanOrEqual(3);
+          expect(m.off).toBeGreaterThanOrEqual(1);
+          expect(m.minutes).toBeLessThanOrEqual(mainMin);
+        }
+      })));
+  });
+
   it('consecutive weeks advance the ladder, and a recovery week resets it', () => {
     const at = seed => bikeMainSet({ type: 'Sweet Spot', intensity: 1, seed, mainMin: 60 });
-    const steps = [0, 1, 2, 3].map(s => at(s).step);
-    expect(new Set(steps).size).toBe(4);          // four distinct steps, not a shuffle
+    const steps = PROGRESSION_STEPS.map((_, i) => at(i).step);
+    expect(new Set(steps).size).toBe(PROGRESSION_STEPS.length);   // distinct, not a shuffle
     // a recovery week pins the seed to 0, which is the base step
     expect(at(0).step).toBe('base');
-    expect(at(4).step).toBe('base');              // and the ladder cycles
+    expect(at(PROGRESSION_STEPS.length).step).toBe('base');       // and the ladder cycles
+  });
+
+  it('every step is actually reachable, at every level, in a real plan', () => {
+    // The index is the week and recovery weeks pin it to zero, so the ladder
+    // length has to be coprime with the recovery cadence or some steps are
+    // dead. A four-step ladder against the four-week cadence left density
+    // unreachable for three of the four levels, and the table-level test
+    // above still passed. This one asks the plans.
+    LEVELS.forEach(fitness => {
+      const p = generatePlan({ ...base, fitness });
+      const seen = new Set();
+      p.weeks.forEach(wk => {
+        const seed = wk.isRecovery ? 0 : wk.index;
+        const ridesQuality = wk.workouts.some(w => isTrainingRide(w)
+          && ['Tempo', 'Sweet Spot', 'Threshold', 'VO2 Intervals'].includes(w.type));
+        if (ridesQuality) seen.add(PROGRESSION_STEPS[seed % PROGRESSION_STEPS.length].id);
+      });
+      PROGRESSION_STEPS.forEach(st =>
+        expect(seen.has(st.id), fitness + ' never reaches the ' + st.id + ' step').toBe(true));
+    });
   });
 
   it('never lets the main set overrun the time it was given', () => {
