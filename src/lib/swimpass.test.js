@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generatePlan, swapForLimiter, detectLimiterSwap, addCustomWorkout, easeWorkout, boostWorkout, trimWorkout, upgradePlanSegments, segMinutes } from './plan.js';
 import { cssFromTestIntervals, cssTestActivityFor, eftpProposal } from './eftp.js';
+import { swimThreshold } from './domain.js';
 import { intervalRows } from './review.js';
 import { SWIM_TYPES, isSwimWorkout, swimWorkoutIssues, isTrainingSwim } from './swimschema.js';
 import { toClientState } from './api.js';
@@ -275,7 +276,9 @@ describe('auto-CSS proposal precedence', () => {
       cssTest: { actId: 'a1', date: today, test: { css100Sec: 112, t400Sec: 420, t200Sec: 196, d400: 400, d200: 200 } },
     });
     expect(prop.kind).toBe('csstest');
-    expect(prop.retarget).toEqual({ css100Sec: 112 });
+    // the retarget now also carries provenance: a swum test is the highest
+    // trust source, dated to the test day, so the threshold model can age it
+    expect(prop.retarget).toEqual({ css100Sec: 112, cssMeta: { source: 'try-test', measuredAt: today, confidence: 'high' } });
     expect(prop.why).toContain('/100m');
     expect(prop.why).toContain('the plan trains to');
     // recorded distances, never nominal labels: a yard-pool 366 m must not
@@ -909,6 +912,41 @@ describe('Phase 3: cool-downs move to the Recovery zone', () => {
       const cd = test.segments.find(g => /Cool-down/.test(g.label));
       expect(pace(cd.detail)).toBeGreaterThan(pace(wu.detail));
     }
+  });
+});
+
+describe('Phase 3b: CSS provenance capture (source, date, confidence)', () => {
+  const base = {
+    name: 'P', raceType: 'olympic', fitness: 'intermediate', fivekSec: 1200,
+    css100Sec: 120, ftp: 320, weightKg: 75, daysPerWeek: 6,
+    trainingDays: [0, 1, 2, 3, 5, 6], longDay: 5, startDate: '2026-06-01', raceDate: '2026-09-27',
+  };
+  const today = '2026-07-01';
+
+  it('an intervals.icu swim retarget records an intervals-icu source at medium confidence', () => {
+    const plan = generatePlan(base);
+    const prop = eftpProposal({
+      activities: [], plan, todayISO: today,
+      thresholds: { swimThresholdPace: 100 / 132 }, // ~132 s/100m vs the plan's 120: a real drift
+      cssTest: null,
+    });
+    expect(prop && prop.kind).toBe('eftp');
+    expect(prop.sport).toBe('swim');
+    expect(prop.retarget.cssMeta).toEqual({ source: 'intervals-icu', measuredAt: today, confidence: 'medium' });
+  });
+
+  it('generatePlan preserves cssMeta so the threshold model can read provenance back', () => {
+    const measured = { source: 'try-test', measuredAt: '2026-06-15', confidence: 'high' };
+    const plan = generatePlan({ ...base, cssMeta: measured });
+    expect(plan.profile.cssMeta).toEqual(measured); // the opaque profile blob carries it
+    expect(swimThreshold(plan.profile)).toEqual({
+      cssSecondsPer100m: 120, source: 'try-test', measuredAt: '2026-06-15', confidence: 'high',
+    });
+  });
+
+  it('defaults with no stored meta: a set CSS reads manual, an unset CSS reads estimated', () => {
+    expect(swimThreshold({ css100Sec: 120 }).source).toBe('manual');
+    expect(swimThreshold({ css100Sec: null }).source).toBe('estimated');
   });
 });
 

@@ -47,6 +47,7 @@ export function Onboarding({ onCreate }) {
   function finish() {
     const mon = T.startOfWeekMonday(new Date());
     const maintenance = f.raceType === 'maintenance';
+    const css100Sec = f.excludedDiscipline === 'swim' ? null : (() => { const d = T.parseTimeToSec(f.css100); return d != null ? Math.round(T.css100mFromDisplay(d, f.pool)) : null; })();
     onCreate({
       name: f.name.trim() || 'Athlete', raceType: f.raceType, fitness: f.fitness,
       trainingDays: f.trainingDays, longDay: f.longDay,
@@ -57,7 +58,10 @@ export function Onboarding({ onCreate }) {
       // but a value typed BEFORE selecting the exclusion would still be in
       // state (gauntlet catch: type a 5k time, go back, exclude running)
       fivekSec: f.excludedDiscipline === 'run' ? null : T.parseTimeToSec(f.fivek),
-      css100Sec: f.excludedDiscipline === 'swim' ? null : (() => { const d = T.parseTimeToSec(f.css100); return d != null ? Math.round(T.css100mFromDisplay(d, f.pool)) : null; })(),
+      css100Sec,
+      // a hand-entered starting CSS is a manual source, dated to onboarding;
+      // no value stays 'estimated' (domain.swimThreshold's null-css default)
+      ...(css100Sec != null ? { cssMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } } : {}),
       pool: f.pool,
       ftp: f.ftp ? Number(f.ftp) : null, weightKg: f.weightKg ? Number(f.weightKg) : null,
       startDate: T.iso(new Date()),

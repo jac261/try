@@ -100,7 +100,10 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
         // test records 366 m and 183 m, and the banner must not dress those
         // up as metric splits.
         why: 'Your CSS test worked out at ' + swimPaceLabel(meas, swimPool) + ' (' + cssTest.test.d400 + ' m in ' + fmtPace(cssTest.test.t400Sec) + ', ' + cssTest.test.d200 + ' m in ' + fmtPace(cssTest.test.t200Sec) + '); the plan trains to ' + swimPaceLabel(pc.swim.css, swimPool) + '.',
-        retarget: { css100Sec: meas },
+        // A directly swum test is the highest-trust source, dated to the swim
+        // itself; accepting it records that provenance on the profile so the
+        // threshold model (domain.swimThreshold) can reason about staleness.
+        retarget: { css100Sec: meas, cssMeta: { source: 'try-test', measuredAt: cssTest.date || todayISO, confidence: 'high' } },
       };
     }
   }
@@ -155,7 +158,9 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
           kind: 'eftp', sport: 'swim', drift: Math.abs(drift), up: drift > 0,
           headline: drift > 0 ? 'Your swim fitness has moved up' : 'Your swim paces may be set too hot',
           why: 'Your CSS is now set at ' + swimPaceLabel(icuSec, swimPool) + '; the plan trains to ' + swimPaceLabel(planSec, swimPool) + '.',
-          retarget: { css100Sec: Math.round(icuSec) },
+          // A configured intervals.icu threshold is a fresh but indirect
+          // signal, not a swum test: medium trust, dated to now.
+          retarget: { css100Sec: Math.round(icuSec), cssMeta: { source: 'intervals-icu', measuredAt: todayISO, confidence: 'medium' } },
         });
       }
     }

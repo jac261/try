@@ -80,17 +80,26 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo }) {
             <div className={'opt' + (f.massGoal === 'gain' ? ' on' : '')} {...tap(() => set('massGoal', 'gain'))}>Gaining on purpose<small>Shows a weekly rate against a gradual gain target.</small></div>
           </div>
         </>}
-        <button className="btn primary" onClick={() => onSave({
-          fitness: f.fitness,
-          fivekSec: T.parseTimeToSec(f.fivek),
+        <button className="btn primary" onClick={() => {
           // convert the per-100-unit entry back to canonical per-100 m; a
           // metre pool is the identity, so existing saves are unchanged
-          css100Sec: (() => { const d = T.parseTimeToSec(f.css100); return d != null ? Math.round(T.css100mFromDisplay(d, f.pool)) : null; })(),
-          ftp: f.ftp ? Number(f.ftp) : null,
-          weightKg: f.weightKg ? Number(f.weightKg) : null,
-          massGoal: f.massGoal || null,
-          pool: f.pool,
-        })}>{noPlan ? 'Save to fitness history' : 'Save & re-target plan'}</button>
+          const css100Sec = (() => { const d = T.parseTimeToSec(f.css100); return d != null ? Math.round(T.css100mFromDisplay(d, f.pool)) : null; })();
+          onSave({
+            fitness: f.fitness,
+            fivekSec: T.parseTimeToSec(f.fivek),
+            css100Sec,
+            ftp: f.ftp ? Number(f.ftp) : null,
+            weightKg: f.weightKg ? Number(f.weightKg) : null,
+            massGoal: f.massGoal || null,
+            pool: f.pool,
+            // Stamp provenance only when the athlete actually changed CSS: an
+            // FTP- or weight-only save must not overwrite a measured source
+            // (a swum test) or bump its date to today.
+            ...(css100Sec != null && css100Sec !== profile.css100Sec
+              ? { cssMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } }
+              : {}),
+          });
+        }}>{noPlan ? 'Save to fitness history' : 'Save & re-target plan'}</button>
       </div>
     </div>
   );
