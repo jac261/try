@@ -557,3 +557,73 @@ defensively:
    power-based TSS and variability index.
 
 None of them changes an existing response.
+
+## 28 July — a power-curve endpoint
+
+This is the largest of the open bike asks and the only one that unblocks a
+whole feature rather than improving an existing one. Everything client-side is
+written, tested and gated: nothing renders today, and the day the endpoint
+lands it becomes a fetch rather than a feature build.
+
+### Why we cannot do it ourselves
+
+A power curve is best power by duration, and a best is not recoverable from
+what we receive. We get per-ride and per-interval averages; the best twenty
+minutes inside a four-hour ride is not in there, and neither is a five-second
+peak. Deriving a curve from averages would produce a curve-shaped object whose
+every point was wrong in the same optimistic direction.
+
+### What we need
+
+Best power for each of these durations, in seconds:
+
+    5, 15, 30, 60, 180, 300, 720, 1200, 2400, 3600
+
+For every point, please include:
+
+- `watts` (integer)
+- `durationSec`
+- `date` — the day the effort was set
+- `source` — the power meter that recorded it, however it is identified
+  upstream. A stable identifier matters more than a pretty name.
+- `bike` — where available
+- `indoor` — boolean, since a trainer and a road are not the same measurement
+- `quality` — `low` | `medium` | `high`, or whatever confidence signal exists
+  upstream. Absent is read as `low` and such points are shown but never judged.
+
+Optionally, a freshness window parameter on the query (for example "best in
+the last 90 days"), so the client can ask for a current curve rather than an
+all-time one. This belongs in the query rather than in our code — the window
+decides which rides are considered when the curve is built, and nothing on our
+side can apply it after the fact.
+
+### `source` is the field that stops us lying to people
+
+It is the one we would most regret not having. A new power meter can read
+several per cent apart from an old one, so a rider who changes one appears to
+get stronger at every duration on the same legs, overnight. Without a source
+identifier we cannot tell that from training, and neither can they — it is the
+one error an athlete has no way to catch for themselves.
+
+With it, we refuse the comparison and say why. The client already computes
+whether a whole-curve shift is uniform enough to look like a calibration
+difference rather than like fitness, and tells the athlete that instead of
+showing them a fake gain. If only one field from this section is cheap to
+provide, make it this one.
+
+### What we will NOT do with it
+
+The curve will not move anyone's FTP. It can raise a recommendation to go and
+ride a ramp test, and that is the strongest action available to it. Threshold
+is what a rider can hold repeatedly; a curve point is what they did once,
+possibly downhill, and the two are not interchangeable.
+
+### Running total of open bike asks
+
+1. `startedAt` on the activity — orders bricks, measures transitions.
+2. `elapsedTimeSec` on the activity — separates a stop from a bad day.
+3. `normalizedWatts` on the activity — unblocks IF, power TSS, variability.
+4. a power-curve endpoint, as above — unblocks the rider profile entirely.
+
+A power STREAM would subsume 2, 3 and 4, if that is ever easier to expose than
+three separate computed fields. None of these changes an existing response.

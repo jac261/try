@@ -23,6 +23,8 @@ export * from './bike-fuelling.js';
 export * from './bike-long.js';
 export * from './bike-position.js';
 export * from './brick.js';
+export * from './bike-power-curve.js';
+export * from './bike-profile.js';
 export * from './ftp-retest.js';
 export * from './bike-sizing.js';
 export * from './disciplines.js';

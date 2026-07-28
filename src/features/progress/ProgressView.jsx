@@ -1,4 +1,5 @@
 import * as T from '@/lib';
+import { PowerCurveCard } from '@/components/PowerCurveCard.jsx';
 import { Icon } from '@/components/Icon.jsx';
 import { BarChart, Donut, Sparkline, TrendChart } from '@/components/charts.jsx';
 import { fitnessSeries } from '@/features/progress/fitnessSeries.js';
@@ -8,7 +9,7 @@ import { InfoLink } from '@/components/InfoLink.jsx';
 import { SwimDashboard } from '@/features/progress/SwimDashboard.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest }) {
+export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, powerCurve, previousPowerCurve }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -158,6 +159,12 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
         const trends = ['run', 'bike'].map(d => ({ d, t: T.durabilityTrend(reads.filter(e => e.discipline === d)) }))
           .filter(x => x.t);
         return <>
+          {/* Phase 7 §6: silent until a power curve exists, which needs a
+              backend endpoint Try does not have yet. Wired now so the model
+              has a real path to the athlete rather than being a module
+              nobody calls. */}
+          <PowerCurveCard curve={powerCurve} previous={previousPowerCurve}
+            ftpWatts={plan.profile && plan.profile.ftp} todayISO={todayISO} />
           <div className="section-title">Durability <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(how the long sessions ended)</span></div>
           <div className="card">
             {trends.map(x => <div className="du-trend" key={x.d}>{x.d === 'bike' ? 'Long rides: ' : 'Long runs: '}{x.t}</div>)}

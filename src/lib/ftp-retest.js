@@ -20,6 +20,7 @@ import { daysBetween } from './date.js';
 import { EFTP_RULES } from './eftp.js';
 import { isTrainingRide } from './bikeschema.js';
 import { bikeReviewEvidence } from './bike-review.js';
+import { staleFtpSignal } from './bike-power-curve.js';
 
 export const FTP_RETEST_RULES = {
   staleDays: 84,        // twelve weeks: an FTP older than a training block
@@ -91,7 +92,7 @@ function driftSignal({ plan, activities, log, moves, todayISO, sinceISO }) {
   return null;
 }
 
-export function ftpRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO, reviews }) {
+export function ftpRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO, reviews, powerCurve }) {
   if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
   const profile = plan.profile || {};
   // nothing to assess on a plan that does not ride towards a race
@@ -125,6 +126,12 @@ export function ftpRetestRecommendation({ plan, activities, thresholds, log, mov
        deliberately the same shape as the drift signal — several comparable,
        completed, well-matched sessions all arguing one way — and it can only
        ever add a reason to nudge towards a test, never move FTP itself. */
+    /* Phase 7 §4: the athlete's own best twenty-minute power, when a curve
+       exists at all. It only ever argues for a TEST — §4 forbids the curve
+       rewriting the plan and §7 forbids it overwriting FTP, so the strongest
+       thing it may do is join the queue of reasons to go and measure. */
+    const curveSignal = staleFtpSignal({ curve: powerCurve, ftpWatts: anchor.ftpWatts, todayISO });
+    if (curveSignal) reasons.push({ key: 'curve-high', latest: curveSignal.date, detail: curveSignal });
     const ev = bikeReviewEvidence((reviews || []).filter(r => !meta.measuredAt || !r.date || r.date >= meta.measuredAt));
     if (ev) reasons.push({ key: ev.direction === 'over' ? 'reps-over' : 'reps-under', latest: ev.latest });
     if (meta.measuredAt && daysBetween(meta.measuredAt, todayISO) > FTP_RETEST_RULES.staleDays) reasons.push({ key: 'stale' });
@@ -138,12 +145,13 @@ export function ftpRetestRecommendation({ plan, activities, thresholds, log, mov
   }
   if (!reasons.length) return null;
 
-  const order = ['missing', 'reps-over', 'reps-under', 'drift-up', 'drift-down', 'returning', 'stale', 'icu', 'unverified'];
+  const order = ['missing', 'curve-high', 'reps-over', 'reps-under', 'drift-up', 'drift-down', 'returning', 'stale', 'icu', 'unverified'];
   reasons.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
   const r = reasons[0];
   const weeks = meta.measuredAt ? Math.round(daysBetween(meta.measuredAt, todayISO) / 7) : null;
   const COPY = {
     missing: ['Anchor your bike targets', 'You are riding without a measured FTP, so every watt target is derived from your level. The ramp test takes twenty minutes and fixes that.'],
+    'curve-high': ['Your best power says your threshold has moved', (r.detail && r.detail.text) || 'Your recent best twenty-minute power is well above the threshold your targets are built from. A ramp test would settle it.'],
     'reps-over': ['Your intervals are landing above target', 'Your last few quality sessions have held power above what the cards asked for, effort by effort rather than on average. A ramp test would set the targets where your riding already is.'],
     'reps-under': ['Your intervals are landing under target', 'Your last few quality sessions have come in below what the cards asked for, effort by effort. A retest will check whether the targets are set too high rather than leaving you chasing them.'],
     'drift-up': ['Your rides are coming in strong', 'Recent quality rides have averaged above what they asked for. A ramp test may earn you higher targets.'],

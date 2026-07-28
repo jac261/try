@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BikeExecution } from '@/components/BikeExecution.jsx';
 import { BikeLongPlan, PositionTap } from '@/components/BikeLongPlan.jsx';
+import { PowerCurveCard } from '@/components/PowerCurveCard.jsx';
+import { powerCurve, CURVE_DURATIONS } from '@/lib/bike-power-curve.js';
 import { generatePlan } from '@/lib/plan.js';
 import { isTrainingRide } from '@/lib/bikeschema.js';
 
@@ -27,7 +29,9 @@ describe('the barrel exports everything the bike cards reach for', () => {
     ['bikeExecution', 'bikeEnvironmentNote', 'bikeDistanceEstimate', 'intervalRows', 'bikeTargetMode',
      'bikeReview', 'bikeReviewVerdict', 'bikeReviewEvidence', 'bikeLoad', 'matchBikeIntervals',
      'longRideObjective', 'bikeFuellingPlan', 'fuellingOutcome', 'positionAsk', 'positionTolerance',
-     'brickExecution', 'brickPattern']
+     'brickExecution', 'brickPattern',
+     'powerCurve', 'curvePoint', 'curveComparison', 'staleDurations', 'staleFtpSignal',
+     'riderProfile', 'trainingImplications', 'durationSummary']
       .forEach(name => expect(typeof T[name], name + ' is not exported from @/lib').toBe('function'));
   });
 });
@@ -121,5 +125,57 @@ describe('BikeLongPlan and PositionTap render', () => {
       <PositionTap w={w} activity={act} positionLog={{ a1: { comfort: 'hard', symptoms: [] } }} onPosition={() => {}} />);
     expect(answered).toContain('Anything complaining');
     expect(answered).toContain('Neck');
+  });
+});
+
+
+describe('PowerCurveCard: gated now, correct when it opens', () => {
+  const FTP = 250;
+  const SHAPE = { 5: 4.0, 15: 3.0, 30: 2.4, 60: 1.8, 180: 1.35, 300: 1.2, 720: 1.08, 1200: 1.03, 2400: 0.97, 3600: 0.95 };
+  const raw = (over = {}) => CURVE_DURATIONS.map(d => ({
+    durationSec: d, watts: Math.round(FTP * SHAPE[d]), date: '2026-07-01',
+    source: 'Assioma', indoor: false, quality: 'high', ...over,
+  }));
+
+  it('renders nothing at all today, which is the acceptance criterion', () => {
+    // Try has no power-curve endpoint, so this is what every athlete sees
+    [null, undefined, { points: [] }].forEach(curve =>
+      expect(renderToStaticMarkup(<PowerCurveCard curve={curve} ftpWatts={FTP} todayISO="2026-07-28" />)).toBe(''));
+  });
+
+  it('renders the curve, its metadata and its confidence once data exists', () => {
+    const html = renderToStaticMarkup(
+      <PowerCurveCard curve={powerCurve(raw())} ftpWatts={FTP} todayISO="2026-07-28" />);
+    expect(html).toContain('Power curve');
+    expect(html).toContain('20 min');
+    expect(html).toContain('Assioma');          // §7: source metadata is visible
+    expect(html).toContain('% of threshold');
+    expect(html).toContain('The shape of your riding');
+    // §4: it says out loud that it changes nothing
+    expect(html).toMatch(/changes your plan on its own/);
+  });
+
+  it('leads with the device change rather than with an apparent gain', () => {
+    const html = renderToStaticMarkup(
+      <PowerCurveCard
+        curve={powerCurve(raw().map(p => ({ ...p, watts: Math.round(p.watts * 1.02), source: 'Assioma' })))}
+        previous={powerCurve(raw({ source: 'Stages' }))}
+        ftpWatts={FTP} todayISO="2026-07-28" />);
+    expect(html).toMatch(/different power meter/);
+    expect(html).toMatch(/calibration difference/);
+    expect(html).toContain('not compared');
+    // every duration reads "not compared": no per-duration gain is claimed
+    // (the banner says it once too, hence at least rather than exactly)
+    expect((html.match(/not compared/g) || []).length).toBeGreaterThanOrEqual(CURVE_DURATIONS.length);
+    // and the same caveat is repeated for the profile, which is measured
+    // against a threshold set on the old meter
+    expect(html).toMatch(/previous power meter/);
+  });
+
+  it('never renders a phenotype label', () => {
+    const html = renderToStaticMarkup(
+      <PowerCurveCard curve={powerCurve(raw())} ftpWatts={FTP} todayISO="2026-07-28" />);
+    expect(html).not.toMatch(/you are an? \w+ rider/i);
+    expect(html).not.toMatch(/\b(sprinter|diesel|all-rounder|puncheur|rouleur)\b/i);
   });
 });
