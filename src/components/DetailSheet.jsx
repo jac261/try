@@ -7,6 +7,7 @@ import { Icon } from '@/components/Icon.jsx';
 import { WorkoutProfile } from '@/components/WorkoutProfile.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 import { BikeExecution } from '@/components/BikeExecution.jsx';
+import { BikeLongPlan, PositionTap } from '@/components/BikeLongPlan.jsx';
 
 const D = T.DISCIPLINES;
 
@@ -39,7 +40,7 @@ const WHY_DISC = {
   'swim:Long': 'Steady, patient distance work. An even rhythm from the first length to the last: the volume does the work when your form holds it together.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed, fuelLog, onFuel, onCue, cueAnswer }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed, fuelLog, onFuel, positionLog, onPosition, onCue, cueAnswer }) {
   // The rep table: lazily fetch the recording's interval analysis once the
   // session is done and matched. null → loading/none; [] handled by the lib.
   const [reps, setReps] = useState(null);
@@ -51,6 +52,10 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
     return () => { gone = true; };
   }, [actId, onLoadIntervals]);
   const disc = D[w.discipline];
+  // §1/§3/§4: does a run follow this ride today? A brick session is one by
+  // definition; otherwise look for a run planned on the same date.
+  const brickFollows = w.discipline === 'brick' || (plan.weeks || []).some(wk =>
+    (wk.workouts || []).some(x => x.discipline === 'run' && x.date === w.date));
   const why = !w.race && !w.test ? (WHY_DISC[w.discipline + ':' + w.type] || WHY[w.type]) : null;
   const shown = eff || w.date;
   const moved = shown !== w.date;
@@ -122,8 +127,16 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
                     onClick={() => onFuel(activity.id, fuel === k ? null : k)}>{lab}</button>)}
               </div>
               <div className="fuel-cap">{T.FUEL_CAPTION}</div>
+              {(() => {
+                // §3: the tap they just gave, measured against what the
+                // session actually asked for. Silent until they answer.
+                const fp = T.bikeFuellingPlan({ workout: w, profile: plan.profile, fuelLog, brickFollows });
+                const out = T.fuellingOutcome({ plan: fp, level: fuel });
+                return out ? <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{out.text}</div> : null;
+              })()}
             </>;
           })()}
+          <PositionTap w={w} activity={activity} positionLog={positionLog} onPosition={onPosition} />
         </div>}
         {w.eased && <div className="testnote"><Icon name="heartrate" size={18} /><span>Eased from your planned {w.easedFrom} session for recovery. {onRestore && <a className="reset" {...tap(onRestore)}>Restore the hard session</a>}</span></div>}
         {w.trimmed && <div className="testnote"><Icon name="trend" size={18} /><span>Trimmed from {T.fmtDuration(w.trimmedFrom)} by the adaptive engine to protect you from overload. {onRestore && <a className="reset" {...tap(onRestore)}>Restore full volume</a>}</span></div>}
@@ -160,6 +173,8 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             it changes the wording, never the session, so there is nothing
             about it worth persisting or syncing. */}
         <BikeExecution w={w} profile={plan.profile} />
+        {/* Phase 6 §1/§3: what this long ride is for, and what to eat on it. */}
+        <BikeLongPlan w={w} plan={plan} fuelLog={fuelLog} brickFollows={brickFollows} />
         {!w.race && !w.bRace && onMove && <>
           <div className="section-title" style={{ margin: '18px 0 8px' }}>Reschedule
             {moved && <a className="reset" {...tap(() => onResetMove(w.id))}> ↺ reset</a>}</div>

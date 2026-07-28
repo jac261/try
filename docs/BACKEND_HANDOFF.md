@@ -521,3 +521,39 @@ cheaper one and improves review verdicts for every outdoor rider today.
 power meter and a measured FTP.
 
 Neither changes any existing response.
+
+## 28 July — brick transitions: activity start time
+
+Small ask, and the last of the timing ones.
+
+Bike sessions are now reviewed partly on the run that follows them, because a
+bike leg that repeatedly wrecks the run is not good triathlon pacing however
+good the ride looked on its own. Most of that works from what already
+arrives: the run's pace against the athlete's own fresh pace, their heart
+rate, their rated effort, and their logged fuelling on the bike.
+
+The one signal we cannot compute is TRANSITION DURATION. Activities carry a
+`date` but no time of day, so the gap between the ride ending and the run
+starting is not recoverable, and a brick run started four minutes after the
+bike is indistinguishable from one started ninety minutes later. The second is
+not a brick at all, and we currently score both the same way.
+
+Requested as a start timestamp on the activity — `startedAt` (ISO 8601, with
+offset or UTC) — raw and unmodified. Any equivalent naming upstream already
+uses is fine; we only need the instant the recording began.
+
+This would also let us stop pairing bricks purely by calendar date, which is
+the other place the missing time of day costs us: two rides and a run on the
+same day currently cannot be ordered.
+
+Running total of open bike asks, cheapest first, all additive and all read
+defensively:
+
+1. `startedAt` on the activity — orders bricks and measures transitions.
+2. `elapsedTimeSec` on the activity — separates a stop from a bad day, so
+   outdoor rides can be judged on what the rider did.
+3. `normalizedWatts` on the activity (or a power stream, which is strictly
+   better and would subsume both this and #2) — unblocks intensity factor,
+   power-based TSS and variability index.
+
+None of them changes an existing response.

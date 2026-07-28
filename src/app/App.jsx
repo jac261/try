@@ -477,6 +477,7 @@ export function App({ storage, getToken, user }) {
   // nothing and retries next load; only a fetched-but-unreadable recording
   // is remembered as read: null (gauntlet catch: the two must never blur).
   const [fuelLog, setFuelLog] = useState(() => storage.loadFuel());
+  const [positionLog, setPositionLog] = useState(() => storage.loadPosition());
   const [focusLog, setFocusLog] = useState(() => storage.loadFocusLog());
   const [blockReviewed, setBlockReviewed] = useState(() => storage.loadBlockReviewed());
   // The one narrow write a focus change is allowed: patch the single field,
@@ -492,6 +493,8 @@ export function App({ storage, getToken, user }) {
   };
   const markBlockReviewed = wm => setBlockReviewed(storage.saveBlockReviewed(wm));
   const answerFuel = (activityId, level) => setFuelLog(storage.saveFuel(activityId, level, new Date().toISOString()));
+  const answerPosition = (activityId, comfort, symptoms, minutes) =>
+    setPositionLog(storage.savePosition(activityId, comfort, symptoms, new Date().toISOString(), minutes));
   const [durability, setDurability] = useState(() => storage.loadDurability());
   const durabilityRef = useRef(durability);
   durabilityRef.current = durability;
@@ -1329,7 +1332,7 @@ export function App({ storage, getToken, user }) {
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}
 
-      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel}
+      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel} positionLog={positionLog} onPosition={answerPosition}
         activity={log[detail.id] ? recordingFor(detail) : null}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}

@@ -1,0 +1,111 @@
+/* Try — did the bike set the run up, or ruin it? (phase 6 §4)
+ *
+ * §4's sentence is the whole module: "A bike execution that repeatedly
+ * destroys the run should not be scored as successful triathlon pacing." A
+ * ride reviewed on its own can be excellent and still be the wrong ride, and
+ * nothing in the app has ever been able to say so, because the bike review
+ * and the run review never looked at each other.
+ *
+ * REPEATEDLY is load-bearing and is enforced, not decorated. One wrecked run
+ * off the bike is a hot day, a bad breakfast, or a rider who went too hard
+ * once on purpose. It takes a pattern to argue that someone's habitual bike
+ * pacing is the problem, and the pattern is what this returns; a single brick
+ * only ever gets a description.
+ *
+ * WHAT IT CANNOT SEE, said plainly rather than left as an absence: transition
+ * duration. §4 lists it, and activities carry a DATE but no time of day, so
+ * the gap between the ride ending and the run starting is not recoverable. It
+ * is in the backend handoff with the other timing asks. Early-run
+ * DETERIORATION needs the run's own laps and is read only when they arrive.
+ */
+import { RACES } from './domain.js';
+import { FUEL_LEVEL_GRAMS } from './bike-fuelling.js';
+
+export const BRICK_RULES = {
+  // A run off the bike is legitimately slower than the same run fresh. This
+  // is the allowance before slowness means anything at all; below it, the
+  // athlete simply ran off a bike.
+  paceAllowancePct: 8,
+  ruinedPct: 18,        // this much slower than the allowance = the run went
+  window: 3,            // bricks considered for a pattern
+  minPattern: 2,        // this many ruined inside the window = a pattern
+  hardRideFrac: 0.85,   // ride average this far above threshold sets up badly
+  lowFuelGrams: 45,     // under this an hour on a brick is under-fuelled
+};
+
+/* One brick, described. Never a verdict on the athlete's pacing: that needs
+   several, and brickPattern is where it lives. */
+export function brickExecution({ ride, run, paces, fuelLevel, raceType }) {
+  if (!ride || !run || !run.movingTimeSec || !run.distance) return null;
+  const pc = paces || {};
+  const target = pc.run && (pc.run.long || pc.run.easy);
+  if (!target) return null;
+
+  const secPerKm = run.movingTimeSec / (run.distance / 1000);
+  // how far past the honest brick allowance the run actually came in
+  const allowed = target * (1 + BRICK_RULES.paceAllowancePct / 100);
+  const overPct = (secPerKm - allowed) / allowed * 100;
+  const ruined = overPct >= BRICK_RULES.ruinedPct;
+
+  // the bike-side explanations, in the order they usually apply
+  const causes = [];
+  const realFtp = !!(pc.ftp && !pc.ftpEstimated);
+  if (realFtp && ride.averageWatts && ride.averageWatts / pc.ftp >= BRICK_RULES.hardRideFrac) {
+    causes.push({ key: 'ride-hard', text: 'the ride averaged close to your threshold, which is not a pace anyone runs well off' });
+  }
+  if (fuelLevel && FUEL_LEVEL_GRAMS[fuelLevel] != null && FUEL_LEVEL_GRAMS[fuelLevel] < BRICK_RULES.lowFuelGrams) {
+    causes.push({ key: 'under-fuelled', text: 'you logged taking in very little on the bike, and the run is where that shows up' });
+  }
+  if (run.rpe != null && run.rpe >= 8) {
+    causes.push({ key: 'run-maximal', text: 'you rated the run near maximal, so it cost more than a brick run should' });
+  }
+
+  const race = RACES[raceType];
+  return {
+    ruined,
+    overPct: Math.round(overPct * 10) / 10,
+    runSecPerKm: Math.round(secPerKm),
+    targetSecPerKm: Math.round(target),
+    rideWatts: ride.averageWatts != null ? Math.round(ride.averageWatts) : null,
+    runHr: run.averageHeartrate != null ? Math.round(run.averageHeartrate) : null,
+    runRpe: run.rpe != null ? run.rpe : null,
+    causes: causes.map(c => c.key),
+    date: run.date || ride.date || null,
+    // §4 lists it; the data does not exist. Named so it reads as blocked
+    // rather than forgotten.
+    transitionSec: null,
+    text: ruined
+      ? 'Your run off this ride came in well below the pace you hold fresh'
+        + (causes.length ? ', and ' + causes[0].text : '') + '.'
+      : 'You ran off this ride at close to the pace you hold fresh, which is the point of a brick'
+        + (race ? ' and the thing ' + race.name + ' actually asks for' : '') + '.',
+  };
+}
+
+/* §4: the pattern. This is the only thing allowed to say a rider's bike
+   pacing is wrong, and it needs the pattern to say it. */
+export function brickPattern(executions) {
+  const usable = (executions || []).filter(Boolean).slice(0, BRICK_RULES.window);
+  if (usable.length < BRICK_RULES.minPattern) return null;
+  const ruined = usable.filter(e => e.ruined);
+  if (ruined.length < BRICK_RULES.minPattern) return null;
+  // the explanation shared by the ruined ones, when there is a shared one
+  const counts = {};
+  ruined.forEach(e => (e.causes || []).forEach(c => { counts[c] = (counts[c] || 0) + 1; }));
+  const shared = Object.keys(counts).filter(c => counts[c] >= BRICK_RULES.minPattern);
+  const CAUSE_ADVICE = {
+    'ride-hard': 'Ride the bike leg easier than feels right. The time you give up on the bike is smaller than the time the run takes back.',
+    'under-fuelled': 'Fuel the bike leg to the plan on the card. A brick run is where an under-fuelled ride presents its bill.',
+    'run-maximal': 'Start the run at an effort you could hold for the whole distance, rather than at the effort the first kilometre allows.',
+  };
+  return {
+    sessions: usable.length,
+    ruined: ruined.length,
+    causes: shared,
+    latest: ruined.map(e => e.date).filter(Boolean).sort().pop() || null,
+    /* §4's acceptance criterion, in one sentence: the bike is not scored as
+       successful triathlon pacing just because the ride itself was good. */
+    text: 'Your last ' + ruined.length + ' brick runs came in well down on the pace you hold fresh. '
+      + (shared.length ? CAUSE_ADVICE[shared[0]] : 'The rides themselves looked fine, which is the point: how a bike leg is ridden shows up in the run, not in the ride.'),
+  };
+}

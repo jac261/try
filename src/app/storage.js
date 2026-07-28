@@ -117,6 +117,21 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'fuel', JSON.stringify(m)); } catch (e) {}
       return m;
     },
+    /* Phase 6 §5: aero position tolerance, on exactly the fuel store's terms
+       and for the same reasons — keyed by the RECORDING (never a workout id,
+       which an eased rebuild can change under you), capped and evicted oldest
+       first, and spanning plans because tolerance is a property of the rider
+       and their bike, not of one training block. */
+    loadPosition() { try { return JSON.parse(localStorage.getItem(ns + 'position') || '{}'); } catch (e) { return {}; } },
+    savePosition(activityId, comfort, symptoms, at, minutes) {
+      const m = this.loadPosition();
+      if (comfort == null) delete m[activityId];
+      else m[activityId] = { comfort, symptoms: symptoms || [], at, minutes: minutes || null };
+      const ids = Object.keys(m).sort((a, b) => ((m[a].at || '') < (m[b].at || '') ? -1 : 1));
+      ids.slice(0, Math.max(0, ids.length - 80)).forEach(id => delete m[id]);
+      try { localStorage.setItem(ns + 'position', JSON.stringify(m)); } catch (e) {}
+      return m;
+    },
     // Block-focus changes journal in their OWN store: coach.js's
     // weekProposal scans adjustLog for any entry with a headline and
     // defaults a kind-less match to a trim, so a focus entry there would be
