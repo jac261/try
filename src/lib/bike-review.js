@@ -22,10 +22,26 @@
 import { BIKE_ZONES, judgeBandForType } from './bike-zones.js';
 import { OUTDOOR_REP_TOLERANCE, REP_TOLERANCE } from './review.js';
 import { isIndoor } from './autolog.js';
+import { bikeLoad } from './bike-load.js';
+
+/* §4 asks that PAUSES AND COASTING be compared, and nothing here does.
+ *
+ * Stated rather than left as an absence, because an unmentioned omission
+ * reads as done. It needs elapsed time or a power stream, and the activity
+ * feed carries neither: a seventy-five minute ride and a ride with the same
+ * seventy-five minutes of moving time spread over a hundred and fifty are
+ * identical to this module. Both fields are named asks in the backend
+ * handoff. Until one arrives, the outdoor tolerance in the rep judging is the
+ * blunt stand-in — it forgives the road without being able to see it.
+ *
+ * The four load fields (§6) are gated the same way and for the same kind of
+ * reason, in bike-load.js. */
+export const PAUSES_AND_COASTING = 'blocked: needs elapsedTimeSec or a power stream';
 
 export const BIKE_REVIEW_RULES = {
   repDurTol: 0.2,        // a lap within 20% of the planned rep length pairs with it
-  minLapSec: 60,         // sub-minute slivers are lap-button stubs, not efforts
+  minLapSec: 60,         // the stub floor for a session with no short efforts
+  minLapAbsSec: 12,      // below this it is a lap-button slip whatever was planned
   fadeSoftPct: 3,        // final effort this much below the body = repeat
   fadeHardPct: 7,        // this much = the session broke down
   cvRepeatable: 8,       // effort-to-effort spread under this % reads as repeatable
@@ -97,10 +113,19 @@ export function plannedBikeEfforts(workout) {
  * pairing. */
 export function matchBikeIntervals({ workout, intervals }) {
   if (!workout || workout.discipline !== 'bike' || !Array.isArray(intervals)) return null;
-  const laps = intervals
-    .filter(l => l && l.type === 'WORK' && l.movingTimeSec >= BIKE_REVIEW_RULES.minLapSec)
-    .sort((a, b) => (a.startTimeSec ?? 0) - (b.startTimeSec ?? 0));
   const planned = plannedBikeEfforts(workout);
+  /* The floor for "this is a lap-button stub rather than an effort" has to
+     come from the session, not from a constant. A flat sixty seconds threw
+     away every lap of a 30/30 VO2 card — the shape the builder actually
+     prescribes — so a flawless recording of 36 efforts matched zero of them
+     and the athlete was told there were "no structured intervals in the
+     recording". The planned side had no minimum and the recorded side had
+     one: that mismatch was the bug. */
+  const shortest = planned.length ? Math.min(...planned.map(p => p.min * 60)) : BIKE_REVIEW_RULES.minLapSec;
+  const floor = Math.max(BIKE_REVIEW_RULES.minLapAbsSec, Math.min(BIKE_REVIEW_RULES.minLapSec, shortest * 0.5));
+  const laps = intervals
+    .filter(l => l && l.type === 'WORK' && l.movingTimeSec >= floor)
+    .sort((a, b) => (a.startTimeSec ?? 0) - (b.startTimeSec ?? 0));
   // ORDER MATTERS HERE. A steady ride has no efforts to match, so the absence
   // of recorded intervals is not a missing recording, it is the session. The
   // no-laps check used to run first and refused every Endurance and Long ride
@@ -144,9 +169,18 @@ export const TYPE_PRIORITIES = {
   Endurance: ['control', 'variability', 'duration'],
   Tempo: ['timeInTarget', 'consistency', 'completion'],
   'Sweet Spot': ['timeInTarget', 'consistency', 'completion'],
-  Threshold: ['completion', 'fade', 'recovery', 'adherence'],
-  'VO2 Intervals': ['completion', 'repeatability', 'fade', 'recovery'],
-  Long: ['duration', 'durability', 'pacing'],
+  // timeInTarget belongs here: §5 names power adherence as a Threshold
+  // priority, and what shipped under that name judged over-riding ONLY. A
+  // session ridden entirely BELOW its band was invisible to the outcome, so
+  // the athlete read "Session complete" directly above "0% of your effort
+  // time was in the target range".
+  Threshold: ['workCompletion', 'completion', 'timeInTarget', 'fade', 'recovery', 'adherence'],
+  'VO2 Intervals': ['workCompletion', 'completion', 'timeInTarget', 'repeatability', 'fade', 'recovery'],
+  // timeInTarget belongs to Long too: a Long ride's tempo surges are a
+  // prescription like any other, and without this the surges could be ridden
+  // far too hard while the copy said "intensity was well controlled" — true
+  // of the whole ride's average and false of the only structured part of it.
+  Long: ['duration', 'timeInTarget', 'durability', 'pacing'],
 };
 
 /* §2/§3/§4: the review.
@@ -161,7 +195,14 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
   const pc = paces || {};
   const type = workout.type;
   const realFtp = !!(pc.ftp && !pc.ftpEstimated);
-  const indoor = isIndoor(activity);
+  /* indoor / outdoor / unknown, and unknown is a real third answer. isIndoor
+     returns false for an activity with no recognised type, which silently
+     became "outdoors" — so a ride with no environment evidence was given the
+     outdoor allowance AND told it had been, which is an assertion about
+     something the module cannot see. The allowance still applies (it errs
+     towards not accusing), but nothing claims to know where it happened. */
+  const environment = isIndoor(activity) ? 'indoor' : (activity.type ? 'outdoor' : 'unknown');
+  const indoor = environment === 'indoor';
   const m = matchBikeIntervals({ workout, intervals });
 
   const plannedMin = workout.durationMin || 0;
@@ -173,7 +214,8 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
   // the same one-sidedness as the rep table (phase 4 §7).
   const lowTol = indoor ? REP_TOLERANCE : OUTDOOR_REP_TOLERANCE;
 
-  let timeInTarget = null, powerAdherence = null, intervalFadePercent = null, variability = null, recoveryCompliance = null;
+  let timeInTarget = null, powerAdherence = null, intervalFadePercent = null, variability = null,
+    recoveryCompliance = null, workCompletion = null;
   const efforts = [];
   if (realFtp && m && m.pairs.length) {
     let inBandMin = 0, totalMin = 0;
@@ -185,12 +227,27 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
       const min = lap.movingTimeSec / 60;
       totalMin += min;
       if (frac >= lo - lowTol && frac <= hi + REP_TOLERANCE) inBandMin += min;
-      // signed, as a percentage of the band midpoint: POSITIVE IS HARDER
-      // THAN ASKED. Stated here because the swim's equivalent runs the other
-      // way (a lower pace is a faster swim) and one convention silently
-      // inverting the other is how a nudge ends up arguing the wrong case.
-      const mid = (lo + hi) / 2;
-      devs.push((frac - mid) / mid * 100);
+      /* HOW FAR OUTSIDE THE PRESCRIPTION, and zero anywhere inside it.
+       *
+       * This used to be deviation from the band's MIDPOINT, which was wrong
+       * in a way that only showed up end to end. The band here is
+       * deliberately a UNION, wider than any single card, so that a rider who
+       * does exactly what their card says is never marked off target. Its
+       * midpoint therefore is not the card's midpoint, and measuring against
+       * it made riding the printed card score as harder than asked: a Sweet
+       * Spot session ridden at the exact middle of its card came out at
+       * +5.1%, three of them tripped the rolling FTP evidence, and riding the
+       * top watt printed on a Threshold card returned "your threshold may
+       * have moved" next to "100% of your effort time was in the target
+       * range".
+       *
+       * Adherence means distance from what was ASKED, and everywhere inside
+       * the prescription is asked. So: zero in band, and outside it the gap
+       * to the nearer edge. POSITIVE IS HARDER THAN ASKED (the swim's
+       * equivalent runs the other way, a lower pace being a faster swim, and
+       * one convention silently inverting the other is how a nudge ends up
+       * arguing the wrong case). */
+      devs.push(frac > hi ? (frac - hi) / hi * 100 : frac < lo ? (frac - lo) / lo * 100 : 0);
       efforts.push({ watts: Math.round(lap.averageWatts), frac, min });
     });
     if (totalMin > 0) timeInTarget = pct1(inBandMin / totalMin * 100);
@@ -208,6 +265,14 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
       rests.push(gapMin >= planned.restMin * BIKE_REVIEW_RULES.restTol ? 1 : 0);
     });
     if (rests.length) recoveryCompliance = pct1(mean(rests) * 100);
+    // §4 asks that planned DURATION be compared. repDurTol was only ever a
+    // pairing filter, so efforts cut short by anything inside that window
+    // reviewed identically to full ones: a Threshold session whose 8 minute
+    // efforts were all ridden as 6:34 read exactly like the complete session,
+    // because whole-ride completion cannot see work traded for recovery.
+    const plannedWork = m.pairs.reduce((t, x) => t + x.planned.min, 0);
+    const ridden = m.pairs.reduce((t, x) => t + x.lap.movingTimeSec / 60, 0);
+    if (plannedWork > 0) workCompletion = pct1(ridden / plannedWork * 100);
     if (devs.length) powerAdherence = pct1(mean(devs));
     if (efforts.length >= 3) {
       // fade: the last effort against the body of the session
@@ -224,36 +289,52 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
   // easy intensity it was prescribed at? This is the one power read that
   // works without any interval structure at all.
   let control = null;
-  if (realFtp && activity.averageWatts && (type === 'Endurance' || type === 'Long')) {
-    control = pct1(activity.averageWatts / pc.ftp * 100);
-  }
+  if (realFtp && activity.averageWatts) control = pct1(activity.averageWatts / pc.ftp * 100);
 
   // confidence: the matcher's word, capped by anything that muddies it
   let confidence = m ? m.confidence : 'low';
   if (!realFtp) confidence = 'low';                 // §3: nothing to judge against
   if (completion == null) confidence = 'low';
-  if (m && m.pairs.length && !efforts.length) confidence = 'low';   // matched, but no power on them
-  // and a steady ride can only be judged if its control read actually exists
-  if (m && m.splits && control == null) confidence = 'low';
+  let decline = null;
+  if (m && m.pairs.length && !efforts.length) { confidence = 'low'; decline = 'the recorded efforts carry no power data'; }
+  if (m && m.splits && control == null) { confidence = 'low'; decline = 'this ride has no power recorded to read intensity from'; }
+  // A steady ride matched nothing because there was nothing to match, which
+  // is a successful read and not a partial one. It used to be capped at
+  // medium forever and then told "some of the planned session could not be
+  // matched" — for a session ridden exactly as prescribed.
+  /* ...but only for the types whose WHOLE ride is the one zone. A continuous
+     quality card has a warm-up and a cool-down inside that average, so the
+     whole-ride number cannot say whether the block itself was ridden right,
+     and calling that high confidence would be claiming a read we do not
+     have. Those keep medium and say what they could not check. */
+  if (m && m.splits && control != null && completion != null
+    && completion >= BIKE_REVIEW_RULES.completionFull
+    && (type === 'Endurance' || type === 'Long')) confidence = 'high';
 
+  // §6: null on every ride until normalized power arrives, by bikeLoad's gate
+  const load = bikeLoad({ activity, profile: { ftp: pc.ftp, ftpMeta: pc.ftpMeta } });
   const outcome = decideOutcome({
     type, confidence, completion, timeInTarget, powerAdherence,
-    intervalFadePercent, control, feel, realFtp, variability, recoveryCompliance,
+    intervalFadePercent, control, feel, realFtp, variability, recoveryCompliance, workCompletion,
   });
 
   const review = {
     completion: completion == null ? null : pct1(completion * 100),
     timeInTarget, powerAdherence,
     averagePowerWatts: activity.averageWatts != null ? Math.round(activity.averageWatts) : null,
-    // §6 lives in bike-load.js and is gated on a field the backend does not
-    // send yet, so these are absent rather than approximated. A normalized
-    // power guessed from interval averages would be a different number with
-    // the same name, and every downstream figure would inherit the fiction.
-    normalizedPowerWatts: null, intensityFactor: null, powerTss: null, variabilityIndex: null,
+    /* §6, DELEGATED rather than hardcoded to null. These were four literal
+       nulls with a comment explaining the gate, which meant bike-load.js had
+       no caller at all and the day the backend field landed nothing in the
+       app would have changed. Now the gate is bikeLoad's to close, and it
+       closes itself. */
+    normalizedPowerWatts: load ? load.normalizedPowerWatts : null,
+    intensityFactor: load ? load.intensityFactor : null,
+    powerTss: load ? load.powerTss : null,
+    variabilityIndex: load ? load.variabilityIndex : null,
     intervalFadePercent,
-    variability, control, indoor, recoveryCompliance,
+    variability, control, indoor, environment, recoveryCompliance, workCompletion,
     efforts: efforts.length, plannedEfforts: m ? m.planned.length : 0,
-    confidence, outcome, type,
+    confidence, outcome, type, decline,
     date: activity.date || null,
   };
   review.text = reviewText(review, { workout, m, realFtp });
@@ -282,8 +363,14 @@ const OUTCOME_SIGNALS = {
   // cutting the recoveries makes a different, harder session out of the same
   // card, so it is worth repeating as written rather than progressing from
   recovery: s => (s.recoveryCompliance != null && s.recoveryCompliance < 50 ? 'repeat' : null),
+  // Now that adherence is zero anywhere inside the prescription, a positive
+  // reading means genuinely above the most permissive card the athlete could
+  // have been given, which is the only reading that argues the THRESHOLD is
+  // wrong rather than the rider.
   adherence: s => (s.confidence === 'high' && s.powerAdherence != null && s.powerAdherence >= 6
     && (s.completion == null || s.completion >= BIKE_REVIEW_RULES.completionFull) ? 'retest-ftp' : null),
+  // efforts cut short: the work was not done even though the ride was
+  workCompletion: s => (s.workCompletion != null && s.workCompletion < 90 ? 'repeat' : null),
 };
 
 function decideOutcome(s) {
@@ -298,12 +385,13 @@ function decideOutcome(s) {
     const out = signal && signal(s);
     if (out) return out;
   }
-  // Comfortably above the band across a whole session, on a credible match,
-  // is the one pattern that argues the THRESHOLD is wrong rather than the
-  // rider. It never acts on its own: §7's rolling evidence decides that, and
-  // this only ever names the possibility.
-  const adh = OUTCOME_SIGNALS.adherence(s);
-  if (adh) return adh;
+  /* NO FALLBACK ADHERENCE CHECK. There used to be one here, consulted for
+     every type regardless of whether that type declared it, and it made a
+     Long ride claim a threshold retest on the strength of two tempo surges
+     inside a hundred minutes of endurance riding — while the text beside the
+     headline praised the ride, because the Long copy branch never mentions
+     adherence. A signal that only some types declare must only be consulted
+     for those types, or the table is not the decision after all. */
   if (s.completion != null && s.completion >= R.completionFull) return 'progress';
   return 'repeat';
 }
@@ -314,41 +402,83 @@ const OUTCOME_WORDS = {
   'retest-ftp': 'Your threshold may have moved', 'insufficient-data': 'Not enough to judge',
 };
 
-function reviewText(r, { workout, m, realFtp }) {
-  const bits = [];
+/* One sentence per priority the type declares, in the order it declares
+   them, and only when that priority has something to say.
+ *
+ * The previous version read priorities[0] and compared it against two
+ * values, so the copy had exactly two shapes: Endurance/Long, and everything
+ * else. Threshold and Sweet Spot emitted identical sentences for identical
+ * data despite prioritising different things, and nine of the twelve
+ * declared priority names were never read anywhere. The outcome was made
+ * table-driven and the copy was not, which is half a fix. */
+const PRIORITY_SENTENCE = {
+  completion: r => (r.completion == null ? null
+    : 'You completed ' + Math.round(r.completion) + '% of the planned time.'),
+  duration: r => (r.completion == null ? null
+    : 'You completed ' + Math.round(r.completion) + '% of the planned time.'),
+  workCompletion: r => (r.workCompletion == null || r.workCompletion >= 98 ? null
+    : 'Your efforts came to ' + Math.round(r.workCompletion) + '% of the work the session asked for, so some of it was traded for recovery.'),
+  timeInTarget: r => (r.timeInTarget == null ? null
+    : r.timeInTarget + '% of your effort time was in the target range.'),
+  control: r => {
+    if (r.control == null) return null;
+    if (r.control > BIKE_REVIEW_RULES.easyCeiling * 100) {
+      return 'You rode this one harder than it asked for, which is the usual reason a quality day later in the week feels flat.';
+    }
+    // Praise for the whole-ride average is TRUE and misleading when the
+    // structured part of the ride missed: a Long ride whose surges went 27%
+    // over read "0% of your effort time was in the target range. Intensity
+    // was well controlled." Both facts, one sentence apart, arguing.
+    if (r.timeInTarget != null && r.timeInTarget < 100) return null;
+    return 'Intensity was well controlled for the length of the ride.';
+  },
+  pacing: r => PRIORITY_SENTENCE.control(r),
+  fade: r => (r.intervalFadePercent == null || r.intervalFadePercent < BIKE_REVIEW_RULES.fadeSoftPct ? null
+    : 'Your last effort came in ' + r.intervalFadePercent + '% below the rest, so the session was at the edge of what you could repeat.'),
+  durability: r => PRIORITY_SENTENCE.fade(r),
+  repeatability: r => (r.variability == null ? null
+    : r.variability > BIKE_REVIEW_RULES.cvRepeatable
+      ? 'Your efforts varied by ' + r.variability + '% between the strongest and the rest, so they were not yet repeatable at this level.'
+      : 'Your efforts were consistent from first to last.'),
+  consistency: r => PRIORITY_SENTENCE.repeatability(r),
+  variability: r => PRIORITY_SENTENCE.repeatability(r),
+  recovery: r => (r.recoveryCompliance == null || r.recoveryCompliance >= 100 ? null
+    : 'You took the full recovery on ' + Math.round(r.recoveryCompliance) + '% of the gaps, and cutting them makes a harder session than the one on the card.'),
+  adherence: r => (r.powerAdherence == null || r.powerAdherence === 0 ? null
+    : r.powerAdherence > 0
+      ? 'Across the session your efforts sat about ' + r.powerAdherence + '% above the top of what was asked.'
+      : 'Across the session your efforts sat about ' + Math.abs(r.powerAdherence) + '% below what was asked.'),
+};
+
+function reviewText(r, { m, realFtp }) {
   if (!realFtp) {
-    bits.push('Your FTP is estimated from your level rather than measured, so this ride is recorded but not judged on power. A ramp test would change that.');
-    return bits.join(' ');
+    return 'Your FTP is estimated from your level rather than measured, so this ride is recorded but not judged on power. A ramp test would change that.';
   }
+  const bits = [];
   if (r.outcome === 'insufficient-data') {
-    bits.push('This recording could not be matched to the planned session well enough to judge it' + (m && m.why ? ' (' + m.why + ')' : '') + '.');
+    // The reason the REVIEW declined, which is not the same thing as the
+    // matcher's verdict. Printing m.why here produced sentences that argued
+    // with themselves: "could not be matched ... (interval count matches the
+    // planned session)".
+    const why = r.decline || (m && m.pairs.length === 0 && m.planned.length ? m.why : null);
+    bits.push('This ride was recorded but could not be judged' + (why ? ', because ' + why : '') + '.');
     return bits.join(' ');
   }
-  const priorities = TYPE_PRIORITIES[r.type] || ['completion'];
-  if (priorities[0] === 'control' || priorities[0] === 'duration') {
-    if (r.control != null) {
-      bits.push(r.control > BIKE_REVIEW_RULES.easyCeiling * 100
-        ? 'You rode this one harder than it asked for, which is the usual reason a quality day later in the week feels flat.'
-        : 'Intensity was well controlled for the length of the ride.');
-    }
-    if (r.completion != null) bits.push('You completed ' + Math.round(r.completion) + '% of the planned time.');
-  } else {
-    if (r.timeInTarget != null) bits.push(r.timeInTarget + '% of your effort time was in the target range.');
-    if (r.efforts) bits.push('Judged across ' + r.efforts + ' of ' + r.plannedEfforts + ' planned efforts.');
-    if (r.recoveryCompliance != null && r.recoveryCompliance < 100) {
-      bits.push('You took the full recovery on ' + Math.round(r.recoveryCompliance) + '% of the gaps, and cutting them makes a harder session than the one on the card.');
-    }
-    if (r.intervalFadePercent != null && r.intervalFadePercent >= BIKE_REVIEW_RULES.fadeSoftPct) {
-      bits.push('Your last effort came in ' + r.intervalFadePercent + '% below the rest, so the session was at the edge of what you could repeat.');
-    }
-  }
-  if (r.indoor === false && r.timeInTarget != null && r.timeInTarget < 100) {
+  (TYPE_PRIORITIES[r.type] || ['completion']).forEach(name => {
+    const say = PRIORITY_SENTENCE[name];
+    const line = say && say(r);
+    if (line && !bits.includes(line)) bits.push(line);
+  });
+  if (r.efforts) bits.push('Judged across ' + r.efforts + ' of ' + r.plannedEfforts + ' planned efforts.');
+  // §7 phrasing: only claim the outdoor allowance where we KNOW it was
+  // outdoors. An unknown environment gets the allowance and no claim.
+  if (r.environment === 'outdoor' && r.timeInTarget != null && r.timeInTarget < 100) {
     bits.push('Judged with the outdoor allowance, since junctions and descents sit inside a recorded average.');
   }
-  if (r.confidence !== 'high') {
-    bits.push(r.confidence === 'medium'
-      ? 'Medium confidence: some of the planned session could not be matched to the recording.'
-      : 'Low confidence.');
+  if (r.confidence === 'medium') {
+    bits.push(m && m.splits
+      ? 'Medium confidence: this ride has no interval structure to check the intensity against.'
+      : 'Medium confidence: some of the planned session could not be matched to the recording.');
   }
   return bits.join(' ');
 }

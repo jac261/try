@@ -19,6 +19,7 @@ import { bikePowerAnchor, RACES } from './domain.js';
 import { daysBetween } from './date.js';
 import { EFTP_RULES } from './eftp.js';
 import { isTrainingRide } from './bikeschema.js';
+import { bikeReviewEvidence } from './bike-review.js';
 
 export const FTP_RETEST_RULES = {
   staleDays: 84,        // twelve weeks: an FTP older than a training block
@@ -90,7 +91,7 @@ function driftSignal({ plan, activities, log, moves, todayISO, sinceISO }) {
   return null;
 }
 
-export function ftpRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO }) {
+export function ftpRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO, reviews }) {
   if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
   const profile = plan.profile || {};
   // nothing to assess on a plan that does not ride towards a race
@@ -118,6 +119,14 @@ export function ftpRetestRecommendation({ plan, activities, thresholds, log, mov
   else {
     const drift = driftSignal({ plan, activities, log: log || {}, moves, todayISO, sinceISO: meta.measuredAt });
     if (drift) reasons.push(drift);
+    /* Phase 5 §7: the interval engine's own rolling evidence, which is a
+       better witness than whole-ride drift because it reads the EFFORTS
+       rather than an average that has the recoveries inside it. It is
+       deliberately the same shape as the drift signal — several comparable,
+       completed, well-matched sessions all arguing one way — and it can only
+       ever add a reason to nudge towards a test, never move FTP itself. */
+    const ev = bikeReviewEvidence((reviews || []).filter(r => !meta.measuredAt || !r.date || r.date >= meta.measuredAt));
+    if (ev) reasons.push({ key: ev.direction === 'over' ? 'reps-over' : 'reps-under', latest: ev.latest });
     if (meta.measuredAt && daysBetween(meta.measuredAt, todayISO) > FTP_RETEST_RULES.staleDays) reasons.push({ key: 'stale' });
     const icu = thresholds && thresholds.bikeFtp;
     if (icu > 0 && Math.abs(anchor.ftpWatts - icu) / anchor.ftpWatts >= EFTP_RULES.minDriftPct) reasons.push({ key: 'icu' });
@@ -129,12 +138,14 @@ export function ftpRetestRecommendation({ plan, activities, thresholds, log, mov
   }
   if (!reasons.length) return null;
 
-  const order = ['missing', 'drift-up', 'drift-down', 'returning', 'stale', 'icu', 'unverified'];
+  const order = ['missing', 'reps-over', 'reps-under', 'drift-up', 'drift-down', 'returning', 'stale', 'icu', 'unverified'];
   reasons.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
   const r = reasons[0];
   const weeks = meta.measuredAt ? Math.round(daysBetween(meta.measuredAt, todayISO) / 7) : null;
   const COPY = {
     missing: ['Anchor your bike targets', 'You are riding without a measured FTP, so every watt target is derived from your level. The ramp test takes twenty minutes and fixes that.'],
+    'reps-over': ['Your intervals are landing above target', 'Your last few quality sessions have held power above what the cards asked for, effort by effort rather than on average. A ramp test would set the targets where your riding already is.'],
+    'reps-under': ['Your intervals are landing under target', 'Your last few quality sessions have come in below what the cards asked for, effort by effort. A retest will check whether the targets are set too high rather than leaving you chasing them.'],
     'drift-up': ['Your rides are coming in strong', 'Recent quality rides have averaged above what they asked for. A ramp test may earn you higher targets.'],
     'drift-down': ['Your rides are coming in under', 'Recent quality rides have averaged below what they asked for. A retest will check whether your targets are set too high.'],
     returning: ['Worth re-anchoring after the break', 'You have not ridden in a while, and an FTP set before a break is a poor guide to what you can hold now.'],

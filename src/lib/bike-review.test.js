@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { generatePlan } from './plan.js';
 import { isTrainingRide } from './bikeschema.js';
-import { reviewActivity } from './review.js';
+import { reviewActivity, intervalRows } from './review.js';
 import {
   bikeReview, bikeReviewVerdict, bikeReviewEvidence, matchBikeIntervals,
   plannedBikeEfforts, bandForRep, BIKE_REVIEW_RULES, BIKE_EVIDENCE_RULES, TYPE_PRIORITIES,
@@ -259,5 +259,181 @@ describe('§8: the engine is the single voice, and fails safely', () => {
     const r = bikeReview({ workout: w, activity: act(w), intervals: noPower, paces: REAL });
     expect(r.confidence).toBe('low');
     expect(r.outcome).toBe('insufficient-data');
+  });
+});
+
+
+/* Gauntlet regressions. Each of these reproduces a defect the review agents
+   demonstrated end to end, so the fix cannot quietly come undone. */
+describe('gauntlet: adherence is distance from the PRESCRIPTION, not from a widened midpoint', () => {
+  // the watts actually printed on the athlete's card
+  const cardBand = w => {
+    const seg = (w.segments || []).find(x => x.blocks);
+    const m = seg && (seg.detail || '').match(/(\d+)\D+(\d+)\s*W/);
+    return m ? [+m[1] / 250, +m[2] / 250] : null;
+  };
+  const atFrac = (w, frac) => {
+    const eff = plannedBikeEfforts(w);
+    let t = 900;
+    return eff.map(e => {
+      const iv = { type: 'WORK', startTimeSec: t, movingTimeSec: e.min * 60, averageWatts: 250 * frac };
+      t += (e.min + (e.restMin || 0)) * 60;
+      return iv;
+    });
+  };
+
+  it('riding the top watt printed on the card scores zero, not "harder than asked"', () => {
+    // The band used for in/out judging is deliberately a UNION, wider than
+    // any single card. Measuring adherence from its midpoint made riding the
+    // card exactly read as +8%, and returned "your threshold may have moved"
+    // beside "100% of your effort time was in the target range".
+    ['Threshold', 'Sweet Spot'].forEach(type => {
+      const w = rides.find(x => x.type === type && (x.segments || []).some(sg => sg.blocks));
+      const band = w && cardBand(w);
+      if (!band) return;
+      [band[0], (band[0] + band[1]) / 2, band[1]].forEach(frac => {
+        const r = bikeReview({ workout: w, activity: act(w), intervals: atFrac(w, frac), paces: REAL });
+        expect(r.powerAdherence, type + ' at ' + Math.round(frac * 250) + ' W').toBe(0);
+        expect(r.outcome, type + ' at ' + Math.round(frac * 250) + ' W').not.toBe('retest-ftp');
+      });
+    });
+  });
+
+  it('three flawless sessions do not trip the rolling FTP evidence', () => {
+    const w = rides.find(x => x.type === 'Sweet Spot' && (x.segments || []).some(sg => sg.blocks));
+    const band = cardBand(w);
+    const mid = (band[0] + band[1]) / 2;
+    const three = [1, 2, 3].map(i => bikeReview({
+      workout: w, activity: act(w, { date: '2026-07-0' + i }), intervals: atFrac(w, mid), paces: REAL,
+    }));
+    three.forEach(r => expect(r.powerAdherence).toBe(0));
+    expect(bikeReviewEvidence(three)).toBe(null);
+  });
+
+  it('a session ridden BELOW its band is not called complete', () => {
+    const w = rides.find(x => x.type === 'Threshold' && (x.segments || []).some(sg => sg.blocks));
+    const r = bikeReview({ workout: w, activity: act(w), intervals: atFrac(w, 0.8), paces: REAL });
+    expect(r.timeInTarget).toBe(0);
+    expect(r.powerAdherence).toBeLessThan(0);      // under-riding is visible now
+    expect(r.outcome).not.toBe('progress');
+    expect(r.text).not.toMatch(/well controlled/);
+  });
+
+  it('a Long ride cannot claim a threshold move off its surges, nor praise them', () => {
+    const w = rides.find(x => x.type === 'Long' && (x.segments || []).some(sg => sg.blocks));
+    if (!w) return;
+    const r = bikeReview({ workout: w, activity: act(w, { averageWatts: 160 }), intervals: atFrac(w, 1.14), paces: REAL });
+    expect(r.outcome).not.toBe('retest-ftp');       // two surges are not a threshold test
+    expect(r.timeInTarget).toBe(0);
+    expect(r.text).not.toMatch(/well controlled/);  // not beside a 0% reading
+  });
+});
+
+describe('gauntlet: sessions that were structurally unjudgeable', () => {
+  it('judges a 30/30 VO2 card, whose efforts are shorter than the old lap floor', () => {
+    const w = {
+      discipline: 'bike', type: 'VO2 Intervals', durationMin: 75,
+      segments: [
+        { label: 'Warm-up', min: 15, zone: 'Z2' },
+        { label: '3 x 12 x (30 s hard / 30 s easy)', min: 42, zone: 'Z5',
+          blocks: Array.from({ length: 36 }).flatMap(() => [{ min: 0.5, zone: 'Z5' }, { min: 0.5, zone: 'Z1' }]) },
+        { label: 'Cool-down', min: 18, zone: 'Z1' },
+      ],
+    };
+    const eff = plannedBikeEfforts(w);
+    expect(eff.length).toBe(36);
+    let t = 900;
+    const laps = eff.map(e => {
+      const iv = { type: 'WORK', startTimeSec: t, movingTimeSec: e.min * 60, averageWatts: 250 * 1.12 };
+      t += (e.min + (e.restMin || 0)) * 60;
+      return iv;
+    });
+    const r = bikeReview({ workout: w, activity: act(w), intervals: laps, paces: REAL });
+    expect(r.efforts, 'a flawless 30/30 recording must be judgeable').toBe(36);
+    expect(r.outcome).not.toBe('insufficient-data');
+  });
+
+  it('gives a continuous quality card a verdict, at honest confidence', () => {
+    const cont = rides.find(x => ['Sweet Spot', 'Tempo', 'Threshold'].includes(x.type)
+      && !(x.segments || []).some(sg => sg.blocks));
+    if (!cont) return;
+    const r = bikeReview({ workout: cont, activity: act(cont, { averageWatts: 210 }), intervals: [], paces: REAL });
+    expect(r.outcome).not.toBe('insufficient-data');
+    // but not HIGH: the whole-ride average has the shoulders inside it, so it
+    // cannot say whether the block itself was ridden right
+    expect(r.confidence).toBe('medium');
+    expect(r.text).toMatch(/no interval structure/);
+  });
+});
+
+describe('gauntlet: the remaining honesty defects', () => {
+  it('notices efforts cut short inside the pairing tolerance', () => {
+    const w = rides.find(x => x.type === 'Threshold' && (x.segments || []).some(sg => sg.blocks));
+    const eff = plannedBikeEfforts(w);
+    let t = 900;
+    const short = eff.map(e => {
+      const iv = { type: 'WORK', startTimeSec: t, movingTimeSec: e.min * 60 * 0.82, averageWatts: 250 };
+      t += (e.min + (e.restMin || 0)) * 60;
+      return iv;
+    });
+    const r = bikeReview({ workout: w, activity: act(w), intervals: short, paces: REAL });
+    expect(r.workCompletion).toBeLessThan(90);
+    expect(r.outcome).toBe('repeat');
+    expect(r.text).toMatch(/traded for recovery/);
+  });
+
+  it('does not claim a ride was outdoors when it has no environment evidence', () => {
+    const w = rides.find(x => x.type === 'Threshold' && (x.segments || []).some(sg => sg.blocks));
+    const eff = plannedBikeEfforts(w);
+    const laps = eff.map((e, i) => ({ type: 'WORK', startTimeSec: 900 + i * 1000, movingTimeSec: e.min * 60, averageWatts: 250 * 0.86 }));
+    const unknown = bikeReview({ workout: w, activity: { id: 'a', movingTimeSec: 3600, date: '2026-06-10' }, intervals: laps, paces: REAL });
+    expect(unknown.environment).toBe('unknown');
+    expect(unknown.text).not.toMatch(/outdoor allowance/);
+    const out = bikeReview({ workout: w, activity: act(w), intervals: laps, paces: REAL });
+    expect(out.environment).toBe('outdoor');
+  });
+
+  it('the rep table and the engine judge against the same band', () => {
+    // they used to disagree for every Z3 type and render the disagreement in
+    // one block of the workout sheet
+    const w = rides.find(x => x.type === 'Sweet Spot' && (x.segments || []).some(sg => sg.blocks));
+    const band = bandForRep('Sweet Spot', 'Z3');
+    // a rep just inside the engine's band must not be 'under' in the table
+    const watts = Math.round(250 * (band[0] + 0.01));
+    const rows = intervalRows({
+      workout: w, paces: REAL, activity: act(w, { type: 'VirtualRide' }),
+      intervals: [{ type: 'WORK', movingTimeSec: 540, averageWatts: watts },
+        { type: 'WORK', movingTimeSec: 540, averageWatts: watts }],
+    });
+    expect(rows.rows[0].tone).toBe('good');
+  });
+
+  it('the decline sentence does not argue with its own reason', () => {
+    const w = rides.find(x => x.type === 'Threshold' && (x.segments || []).some(sg => sg.blocks));
+    const eff = plannedBikeEfforts(w);
+    const noPower = eff.map((e, i) => ({ type: 'WORK', startTimeSec: 900 + i * 1000, movingTimeSec: e.min * 60, averageWatts: null }));
+    const r = bikeReview({ workout: w, activity: act(w), intervals: noPower, paces: REAL });
+    expect(r.outcome).toBe('insufficient-data');
+    expect(r.text).toMatch(/no power data/);
+    // it used to print the MATCHER's affirmative verdict as the reason it
+    // could not judge: "could not be matched (interval count matches)"
+    expect(r.text).not.toMatch(/count matches/);
+  });
+
+  it('the load fields delegate to bikeLoad rather than being hardcoded null', () => {
+    const w = rides.find(x => x.type === 'Threshold' && (x.segments || []).some(sg => sg.blocks));
+    const eff = plannedBikeEfforts(w);
+    const laps = eff.map((e, i) => ({ type: 'WORK', startTimeSec: 900 + i * 1000, movingTimeSec: e.min * 60, averageWatts: 250 }));
+    // gated today
+    expect(bikeReview({ workout: w, activity: act(w), intervals: laps, paces: REAL }).powerTss).toBe(null);
+    // and live the moment the backend field arrives, with no other change
+    const withNp = bikeReview({
+      workout: w, paces: REAL, intervals: laps,
+      activity: act(w, { normalizedWatts: 235, averageWatts: 230, movingTimeSec: 3600 }),
+    });
+    expect(withNp.normalizedPowerWatts).toBe(235);
+    expect(withNp.intensityFactor).toBe(0.94);
+    expect(withNp.powerTss).toBe(88);
+    expect(withNp.variabilityIndex).toBe(1.02);
   });
 });

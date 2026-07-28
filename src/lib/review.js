@@ -15,7 +15,7 @@ import { DEFAULT_POOL } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { isIndoor } from './autolog.js';
 import { swimReviewVerdict } from './swim-review.js';
-import { bikeReviewVerdict } from './bike-review.js';
+import { bikeReviewVerdict, bandForRep } from './bike-review.js';
 import { judgeBandForType } from './bike-zones.js';
 
 // Session types whose whole intent is one steady band — the only ones an
@@ -175,8 +175,7 @@ const REP_BANDS = {
   // separately and had drifted: Tempo was judged at 83-90% while generation
   // prescribed 76-85%, so a rider at 195 W against a 190-213 W card was
   // told they came in under (found 2026-07-27).
-  bike: Object.fromEntries(['Threshold', 'Sweet Spot', 'VO2 Intervals', 'Tempo']
-    .map(t => [t, judgeBandForType(t)]).filter(([, b]) => b)),
+  // bike bands are resolved LAZILY, in bikeRepBand() below.
 };
 
 /* Phase 4 §7: how far off a prescribed band an OUTDOOR rep may sit before it
@@ -201,6 +200,23 @@ const REP_BANDS = {
 export const REP_TOLERANCE = 0.03;
 export const OUTDOOR_REP_TOLERANCE = 0.08;
 
+/* Phase 5: the SAME band the interval engine uses, resolved at call time.
+ *
+ * These two judged the same laps against different numbers and rendered the
+ * disagreement in one block of the workout sheet — bandForRep unions tempo
+ * and sweet spot for Z3 and judgeBandForType does not, so a rep could read
+ * 'under' in the table and in target in the verdict directly above it. One
+ * table, which is the phase 2 lesson.
+ *
+ * It is a function and not a const because resolving it at module scope
+ * evaluated bandForRep while bike-review.js was still initialising, and its
+ * zone table was still in the temporal dead zone. Lazy is also just correct
+ * here: nothing needs these bands until a rep is judged. */
+const JUDGE_ZONE = { Tempo: 'Z3', 'Sweet Spot': 'Z3', Threshold: 'Z4', 'VO2 Intervals': 'Z5' };
+function bikeRepBand(type) {
+  return JUDGE_ZONE[type] ? bandForRep(type, JUDGE_ZONE[type]) : null;
+}
+
 export function intervalRows({ workout, intervals, paces, activity }) {
   if (!workout || !Array.isArray(intervals)) return null;
   const disc = workout.discipline;
@@ -212,7 +228,9 @@ export function intervalRows({ workout, intervals, paces, activity }) {
   // every time. Fail silent instead, the same principle as a missing FTP
   // (design panel 2026-07-18).
   const hilly = (workout.segments || []).some(s => s && s.terrain === 'hill');
-  const band = hilly ? null : (REP_BANDS[disc] || {})[workout.type] || null;
+  const band = hilly ? null
+    : disc === 'bike' ? bikeRepBand(workout.type)
+      : (REP_BANDS[disc] || {})[workout.type] || null;
   // §7. Absent an activity nothing changes, so a caller that cannot say where
   // the ride happened gets the behaviour it has always had rather than the
   // benefit of a doubt nobody expressed.
