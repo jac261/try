@@ -130,8 +130,6 @@ export function ftpRetestRecommendation({ plan, activities, thresholds, log, mov
        exists at all. It only ever argues for a TEST — §4 forbids the curve
        rewriting the plan and §7 forbids it overwriting FTP, so the strongest
        thing it may do is join the queue of reasons to go and measure. */
-    const curveSignal = staleFtpSignal({ curve: powerCurve, ftpWatts: anchor.ftpWatts, todayISO });
-    if (curveSignal) reasons.push({ key: 'curve-high', latest: curveSignal.date, detail: curveSignal });
     const ev = bikeReviewEvidence((reviews || []).filter(r => !meta.measuredAt || !r.date || r.date >= meta.measuredAt));
     if (ev) reasons.push({ key: ev.direction === 'over' ? 'reps-over' : 'reps-under', latest: ev.latest });
     if (meta.measuredAt && daysBetween(meta.measuredAt, todayISO) > FTP_RETEST_RULES.staleDays) reasons.push({ key: 'stale' });
@@ -142,10 +140,27 @@ export function ftpRetestRecommendation({ plan, activities, thresholds, log, mov
       .map(a => a.date).sort().pop();
     if (lastRide && daysBetween(lastRide, todayISO) > FTP_RETEST_RULES.gapDays) reasons.push({ key: 'returning', latest: lastRide });
     if (!meta.measuredAt && anchor.source !== 'try-test') reasons.push({ key: 'unverified' });
+    const curveSignal = staleFtpSignal({
+      curve: powerCurve, ftpWatts: anchor.ftpWatts, todayISO,
+      ftpSource: meta.deviceSource || null,
+    });
+    /* The curve's evidence is ONE historical ride, up to four months old. The
+       other reasons here are built from several recent, completed,
+       well-matched sessions inside a four-week lookback, and the two
+       staleness horizons were never reconciled: a 97-day-old best counted as
+       fresh while a rider who had not turned a pedal in 75 days counted as
+       returning, and the curve won.
+       So it is consulted LAST, and it stands down entirely when anything
+       recent argues the other way — being told your threshold has moved UP on
+       the same screen that your last three sessions came in UNDER target is
+       not a ranking problem, it is two contradictory claims. */
+    const contradicts = reasons.some(r => r.key === 'reps-under' || r.key === 'drift-down' || r.key === 'returning');
+    if (curveSignal && !contradicts) reasons.push({ key: 'curve-high', latest: curveSignal.date, detail: curveSignal });
+
   }
   if (!reasons.length) return null;
 
-  const order = ['missing', 'curve-high', 'reps-over', 'reps-under', 'drift-up', 'drift-down', 'returning', 'stale', 'icu', 'unverified'];
+  const order = ['missing', 'reps-over', 'reps-under', 'drift-up', 'drift-down', 'returning', 'curve-high', 'stale', 'icu', 'unverified'];
   reasons.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
   const r = reasons[0];
   const weeks = meta.measuredAt ? Math.round(daysBetween(meta.measuredAt, todayISO) / 7) : null;

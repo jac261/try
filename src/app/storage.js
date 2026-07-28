@@ -139,6 +139,16 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'position', JSON.stringify(m)); } catch (e) {}
       return m;
     },
+    /* Phase 7 §5/§6: the last power curve we showed, so the next one has
+       something to be compared against. Without a stored previous there is no
+       historical comparison and, more importantly, no device-change
+       detection: the entire protection against reporting a new power meter as
+       a performance jump only runs when a previous curve exists. */
+    loadPowerCurve() { try { return JSON.parse(localStorage.getItem(ns + 'powercurve') || 'null'); } catch (e) { return null; } },
+    savePowerCurve(curve) {
+      try { localStorage.setItem(ns + 'powercurve', JSON.stringify(curve || null)); } catch (e) {}
+      return curve || null;
+    },
     // Block-focus changes journal in their OWN store: coach.js's
     // weekProposal scans adjustLog for any entry with a headline and
     // defaults a kind-less match to a trim, so a focus entry there would be

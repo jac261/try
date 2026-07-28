@@ -64,21 +64,39 @@ export function riderProfile({ curve, ftpWatts }) {
   if (usable.length < POWER_CURVE_RULES.minPointsForProfile) return null;
   const byDuration = new Map(usable.map(p => [p.durationSec, p]));
 
-  const scores = {};
+  /* NORMALISED, so this describes a SHAPE and not a threshold.
+   *
+   * Every raw score is (watts/ftp - shape)/shape, so a uniform error in the
+   * FTP moves all five capabilities by the same amount and the module cannot
+   * tell a rider's shape from a mis-set threshold. The spread between a
+   * ramp-test FTP and a twenty-minute-test FTP for the same rider is larger
+   * than the +/-6% strength band, so a stale or differently-measured
+   * threshold could manufacture five strengths or five limiters at once.
+   * Subtracting the rider's own mean deviation removes exactly that common
+   * term: what is left is where they sit RELATIVE TO THEMSELVES, which is the
+   * only thing §3 asks for and the only thing a curve over one number can
+   * honestly support. */
+  const raw = {};
   Object.entries(CAPABILITIES).forEach(([key, cap]) => {
     const have = cap.durations.filter(d => byDuration.has(d));
     if (have.length < PROFILE_RULES.minDurationsPerCapability) return;
-    // how far above or below this rider's own shape they sit, averaged over
-    // the durations that describe the capability
-    const devs = have.map(d => {
-      const actual = byDuration.get(d).watts / ftpWatts;
-      return (actual - SHAPE[d]) / SHAPE[d] * 100;
-    });
+    const devs = have.map(d => (byDuration.get(d).watts / ftpWatts - SHAPE[d]) / SHAPE[d] * 100);
+    raw[key] = { have, mean: devs.reduce((t, x) => t + x, 0) / devs.length };
+  });
+  const keys = Object.keys(raw);
+  if (!keys.length) return null;
+  const level = keys.reduce((t, k) => t + raw[k].mean, 0) / keys.length;
+
+  const scores = {};
+  Object.entries(CAPABILITIES).forEach(([key, cap]) => {
+    if (!raw[key]) return;
+    const have = raw[key].have;
     scores[key] = {
       key,
       label: cap.label,
       why: cap.why,
-      pct: Math.round(devs.reduce((t, x) => t + x, 0) / devs.length * 10) / 10,
+      // relative to the rider's own average, so the FTP level cancels
+      pct: Math.round((raw[key].mean - level) * 10) / 10,
       durations: have,
       // a capability read from one duration is a weaker claim than one read
       // from both, and says so rather than being quietly equivalent
@@ -90,6 +108,11 @@ export function riderProfile({ curve, ftpWatts }) {
   const ranked = Object.values(scores).sort((a, b) => b.pct - a.pct);
   return {
     scores,
+    /* How far the whole curve sits from the reference, before normalisation.
+       Kept because it is the honest place to notice a threshold that no
+       longer matches the riding: a rider whose entire curve is 12% above
+       shape has a stale FTP, not five strengths. */
+    levelPct: Math.round(level * 10) / 10,
     ranked,
     strengths: ranked.filter(s => s.pct >= PROFILE_RULES.strongPct).map(s => s.key),
     limiters: ranked.filter(s => s.pct <= PROFILE_RULES.limiterPct).map(s => s.key),
@@ -97,17 +120,27 @@ export function riderProfile({ curve, ftpWatts }) {
        feature, and the test that guards it is the point of §3. A profile with
        nothing above or below the bands is a rider who is even across the
        range, which is a real and common answer rather than a missing one. */
-    even: ranked.every(s => s.pct < PROFILE_RULES.strongPct && s.pct > PROFILE_RULES.limiterPct),
-    text: profileText(ranked),
+    /* Only claimable when the range was actually covered. With five points
+       all at the short end, three capabilities scored and the module told the
+       athlete their power was "even across the range" having seen one end of
+       it. */
+    even: Object.keys(scores).length === Object.keys(CAPABILITIES).length
+      && ranked.every(s => s.pct < PROFILE_RULES.strongPct && s.pct > PROFILE_RULES.limiterPct),
+    covered: Object.keys(scores).length,
+    capabilities: Object.keys(CAPABILITIES).length,
+    text: profileText(ranked, Object.keys(scores).length, Object.keys(CAPABILITIES).length),
   };
 }
 
-function profileText(ranked) {
+function profileText(ranked, covered, total) {
   const strong = ranked.filter(s => s.pct >= PROFILE_RULES.strongPct);
   const weak = ranked.filter(s => s.pct <= PROFILE_RULES.limiterPct);
   const bits = [];
   if (!strong.length && !weak.length) {
-    bits.push('Your power is even across the range, relative to your own threshold. That is a genuine result rather than a missing one, and it means no one duration is holding you back.');
+    bits.push(covered === total
+      ? 'Your power is even across the range, relative to your own threshold. That is a genuine result rather than a missing one, and it means no one duration is holding you back.'
+      : 'Nothing stands out in the part of your range you have bests for, but ' + (total - covered)
+        + ' of the ' + total + ' areas have no recent best to read, so this is a partial picture.');
   } else {
     if (strong.length) bits.push('Relative to your own threshold you are strongest at '
       + strong.map(s => s.label.toLowerCase()).join(' and ') + '.');

@@ -66,7 +66,10 @@ export function curvePoint(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const durationSec = Number(raw.durationSec);
   const watts = Number(raw.watts);
-  if (!CURVE_DURATIONS.includes(durationSec) || !(watts > 0)) return null;
+  // Infinity > 0 is true and Math.round(Infinity) is Infinity, so the old
+  // guard passed a non-finite reading straight through to "Infinity W" on a
+  // card. A number that is not finite is not a measurement.
+  if (!CURVE_DURATIONS.includes(durationSec) || !Number.isFinite(watts) || watts <= 0) return null;
   return {
     durationSec,
     watts: Math.round(watts),
@@ -75,7 +78,14 @@ export function curvePoint(raw) {
     source: raw.source || null,      // the device that recorded it
     bike: raw.bike || null,
     indoor: raw.indoor == null ? null : !!raw.indoor,
-    quality: QUALITY_ORDER.includes(raw.quality) ? raw.quality : 'low',
+    /* Absent means UNKNOWN, not bad. Defaulting to 'low' looked cautious and
+       was actually a silent kill switch: the profile filters to medium and
+       above, so a backend that shipped the endpoint without a confidence
+       signal — which the handoff explicitly allows — would have left §3, §4
+       and §6's implication permanently dark with no error anywhere. Only an
+       explicit 'low' is treated as untrusted. */
+    quality: QUALITY_ORDER.includes(raw.quality) ? raw.quality : 'medium',
+    qualityKnown: QUALITY_ORDER.includes(raw.quality),
   };
 }
 
@@ -126,8 +136,19 @@ export function staleDurations(curve, todayISO) {
 export function comparable(a, b) {
   if (!a || !b) return false;
   if (a.durationSec !== b.durationSec) return false;
-  if (a.source && b.source && a.source !== b.source) return false;
-  if (a.indoor != null && b.indoor != null && a.indoor !== b.indoor) return false;
+  /* FAILS CLOSED. This used to require BOTH sides to name a source before it
+     would refuse, so a point with no source was comparable to a point from
+     any meter on earth — and curvePoint normalises a missing source to null,
+     so one older curve stored before the field existed, or one backend that
+     omits it on historical rows, silently switched the whole §5 protection
+     off and reported a 5% hardware difference as a 5% gain at every duration.
+     An unknown source is not a matching source. The same reasoning applies to
+     the bike and the environment: §5 lists all three as things a point must
+     retain, and retaining them without consulting them is worse than not
+     having them, because it looks handled. */
+  if (a.source !== b.source) return false;
+  if (a.bike !== b.bike) return false;
+  if (a.indoor !== b.indoor) return false;
   return true;
 }
 
@@ -157,9 +178,26 @@ export function curveComparison({ current, previous }) {
       status: Math.abs(deltaPct) < 1 ? 'unchanged' : deltaPct > 0 ? 'improved' : 'declined',
     };
   });
+  /* Durations the athlete used to have a best at and no longer does. The
+     comment above claimed every duration lands in exactly one bucket and then
+     mapped over the CURRENT points only, so this case fell through a gap —
+     and with the freshness window the handoff asks for, it is the normal
+     case rather than an edge one. */
+  const current_ = new Set(current.points.map(p => p.durationSec));
+  previous.points.filter(p => !current_.has(p.durationSec)).forEach(p => {
+    rows.push({ durationSec: p.durationSec, status: 'gone', wasWatts: p.watts });
+  });
+  rows.sort((a, b) => a.durationSec - b.durationSec);
   const incomparable = rows.filter(r => r.status === 'incomparable');
   const sourceChanged = incomparable.length > 0 && incomparable.some(r => /power meter/.test(r.why || ''));
-  const shifts = incomparable.filter(r => r.wasWatts > 0).map(r => (r.watts - r.wasWatts) / r.wasWatts * 100);
+  // Only the rows that changed METER. Averaging in rows that differ for some
+  // other reason (a ride moved indoors, a different bike) produced a number
+  // presented as a calibration offset that was partly not one, and both error
+  // directions are bad: it can hide a real device shift inside an average, or
+  // manufacture one that never happened.
+  const shifts = incomparable
+    .filter(r => r.wasWatts > 0 && /power meter/.test(r.why || ''))
+    .map(r => (r.watts - r.wasWatts) / r.wasWatts * 100);
   const shift = shifts.length
     ? Math.round(shifts.reduce((t, x) => t + x, 0) / shifts.length * 10) / 10 : null;
   return {
@@ -167,6 +205,7 @@ export function curveComparison({ current, previous }) {
     improved: rows.filter(r => r.status === 'improved').map(r => r.durationSec),
     declined: rows.filter(r => r.status === 'declined').map(r => r.durationSec),
     incomparable: incomparable.map(r => r.durationSec),
+    gone: rows.filter(r => r.status === 'gone').map(r => r.durationSec),
     /* §5's headline case, stated once rather than per row: a whole-curve jump
        that coincides with a device change is a device change until proven
        otherwise. */
@@ -187,11 +226,24 @@ export function curveComparison({ current, previous }) {
    power? This is the one training application that can be answered from the
    curve alone, and it only ever RECOMMENDS A TEST — §4 is explicit that the
    curve must not rewrite the plan, and §7 that it must not overwrite FTP. */
-export function staleFtpSignal({ curve, ftpWatts, todayISO }) {
+export function staleFtpSignal({ curve, ftpWatts, todayISO, previous, ftpSource }) {
   if (!curve || !ftpWatts) return null;
   const p20 = curve.points.find(p => p.durationSec === 1200);
   if (!p20 || p20.quality === 'low') return null;
   if (todayISO && staleDurations(curve, todayISO).includes(1200)) return null;
+  /* §5, APPLIED WHERE IT ACTUALLY MATTERS. The module builds a whole detector
+     for hardware-versus-fitness and then this — the ONE signal that reaches
+     the athlete — used to ignore it entirely, so a new meter reading six per
+     cent high told a rider their threshold had moved. A twenty-minute best
+     may only argue about a threshold if it was measured the same way the
+     threshold was.
+     Indoors versus outdoors counts too: a trainer and a road are not the same
+     measurement, and a threshold set on one is not evidence about the other. */
+  if (previous) {
+    const q20 = previous.points.find(p => p.durationSec === 1200);
+    if (q20 && !comparable(p20, q20)) return null;
+  }
+  if (ftpSource && p20.source && ftpSource !== p20.source) return null;
   // a twenty-minute best is conventionally a little above threshold; well
   // above it means the threshold is behind the rider
   const impliedFtp = p20.watts * FTP_FROM_20MIN;

@@ -484,6 +484,14 @@ export function App({ storage, getToken, user }) {
      wired rather than omitted so the day the endpoint lands is a fetch
      change and not a feature build. */
   const [powerCurveRaw] = useState(null);
+  /* The previously stored curve, so §6's historical comparison and §5's
+     device-change detection have something to compare against. Without a
+     stored previous there is no comparison at all, and the whole
+     hardware-versus-fitness protection is unreachable however good the data
+     gets. Kept in the same local store the fuel and position answers use. */
+  const [prevPowerCurve] = useState(() => storage.loadPowerCurve());
+  // the phase 5 review evidence the retest also reads
+  const bikeReviews = useMemo(() => [], []);
   const [focusLog, setFocusLog] = useState(() => storage.loadFocusLog());
   const [blockReviewed, setBlockReviewed] = useState(() => storage.loadBlockReviewed());
   // The one narrow write a focus change is allowed: patch the single field,
@@ -1088,7 +1096,7 @@ export function App({ storage, getToken, user }) {
   // the same reason the swim one is: measuring and updating are different
   // things, but two banners about one number is nagging.
   const ftpRetest = (!eftp || eftp.sport !== 'bike')
-    ? T.ftpRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()) })
+    ? T.ftpRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()) , powerCurve: T.powerCurve(powerCurveRaw), reviews: bikeReviews })
     : null;
   const addCssTestToWeek = () => {
     const r = T.addCssTest(plan, T.iso(new Date()));
@@ -1294,7 +1302,7 @@ export function App({ storage, getToken, user }) {
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={null} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}

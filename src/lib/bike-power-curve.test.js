@@ -67,7 +67,11 @@ describe('§7: every point carries source and date metadata', () => {
     const bare = curvePoint({ durationSec: 300, watts: 300 });
     expect(bare.source).toBe(null);
     expect(bare.indoor).toBe(null);
-    expect(bare.quality).toBe('low');      // untrusted until told otherwise
+    // unknown is not bad: defaulting an absent confidence signal to 'low' was
+    // a silent kill switch, since the profile filters to medium and above
+    expect(bare.quality).toBe('medium');
+    expect(bare.qualityKnown).toBe(false);
+    expect(curvePoint({ durationSec: 300, watts: 300, quality: 'low' }).quality).toBe('low');
   });
 });
 
@@ -321,5 +325,179 @@ describe('nothing here is a model without a caller', () => {
       expect(src.split(k).length - 1, 'POWER_CURVE_RULES.' + k + ' is declared but never used').toBeGreaterThan(1));
     Object.keys(PROFILE_RULES).forEach(k =>
       expect(src.split(k).length - 1, 'PROFILE_RULES.' + k + ' is declared but never used').toBeGreaterThan(1));
+  });
+});
+
+
+/* Gauntlet regressions. Each reproduces a defect the review agents
+   demonstrated end to end. */
+const pt = over => curvePoint({ durationSec: 1200, watts: 263, source: 'A', bike: 'tt', indoor: false, quality: 'high', ...over });
+
+describe('gauntlet: comparability fails CLOSED', () => {
+  it('an unknown source is not a matching source', () => {
+    /* The guard required BOTH sides to name a source before refusing, so a
+       point with no source compared equal to a point from any meter on earth
+       — and one older curve stored before the field existed switched the
+       whole §5 protection off. */
+    expect(comparable(pt(), pt({ source: null }))).toBe(false);
+    expect(comparable(pt({ source: null }), pt({ source: null }))).toBe(true);
+  });
+
+  it('checks the bike and the environment, which §5 also requires', () => {
+    expect(comparable(pt(), pt({ bike: 'road' }))).toBe(false);
+    expect(comparable(pt(), pt({ indoor: true }))).toBe(false);
+    expect(comparable(pt(), pt({ indoor: null }))).toBe(false);
+  });
+
+  it('a curve with no sources at all is not silently improved', () => {
+    const strip = p => ({ ...p, source: undefined });
+    const previous = powerCurve(balanced().map(strip));
+    const current = powerCurve(balanced().map(p => ({ ...strip(p), watts: Math.round(p.watts * 1.05), source: 'NewMeter' })));
+    const cmp = curveComparison({ current, previous });
+    expect(cmp.improved, 'a meter change was reported as a gain at every duration').toEqual([]);
+    expect(cmp.incomparable.length).toBe(CURVE_DURATIONS.length);
+  });
+});
+
+describe('gauntlet: the stale-FTP signal obeys the detector the module built', () => {
+  it('says nothing when the best came from a different meter than the last curve', () => {
+    const previous = powerCurve(balanced({ source: 'Old' }));
+    const current = powerCurve(balanced({ source: 'New' }).map(p => (p.durationSec === 1200
+      ? { ...p, watts: Math.round(FTP * 1.2) } : p)));
+    // without the previous curve it fires; with it, the meter change silences it
+    expect(staleFtpSignal({ curve: current, ftpWatts: FTP, todayISO: TODAY })).toBeTruthy();
+    expect(staleFtpSignal({ curve: current, previous, ftpWatts: FTP, todayISO: TODAY })).toBe(null);
+  });
+
+  it('says nothing when the threshold was set on a different device', () => {
+    const curve = powerCurve(balanced({ source: 'New' }).map(p => (p.durationSec === 1200
+      ? { ...p, watts: Math.round(FTP * 1.2) } : p)));
+    expect(staleFtpSignal({ curve, ftpWatts: FTP, todayISO: TODAY, ftpSource: 'Old' })).toBe(null);
+    expect(staleFtpSignal({ curve, ftpWatts: FTP, todayISO: TODAY, ftpSource: 'New' })).toBeTruthy();
+  });
+});
+
+describe('gauntlet: a non-finite reading is not a reading', () => {
+  it('rejects Infinity rather than rendering it', () => {
+    expect(curvePoint({ durationSec: 1200, watts: Infinity })).toBe(null);
+    expect(curvePoint({ durationSec: 1200, watts: -Infinity })).toBe(null);
+    expect(curvePoint({ durationSec: 1200, watts: NaN })).toBe(null);
+    expect(powerCurve([{ durationSec: 1200, watts: Infinity, quality: 'high' }])).toBe(null);
+  });
+});
+
+describe('gauntlet: the shift estimate describes the DEVICE change only', () => {
+  it('does not average in rows that differ for other reasons', () => {
+    const previous = powerCurve(balanced({ source: 'Old' }));
+    // one duration changed meter by 2%; the rest merely moved indoors
+    const current = powerCurve(balanced().map(p => (p.durationSec === 1200
+      ? { ...p, source: 'New', watts: Math.round(p.watts * 1.02) }
+      : { ...p, source: 'Old', indoor: true, watts: Math.round(p.watts * 1.4) })));
+    const cmp = curveComparison({ current, previous });
+    expect(cmp.sourceChanged).toBe(true);
+    // the 40% indoor rows must not dilute the calibration estimate
+    expect(cmp.sourceShiftPct).toBeCloseTo(2, 0);
+    expect(cmp.looksLikeCalibration).toBe(true);
+  });
+});
+
+describe('gauntlet: a duration that disappeared is a case, not a silence', () => {
+  it('buckets durations present before and absent now', () => {
+    const previous = powerCurve(balanced());
+    const current = powerCurve(balanced().filter(p => p.durationSec !== 5));
+    const cmp = curveComparison({ current, previous });
+    expect(cmp.gone).toEqual([5]);
+    expect(cmp.rows.find(r => r.durationSec === 5).status).toBe('gone');
+  });
+});
+
+describe('gauntlet: the profile describes a shape, not a threshold', () => {
+  it('a uniformly wrong FTP does not manufacture five strengths', () => {
+    /* Every raw score is relative to ftpWatts, so a stale or
+       differently-measured threshold moved all five capabilities together —
+       and the spread between a ramp-test FTP and a 20-minute-test FTP is
+       wider than the strength band, so it could invent a whole profile. */
+    const curve = powerCurve(balanced());
+    const right = riderProfile({ curve, ftpWatts: FTP });
+    const stale = riderProfile({ curve, ftpWatts: Math.round(FTP * 0.88) });
+    expect(stale.strengths, 'a stale FTP invented strengths').toEqual(right.strengths);
+    expect(stale.limiters).toEqual(right.limiters);
+    stale.ranked.forEach(sc => expect(Math.abs(sc.pct - right.scores[sc.key].pct)).toBeLessThan(0.5));
+    // but the level shift is still reported, because it is the real finding
+    expect(stale.levelPct).toBeGreaterThan(right.levelPct + 5);
+  });
+
+  it('does not call a rider even having seen one end of their range', () => {
+    const shortOnly = powerCurve(balanced().filter(p => p.durationSec <= 180));
+    const p = riderProfile({ curve: shortOnly, ftpWatts: FTP });
+    expect(p.even).toBe(false);
+    expect(p.covered).toBeLessThan(p.capabilities);
+    expect(p.text).toMatch(/partial picture/);
+  });
+});
+
+describe('gauntlet: the curve never outranks or contradicts recent evidence', () => {
+  const planFor = () => {
+    const pl = generatePlan({
+      name: 'S', raceType: 'half', fitness: 'intermediate', fivekSec: 1200, css100Sec: 120,
+      ftp: FTP, weightKg: 75, daysPerWeek: 6, trainingDays: [0, 1, 2, 3, 5, 6], longDay: 5,
+      startDate: '2026-06-01', raceDate: '2026-11-01',
+    });
+    pl.profile.ftpMeta = { source: 'try-test', measuredAt: '2026-05-01', confidence: 'high' };
+    return pl;
+  };
+  const strongCurve = powerCurve(balanced().map(p => (p.durationSec === 1200
+    ? { ...p, watts: Math.round(FTP * 1.2), date: '2026-06-10' } : { ...p, date: '2026-06-10' })));
+  const under = { type: 'Threshold', powerAdherence: -8, confidence: 'high', completion: 100, date: '2026-06-12' };
+
+  it('stands down when the last few sessions argue the opposite way', () => {
+    const rec = ftpRetestRecommendation({
+      plan: planFor(), activities: [], thresholds: null, log: {}, moves: {}, todayISO: '2026-06-15',
+      powerCurve: strongCurve, reviews: [under, under, under],
+    });
+    expect(rec.reason, 'told the threshold moved UP beside three sessions that came in UNDER').toBe('reps-under');
+    expect(rec.reasons).not.toContain('curve-high');
+  });
+
+  it('stands down for a rider who has not ridden in months', () => {
+    const rec = ftpRetestRecommendation({
+      plan: planFor(), thresholds: null, log: {}, moves: {}, todayISO: '2026-06-15',
+      powerCurve: strongCurve,
+      activities: [{ id: 'a', type: 'Ride', date: '2026-03-20', movingTimeSec: 3600 }],
+    });
+    expect(rec.reason).toBe('returning');
+    expect(rec.reasons).not.toContain('curve-high');
+  });
+
+  it('but still speaks when nothing else does', () => {
+    const rec = ftpRetestRecommendation({
+      plan: planFor(), activities: [], thresholds: null, log: {}, moves: {}, todayISO: '2026-06-15',
+      powerCurve: strongCurve,
+    });
+    expect(rec.reason).toBe('curve-high');
+  });
+});
+
+describe('gauntlet: the WIRING is asserted, not just the function', () => {
+  it('App actually hands the curve to the retest', () => {
+    /* The previous test in this file called ftpRetestRecommendation directly
+       with a powerCurve and passed, while App omitted the argument entirely —
+       so the one behavioural application of the whole phase was dead and a
+       green test said otherwise. Testing a function proves a function. */
+    const app = readFileSync(new URL('../app/App.jsx', import.meta.url), 'utf8');
+    const call = app.match(/T\.ftpRetestRecommendation\(\{[^}]*\}\)/);
+    expect(call, 'no retest call site found in App').toBeTruthy();
+    expect(call[0], 'App does not pass powerCurve to the retest').toMatch(/powerCurve/);
+  });
+
+  it('the curve card is rendered by something, not merely defined', () => {
+    // the no-caller guard counts references across src files, and a component
+    // referencing the lib satisfies it whether or not anything renders the
+    // component
+    const pv = readFileSync(new URL('../features/progress/ProgressView.jsx', import.meta.url), 'utf8');
+    expect(pv).toMatch(/<PowerCurveCard/);
+    const app = readFileSync(new URL('../app/App.jsx', import.meta.url), 'utf8');
+    expect(app).toMatch(/previousPowerCurve=\{prevPowerCurve\}/);
+    expect(app).toMatch(/loadPowerCurve/);
   });
 });

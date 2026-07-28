@@ -589,7 +589,11 @@ For every point, please include:
 - `bike` — where available
 - `indoor` — boolean, since a trainer and a road are not the same measurement
 - `quality` — `low` | `medium` | `high`, or whatever confidence signal exists
-  upstream. Absent is read as `low` and such points are shown but never judged.
+  upstream. Absent is read as UNKNOWN and treated as usable, because a backend
+  saying nothing is not the same as a backend saying the reading is bad. Only
+  an explicit `low` marks a point as shown-but-never-judged. (We had this the
+  other way round at first, which made an omitted field a silent kill switch
+  for the whole profile.)
 
 Optionally, a freshness window parameter on the query (for example "best in
 the last 90 days"), so the client can ask for a current curve rather than an
