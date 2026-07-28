@@ -431,3 +431,51 @@ down.
 
 Nothing here changes any existing response. The client reads all of it
 defensively and the analysis stays behind a flag until the fields arrive.
+
+## 28 July — bike ride execution: elapsed time, and trainer control state
+
+Two asks, both additive, both for the same purpose: judging an outdoor ride
+by what the rider did rather than by what the road did to their averages.
+
+### 1. `elapsed_time` on the activity (the one that matters)
+
+We currently receive `movingTimeSec` and averages. Nothing else. That means
+we cannot tell a rider who stopped at four junctions from a rider who had a
+bad day: both arrive as one number that is lower than the session asked for.
+
+Outdoor rides are currently given a wider allowance on the low side of a
+prescribed band, because interruptions can only ever remove work from an
+average. That is the honest thing to do without evidence, but it is blunt: it
+forgives the bad day too.
+
+`elapsed_time` is already on the upstream activity and needs no computation
+from you. With it and `moving_time` we can measure the stopped fraction
+directly, and say "your efforts were right, the road cost you eight minutes"
+instead of widening a tolerance and hoping.
+
+Requested as `elapsedTimeSec` alongside the existing `movingTimeSec`, raw and
+unmodified. Where the two are equal we will treat the ride as uninterrupted
+rather than assuming the field is missing, so please send it even when it
+matches.
+
+### 2. Trainer control state, when it is available (`erg`)
+
+Deferred, and stays deferred until the data exist — nothing in the client
+turns on this. Recording it here so the field has a name if it ever becomes
+available upstream.
+
+A smooth power trace means one thing under trainer control and something
+quite different under the rider's own pacing, and the difference changes what
+a review can honestly say: whether the rider held the effort, or whether a
+trainer held it for them.
+
+If the upstream activity ever exposes a trainer-control flag, please pass it
+through as `erg` (boolean, absent when unknown). Absent must mean unknown and
+not false: we would rather say nothing than credit a rider's pacing to a
+trainer, or a trainer's to the rider.
+
+To be explicit about scope: this would only ever change how an execution is
+EXPLAINED. It would not change the session, the targets or the verdict
+thresholds.
+
+Neither ask changes any existing response, and both are read defensively.

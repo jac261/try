@@ -6,6 +6,7 @@ import { weekRange } from '@/lib/schedule.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutProfile } from '@/components/WorkoutProfile.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
+import { BikeExecution } from '@/components/BikeExecution.jsx';
 
 const D = T.DISCIPLINES;
 
@@ -132,6 +133,17 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           {w.distance && <div className="s"><b>{w.distEst ? '~' : ''}{w.distance}</b><span>{w.unit}</span></div>}
           <div className="s"><b>{disc.name}</b><span>{w.type}</span></div>
         </div>}
+        {/* Phase 4 §2: the tilde says the distance is estimated; this says
+            what the estimate assumed, so it can be judged rather than
+            trusted. Bike only, because it is the only modelled one. */}
+        {(() => {
+          const est = T.bikeDistanceEstimate(w, plan.paces);
+          if (!est) return null;
+          return <div className="lead" style={{ margin: '2px 0 0', fontSize: 12 }}>
+            ~{est.distanceKm} km is modelled from this session's own mix ({est.assumptions.zoneMix}) at
+            your current strength, not measured. Your actual distance depends on terrain, wind and who you ride with.
+          </div>;
+        })()}
         {why && <div className="why" style={{ borderColor: disc.color }}><span className="why-label">Why this session</span>{why}</div>}
         <div className="section-title" style={{ margin: '8px 0 2px' }}>{!w.race && !w.bRace && <InfoLink onOpen={onSupport} topic="workout-library" />}{w.race || w.bRace ? 'Race plan' : 'Workout'}</div>
         <WorkoutProfile w={w} />
@@ -142,6 +154,12 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             {s.min ? <div className="m">{s.min} min</div> : null}
           </div>
         ))}
+        {/* Phase 4 §5: the same card is a different session on a trainer and
+            on a road, so it says which it was written for and what changes in
+            the other place. The choice is local to this sheet on purpose —
+            it changes the wording, never the session, so there is nothing
+            about it worth persisting or syncing. */}
+        <BikeExecution w={w} profile={plan.profile} />
         {!w.race && !w.bRace && onMove && <>
           <div className="section-title" style={{ margin: '18px 0 8px' }}>Reschedule
             {moved && <a className="reset" {...tap(() => onResetMove(w.id))}> ↺ reset</a>}</div>
@@ -208,12 +226,15 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
               {(() => {
                 // Rep-by-rep (or km splits): honest per-interval numbers, with
                 // verdict dots only where the session type defines a target.
-                const it = T.intervalRows({ workout: w, intervals: reps, paces: plan.paces });
+                const it = T.intervalRows({ workout: w, intervals: reps, paces: plan.paces, activity });
                 if (!it) return null;
                 const toneCol = { good: 'var(--run)', warn: '#f6b27a', info: 'var(--muted)' };
                 return (
                   <div className="rep-table">
                     <div className="rd-trend-head" style={{ marginTop: 12 }}><span>{it.judged ? 'Reps' : 'Splits'}</span><span>{it.summary}</span></div>
+                    {/* §7: said only when the allowance actually changed a
+                        verdict, so it explains rather than disclaims. */}
+                    {it.note && <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{it.note}</div>}
                     {it.rows.map(r => (
                       <div className="seg" key={r.n} style={{ padding: '5px 0' }}>
                         <div className="bar" style={{ background: r.tone ? toneCol[r.tone] : 'var(--chip)' }} />

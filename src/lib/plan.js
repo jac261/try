@@ -6,6 +6,7 @@ import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisp
 import { swimZoneTargets } from './swim-zones.js';
 import { drillPool, focusOrder, saneTechnique } from './swim-drills.js';
 import { bikeMainSet, levelGate, mainSetMinutes } from './bike-sizing.js';
+import { bikeDistance } from './bike-distance.js';
 import { OW_SKILLS, OW_SAFETY, OW_SKILL_CEILING, owCategory } from './swim-open-water.js';
 import { weakBias, weakestLink } from './weakest.js';
 import { RIEGEL_EXP } from './runstats.js';
@@ -154,18 +155,9 @@ function runDistance(segs, pc) {
 // 30 km/h guess). Speeds are km/h for a rider on flat-to-rolling roads,
 // scaled by the athlete's watts per kilo. Still an estimate (no terrain,
 // wind, draft or position model), so callers keep distEst and the tilde.
-const ZONE_KMH = { Z1: 24, Z2: 28, Z3: 32, Z4: 35, Z5: 37 };
-const REF_WKG = 2.6; // the intermediate rung ZONE_KMH is written for
-function bikeDistance(segs, pc) {
-  const wkg = (pc && pc.bikeWkg) || REF_WKG;
-  // Speed rises far more slowly than power (aerodynamic drag), so scale on a
-  // cube root: double the watts per kilo is about a quarter more speed.
-  const scale = Math.pow(wkg / REF_WKG, 1 / 3);
-  let km = 0;
-  const add = (min, zone) => { km += (min || 0) / 60 * (ZONE_KMH[zone] || ZONE_KMH.Z2) * scale; };
-  segs.forEach(s => { if (s.blocks) s.blocks.forEach(b => add(b.min, b.zone)); else add(s.min, s.zone); });
-  return Math.round(km);
-}
+// The model and its table now live in bike-distance.js, with the assumptions
+// it rests on (phase 4 §1/§2). Same numbers: a phase that documented the
+// estimate by moving everyone's distances would have defeated itself.
 function swimDistance(segs) {
   let m = 0;
   segs.forEach(s => { if (s.swim) m += s.swim.distM != null ? s.swim.distM : (s.swim.n || 0) * (s.swim.repM || 0); });

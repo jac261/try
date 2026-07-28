@@ -25,7 +25,7 @@ export function buildRecap({ workout, activity, intervals, route, paces, plan, l
   const sr = workout.discipline === 'swim' && !workout.adhoc && intervals
     ? swimReview({ workout, activity, intervals, paces, feel: (log && log[workout.id] && log[workout.id].feel) || activity.feel }) : null;
   const rv = reviewActivity({ workout, activity, paces, swimReview: sr }) || { stats: [], verdicts: [] };
-  const it = intervalRows({ workout, intervals, paces });
+  const it = intervalRows({ workout, intervals, paces, activity });
   const slides = [];
 
   // 1 — headline: what you did, and the sharpest verdict available.

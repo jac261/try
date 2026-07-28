@@ -54,11 +54,17 @@ export function reviewActivity({ workout, activity, paces, log, swimReview }) {
   const actualMin = a.movingTimeSec / 60;
 
   stats.push(['Time', fmtDur(a.movingTimeSec)]);
-  if (a.distance) stats.push(['Distance', (a.distance / 1000).toFixed(a.distance >= 10000 ? 0 : 1) + ' km']);
   // Indoor recordings carry a virtual distance, so a derived pace or speed
   // would be a fabricated number. The recorded rows already suppress it; this
   // review sits one screen deeper and must agree (gauntlet catch 2026-07-18).
   const derived = a.distance && !isIndoor(a);
+  // ...and so is the DISTANCE ITSELF, which this line used to print
+  // unconditionally right above a comment explaining why it must not be
+  // trusted. A turbo's 30 km is a number its wheel model invented; showing it
+  // as "Distance 30 km" beside a suppressed speed presented the fabricated
+  // half and hid the honest one. §4's acceptance criterion is that indoor
+  // speed AND distance stay suppressed (phase 4 §4).
+  if (derived) stats.push(['Distance', (a.distance / 1000).toFixed(a.distance >= 10000 ? 0 : 1) + ' km']);
   if (derived && w.discipline === 'run') stats.push(['Avg pace', fmtPace(secPerKm(a)) + ' /km']);
   if (derived && w.discipline === 'swim') stats.push(['Avg pace', swimPace(secPer100(a))]);
   if (derived && w.discipline === 'bike') stats.push(['Avg speed', (a.distance / 1000 / (a.movingTimeSec / 3600)).toFixed(1) + ' km/h']);
@@ -164,7 +170,29 @@ const REP_BANDS = {
     .map(t => [t, judgeBandForType(t)]).filter(([, b]) => b)),
 };
 
-export function intervalRows({ workout, intervals, paces }) {
+/* Phase 4 §7: how far off a prescribed band an OUTDOOR rep may sit before it
+ * is called off target.
+ *
+ * Outdoors the road is in the session. A junction, a descent, a car, a
+ * gradient that runs out: each puts zero-power seconds inside a rep, and a
+ * rep average is arithmetic, so the effort reads low even when it was ridden
+ * exactly right. Indoors none of that exists, which is why the shipped
+ * tolerance is tight and why applying it outdoors is the "indoor-style
+ * second-by-second adherence" the spec says outdoor rides must not be judged
+ * by.
+ *
+ * IT IS DELIBERATELY ONE-SIDED. Interruptions can only ever remove work from
+ * an average, never add it, so the low side widens and the high side does
+ * not: a rider who went too hard outdoors went too hard, and the road is no
+ * defence. Anything more than this needs data the app does not have — the
+ * activity feed carries movingTimeSec and averages, with no elapsed time and
+ * no streams, so a stop cannot be distinguished from a bad day. That is
+ * recorded as a backend ask rather than guessed at, because a wrong reason
+ * attached to a real verdict is worse than no reason. */
+export const REP_TOLERANCE = 0.03;
+export const OUTDOOR_REP_TOLERANCE = 0.08;
+
+export function intervalRows({ workout, intervals, paces, activity }) {
   if (!workout || !Array.isArray(intervals)) return null;
   const disc = workout.discipline;
   const pc = paces || {};
@@ -176,7 +204,12 @@ export function intervalRows({ workout, intervals, paces }) {
   // (design panel 2026-07-18).
   const hilly = (workout.segments || []).some(s => s && s.terrain === 'hill');
   const band = hilly ? null : (REP_BANDS[disc] || {})[workout.type] || null;
-  let judged = 0, onTarget = 0;
+  // §7. Absent an activity nothing changes, so a caller that cannot say where
+  // the ride happened gets the behaviour it has always had rather than the
+  // benefit of a doubt nobody expressed.
+  const outdoor = disc === 'bike' && !!activity && !isIndoor(activity);
+  const lowTol = outdoor ? OUTDOOR_REP_TOLERANCE : REP_TOLERANCE;
+  let judged = 0, onTarget = 0, forgiven = 0;
   const rows = work.map((i, idx) => {
     const row = {
       n: idx + 1,
@@ -192,7 +225,9 @@ export function intervalRows({ workout, intervals, paces }) {
     if (band && disc === 'bike' && row.watts != null && pc.ftp && !pc.ftpEstimated) {
       judged++;
       const p = row.watts / pc.ftp;
-      row.tone = p > band[1] + 0.03 ? 'warn' : p < band[0] - 0.03 ? 'info' : 'good';
+      row.tone = p > band[1] + REP_TOLERANCE ? 'warn' : p < band[0] - lowTol ? 'info' : 'good';
+      // did the road, rather than the rider, make the difference to this row?
+      if (outdoor && row.tone === 'good' && p < band[0] - REP_TOLERANCE) forgiven++;
     } else if (band && disc !== 'bike' && row.paceSec && pc[disc] && pc[disc][band[0]]) {
       judged++;
       const target = pc[disc][band[0]], tol = band[1];
@@ -204,5 +239,11 @@ export function intervalRows({ workout, intervals, paces }) {
   const summary = judged
     ? onTarget + ' of ' + judged + ' rep' + (judged === 1 ? '' : 's') + ' on target'
     : rows.length + ' split' + (rows.length === 1 ? '' : 's');
-  return { rows, summary, judged };
+  // Only said when it actually changed a verdict, so it reads as an
+  // explanation rather than a disclaimer printed on every outdoor ride.
+  const note = forgiven
+    ? 'Judged with outdoor allowance: ' + (forgiven === 1 ? 'one rep' : forgiven + ' reps')
+      + ' averaged low, which is what junctions, descents and coasting do to a rep average.'
+    : null;
+  return { rows, summary, judged, note, outdoor };
 }
