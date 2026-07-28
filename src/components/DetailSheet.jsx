@@ -279,6 +279,20 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
                   </div>
                 );
               })()}
+              {(() => {
+                /* Swim phase 8's stroke metrics, behind their flag. The gate
+                   function shipped with ZERO callers, so even with the flag
+                   on and the backend fields present nothing would ever have
+                   rendered — a gate with no door, the same class as the bike
+                   load model and the brick engine before their audits. The
+                   flag is off and the fields are absent, so this renders
+                   nothing today; the day both change is a flip, not a build. */
+                if (w.discipline !== 'swim' || !reps) return null;
+                if (!T.strokeMetricsEnabled({ activity, laps: reps, enabled: T.STROKE_METRICS_FLAG })) return null;
+                const ss = T.strokeSessionSummary({ activity, laps: reps, poolLengthM: plan.paces && plan.paces.pool ? T.poolLengthM(plan.paces.pool) : undefined });
+                if (!ss || !ss.summary) return null;
+                return <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{ss.summary}</div>;
+              })()}
             </div>
           );
         })()}

@@ -38,7 +38,6 @@ export const DASH_RULES = {
   completionFloor: 0.7,  // below this, consistency is the limiter
   fadeConcern: 3,        // percent slower in the closing reps
   minSessions: 4,        // below this there is no completion rate worth naming
-  owRecentDays: 42,
   owRaceSoonDays: 56,    // an open-water race this close wants exposure
 };
 
@@ -286,10 +285,20 @@ export function swimLimiter(d, today) {
   // quality half of this sentence would be manufactured from absence
   // (review catch 2026-07-27).
   const hasQuality = !!(d.quality.adherence && d.quality.adherence.value != null);
+  /* An all-clear and an absence of data are different answers, and this
+     branch used to give both the same headline: a day-one athlete read
+     "Nothing is obviously holding your swim back" in the largest text on the
+     card, directly above its own evidence line saying there was not enough
+     data to name a limiter. The bike dashboard fixed this in its gauntlet;
+     the fix is now on both sides. */
+  if (!(d.distribution.completion && d.distribution.completion.value != null)) {
+    return out('too-early', 'Not enough swimming yet to name a limiter',
+      ['Your plan has not been running long enough for the figures below to mean much.',
+        'They fill in as sessions are completed.'],
+      ['The plan progresses as written in the meantime.']);
+  }
   return out('none', 'Nothing is obviously holding your swim back',
-    [d.distribution.completion && d.distribution.completion.value != null
-      ? 'You are completing your planned swims.'
-      : 'Not enough completed swims yet to name a limiter.',
+    ['You are completing your planned swims.',
       ...(hasQuality ? ['Your quality sessions are landing on target.'] : [])],
     ['The plan continues to progress as written.']);
 }

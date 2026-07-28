@@ -27,7 +27,6 @@ export const REVIEW_RULES = {
   offTargetPct: 0.05,    // 5% over is a failed rep
   fadeSoftPct: 2.5,      // final reps this much slower than the body = repeat
   fadeHardPct: 5,        // this much = genuine breakdown
-  cvSteady: 0.05,        // pace CV under 5% reads as stable steady swimming
   completionFull: 0.9,   // at least this much of the planned work = completed
   completionPoor: 0.7,   // under this (on a credible match) = reduce
   restTol: 0.5,          // recorded recovery within 50% of planned = compliant
@@ -147,9 +146,28 @@ export function swimReview({ workout, activity, intervals, paces, feel, evidence
   const poolMismatch = activity.poolLengthM && Math.abs(activity.poolLengthM - poolLengthM(pool)) > 0.5;
 
   // pace facts, only from what genuinely matched
-  let paceAdherence = null, consistency = null, fadePercent = null, failedReps = 0, repsDone = null;
+  let paceAdherence = null, consistency = null, fadePercent = null, failedReps = 0, repsDone = null,
+    recoveryCompliance = null;
   const judged = m && (m.pairs.length >= 2 || (m.splits && m.laps.length >= 3));
   if (judged && !poolMismatch) {
+    /* Recovery, COMPARED rather than merely collected. restTol sat in the
+       rules table from the day this shipped and nothing read it, so the
+       prescription's rest was gathered per rep and dropped — the same silent
+       gap the bike review shipped and had fixed in its own gauntlet. A
+       swimmer who cut every recovery did a harder set than the one on the
+       card, and nothing could say so. Needs start times; stays null without
+       them rather than guessing (the bike rule, verbatim). */
+    if (!m.splits && m.pairs.length >= 2) {
+      const rests = [];
+      m.pairs.forEach((pr, i) => {
+        const next = m.pairs[i + 1];
+        if (!next || !pr.planned.restSec || pr.lap.startTimeSec == null || next.lap.startTimeSec == null) return;
+        const gap = next.lap.startTimeSec - (pr.lap.startTimeSec + pr.lap.movingTimeSec);
+        if (gap < 0) return;
+        rests.push(gap >= pr.planned.restSec * REVIEW_RULES.restTol ? 1 : 0);
+      });
+      if (rests.length) recoveryCompliance = pct1(mean(rests) * 100);
+    }
     const rows = m.splits
       ? m.laps.map(l => ({ actual: lapPace(l), target: blockTarget(workout, paces) }))
       : m.pairs.map(p => ({ actual: lapPace(p.lap), target: p.planned.targetSec }));
@@ -196,11 +214,14 @@ export function swimReview({ workout, activity, intervals, paces, feel, evidence
     outcome = done && !shortReps && feel !== 'hard' ? 'progress' : 'repeat';
   }
   else if (evidence && evidence.direction && done && !softFade) outcome = 'retest-css';
+  // recoveries cut to under half the prescription made a different, harder
+  // session out of the same card: worth repeating as written, not progressing
+  else if (recoveryCompliance != null && recoveryCompliance < 50) outcome = 'repeat';
   else if (done && !softFade && feel !== 'hard') outcome = 'progress';
   else outcome = 'repeat';
 
   const review = {
-    completion, paceAdherence, consistency, fadePercent,
+    completion, paceAdherence, consistency, fadePercent, recoveryCompliance,
     perceivedEffort: feel || undefined,
     repsDone, repsPlanned: m && m.planned.length ? m.planned.length : null,
     failedReps: judged ? failedReps : null,
@@ -241,6 +262,10 @@ function reviewText(r, { workout, pool, m }) {
     if (r.fadePercent != null && r.fadePercent > REVIEW_RULES.fadeSoftPct) {
       bits.push('The final efforts slowed by ' + r.fadePercent + '%.');
     }
+  }
+  if (r.recoveryCompliance != null && r.recoveryCompliance < 100) {
+    bits.push('You took the full recovery on ' + Math.round(r.recoveryCompliance)
+      + '% of the gaps, and cutting them makes a harder set than the one on the card.');
   }
   if (r.confidence !== 'high') {
     bits.push(r.confidence === 'medium'

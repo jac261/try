@@ -172,6 +172,13 @@ export function strokeSessionSummary({ activity, laps, poolLengthM }) {
 /* The gate itself (§8, and the spec's own Dependency note). Analysis stays
    off until the backend carries the fields AND the caller opts in, so this
    cannot start speaking on its own the day a field appears. */
+/* The gate's own state. There was no flag constant anywhere: `enabled` was a
+   parameter no caller ever supplied, which is how the whole feature shipped
+   with a gate and no door. Flip this to true when the backend passes the
+   stroke fields through; everything downstream is already written and
+   tested. */
+export const STROKE_METRICS_FLAG = false;
+
 export function strokeMetricsEnabled({ activity, laps, enabled }) {
   if (!enabled) return false;
   return strokeDataQuality({ activity, laps }).available;
