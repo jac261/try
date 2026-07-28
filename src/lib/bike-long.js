@@ -51,13 +51,20 @@ export const LONG_OBJECTIVES = {
    progression ladder, nothing resets it, and it is indexed on the week, so
    every focus comes round. */
 export const LONG_FOCUSES = {
+  /* Two cues each, because the card cannot always keep the promise the cue
+     makes. A fuelling plan is only rendered above 75 minutes and the position
+     question only above 90, so the versions that said "the plan below" and
+     "note afterwards" were pointing at sections that were not there on a
+     third of the rides that carried them. */
   fuelling: {
     label: 'Fuelling rehearsal',
     cue: 'Eat and drink to the plan below from the first twenty minutes, not when you start to feel it. This is a dress rehearsal for the stomach.',
+    cueAlone: 'Practise eating and drinking on the move from early on, rather than waiting until you feel you need it.',
   },
   position: {
     label: 'Position practice',
     cue: 'Spend real time in the position you intend to race in, and break it up before it breaks you. Note afterwards how it held.',
+    cueAlone: 'Spend real time in the position you intend to race in, and break it up before it breaks you.',
   },
   terrain: {
     label: 'Terrain preparation',
@@ -67,22 +74,43 @@ export const LONG_FOCUSES = {
 
 const FOCUS_ORDER = ['fuelling', 'position', 'terrain'];
 
-/* The objective this particular Long ride serves, read off what was built. */
+/* The objective this particular long session serves, read off what was built.
+ *
+ * A BRICK COUNTS. It is a ride with a run on the end, which is the most
+ * literal brick preparation there is, and the first cut excluded it on
+ * discipline — so the phase about long-ride purpose said nothing at all on
+ * hundreds of the sessions most central to it.
+ *
+ * AN EASED LONG RIDE COUNTS TOO. Easing rewrites the type from Long to
+ * Endurance, so the objective vanished from the card while the fuelling block
+ * underneath it stayed, leaving a recovery ride carrying a fuelling
+ * prescription and no explanation. An eased long ride is still the week's
+ * long ride; it is simply the pure-endurance version of one, which is also
+ * the only way that objective is ever reached. */
 export function longRideObjective({ workout, seed, brickFollows }) {
-  if (!workout || workout.discipline !== 'bike' || workout.type !== 'Long') return null;
+  if (!workout) return null;
+  const isBrick = workout.discipline === 'brick' && !workout.race;
+  const isLong = workout.discipline === 'bike'
+    && (workout.type === 'Long' || workout.easedFrom === 'Long');
+  if (!isBrick && !isLong) return null;
   const segs = workout.segments || [];
   const quality = segs.filter(s => s.zone && s.zone !== 'Z1' && s.zone !== 'Z2');
   let primary;
-  if (brickFollows) primary = 'brick-preparation';
+  if (isBrick || brickFollows) primary = 'brick-preparation';
   // the builder writes this one's intent into the label, and it is the only
   // variant that puts hard efforts deliberately late
   else if (segs.some(s => /tired legs/i.test(s.label || '')) || quality.some(s => s.zone === 'Z4')) primary = 'late-ride-stability';
   else if (!quality.length) primary = 'pure-endurance';
   else {
-    // a long sustained block trains durability; shorter surges rehearse race
-    // power. The split is the block's own length, not its zone.
-    const longest = Math.max(...quality.map(s => s.min || 0));
-    primary = longest >= 20 ? 'aerobic-durability' : 'race-power';
+    /* Sustained blocks train durability; short surges rehearse race power.
+       The split is the length of ONE EFFORT, not of the segment that holds
+       them — reading the segment total made a set of 6-minute surges look
+       like a 20-minute block, so every long ride collapsed into a single
+       objective and two of the five were unreachable. */
+    const effort = Math.max(...quality.map(s => (s.blocks || []).length
+      ? Math.max(...s.blocks.filter(b => b.zone === s.zone).map(b => b.min || 0))
+      : (s.min || 0)));
+    primary = effort >= 10 ? 'aerobic-durability' : 'race-power';
   }
   const focus = FOCUS_ORDER[(seed == null ? 0 : seed) % FOCUS_ORDER.length];
   return {
@@ -92,8 +120,15 @@ export function longRideObjective({ workout, seed, brickFollows }) {
     focus,
     focusLabel: LONG_FOCUSES[focus].label,
     focusCue: LONG_FOCUSES[focus].cue,
-    // §1's real constraint, answered per session rather than asserted once
-    harder: primary === 'late-ride-stability' || primary === 'race-power',
+    focusCueAlone: LONG_FOCUSES[focus].cueAlone || LONG_FOCUSES[focus].cue,
+    /* §1's real constraint, answered per session. ONLY late-ride stability
+       counts as harder: it is the only variant that puts efforts above tempo
+       deliberately late in a ride. Race-power blocks are two six-minute
+       surges inside three hours of endurance riding — a different purpose,
+       not an escalation — and counting them made two thirds of every plan's
+       long rides read as "harder", which would have forced the guard below to
+       be so loose it could never bind. */
+    harder: primary === 'late-ride-stability',
   };
 }
 
@@ -106,4 +141,10 @@ export function longRideObjective({ workout, seed, brickFollows }) {
  * objectives it constrains, and `harder` is on every objective so the check
  * has something to count.
  */
-export const MAX_HARD_LONG_SHARE = 0.7;
+/* Measured, not guessed. Across 300 generated plans (every race type x level
+   x days-per-week x three start dates) the worst share of long sessions
+   carrying the harder objective is 0.17, so the ceiling sits just above it
+   and will actually trip if generation drifts. It was 0.7 to begin with,
+   which is five times looser than anything the engine produces: a guard that
+   cannot fail is a comment with a number on it. */
+export const MAX_HARD_LONG_SHARE = 0.25;

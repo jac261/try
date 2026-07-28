@@ -107,9 +107,16 @@ export function storageForUser(userId) {
     // durability and the calibration diary, spans plans and must NOT join
     // clear()'s removal list. No workout-id keying, no reshape wiring.
     loadFuel() { try { return JSON.parse(localStorage.getItem(ns + 'fuel') || '{}'); } catch (e) { return {}; } },
-    saveFuel(activityId, level, at) {
+    saveFuel(activityId, level, at, discipline) {
       const m = this.loadFuel();
-      if (level == null) delete m[activityId]; else m[activityId] = { level, at };
+      /* The DISCIPLINE the answer was about rides along, because the tap is
+         shared with long swims and runs where taking nothing in is normal and
+         correct, and the bike's fuelling target reads this store to work out
+         what a rider's stomach has proven. Without it one honest "nothing" on
+         a forty-five minute swim capped every future ride at thirty grams an
+         hour. Entries written before this carry no discipline and are ignored
+         by that calculation rather than guessed at. */
+      if (level == null) delete m[activityId]; else m[activityId] = { level, at, discipline: discipline || undefined };
       // evict OLDEST answers by timestamp: object key order is insertion
       // order, not time order (gauntlet catch 2026-07-21)
       const ids = Object.keys(m).sort((a, b) => ((m[a].at || '') < (m[b].at || '') ? -1 : 1));

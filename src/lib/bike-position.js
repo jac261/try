@@ -56,20 +56,25 @@ export const POSITION_RULES = {
    you nothing about position tolerance, and asking anyway trains athletes to
    dismiss the question. */
 export function positionAsk(workout) {
-  if (!workout || workout.discipline !== 'bike') return false;
-  if (!['Long', 'Endurance', 'Threshold', 'Sweet Spot'].includes(workout.type)) return false;
+  if (!workout || workout.race) return false;
+  // a brick's bike leg is ridden in position like any other long ride
+  const ok = workout.discipline === 'brick'
+    || (workout.discipline === 'bike' && ['Long', 'Endurance', 'Threshold', 'Sweet Spot'].includes(workout.type));
+  if (!ok) return false;
   return (workout.durationMin || 0) >= POSITION_RULES.minRideMin;
 }
 
 /* One stored answer: { comfort, symptoms: [], minutes } against a recording. */
-export function positionRead({ comfort, symptoms, minutes, date }) {
+export function positionRead({ comfort, symptoms, minutes, date, at }) {
   if (!comfort || AERO_COMFORT_SCORE[comfort] == null) return null;
   return {
     comfort,
     score: AERO_COMFORT_SCORE[comfort],
     symptoms: (symptoms || []).filter(s => AERO_SYMPTOMS[s]),
     minutes: minutes || null,
-    date: date || null,
+    // the store writes `at`; reading only `date` made this null on every
+    // record that has ever existed, on the only path the app actually uses
+    date: date || at || null,
   };
 }
 

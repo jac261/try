@@ -52,10 +52,11 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
     return () => { gone = true; };
   }, [actId, onLoadIntervals]);
   const disc = D[w.discipline];
-  // §1/§3/§4: does a run follow this ride today? A brick session is one by
-  // definition; otherwise look for a run planned on the same date.
-  const brickFollows = w.discipline === 'brick' || (plan.weeks || []).some(wk =>
-    (wk.workouts || []).some(x => x.discipline === 'run' && x.date === w.date));
+  /* §1/§3: does a run follow this ride? A brick session is one by definition,
+     and that is the only way it happens — the generator never schedules a
+     separate run on the same date as a ride, so the "look for a run today"
+     clause this used to carry was dead in every plan ever built. */
+  const brickFollows = w.discipline === 'brick';
   const why = !w.race && !w.test ? (WHY_DISC[w.discipline + ':' + w.type] || WHY[w.type]) : null;
   const shown = eff || w.date;
   const moved = shown !== w.date;
@@ -124,7 +125,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
               <div className="feel-row fuel">
                 {Object.entries(T.FUEL_LEVELS).map(([k, lab]) =>
                   <button key={k} className={'feelbtn' + (fuel === k ? ' on right' : '')}
-                    onClick={() => onFuel(activity.id, fuel === k ? null : k)}>{lab}</button>)}
+                    onClick={() => onFuel(activity.id, fuel === k ? null : k, w.discipline)}>{lab}</button>)}
               </div>
               <div className="fuel-cap">{T.FUEL_CAPTION}</div>
               {(() => {

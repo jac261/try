@@ -20,7 +20,7 @@
  */
 import { RACES } from './domain.js';
 import { brickPairFor } from './autolog.js';
-import { FUEL_LEVEL_GRAMS } from './bike-fuelling.js';
+import { FUEL_LEVEL_GRAMS, FUELLING_RULES, bikeFuellingPlan } from './bike-fuelling.js';
 
 export const BRICK_RULES = {
   // A run off the bike is legitimately slower than the same run fresh. This
@@ -31,12 +31,11 @@ export const BRICK_RULES = {
   window: 3,            // bricks considered for a pattern
   minPattern: 2,        // this many ruined inside the window = a pattern
   hardRideFrac: 0.85,   // ride average this far above threshold sets up badly
-  lowFuelGrams: 45,     // under this an hour on a brick is under-fuelled
 };
 
 /* One brick, described. Never a verdict on the athlete's pacing: that needs
    several, and brickPattern is where it lives. */
-export function brickExecution({ ride, run, paces, fuelLevel, raceType }) {
+export function brickExecution({ ride, run, paces, fuelLevel, raceType, fuellingPlan }) {
   if (!ride || !run || !run.movingTimeSec || !run.distance) return null;
   const pc = paces || {};
   const target = pc.run && (pc.run.long || pc.run.easy);
@@ -54,8 +53,15 @@ export function brickExecution({ ride, run, paces, fuelLevel, raceType }) {
   if (realFtp && ride.averageWatts && ride.averageWatts / pc.ftp >= BRICK_RULES.hardRideFrac) {
     causes.push({ key: 'ride-hard', text: 'the ride averaged close to your threshold, which is not a pace anyone runs well off' });
   }
-  if (fuelLevel && FUEL_LEVEL_GRAMS[fuelLevel] != null && FUEL_LEVEL_GRAMS[fuelLevel] < BRICK_RULES.lowFuelGrams) {
-    causes.push({ key: 'under-fuelled', text: 'you logged taking in very little on the bike, and the run is where that shows up' });
+  /* Under-fuelling is judged against WHAT THIS SESSION ASKED FOR, not an
+     absolute. A short brick gets no fuelling plan at all — the app decides
+     deliberately that it runs on what you already had — and an athlete who
+     correctly took nothing was then accused of under-fuelling it. No plan
+     means no shortfall to accuse anyone of. */
+  const asked = fuellingPlan && fuellingPlan.carbsPerHour;
+  if (asked && fuelLevel && FUEL_LEVEL_GRAMS[fuelLevel] != null
+    && FUEL_LEVEL_GRAMS[fuelLevel] <= asked - FUELLING_RULES.shortfallGrams) {
+    causes.push({ key: 'under-fuelled', text: 'you took in well under what the session asked for, and the run is where that shows up' });
   }
   if (run.rpe != null && run.rpe >= 8) {
     causes.push({ key: 'run-maximal', text: 'you rated the run near maximal, so it cost more than a brick run should' });
@@ -75,11 +81,17 @@ export function brickExecution({ ride, run, paces, fuelLevel, raceType }) {
     // §4 lists it; the data does not exist. Named so it reads as blocked
     // rather than forgotten.
     transitionSec: null,
+    /* Three bands, not two. The non-ruined branch used to be an unconditional
+       else, so a run twenty-seven per cent down on fresh pace was told it came
+       in "close to the pace you hold fresh" — praise for a session that went
+       badly, which is worse than saying nothing. */
     text: ruined
       ? 'Your run off this ride came in well below the pace you hold fresh'
         + (causes.length ? ', and ' + causes[0].text : '') + '.'
-      : 'You ran off this ride at close to the pace you hold fresh, which is the point of a brick'
-        + (race ? ' and the thing ' + race.name + ' actually asks for' : '') + '.',
+      : overPct > 0
+        ? 'Your run off this ride came in a little down on the pace you hold fresh, which is normal off a ride this long.'
+        : 'You ran off this ride at close to the pace you hold fresh, which is the point of a brick'
+          + (race ? ' and the thing ' + race.name + ' actually asks for' : '') + '.',
   };
 }
 
@@ -136,6 +148,7 @@ export function brickHistory({ plan, activities, log, moves, paces, fuelLog, lim
     const e = brickExecution({
       ride: pair.ride, run: pair.run, paces, fuelLevel: level,
       raceType: (plan.profile || {}).raceType,
+      fuellingPlan: bikeFuellingPlan({ workout: w, profile: plan.profile, fuelLog }),
     });
     if (e) executions.push(e);
   }

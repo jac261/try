@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { trimWorkout } from './plan.js';
+import { trimWorkout, easeWorkout } from './plan.js';
 import { brickHistory } from './brick.js';
 import { generatePlan } from './plan.js';
 import { isTrainingRide } from './bikeschema.js';
@@ -53,7 +53,10 @@ describe('§1: Long rides have rotating objectives', () => {
     // threshold work at hour four every week. Asked of the plans, not asserted.
     ['sprint', 'olympic', 'half', 'full'].forEach(raceType =>
       ['beginner', 'intermediate', 'advanced', 'elite'].forEach(fitness => {
-        const p = generatePlan({ ...base, raceType, fitness });
+        // four training days and a long horizon, so brick sessions exist
+        const p = generatePlan({
+          ...base, raceType, fitness, daysPerWeek: 4, trainingDays: [0, 1, 2, 3], raceDate: '2027-02-01',
+        });
         const objs = p.weeks.flatMap(w => w.workouts).filter(isTrainingRide)
           .filter(w => w.type === 'Long')
           .map(w => longRideObjective({ workout: w, seed: w.seed }));
@@ -81,25 +84,30 @@ describe('§3: fuelling plans are workout specific', () => {
     expect(bikeFuellingPlan({ workout: { discipline: 'bike', durationMin: 45, segments: [] }, profile })).toBe(null);
   });
 
+  // a gut that has proven the top of the scale, so the cap does not mask the
+  // scaling under test
+  const trainedLog = { a: { level: 'race', discipline: 'bike' } };
   it('scales with duration, intensity and a run to follow', () => {
     const at = (durationMin, over = {}) => bikeFuellingPlan({
-      workout: { discipline: 'bike', durationMin, segments: [{ min: durationMin, zone: 'Z2' }], ...over }, profile,
+      workout: { discipline: 'bike', durationMin, segments: [{ min: durationMin, zone: 'Z2' }], ...over },
+      profile, fuelLog: trainedLog,
     });
     expect(at(90).carbsPerHour).toBeLessThan(at(180).carbsPerHour);
     expect(at(180).carbsPerHour).toBeLessThan(at(300).carbsPerHour);
     const steady = at(180);
     const quality = bikeFuellingPlan({
-      workout: { discipline: 'bike', durationMin: 180, segments: [{ min: 30, zone: 'Z4' }] }, profile,
+      workout: { discipline: 'bike', durationMin: 180, segments: [{ min: 30, zone: 'Z4' }] }, profile, fuelLog: trainedLog,
     });
     expect(quality.carbsPerHour).toBeGreaterThan(steady.carbsPerHour);
     const brick = bikeFuellingPlan({
-      workout: { discipline: 'bike', durationMin: 180, segments: [{ min: 180, zone: 'Z2' }] }, profile, brickFollows: true,
+      workout: { discipline: 'bike', durationMin: 180, segments: [{ min: 180, zone: 'Z2' }] },
+      profile, fuelLog: trainedLog, brickFollows: true,
     });
     expect(brick.carbsPerHour).toBeGreaterThan(steady.carbsPerHour);
   });
 
   it('totals follow the per-hour figure and the length of the ride', () => {
-    const p = bikeFuellingPlan({ workout: { discipline: 'bike', durationMin: 240, segments: [{ min: 240, zone: 'Z2' }] }, profile });
+    const p = bikeFuellingPlan({ workout: { discipline: 'bike', durationMin: 240, segments: [{ min: 240, zone: 'Z2' }] }, profile, fuelLog: trainedLog });
     expect(p.carbsTotal).toBe(Math.round(p.carbsPerHour * 4));
     expect(p.fluidTotalLo).toBe(p.fluidLoPerHour * 4);
   });
@@ -108,15 +116,85 @@ describe('§3: fuelling plans are workout specific', () => {
     // absorbing carbohydrate is trained; 90 g/h to someone who has never held
     // 60 is how a long ride becomes a gastrointestinal event
     const w = { discipline: 'bike', durationMin: 300, segments: [{ min: 300, zone: 'Z2' }] };
-    const untrained = bikeFuellingPlan({ workout: w, profile, fuelLog: { a: { level: 'bit' } } });
+    const untrained = bikeFuellingPlan({ workout: w, profile, fuelLog: { a: { level: 'bit', discipline: 'bike' } } });
     expect(untrained.provenGrams).toBe(30);
     expect(untrained.carbsPerHour).toBe(30 + FUELLING_RULES.gutStepGrams);
     expect(untrained.capped).toBe(true);
     expect(untrained.why).toMatch(/trained/);
     // and a trained gut is not held back
-    const trained = bikeFuellingPlan({ workout: w, profile, fuelLog: { a: { level: 'race' } } });
+    const trained = bikeFuellingPlan({ workout: w, profile, fuelLog: { a: { level: 'race', discipline: 'bike' } } });
     expect(trained.carbsPerHour).toBeGreaterThan(untrained.carbsPerHour);
     expect(trained.capped).toBe(false);
+  });
+
+  it('THE CAP IS NOT INVERTED: proving more never earns you less', () => {
+    /* The first cut disabled the cap entirely when there was no history, so a
+       first-time user was handed the largest dose in the system while a rider
+       who had proven sixty grams got ninety. The module header named that
+       exact hazard and the code did the opposite, and the test below this one
+       asserted the inversion as though it were the intent. So this asserts
+       the ordering directly, over every duration. */
+    const order = ['none', 'bit', 'solid', 'race'];
+    [90, 150, 240, 300, 360].forEach(durationMin => {
+      const w = { discipline: 'bike', durationMin, segments: [{ min: durationMin, zone: 'Z2' }] };
+      const noHistory = bikeFuellingPlan({ workout: w, profile, fuelLog: {} }).carbsPerHour;
+      const byLevel = order.map(level =>
+        bikeFuellingPlan({ workout: w, profile, fuelLog: { a: { level, discipline: 'bike' } } }).carbsPerHour);
+      // monotonic in proven tolerance
+      byLevel.forEach((g, i) => {
+        if (i) expect(g, durationMin + ' min: ' + order[i] + ' earns less than ' + order[i - 1])
+          .toBeGreaterThanOrEqual(byLevel[i - 1]);
+      });
+      // and nobody is given more than a rider who has proven the top of scale
+      expect(noHistory, durationMin + ' min: no history outranks a proven gut')
+        .toBeLessThanOrEqual(byLevel[byLevel.length - 1]);
+    });
+  });
+
+  it('never prescribes more than the athlete can record having taken', () => {
+    // the tap tops out at "race level"; a target above it marks every possible
+    // answer as a shortfall, including the rider who out-fuelled the plan
+    ['sprint', 'olympic', 'half', 'full'].forEach(raceType =>
+      [90, 150, 240, 300, 400].forEach(durationMin => {
+        const p = bikeFuellingPlan({
+          workout: { discipline: 'bike', durationMin, segments: [{ min: 30, zone: 'Z4' }] },
+          profile: { ...profile, raceType }, fuelLog: { a: { level: 'race', discipline: 'bike' } },
+          brickFollows: true,
+        });
+        expect(p.carbsPerHour, raceType + ' ' + durationMin + ' min').toBeLessThanOrEqual(FUEL_LEVEL_GRAMS.race);
+        expect(fuellingOutcome({ plan: p, level: 'race' }).met, 'top answer must be able to meet the plan').toBe(true);
+      }));
+  });
+
+  it('a long swim or run cannot cap the bike', () => {
+    // the tap is shared, and taking nothing in on a 45-minute swim is correct
+    const w = { discipline: 'bike', durationMin: 300, segments: [{ min: 300, zone: 'Z2' }] };
+    const swimAnswer = { s1: { level: 'none', discipline: 'swim' }, r1: { level: 'bit', discipline: 'run' } };
+    const withSwim = bikeFuellingPlan({ workout: w, profile, fuelLog: swimAnswer });
+    const withNothing = bikeFuellingPlan({ workout: w, profile, fuelLog: {} });
+    expect(withSwim.provenGrams).toBe(null);
+    expect(withSwim.carbsPerHour).toBe(withNothing.carbsPerHour);
+  });
+
+  it('"nothing" is not evidence of a ceiling', () => {
+    // it says the athlete did not eat, not that they cannot
+    const w = { discipline: 'bike', durationMin: 300, segments: [{ min: 300, zone: 'Z2' }] };
+    const p = bikeFuellingPlan({ workout: w, profile, fuelLog: { a: { level: 'none', discipline: 'bike' } } });
+    expect(p.provenGrams).toBe(null);
+    expect(p.carbsPerHour).toBe(bikeFuellingPlan({ workout: w, profile, fuelLog: {} }).carbsPerHour);
+  });
+
+  it('a routine trim does not fall off a fuelling cliff', () => {
+    // duration bands with hard edges cut 30 g/h for a 6% trim
+    const at = d => bikeFuellingPlan({
+      workout: { discipline: 'bike', durationMin: d, segments: [{ min: d, zone: 'Z2' }] },
+      profile, fuelLog: { a: { level: 'race', discipline: 'bike' } },
+    }).carbsPerHour;
+    for (let d = 80; d <= 400; d += 5) {
+      const drop = at(d) - at(d - 5);
+      expect(Math.abs(drop), 'a 5 min change moved fuelling by ' + drop + ' g/h at ' + d + ' min')
+        .toBeLessThanOrEqual(5);
+    }
   });
 
   it('no history is not the same as no tolerance', () => {
@@ -125,8 +203,10 @@ describe('§3: fuelling plans are workout specific', () => {
     const fresh = bikeFuellingPlan({ workout: w, profile, fuelLog: {} });
     expect(fresh.provenGrams).toBe(null);
     expect(bikeFuellingPlan({ workout: w, profile, fuelLog: null }).provenGrams).toBe(null);
-    expect(fresh.capped).toBe(false);
-    expect(fresh.why).toMatch(/starting point/);
+    // a conservative START, not a free pass: no history is not evidence of a
+    // large tolerance any more than it is evidence of none
+    expect(fresh.carbsPerHour).toBe(FUELLING_RULES.novicePerHour);
+    expect(fresh.why).toMatch(/conservative starting point/);
   });
 
   it('names sodium as unpersonalised rather than inventing it', () => {
@@ -171,10 +251,32 @@ describe('§4: the bike is judged on the run that follows', () => {
     const e = brickExecution({
       ride: ride({ averageWatts: 250 * 0.9 }), run: runAt(1.35), paces, raceType: 'half',
       fuelLevel: 'none',
+      fuellingPlan: bikeFuellingPlan({
+        workout: { discipline: 'bike', durationMin: 240, segments: [{ min: 240, zone: 'Z2' }] },
+        profile: base, fuelLog: { a: { level: 'race', discipline: 'bike' } },
+      }),
     });
     expect(e.ruined).toBe(true);
     expect(e.causes).toContain('ride-hard');
     expect(e.causes).toContain('under-fuelled');
+  });
+
+  it('does not accuse anyone of under-fuelling a session it declined to fuel', () => {
+    // a short brick gets no fuelling plan at all: the app decides it runs on
+    // what you already had, and then blamed the athlete for doing exactly that
+    const short = bikeFuellingPlan({ workout: { discipline: 'bike', durationMin: 60, segments: [] }, profile: base });
+    expect(short).toBe(null);
+    const e = brickExecution({
+      ride: ride(), run: runAt(1.35), paces, fuelLevel: 'none', fuellingPlan: short,
+    });
+    expect(e.causes).not.toContain('under-fuelled');
+  });
+
+  it('a run a little down on fresh pace is neither flagged nor congratulated', () => {
+    const e = brickExecution({ ride: ride(), run: runAt(1.15), paces });
+    expect(e.ruined).toBe(false);
+    expect(e.text).toMatch(/a little down/);
+    expect(e.text).not.toMatch(/close to the pace/);
   });
 
   it('ONE ruined run is never a verdict on how somebody rides', () => {
@@ -358,5 +460,108 @@ describe('nothing here is a model without a caller', () => {
     expect(r.executions).toEqual([]);
     expect(r.pattern).toBe(null);
     expect(brickHistory({ plan: null, activities: [] }).pattern).toBe(null);
+  });
+});
+
+
+/* Gauntlet regressions for phase 6. */
+describe('gauntlet: every declared objective is actually reachable', () => {
+  it('reaches four of five from generation, and the fifth from the ease path', () => {
+    /* Three of the five were structurally unreachable on the first cut. The
+       objective split read the SEGMENT total rather than the length of one
+       effort, so a set of six-minute surges looked like a twenty-minute block
+       and every long ride collapsed into one objective; bricks were excluded
+       on discipline, which removed the most literal brick preparation there
+       is; and an eased long ride lost its objective entirely. */
+    const seen = new Set();
+    ['sprint', 'olympic', 'half', 'full'].forEach(raceType =>
+      ['beginner', 'intermediate', 'advanced', 'elite'].forEach(fitness =>
+        [[6, [0, 1, 2, 3, 5, 6]], [4, [0, 1, 2, 3]]].forEach(([daysPerWeek, trainingDays]) => {
+          // both day counts, because brick sessions only exist on the lower one
+          const p = generatePlan({ ...base, raceType, fitness, daysPerWeek, trainingDays, raceDate: '2027-02-01' });
+          p.weeks.flatMap(w => w.workouts).forEach(w => {
+            const o = longRideObjective({ workout: w, seed: w.seed });
+            if (o) seen.add(o.primary);
+          });
+        })));
+    ['aerobic-durability', 'late-ride-stability', 'race-power', 'brick-preparation']
+      .forEach(k => expect(seen.has(k), k + ' is never produced by generation').toBe(true));
+
+    // pure endurance is what a long ride becomes when it is eased
+    const long = longs.find(w => w.durationMin >= 120) || longs[0];
+    const eased = easeWorkout(long, plan);
+    const o = longRideObjective({ workout: eased, seed: eased.seed });
+    expect(o, 'an eased long ride lost its objective entirely').toBeTruthy();
+    expect(o.primary).toBe('pure-endurance');
+    expect(LONG_OBJECTIVES[o.primary]).toBeTruthy();
+  });
+
+  it('the harder-share guard is tight enough to actually bind', () => {
+    // it was 0.7 against a measured worst case of 0.17: five times looser
+    // than anything the engine produces, so it could never fail
+    expect(MAX_HARD_LONG_SHARE).toBeLessThan(0.5);
+  });
+});
+
+describe('gauntlet: a brick is the session this phase is most about', () => {
+  /* Training bricks appear on FOUR training days, not six: with fewer days
+     the plan combines the bike and the run into one session rather than
+     scheduling them separately. Worth writing down, because a sweep run only
+     at six days concludes they do not exist — which is what happened, and it
+     is why the first cut excluded them from the whole phase. */
+  const longPlan = generatePlan({
+    ...base, raceType: 'olympic', daysPerWeek: 4, trainingDays: [0, 1, 2, 3], raceDate: '2027-02-01',
+  });
+  const bricks = longPlan.weeks.flatMap(w => w.workouts)
+    .filter(w => w.discipline === 'brick' && !w.race);
+
+  it('generation produces brick training sessions at all', () => {
+    expect(bricks.length).toBeGreaterThan(0);
+  });
+
+  it('they get an objective, a fuelling plan and the position question', () => {
+    const long = bricks.filter(w => w.durationMin >= POSITION_RULES.minRideMin);
+    expect(long.length).toBeGreaterThan(0);
+    long.forEach(w => {
+      const o = longRideObjective({ workout: w, seed: w.seed });
+      expect(o, w.durationMin + ' min brick has no objective').toBeTruthy();
+      expect(o.primary).toBe('brick-preparation');
+      expect(bikeFuellingPlan({ workout: w, profile: base }), 'no fuelling plan on a ' + w.durationMin + ' min brick').toBeTruthy();
+      expect(positionAsk(w), 'no position question on a ' + w.durationMin + ' min brick').toBe(true);
+    });
+  });
+
+  it('the race itself is not treated as a training brick', () => {
+    const race = longPlan.weeks.flatMap(w => w.workouts).find(w => w.discipline === 'brick' && w.race);
+    if (!race) return;
+    expect(longRideObjective({ workout: race, seed: 0 })).toBe(null);
+    expect(positionAsk(race)).toBe(false);
+  });
+});
+
+describe('gauntlet: the card does not promise what it will not render', () => {
+  it('a fuelling cue on a ride with no fuelling plan does not point at one', () => {
+    const shortLong = { discipline: 'bike', type: 'Long', durationMin: 60, seed: 0, segments: [{ min: 60, zone: 'Z2' }] };
+    const o = longRideObjective({ workout: shortLong, seed: 0 });
+    expect(o.focus).toBe('fuelling');
+    expect(bikeFuellingPlan({ workout: shortLong, profile: base })).toBe(null);
+    expect(o.focusCueAlone).not.toMatch(/plan below/);
+  });
+
+  it('a position cue on a ride too short to be asked does not say to note it afterwards', () => {
+    const shortLong = { discipline: 'bike', type: 'Long', durationMin: 80, seed: 1, segments: [{ min: 80, zone: 'Z2' }] };
+    const o = longRideObjective({ workout: shortLong, seed: 1 });
+    expect(o.focus).toBe('position');
+    expect(positionAsk(shortLong)).toBe(false);
+    expect(o.focusCueAlone).not.toMatch(/afterwards/);
+  });
+});
+
+describe('gauntlet: a stored position answer is actually readable', () => {
+  it('reads the timestamp the store actually writes', () => {
+    // storage writes `at`; positionRead read `date`, so it was null on every
+    // record that has ever existed
+    const r = positionRead({ comfort: 'ok', symptoms: [], minutes: 180, at: '2026-07-01T10:00:00Z' });
+    expect(r.date).toBe('2026-07-01T10:00:00Z');
   });
 });

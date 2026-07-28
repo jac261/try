@@ -492,7 +492,8 @@ export function App({ storage, getToken, user }) {
     if (plan.race !== 'tracker') sync.replacePlan(np).then(adoptRes(np.createdAt));
   };
   const markBlockReviewed = wm => setBlockReviewed(storage.saveBlockReviewed(wm));
-  const answerFuel = (activityId, level) => setFuelLog(storage.saveFuel(activityId, level, new Date().toISOString()));
+  const answerFuel = (activityId, level, discipline) =>
+    setFuelLog(storage.saveFuel(activityId, level, new Date().toISOString(), discipline));
   const answerPosition = (activityId, comfort, symptoms, minutes) =>
     setPositionLog(storage.savePosition(activityId, comfort, symptoms, new Date().toISOString(), minutes));
   /* Phase 6 §4: how the athlete's recent bricks actually went. Computed here

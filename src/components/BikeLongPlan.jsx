@@ -21,7 +21,11 @@ export function BikeLongPlan({ w, plan, fuelLog, brickFollows }) {
         </div>
         <div className="lead" style={{ margin: '0 0 6px', fontSize: 13 }}>{objective.why}</div>
         <div className="lead" style={{ margin: '0 0 6px', fontSize: 13 }}>
-          <b>{objective.focusLabel}.</b> {objective.focusCue}
+          {/* the cue must not point at a section this card will not render */}
+          <b>{objective.focusLabel}.</b>{' '}
+          {objective.focus === 'fuelling' && !fuel ? objective.focusCueAlone
+            : objective.focus === 'position' && !T.positionAsk(w) ? objective.focusCueAlone
+              : objective.focusCue}
         </div>
       </>}
       {fuel && <>
@@ -41,6 +45,9 @@ export function BikeLongPlan({ w, plan, fuelLog, brickFollows }) {
             The most you have logged taking in is about {fuel.provenGrams} g an hour.
           </div>
         )}
+        <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>
+          Fluid over the whole ride: roughly {(fuel.fluidTotalLo / 1000).toFixed(1)}–{(fuel.fluidTotalHi / 1000).toFixed(1)} litres. {fuel.conditionsNote}
+        </div>
         <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{fuel.sodiumNote}</div>
       </>}
     </>
