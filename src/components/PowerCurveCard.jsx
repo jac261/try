@@ -105,7 +105,7 @@ export function PowerCurveCard({ curve, previous, ftpWatts, todayISO }) {
                numbers. */
             <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>
               These are measured against a threshold set on your previous power meter,
-              so the whole shape shifts with it. A ramp test on the new one puts them
+              so the whole shape shifts with it. A fresh test on the new one puts them
               back on the same footing.
             </div>
           )}

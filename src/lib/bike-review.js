@@ -452,7 +452,7 @@ const PRIORITY_SENTENCE = {
 
 function reviewText(r, { m, realFtp }) {
   if (!realFtp) {
-    return 'Your FTP is estimated from your level rather than measured, so this ride is recorded but not judged on power. A ramp test would change that.';
+    return 'Your FTP is estimated from your level rather than measured, so this ride is recorded but not judged on power. A twenty-minute test would change that.';
   }
   const bits = [];
   if (r.outcome === 'insufficient-data') {

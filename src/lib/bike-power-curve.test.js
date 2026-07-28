@@ -245,7 +245,8 @@ describe('§4/§7: the curve recommends and never rewrites', () => {
     const strong = powerCurve(balanced().map(p => (p.durationSec === 1200 ? { ...p, watts: Math.round(FTP * 1.2) } : p)));
     const sig = staleFtpSignal({ curve: strong, ftpWatts: FTP, todayISO: TODAY });
     expect(sig.impliedFtp).toBeGreaterThan(FTP);
-    expect(sig.text).toMatch(/ramp test/);
+    // the plan's bike test is a twenty-minute time trial, not a ramp
+    expect(sig.text).toMatch(/twenty-minute test/);
     // §7: it reports, it does not assign. Nothing about the input changed.
     expect(sig.ftpWatts).toBe(FTP);
   });

@@ -10,7 +10,7 @@ import { SwimDashboard } from '@/features/progress/SwimDashboard.jsx';
 import { BikeDashboard } from '@/features/progress/BikeDashboard.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, powerCurve, previousPowerCurve, positionLog, bikeReviews }) {
+export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -330,9 +330,14 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
         && <SwimDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO} retest={retest} onSupport={onSupport} />}
 
         {/* Phase 8: the bike's own dashboard, on the swim's terms. */}
-        <BikeDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO}
-          retest={retest} durabilityReads={durability}
-          fuelLog={fuelLog} positionLog={positionLog} />
+        {/* Guarded exactly as the swim dashboard above is. Without this a
+            run-only athlete with no rides in their plan was shown a full bike
+            dashboard, FTP and all. */}
+        {!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'bike')
+          && plan.profile.excludedDiscipline !== 'bike'
+          && <BikeDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO}
+            retest={ftpRetest} durabilityReads={durability}
+            fuelLog={fuelLog} positionLog={positionLog} />}
 
       <div className="section-title">Discipline balance</div>
         <div className="card center">

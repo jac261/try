@@ -48,11 +48,20 @@ export function bikeReadiness(d) {
   const out = {};
 
   const ftp = d.status.ftpWatts.value;
+  const adherence = d.quality.adherence.value;
+  /* A measured FTP alone is not fitness. The else arm used to claim "your
+     efforts are landing on it" whenever an FTP existed — a second fact the
+     code had never checked — so a brand-new athlete who typed a number into
+     onboarding, and one returning from injury having ridden nothing, both
+     read 'ready'. And since no reviews are stored yet, that was EVERY
+     athlete. Unknown adherence is unknown fitness. */
   out.fitness = ftp == null
     ? st('unknown', 'No measured FTP, so there is nothing to judge fitness against.')
-    : d.quality.adherence.value != null && d.quality.adherence.value <= -BIKE_DASH_RULES.fadeConcern
-      ? st('at-risk', 'Your efforts are landing below their targets, which usually means the threshold is set high.')
-      : st('ready', 'Your threshold is measured and your efforts are landing on it.');
+    : adherence == null
+      ? st('unknown', 'Your FTP is measured, but no judged efforts yet to say whether it still fits you.')
+      : adherence <= -BIKE_DASH_RULES.fadeConcern
+        ? st('at-risk', 'Your efforts are landing below their targets, which usually means the threshold is set high.')
+        : st('ready', 'Your threshold is measured and your efforts are landing on it.');
 
   const fade = d.durability.lateFadePct.value;
   out.durability = fade == null
@@ -62,11 +71,16 @@ export function bikeReadiness(d) {
       : st('ready', 'Your output holds to the end of your long rides.');
 
   const adh = d.quality.adherence.value;
+  /* Three arms, not two: there was no at-risk case at all, so the one
+     component §7 names for pacing was structurally capped at 'building' — an
+     athlete 40% off every target read the same as one 4% off. */
   out.pacing = adh == null
     ? st('unknown', 'Not enough judged efforts yet to say how your pacing lands.')
     : Math.abs(adh) <= BIKE_DASH_RULES.fadeConcern
       ? st('ready', 'Your efforts land close to what they ask for.')
-      : st('building', 'Your efforts sit about ' + Math.abs(adh) + '% ' + (adh > 0 ? 'above' : 'below') + ' target.');
+      : Math.abs(adh) >= BIKE_DASH_RULES.fadeConcern * 3
+        ? st('at-risk', 'Your efforts sit about ' + Math.abs(adh) + '% ' + (adh > 0 ? 'above' : 'below') + ' target, which is far enough that the targets and the riding do not describe the same athlete.')
+        : st('building', 'Your efforts sit about ' + Math.abs(adh) + '% ' + (adh > 0 ? 'above' : 'below') + ' target.');
 
   const fuel = d.durability.fuellingMet.value;
   out.fuelling = fuel == null

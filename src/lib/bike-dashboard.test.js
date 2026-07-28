@@ -50,10 +50,26 @@ describe('§8/§9: indoor virtual distance never enters an outdoor figure', () =
   const indoor = { id: 'v', type: 'VirtualRide', date: '2026-07-15', movingTimeSec: 3600, distance: 40000 };
   const outdoor = { id: 'o', type: 'Ride', date: '2026-07-16', movingTimeSec: 3600, distance: 30000 };
 
-  it('the outdoor distance is modelled from the plan and cannot be moved by a turbo', () => {
-    const without = dash().status.outdoorDistanceKm.value;
-    const with_ = dash({ activities: [indoor] }).status.outdoorDistanceKm.value;
-    expect(with_, 'a trainer moved the outdoor distance').toBe(without);
+  it('a rider who rode entirely indoors has no outdoor distance at all', () => {
+    /* The figure is modelled from PLANNED segments and the plan carries no
+       indoor flag, so it used to be shown in full to somebody who never left
+       the house — beside copy insisting indoor rides never contribute
+       distance. */
+    const d = dash({ activities: [indoor] });
+    expect(d.status.outdoorDistanceKm.value).toBe(null);
+    expect(d.status.outdoorDistanceKm.note).toMatch(/entirely indoors/);
+  });
+
+  it('a turbo’s own reported kilometres never enter the figure', () => {
+    const half = dash({ activities: [indoor, outdoor] }).status.outdoorDistanceKm.value;
+    // the trainer claims 40 km and the road ride 30; the figure is modelled
+    // from the plan and scaled by time ridden outside, so neither number
+    // appears and inflating the turbo's distance changes nothing
+    const inflated = dash({
+      activities: [{ ...indoor, distance: 400000 }, outdoor],
+    }).status.outdoorDistanceKm.value;
+    expect(inflated).toBe(half);
+    expect(half).toBeGreaterThan(0);
   });
 
   it('but indoor duration and the split stay visible', () => {
@@ -260,5 +276,179 @@ describe('the quality section reads STORED reviews, not a caller-supplied array'
       bikeReview: { outcome: 'reduce', confidence: 'high', powerAdherence: -20, type: w.type },
     };
     expect(dash({ log: log2 }).quality.reviews).toBe(0);
+  });
+});
+
+
+/* Gauntlet regressions. Each reproduces a defect the review agents
+   demonstrated end to end. */
+describe('gauntlet: the dashboard is wired to the BIKE retest, and guarded', () => {
+  it('ProgressView hands it ftpRetest, not the swim CSS nudge', () => {
+    /* Both retest objects are {headline, why, sig}, so passing the swim one
+       failed nothing and printed "Verify your swim CSS" under the bike card's
+       "Next FTP recommendation". Shape collisions do not throw. */
+    const pv = readFileSync(new URL('../features/progress/ProgressView.jsx', import.meta.url), 'utf8');
+    const call = pv.match(/<BikeDashboard[^>]*>/s);
+    expect(call, 'no BikeDashboard render found').toBeTruthy();
+    expect(call[0], 'the bike dashboard is fed the swim retest').toMatch(/retest=\{ftpRetest\}/);
+    const app = readFileSync(new URL('../app/App.jsx', import.meta.url), 'utf8');
+    expect(app).toMatch(/ftpRetest=\{ftpRetest\}/);
+  });
+
+  it('is guarded for run-only and bike-excluded plans, as the swim one is', () => {
+    const pv = readFileSync(new URL('../features/progress/ProgressView.jsx', import.meta.url), 'utf8');
+    const block = pv.slice(pv.indexOf('<BikeDashboard') - 400, pv.indexOf('<BikeDashboard'));
+    expect(block).toMatch(/excludedDiscipline !== 'bike'/);
+    expect(block).toMatch(/solo/);
+  });
+});
+
+describe('gauntlet: a commute cannot erase or invert a long ride’s fuel answer', () => {
+  it('matches the workout’s own recording, not the first ride of the day', () => {
+    const long = rides.find(w => w.type === 'Long' && w.date > '2026-06-15' && w.date <= TODAY);
+    if (!long) return;
+    const acts = [
+      // a commute recorded EARLIER the same day, honestly answered "nothing"
+      { id: 'commute', type: 'Ride', date: long.date, movingTimeSec: 15 * 60 },
+      { id: 'thelong', type: 'Ride', date: long.date, movingTimeSec: long.durationMin * 60 },
+    ];
+    const fuelLog = { commute: { level: 'none', discipline: 'bike' }, thelong: { level: 'race', discipline: 'bike' } };
+    const d = dash({ activities: acts, fuelLog });
+    expect(d.durability.fuellingMet.value, 'the commute’s answer was scored against the long ride')
+      .toBe(100);
+  });
+});
+
+describe('gauntlet: position answers are read newest-first, inside the window', () => {
+  it('recent good answers are not overruled by old bad ones', () => {
+    const oldBad = Object.fromEntries([1, 2, 3, 4].map(i =>
+      ['old' + i, { comfort: 'bad', symptoms: ['neck'], at: '2026-03-0' + i + 'T10:00:00Z', minutes: 150 }]));
+    const newGood = Object.fromEntries([1, 2, 3].map(i =>
+      ['new' + i, { comfort: 'easy', symptoms: [], at: '2026-07-1' + i + 'T10:00:00Z', minutes: 200 }]));
+    const d = dash({ positionLog: { ...oldBad, ...newGood } });
+    expect(d.durability.positionTolerance.value, 'four spring answers decided a July verdict').toBe('build');
+  });
+
+  it('answers from outside the window do not count at all', () => {
+    const ancient = Object.fromEntries([1, 2, 3, 4].map(i =>
+      ['a' + i, { comfort: 'bad', symptoms: [], at: '2025-01-0' + i + 'T10:00:00Z', minutes: 150 }]));
+    expect(dash({ positionLog: ancient }).durability.positionTolerance.value).toBe(null);
+  });
+});
+
+describe('gauntlet: figures describe what they claim to', () => {
+  it('a brick’s run leg is not credited as riding', () => {
+    const d = dash();
+    const bikeOnly = rides.filter(w => w.date >= d.status.windowFrom && w.date < TODAY);
+    if (!bikeOnly.length) return;
+    expect(d.durability.longestRideMin.value)
+      .toBe(Math.max(...bikeOnly.map(w => w.durationMin || 0)));
+  });
+
+  it('weekly figures divide by the weeks the plan actually covers', () => {
+    // two weeks into a plan, a rider reading a sixth of their real volume
+    // under a label saying "a week" is being told something false
+    const early = bikeDashboard({
+      plan, log: doneLog(), moves: {}, activities: [], todayISO: '2026-06-15',
+    });
+    const full = dash();
+    expect(early.status.weeklyMinutes.value).toBeGreaterThan(0);
+    expect(early.status.weeklyMinutes.value, 'the early denominator counted weeks that could not exist')
+      .toBeGreaterThan(full.status.weeklyMinutes.value * 0.4);
+  });
+
+  it('a session scheduled for today is not yet a missed one', () => {
+    const day = rides.find(w => w.date > '2026-06-20' && w.date < TODAY);
+    if (!day) return;
+    const d = bikeDashboard({
+      plan, log: doneLog(), moves: {}, activities: [], todayISO: day.date,
+    });
+    // everything before today is done, so completion is whole
+    expect(d.status.completion.value === null || d.status.completion.value === 1).toBe(true);
+  });
+});
+
+describe('gauntlet: evidence outranks absence, and claims match what was checked', () => {
+  it('a measured problem is named ahead of a missing FTP', () => {
+    const p2 = generatePlan({ ...base, ftp: null });
+    const log2 = Object.fromEntries(p2.weeks.flatMap(w => w.workouts)
+      .filter(w => w.date <= TODAY).map(w => [w.id, { done: true }]));
+    const d = bikeDashboard({ plan: p2, log: log2, moves: {}, activities: [], todayISO: TODAY });
+    const withBrick = { ...d, brick: { executions: [], pattern: { text: 'Your last 2 brick runs came in well down.' } } };
+    expect(bikeLimiter(withBrick).id, 'a recorded brick pattern was masked by a missing FTP')
+      .toBe('bike-to-run');
+  });
+
+  it('readiness does not claim efforts land when none were judged', () => {
+    const r = bikeReadiness(dash());
+    expect(r.byId.fitness.state, 'claimed ready with no judged efforts at all').toBe('unknown');
+    expect(r.byId.fitness.evidence).toMatch(/no judged efforts/);
+  });
+
+  it('pacing can reach at-risk, not only building', () => {
+    const d = dash();
+    const far = { ...d, quality: { ...d.quality, adherence: { value: -30, kind: 'recorded', note: '%' } } };
+    expect(bikeReadiness(far).byId.pacing.state).toBe('at-risk');
+  });
+
+  it('the all-clear headline is not shown to an athlete with no data', () => {
+    const d = bikeDashboard({ plan, log: {}, moves: {}, activities: [], todayISO: '2026-06-02' });
+    expect(d.limiter.id).toBe('too-early');
+    expect(d.limiter.headline).not.toMatch(/Nothing is obviously holding/);
+  });
+
+  it('promises no plan behaviour that does not exist', () => {
+    /* These render under "What the plan does about it". Four of them once
+       described rules no phase ever built. */
+    const d = dash();
+    const all = [];
+    ['consistency', 'bike-to-run', 'durability', 'fuelling', 'threshold', 'aero-tolerance', 'data-confidence']
+      .forEach(id => {
+        const fake = { ...d };
+        if (id === 'bike-to-run') fake.brick = { executions: [], pattern: { text: 'x' } };
+        if (id === 'durability') fake.durability = { ...d.durability, lateFadePct: { value: 9, kind: 'recorded' } };
+        if (id === 'fuelling') fake.durability = { ...d.durability, fuellingMet: { value: 10, kind: 'reported' } };
+        if (id === 'threshold') fake.quality = { ...d.quality, adherence: { value: -9, kind: 'recorded' } };
+        if (id === 'aero-tolerance') fake.durability = { ...d.durability, positionTolerance: { value: 'back-off', kind: 'reported', note: 'n' } };
+        if (id === 'data-confidence') fake.status = { ...d.status, ftpWatts: { value: null, kind: 'missing' } };
+        all.push(...bikeLimiter(fake).response);
+      });
+    const text = all.join(' ');
+    // the four claims that were untrue
+    expect(text).not.toMatch(/holds bike intensity in the week of a brick/);
+    expect(text).not.toMatch(/keeps the position work in shorter blocks/);
+    expect(text).not.toMatch(/adds long-ride duration instead/);
+    expect(text).not.toMatch(/ramp test/);
+    // and where the plan does nothing, it says so rather than inventing
+    expect(text).toMatch(/yours to act on|yours: the plan does not/);
+  });
+});
+
+describe('gauntlet: §1’s first question is answered', () => {
+  it('reports whether the FTP has moved, using the phase 2 history', () => {
+    /* A FRESH profile object. generatePlan keeps a reference to the profile
+       it was given, so mutating one plan's profile reaches every other plan
+       built from the same literal — which polluted the test below this one. */
+    const p2 = generatePlan({
+      ...base,
+      fitnessHistory: [{ date: '2026-03-01', ftp: 230 }],
+      ftpMeta: { source: 'try-test', measuredAt: '2026-06-01', confidence: 'high' },
+    });
+    const d = bikeDashboard({ plan: p2, log: doneLog(), moves: {}, activities: [], todayISO: TODAY });
+    expect(d.status.ftpTrend.value).toBe(20);
+    expect(d.status.ftpTrend.note).toMatch(/230 W to 250 W/);
+  });
+
+  it('says there is no trend rather than inventing one from a single reading', () => {
+    expect(dash().status.ftpTrend.value).toBe(null);
+    expect(dash().status.ftpTrend.note).toMatch(/one measurement/);
+  });
+});
+
+describe('gauntlet: the race date is read from where it lives', () => {
+  it('daysToRace is a number, not permanently null', () => {
+    const d = dash();
+    expect(typeof d.daysToRace).toBe('number');
+    expect(d.daysToRace).toBeGreaterThan(0);
   });
 });

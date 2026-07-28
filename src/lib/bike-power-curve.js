@@ -259,6 +259,6 @@ export function staleFtpSignal({ curve, ftpWatts, todayISO, previous, ftpSource 
        they can hold repeatedly, and only a test settles that. */
     text: 'Your best twenty-minute power suggests a threshold around '
       + Math.round(impliedFtp) + ' W, about ' + Math.round(pct)
-      + '% above the number your targets are built from. Worth a ramp test rather than a change on the strength of one ride.',
+      + '% above the number your targets are built from. Worth riding the twenty-minute test rather than a change on the strength of one ride.',
   };
 }

@@ -22,9 +22,23 @@ function Metric({ m, label, unit }) {
   );
 }
 
-function Note({ m }) {
-  if (!m || m.value == null || !m.note) return null;
-  return <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{m.note}</div>;
+/* A number and its note, as one sentence.
+ *
+ * This used to render `m.note` alone, and the notes are UNIT FRAGMENTS — so
+ * §3's power adherence and rep fade appeared on the card as two orphan
+ * phrases, "% from the prescription" and "% in the closing efforts", with the
+ * numbers they belong to nowhere on the page. It also returned null whenever
+ * the value was missing, which hid the note in exactly the case the note
+ * exists to explain. */
+function Note({ m, label }) {
+  if (!m || !m.note) return null;
+  return (
+    <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>
+      {m.value != null
+        ? (label ? label + ': ' : '') + (m.value > 0 && /^%/.test(m.note) ? '+' : '') + m.value + m.note
+        : m.note}
+    </div>
+  );
 }
 
 export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog }) {
@@ -72,26 +86,46 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
           <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
             Measured{s.ftpSource.value ? ' from ' + s.ftpSource.value : ''}
             {s.ftpDate.value ? ' on ' + T.fmtDate(s.ftpDate.value) : ''}
-            {s.ftpConfidence.value ? ' · ' + s.ftpConfidence.value + ' confidence' : ''}.
+            {s.ftpConfidence.value && s.ftpConfidence.value !== 'unknown'
+              ? ' · ' + s.ftpConfidence.value + ' confidence' : ''}.
+          </div>
+        )}
+        {/* §1: "Is my FTP improving?" — the first question on the spec's list,
+            and the one the status block used to leave unanswered. */}
+        {s.ftpTrend.value != null && (
+          <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>
+            {s.ftpTrend.value > 0 ? '+' : ''}{s.ftpTrend.value} {s.ftpTrend.note}
+          </div>
+        )}
+        {s.ftpWatts.value != null && s.ftpTrend.value == null && s.ftpTrend.note && (
+          <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>
+            Is it improving? Only {s.ftpTrend.note}.
           </div>
         )}
         {s.estimatedFtpWatts.value != null && (
           <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
             This is an estimate from your level and weight, not a measurement, so nothing
-            on this page judges your riding against it. A ramp test changes that.
+            on this page judges your riding against it. A twenty-minute test changes that.
           </div>
         )}
         {/* §8: outdoor and indoor kept apart, and the estimate explained. */}
         <div className="rd-pmc" style={{ flexWrap: 'wrap' }}>
-          <Metric m={s.outdoorDistanceKm} label="Outdoor distance" unit="km" />
+          {/* §8 asks for the tilde on the figure itself, not only in the prose */}
+          {s.outdoorDistanceKm.value != null && (
+            <div><b style={{ fontSize: 15 }}>~{s.outdoorDistanceKm.value} km</b><span>Outdoor distance</span></div>
+          )}
           <Metric m={s.indoorMinutes} label="Indoor minutes" />
           <Metric m={s.indoorShare} label="Ridden indoors" unit="%" />
         </div>
-        {s.outdoorDistanceKm.value != null && (
+        {/* The explanation, in BOTH states: a rider who trained entirely
+            indoors needs to know why there is no distance here at all. */}
+        {s.outdoorDistanceKm.note && (
           <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>
-            ~{s.outdoorDistanceKm.value} km is {s.outdoorDistanceKm.note} Indoor rides
-            contribute their duration and power here, never their distance: a trainer’s
-            kilometres come from its wheel model rather than from the road.
+            {s.outdoorDistanceKm.value != null
+              ? '~' + s.outdoorDistanceKm.value + ' km is ' + s.outdoorDistanceKm.note + '.'
+              : 'No outdoor distance is shown because ' + s.outdoorDistanceKm.note + '.'}
+            {' '}Indoor rides contribute their duration and power here, never their distance:
+            a trainer’s kilometres come from its wheel model rather than from the road.
           </div>
         )}
       </div>
@@ -104,15 +138,23 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
           <Metric m={q.sweetSpotMin} label="Sweet spot" unit="min" />
           <Metric m={q.thresholdMin} label="Threshold" unit="min" />
           <Metric m={q.vo2Min} label="VO2" unit="min" />
+          {s.completion.value != null && (
+            <div><b style={{ fontSize: 15 }}>{Math.round(s.completion.value * 100)}%</b><span>Rides completed</span></div>
+          )}
           {q.completion.value != null && (
-            <div><b style={{ fontSize: 15 }}>{Math.round(q.completion.value * 100)}%</b><span>Completed</span></div>
+            <div><b style={{ fontSize: 15 }}>{Math.round(q.completion.value * 100)}%</b><span>Quality completed</span></div>
           )}
         </div>
-        {q.completion.value == null && q.completion.note && (
-          <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{q.completion.note}</div>
+        {s.completion.value == null && s.completion.note && (
+          <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{s.completion.note}</div>
         )}
-        <Note m={q.adherence} />
-        <Note m={q.fade} />
+        <Note m={q.adherence} label="Power adherence" />
+        <Note m={q.fade} label="Rep fade" />
+        {q.outcomes && (
+          <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>
+            Review outcomes: {Object.entries(q.outcomes).map(([k, n]) => k.replace('-', ' ') + ' ×' + n).join(', ')}.
+          </div>
+        )}
         {q.reviewNote && (
           <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{q.reviewNote}</div>
         )}

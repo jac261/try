@@ -1,6 +1,6 @@
 /* Try — phase 2 §6: when to recommend an FTP assessment.
  *
- * A recommendation is a nudge to ride the ramp test, never an automatic
+ * A recommendation is a nudge to ride the bike test, never an automatic
  * change: FTP only ever moves through a proposal the athlete accepts, or a
  * number they type. That separation is the same one the swim retest keeps,
  * and it is why this returns copy and a dismissal signature rather than a
@@ -165,16 +165,16 @@ export function ftpRetestRecommendation({ plan, activities, thresholds, log, mov
   const r = reasons[0];
   const weeks = meta.measuredAt ? Math.round(daysBetween(meta.measuredAt, todayISO) / 7) : null;
   const COPY = {
-    missing: ['Anchor your bike targets', 'You are riding without a measured FTP, so every watt target is derived from your level. The ramp test takes twenty minutes and fixes that.'],
-    'curve-high': ['Your best power says your threshold has moved', (r.detail && r.detail.text) || 'Your recent best twenty-minute power is well above the threshold your targets are built from. A ramp test would settle it.'],
-    'reps-over': ['Your intervals are landing above target', 'Your last few quality sessions have held power above what the cards asked for, effort by effort rather than on average. A ramp test would set the targets where your riding already is.'],
+    missing: ['Anchor your bike targets', 'You are riding without a measured FTP, so every watt target is derived from your level. The plan’s bike test takes twenty minutes and fixes that.'],
+    'curve-high': ['Your best power says your threshold has moved', (r.detail && r.detail.text) || 'Your recent best twenty-minute power is well above the threshold your targets are built from. A fresh test would settle it.'],
+    'reps-over': ['Your intervals are landing above target', 'Your last few quality sessions have held power above what the cards asked for, effort by effort rather than on average. A fresh test would set the targets where your riding already is.'],
     'reps-under': ['Your intervals are landing under target', 'Your last few quality sessions have come in below what the cards asked for, effort by effort. A retest will check whether the targets are set too high rather than leaving you chasing them.'],
-    'drift-up': ['Your rides are coming in strong', 'Recent quality rides have averaged above what they asked for. A ramp test may earn you higher targets.'],
+    'drift-up': ['Your rides are coming in strong', 'Recent quality rides have averaged above what they asked for. A fresh test may earn you higher targets.'],
     'drift-down': ['Your rides are coming in under', 'Recent quality rides have averaged below what they asked for. A retest will check whether your targets are set too high.'],
     returning: ['Worth re-anchoring after the break', 'You have not ridden in a while, and an FTP set before a break is a poor guide to what you can hold now.'],
-    stale: ['Time to retest your FTP', 'Your FTP was set about ' + weeks + ' weeks ago. A fresh ramp test keeps every bike target honest.'],
-    icu: ['Worth checking your FTP', 'intervals.icu has your cycling threshold set materially different from the plan. A ramp test would settle it.'],
-    unverified: ['Verify your FTP', 'Your FTP came from a hand entry. A ramp test will confirm the targets every ride is built from.'],
+    stale: ['Time to retest your FTP', 'Your FTP was set about ' + weeks + ' weeks ago. A fresh test keeps every bike target honest.'],
+    icu: ['Worth checking your FTP', 'intervals.icu has your cycling threshold set materially different from the plan. A fresh test would settle it.'],
+    unverified: ['Verify your FTP', 'Your FTP came from a hand entry. A twenty-minute test will confirm the targets every ride is built from.'],
   };
   const sig = 'ftp-retest:' + r.key + ':' + (r.latest || meta.measuredAt || anchor.ftpWatts || '');
   return { reason: r.key, reasons: reasons.map(x => x.key), headline: COPY[r.key][0], why: COPY[r.key][1], sig };

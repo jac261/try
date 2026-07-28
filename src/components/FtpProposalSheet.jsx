@@ -8,7 +8,7 @@ import { useSheetFocus } from '@/utils/useSheetFocus.js';
    same retarget the banner always ran; declining changes nothing. */
 
 const SOURCE_WORDS = {
-  'try-test': 'your ramp test',
+  'try-test': 'your bike test',
   'activity-model': 'the rolling estimate from your rides',
   'intervals-icu': 'your intervals.icu threshold',
   manual: 'a manual entry',
