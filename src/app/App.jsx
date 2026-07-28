@@ -495,6 +495,15 @@ export function App({ storage, getToken, user }) {
   const answerFuel = (activityId, level) => setFuelLog(storage.saveFuel(activityId, level, new Date().toISOString()));
   const answerPosition = (activityId, comfort, symptoms, minutes) =>
     setPositionLog(storage.savePosition(activityId, comfort, symptoms, new Date().toISOString(), minutes));
+  /* Phase 6 §4: how the athlete's recent bricks actually went. Computed here
+     because this is where the plan, the recordings, the log and the fuel
+     answers are all in scope at once; the sheet only renders the verdict.
+     Without this the brick model had no caller at all, which is the same way
+     the phase 5 load model shipped. */
+  const brickRead = useMemo(() => T.brickHistory({
+    plan, activities: displayActivities, log, moves,
+    paces: plan && plan.paces, fuelLog, limit: 3,
+  }), [plan, displayActivities, log, moves, fuelLog]);
   const [durability, setDurability] = useState(() => storage.loadDurability());
   const durabilityRef = useRef(durability);
   durabilityRef.current = durability;
@@ -1332,7 +1341,7 @@ export function App({ storage, getToken, user }) {
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}
 
-      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel} positionLog={positionLog} onPosition={answerPosition}
+      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel} positionLog={positionLog} onPosition={answerPosition} brick={brickRead}
         activity={log[detail.id] ? recordingFor(detail) : null}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}

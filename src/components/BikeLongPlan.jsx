@@ -34,6 +34,13 @@ export function BikeLongPlan({ w, plan, fuelLog, brickFollows }) {
         <div className="lead" style={{ margin: '8px 0 0', fontSize: 13 }}>
           Start within the first {fuel.startAfterMin} minutes, before you need it. {fuel.why}
         </div>
+        {fuel.provenGrams != null && (
+          // makes the cap comprehensible rather than mysterious: the athlete
+          // can see the number their own answers have earned
+          <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>
+            The most you have logged taking in is about {fuel.provenGrams} g an hour.
+          </div>
+        )}
         <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{fuel.sodiumNote}</div>
       </>}
     </>
@@ -71,6 +78,18 @@ export function PositionTap({ w, activity, positionLog, onPosition }) {
           ))}
         </div>
       </>}
+      {(() => {
+        /* The answers, read back. Asking a question after every long ride and
+           never using the answer is worse than not asking: this tap wrote to
+           a store that nothing read until this was wired. Silent until there
+           are enough answers to mean something. */
+        const reads = Object.values(positionLog || {})
+          .sort((a, b) => ((a.at || '') < (b.at || '') ? 1 : -1))
+          .map(r => T.positionRead(r)).filter(Boolean);
+        const tol = T.positionTolerance(reads);
+        return tol.verdict === 'unknown' ? null
+          : <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{tol.text}</div>;
+      })()}
     </>
   );
 }

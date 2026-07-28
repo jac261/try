@@ -40,7 +40,7 @@ const WHY_DISC = {
   'swim:Long': 'Steady, patient distance work. An even rhythm from the first length to the last: the volume does the work when your form holds it together.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed, fuelLog, onFuel, positionLog, onPosition, onCue, cueAnswer }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed, fuelLog, onFuel, positionLog, onPosition, brick, onCue, cueAnswer }) {
   // The rep table: lazily fetch the recording's interval analysis once the
   // session is done and matched. null → loading/none; [] handled by the lib.
   const [reps, setReps] = useState(null);
@@ -137,6 +137,14 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             </>;
           })()}
           <PositionTap w={w} activity={activity} positionLog={positionLog} onPosition={onPosition} />
+          {/* §4: how the bike leg set the run up. The pattern is the only
+              thing allowed to say somebody's pacing is wrong, so only the
+              pattern speaks here. */}
+          {brick && brick.pattern && (w.discipline === 'brick' || w.discipline === 'bike') && (
+            <div className="testnote" style={{ marginTop: 8 }}>
+              <Icon name="trend" size={18} /><span>{brick.pattern.text}</span>
+            </div>
+          )}
         </div>}
         {w.eased && <div className="testnote"><Icon name="heartrate" size={18} /><span>Eased from your planned {w.easedFrom} session for recovery. {onRestore && <a className="reset" {...tap(onRestore)}>Restore the hard session</a>}</span></div>}
         {w.trimmed && <div className="testnote"><Icon name="trend" size={18} /><span>Trimmed from {T.fmtDuration(w.trimmedFrom)} by the adaptive engine to protect you from overload. {onRestore && <a className="reset" {...tap(onRestore)}>Restore full volume</a>}</span></div>}

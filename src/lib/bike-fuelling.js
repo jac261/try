@@ -59,8 +59,12 @@ function baseCarbs({ durationMin, hasQualityBlock, brickFollows, raceType }) {
 /* What the athlete has actually proven they can take, from their own logged
    answers. Null when they have never answered, which is not the same as zero
    and must not be treated as it: an athlete with no history gets the
-   unconstrained target and a note, not a beginner's ration. */
-export function provenIntake(fuelLog) {
+   unconstrained target and a note, not a beginner's ration.
+ *
+ * Internal on purpose: it is reported through bikeFuellingPlan's own
+   provenGrams field, and an export nobody outside calls is exactly what this
+   phase got wrong four times over. */
+function provenIntake(fuelLog) {
   const levels = Object.values(fuelLog || {})
     .map(v => (typeof v === 'string' ? v : v && v.level))
     .filter(l => l && FUEL_LEVEL_GRAMS[l] != null);

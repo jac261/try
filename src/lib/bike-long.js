@@ -99,20 +99,11 @@ export function longRideObjective({ workout, seed, brickFollows }) {
 
 /* §1: "Not every Long ride should become harder."
  *
- * A property of a SEQUENCE, so it is checked over one: given the long rides a
- * plan actually generates, at most this share may be the harder objectives.
- * Stated as a function rather than a comment so a test can ask the plans
- * instead of taking the table's word for it. */
+ * A property of a SEQUENCE, not of a session, so there is nothing here to
+ * compute at read time and nothing for the app to render: the check belongs
+ * to the tests, which ask the generated plans directly. The ceiling is
+ * recorded here because it is a design constraint worth stating next to the
+ * objectives it constrains, and `harder` is on every objective so the check
+ * has something to count.
+ */
 export const MAX_HARD_LONG_SHARE = 0.7;
-export function longRideMix(objectives) {
-  const list = (objectives || []).filter(Boolean);
-  if (!list.length) return null;
-  const hard = list.filter(o => o.harder).length;
-  return {
-    total: list.length,
-    hard,
-    hardShare: Math.round(hard / list.length * 100) / 100,
-    withinGuidance: hard / list.length <= MAX_HARD_LONG_SHARE,
-    focuses: [...new Set(list.map(o => o.focus))],
-  };
-}

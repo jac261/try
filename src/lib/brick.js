@@ -19,6 +19,7 @@
  * DETERIORATION needs the run's own laps and is read only when they arrive.
  */
 import { RACES } from './domain.js';
+import { brickPairFor } from './autolog.js';
 import { FUEL_LEVEL_GRAMS } from './bike-fuelling.js';
 
 export const BRICK_RULES = {
@@ -108,4 +109,35 @@ export function brickPattern(executions) {
     text: 'Your last ' + ruined.length + ' brick runs came in well down on the pace you hold fresh. '
       + (shared.length ? CAUSE_ADVICE[shared[0]] : 'The rides themselves looked fine, which is the point: how a bike leg is ridden shows up in the run, not in the ride.'),
   };
+}
+
+/* The recent bricks an athlete has actually completed, read straight off the
+   plan and the activity feed, so §4's evidence has a way into the app rather
+   than being a module nobody calls.
+ *
+ * That mattered enough to write down: the first cut of this phase shipped
+ * brickExecution and brickPattern with ZERO consumers, exactly as the phase
+ * before it shipped its load model with none. A model with no caller is not a
+ * feature, and "bike review can use following-run evidence" is an acceptance
+ * criterion, not an aspiration. */
+export function brickHistory({ plan, activities, log, moves, paces, fuelLog, limit }) {
+  if (!plan || !Array.isArray(activities)) return { executions: [], pattern: null };
+  const used = new Set();
+  const bricks = (plan.weeks || []).flatMap(w => w.workouts || [])
+    .filter(w => w.discipline === 'brick' && log && log[w.id])
+    .sort((a, b) => (((moves && moves[b.id]) || b.date) < ((moves && moves[a.id]) || a.date) ? -1 : 1));
+  const executions = [];
+  for (const w of bricks) {
+    if (limit && executions.length >= limit) break;
+    const pair = brickPairFor({ workout: w, activities, moves, used });
+    if (!pair) continue;
+    used.add(pair.ride.id); used.add(pair.run.id);
+    const level = fuelLog && fuelLog[pair.ride.id] && fuelLog[pair.ride.id].level;
+    const e = brickExecution({
+      ride: pair.ride, run: pair.run, paces, fuelLevel: level,
+      raceType: (plan.profile || {}).raceType,
+    });
+    if (e) executions.push(e);
+  }
+  return { executions, pattern: brickPattern(executions) };
 }

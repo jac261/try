@@ -1,9 +1,22 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { trimWorkout } from './plan.js';
+import { brickHistory } from './brick.js';
 import { generatePlan } from './plan.js';
 import { isTrainingRide } from './bikeschema.js';
 import { bikePowerAnchor } from './domain.js';
-import { longRideObjective, longRideMix, LONG_OBJECTIVES, LONG_FOCUSES, MAX_HARD_LONG_SHARE } from './bike-long.js';
-import { bikeFuellingPlan, fuellingOutcome, provenIntake, FUELLING_RULES, FUEL_LEVEL_GRAMS } from './bike-fuelling.js';
+import { longRideObjective, LONG_OBJECTIVES, LONG_FOCUSES, MAX_HARD_LONG_SHARE } from './bike-long.js';
+
+/* §1's sequence property lives here rather than in the module: nothing in the
+   app renders it, and a function exported only for its own test is the shape
+   of the defect this file guards against further down. */
+function longRideMix(objectives) {
+  const list = (objectives || []).filter(Boolean);
+  if (!list.length) return null;
+  const hard = list.filter(o => o.harder).length;
+  return { total: list.length, hard, withinGuidance: hard / list.length <= MAX_HARD_LONG_SHARE };
+}
+import { bikeFuellingPlan, fuellingOutcome, FUELLING_RULES, FUEL_LEVEL_GRAMS } from './bike-fuelling.js';
 import { brickExecution, brickPattern, BRICK_RULES } from './brick.js';
 import { positionAsk, positionRead, positionTolerance, POSITION_RULES, AERO_SYMPTOMS } from './bike-position.js';
 
@@ -96,7 +109,7 @@ describe('§3: fuelling plans are workout specific', () => {
     // 60 is how a long ride becomes a gastrointestinal event
     const w = { discipline: 'bike', durationMin: 300, segments: [{ min: 300, zone: 'Z2' }] };
     const untrained = bikeFuellingPlan({ workout: w, profile, fuelLog: { a: { level: 'bit' } } });
-    expect(provenIntake({ a: { level: 'bit' } })).toBe(30);
+    expect(untrained.provenGrams).toBe(30);
     expect(untrained.carbsPerHour).toBe(30 + FUELLING_RULES.gutStepGrams);
     expect(untrained.capped).toBe(true);
     expect(untrained.why).toMatch(/trained/);
@@ -108,10 +121,10 @@ describe('§3: fuelling plans are workout specific', () => {
 
   it('no history is not the same as no tolerance', () => {
     // an athlete who has never answered must not be rationed like a beginner
-    expect(provenIntake({})).toBe(null);
-    expect(provenIntake(null)).toBe(null);
     const w = { discipline: 'bike', durationMin: 300, segments: [{ min: 300, zone: 'Z2' }] };
     const fresh = bikeFuellingPlan({ workout: w, profile, fuelLog: {} });
+    expect(fresh.provenGrams).toBe(null);
+    expect(bikeFuellingPlan({ workout: w, profile, fuelLog: null }).provenGrams).toBe(null);
     expect(fresh.capped).toBe(false);
     expect(fresh.why).toMatch(/starting point/);
   });
@@ -255,5 +268,95 @@ describe('§6: the shipped caps survive', () => {
       const maxBuild = Math.max(...build.map(w => w.durationMin));
       expect(maxEarly).toBeLessThan(maxBuild);
     }
+  });
+});
+
+
+describe('the adapt paths, which sweeps that only GENERATE always miss', () => {
+  it('a trimmed long ride does not keep prescribing the untrimmed fuel load', () => {
+    const long = longs.find(w => w.durationMin >= 150) || longs[longs.length - 1];
+    const profile = { ...base };
+    const full = bikeFuellingPlan({ workout: long, profile });
+    [0.6, 0.7, 0.8, 0.9].forEach(f => {
+      const t = trimWorkout(long, plan, f);
+      if (!t || t.durationMin === long.durationMin) return;
+      const cut = bikeFuellingPlan({ workout: t, profile });
+      if (!cut) return;   // trimmed below the threshold for needing a plan at all
+      expect(cut.carbsTotal, 'trim ' + f + ' still asks for the full load')
+        .toBeLessThan(full.carbsTotal);
+      expect(cut.hours).toBeLessThan(full.hours);
+    });
+  });
+
+  it('a trim does not flip what the long ride is FOR', () => {
+    // the swim module shipped exactly this: a category salted on duration, so
+    // trimming a session silently swapped it for a different one
+    longs.forEach(w => {
+      const before = longRideObjective({ workout: w, seed: w.seed });
+      [0.7, 0.85].forEach(f => {
+        const t = trimWorkout(w, plan, f);
+        if (!t || t.durationMin === w.durationMin) return;
+        const after = longRideObjective({ workout: t, seed: t.seed });
+        if (!after) return;
+        expect(after.focus, 'trim ' + f + ' changed the rehearsal focus').toBe(before.focus);
+      });
+    });
+  });
+});
+
+describe('nothing here is a model without a caller', () => {
+  it('every phase 6 export is consumed outside its own module', () => {
+    /* This phase shipped brickExecution, brickPattern, positionRead and
+       positionTolerance with ZERO consumers on the first cut — the position
+       tap wrote answers to a store that nothing ever read, which is worse
+       than dead code because it asks the athlete a question and then ignores
+       it. The phase before shipped its load model the same way. So the guard
+       is generalised rather than the four cases being fixed and forgotten. */
+    const MODULES = ['bike-fuelling.js', 'bike-long.js', 'bike-position.js', 'brick.js'];
+    const srcFiles = [];
+    const walk = dir => readdirSync(dir, { withFileTypes: true }).forEach(e => {
+      const full = dir + '/' + e.name;
+      if (e.isDirectory()) walk(full);
+      else if (/\.jsx?$/.test(e.name) && !/\.test\./.test(e.name)) srcFiles.push(full);
+    });
+    walk(new URL('..', import.meta.url).pathname.replace(/\/$/, ''));
+
+    const prodUses = name => srcFiles.filter(f => !/\/(bike-fuelling|bike-long|bike-position|brick)\.js$/.test(f)
+      && !f.endsWith('/index.js')
+      && new RegExp('\\b' + name + '\\b').test(readFileSync(f, 'utf8'))).length;
+
+    MODULES.forEach(mod => {
+      const src = readFileSync(new URL('./' + mod, import.meta.url), 'utf8');
+      /* FUNCTIONS only. The defect this guards against is a model with no
+         caller — brickExecution, positionTolerance, bikeLoad — not a data
+         table. An exported catalogue or threshold set is read by the module
+         itself and asserted by tests, and that IS its consumer; requiring a
+         production reference for it would only invite pointless re-exports. */
+      const exported = [...src.matchAll(/export function (\w+)/g)].map(m => m[1]);
+      expect(exported.length, mod + ' exports no functions').toBeGreaterThan(0);
+      /* The defect is a module with no PATH INTO THE APP. brick.js shipped
+         with none: every function in it was reachable only from its own
+         tests. So the module-level assertion is the real one, and each
+         function must then be reachable either from production directly or
+         through a sibling in its own module that is. */
+      expect(exported.some(n => prodUses(n) > 0),
+        mod + ' has no export the app actually calls: it is a model with no caller')
+        .toBe(true);
+      exported.forEach(name => {
+        const internal = new RegExp('\\b' + name + '\\b\\s*\\(').test(
+          src.replace(new RegExp('export function ' + name + '[^]*?\\n}', 'm'), ''));
+        expect(prodUses(name) > 0 || internal,
+          mod + ' exports ' + name + ', which nothing in the app and nothing in its own module calls')
+          .toBe(true);
+      });
+    });
+  });
+
+  it('the brick evidence has a real path from the plan to the athlete', () => {
+    // not just importable: callable with the shapes the app actually holds
+    const r = brickHistory({ plan, activities: [], log: {}, moves: {}, paces: plan.paces, fuelLog: {} });
+    expect(r.executions).toEqual([]);
+    expect(r.pattern).toBe(null);
+    expect(brickHistory({ plan: null, activities: [] }).pattern).toBe(null);
   });
 });
