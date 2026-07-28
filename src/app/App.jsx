@@ -490,8 +490,15 @@ export function App({ storage, getToken, user }) {
      hardware-versus-fitness protection is unreachable however good the data
      gets. Kept in the same local store the fuel and position answers use. */
   const [prevPowerCurve] = useState(() => storage.loadPowerCurve());
-  // the phase 5 review evidence the retest also reads
-  const bikeReviews = useMemo(() => [], []);
+  /* The phase 5 bike reviews, read off the log exactly as the swim evidence
+     above is. They arrive on the log entry from the backend and that column
+     is still an open ask, so this is empty today — but it is empty because
+     there is nothing stored, not because nothing asked. */
+  const bikeReviews = useMemo(() => (plan && plan.weeks
+    ? plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline === 'bike' && log[w.id] && log[w.id].bikeReview)
+      .map(w => ({ ...log[w.id].bikeReview, date: (log[w.id].at || '').slice(0, 10) || w.date }))
+    : []), [plan, log]);
   const [focusLog, setFocusLog] = useState(() => storage.loadFocusLog());
   const [blockReviewed, setBlockReviewed] = useState(() => storage.loadBlockReviewed());
   // The one narrow write a focus change is allowed: patch the single field,
@@ -1302,7 +1309,7 @@ export function App({ storage, getToken, user }) {
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} bikeReviews={bikeReviews} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}

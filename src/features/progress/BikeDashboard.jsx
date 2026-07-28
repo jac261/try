@@ -27,9 +27,9 @@ function Note({ m }) {
   return <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{m.note}</div>;
 }
 
-export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, reviews, durabilityReads, fuelLog, positionLog }) {
+export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog }) {
   const d = T.bikeDashboard({
-    plan, log, moves, activities, todayISO, retest, reviews, durabilityReads, fuelLog, positionLog,
+    plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog,
   });
   if (!d) return null;
   const readiness = T.bikeReadiness(d);
@@ -113,6 +113,9 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
         )}
         <Note m={q.adherence} />
         <Note m={q.fade} />
+        {q.reviewNote && (
+          <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{q.reviewNote}</div>
+        )}
         {q.nextFtp.value != null && (
           <div className="testnote" style={{ marginTop: 8 }}>
             <span><b>{q.nextFtp.value}</b> {q.nextFtp.note}</span>

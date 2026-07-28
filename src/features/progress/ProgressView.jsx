@@ -331,7 +331,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
 
         {/* Phase 8: the bike's own dashboard, on the swim's terms. */}
         <BikeDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO}
-          retest={retest} reviews={bikeReviews} durabilityReads={durability}
+          retest={retest} durabilityReads={durability}
           fuelLog={fuelLog} positionLog={positionLog} />
 
       <div className="section-title">Discipline balance</div>

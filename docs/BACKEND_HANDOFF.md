@@ -631,3 +631,42 @@ possibly downhill, and the two are not interchangeable.
 
 A power STREAM would subsume 2, 3 and 4, if that is ever easier to expose than
 three separate computed fields. None of these changes an existing response.
+
+## 28 July — a `bikeReview` column on the log entry
+
+Small, and the same shape as the `swimReview` column already asked for, so if
+that one gets done this should ride along with it.
+
+The bike now has a per-session review engine: it matches the efforts an
+athlete actually rode against the ones their card prescribed, and returns
+power adherence, rep-to-rep fade, completion and a confidence. It is computed
+client-side from the workout, the recording and its intervals.
+
+The problem is that it is computed and then lost. Intervals are fetched per
+workout on demand, so the review exists only while that sheet is open. The
+bike dashboard therefore cannot show adherence, fade or review outcomes over a
+six-week window, because five of those six weeks are not in memory. It
+currently says so plainly rather than substituting a whole-ride average, which
+is exactly the thing the review engine exists to avoid — but saying so is not
+the same as answering the question.
+
+Requested as `bikeReview` on the workout log entry, a JSON blob, opaque to
+you: write back whatever the client sends and return it unchanged. The client
+already reads `swimReview` from the same place in the same way.
+
+It is worth noting what this unblocks, because it is more than one number:
+the dashboard's whole quality section, the rolling multi-session evidence that
+decides whether an FTP retest is worth recommending, and the review outcome
+history. All three currently render as "not enough data yet" for every athlete
+regardless of how much they ride.
+
+### Running total of open bike asks
+
+1. `startedAt` on the activity — orders bricks, measures transitions.
+2. `bikeReview` on the log entry — as above, and it pairs with the existing
+   `swimReview` ask.
+3. `elapsedTimeSec` on the activity — separates a stop from a bad day.
+4. `normalizedWatts` on the activity — unblocks IF, power TSS, variability.
+5. a power-curve endpoint — unblocks the rider profile entirely.
+
+None of them changes an existing response, and every one is read defensively.

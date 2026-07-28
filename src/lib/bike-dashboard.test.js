@@ -221,3 +221,44 @@ describe('nothing here is a model without a caller', () => {
     expect(app, 'App does not pass the position log the dashboard needs').toMatch(/positionLog=\{positionLog\}/);
   });
 });
+
+
+describe('the quality section reads STORED reviews, not a caller-supplied array', () => {
+  it('says plainly that it has none rather than looking wired', () => {
+    /* The first cut took `reviews` as a parameter, App had none to give and
+       passed an empty array, and every metric here read "missing" while the
+       plumbing looked complete. Absence has to be visible. */
+    const d = dash();
+    expect(d.quality.reviews).toBe(0);
+    expect(d.quality.adherence.value).toBe(null);
+    expect(d.quality.reviewNote).toMatch(/stored/);
+  });
+
+  it('reads them off the log the way the swim dashboard does', () => {
+    const w = rides.find(x => ['Threshold', 'Sweet Spot'].includes(x.type)
+      && x.date <= TODAY && x.date >= '2026-06-15');
+    if (!w) return;
+    const log2 = { ...doneLog() };
+    log2[w.id] = {
+      done: true, at: w.date + 'T10:00:00Z',
+      bikeReview: { outcome: 'progress', confidence: 'high', powerAdherence: 0, intervalFadePercent: 1.2, type: w.type },
+    };
+    const d = dash({ log: log2 });
+    expect(d.quality.reviews).toBe(1);
+    expect(d.quality.adherence.value).toBe(0);
+    expect(d.quality.fade.value).toBe(1.2);
+    expect(d.quality.outcomes.progress).toBe(1);
+    expect(d.quality.reviewNote).toBe(null);
+  });
+
+  it('a review from before the window does not count towards it', () => {
+    const w = rides.find(x => x.date < '2026-06-08');
+    if (!w) return;
+    const log2 = { ...doneLog() };
+    log2[w.id] = {
+      done: true, at: w.date + 'T10:00:00Z',
+      bikeReview: { outcome: 'reduce', confidence: 'high', powerAdherence: -20, type: w.type },
+    };
+    expect(dash({ log: log2 }).quality.reviews).toBe(0);
+  });
+});
