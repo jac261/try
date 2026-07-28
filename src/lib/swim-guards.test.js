@@ -6,6 +6,10 @@ import { prescribedSwim } from './css-retest.js';
 import { swimDashboard } from './swim-dashboard.js';
 import { strokeMetricsEnabled, STROKE_METRICS_FLAG } from './swim-strokes.js';
 import { powerCurve, curveComparison, CURVE_DURATIONS } from './bike-power-curve.js';
+import { intervalRows } from './review.js';
+import { prescribedWatts } from './ftp-retest.js';
+import { bikeFuellingPlan } from './bike-fuelling.js';
+import { swimLimiter } from './swim-dashboard.js';
 
 /* Post-merge audit hardening (2026-07-28). The bike gauntlets found defect
    classes phase by phase; the swim module predates the generalised guards, so
@@ -143,5 +147,67 @@ describe('audit: the generalised guards now cover the swim modules too', () => {
         && new RegExp('\\b' + name + '\\b').test(readFileSync(f, 'utf8'))));
       expect(called, mod + ' has no export the app calls: a model with no caller').toBe(true);
     });
+  });
+});
+
+
+/* Second audit pass (the four-agent run). */
+describe('audit 2: the swim rep table judges the card, not the flat CSS band', () => {
+  it('a sprint set swum exactly at its own printed pace is on target', () => {
+    /* The sprint variant of CSS Intervals prescribes its 50s at the FASTER
+       sprint pace and prints it on the card; the rep table judged them at
+       CSS, so a swimmer executing the card exactly read "0 of 24 reps on
+       target", every rep hot, under a verdict saying pace sat right on
+       target. The bike fixed this class by sharing the generation band. */
+    const w = {
+      discipline: 'swim', type: 'CSS Intervals', durationMin: 40,
+      segments: [{ label: '24 x 50 m fast', swim: { n: 24, repM: 50, restSec: 20, pct: 105 } }],
+    };
+    const css = plan.paces.swim.css;
+    const sprint = css * 100 / 105;
+    const laps = Array.from({ length: 24 }, (_, i) => ({
+      type: 'WORK', startTimeSec: 600 + i * 60, movingTimeSec: sprint / 2, distance: 50,
+      averageSpeed: 50 / (sprint / 2),
+    }));
+    const it_ = intervalRows({ workout: w, intervals: laps, paces: plan.paces });
+    expect(it_.rows.every(r => r.tone === 'good'),
+      'reps swum at the pace printed on the card were marked hot').toBe(true);
+  });
+});
+
+describe('audit 2: prescribedWatts charges recoveries at their own zone', () => {
+  it('an interval card executed exactly does not read as under-ridden', () => {
+    const w = {
+      segments: [
+        { label: 'Warm-up', min: 15, zone: 'Z2' },
+        { label: '3 x (8 min / 4 min easy)', min: 36, zone: 'Z4',
+          blocks: [{ min: 8, zone: 'Z4' }, { min: 4, zone: 'Z1' }, { min: 8, zone: 'Z4' }, { min: 4, zone: 'Z1' }, { min: 8, zone: 'Z4' }, { min: 4, zone: 'Z1' }] },
+        { label: 'Cool-down', min: 9, zone: 'Z1' },
+      ],
+    };
+    const p = prescribedWatts(w, 250);
+    // honest average: work at threshold midpoint, recoveries at Z1, shoulders as printed
+    const honest = (15 * 0.675 + 24 * 1.0 + 12 * 0.55 + 9 * 0.55) * 250 / 60;
+    expect(Math.abs(p.avgWatts - honest), 'recoveries were charged at threshold watts')
+      .toBeLessThan(1);
+  });
+});
+
+describe('audit 2: smaller parities', () => {
+  it('a brick fuel answer trains the same gut a ride answer does', () => {
+    const w = { discipline: 'bike', durationMin: 300, segments: [{ min: 300, zone: 'Z2' }] };
+    const viaBrick = bikeFuellingPlan({ workout: w, profile: base, fuelLog: { b1: { level: 'race', discipline: 'brick' } } });
+    expect(viaBrick.provenGrams).toBe(90);
+  });
+
+  it('the swim limiter no longer answers missing CSS ahead of a live race-readiness gap', () => {
+    const d = {
+      status: { threshold: {}, focus: [] },
+      distribution: { completion: { value: 1 } },
+      quality: { evidence: null, fade: { value: null }, adherence: { value: null } },
+      openWater: { raceSoon: true, exposure: { sessions: 0 } },
+      testAhead: null,
+    };
+    expect(swimLimiter(d, '2026-07-28').id).toBe('open-water');
   });
 });

@@ -14,7 +14,7 @@ import { pacePer100ForDisplay, unitShort, poolLengthM, fromMetres, swimPaceLabel
 import { DEFAULT_POOL } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { isIndoor } from './autolog.js';
-import { swimReviewVerdict } from './swim-review.js';
+import { swimReviewVerdict, plannedSwimReps } from './swim-review.js';
 import { bikeReviewVerdict, bandForRep } from './bike-review.js';
 import { judgeBandForType } from './bike-zones.js';
 
@@ -114,7 +114,10 @@ export function reviewActivity({ workout, activity, paces, log, swimReview, bike
   // says more about it: this line and that one were the same claim.
   if (!perRepBike && w.discipline === 'bike' && EASY_INTENT[w.type] && a.averageWatts && pc.ftp && !pc.ftpEstimated) {
     const pct = a.averageWatts / pc.ftp;
-    if (pct > 0.78) verdicts.push({ tone: 'warn', text: 'Averaged ' + Math.round(pct * 100) + '% of FTP on a ride meant to be easy. Keeping easy rides genuinely easy is what lets the quality days be quality.' });
+    // 0.83 mirrors BIKE_REVIEW_RULES.easyCeiling (written out for the same
+    // TDZ reason as the judge band below); the endurance low-cadence card
+    // prescribes up to 0.80, and the judge may not be stricter than the card
+    if (pct > 0.83) verdicts.push({ tone: 'warn', text: 'Averaged ' + Math.round(pct * 100) + '% of FTP on a ride meant to be easy. Keeping easy rides genuinely easy is what lets the quality days be quality.' });
     else verdicts.push({ tone: 'good', text: 'Kept it easy: ' + Math.round(pct * 100) + '% of FTP on average. Textbook.' });
   }
   // Easy-intent with HR (needs the backend to pass averageHeartrate + a threshold HR to
@@ -213,6 +216,12 @@ export const OUTDOOR_REP_TOLERANCE = 0.08;
  * zone table was still in the temporal dead zone. Lazy is also just correct
  * here: nothing needs these bands until a rep is judged. */
 const JUDGE_ZONE = { Tempo: 'Z3', 'Sweet Spot': 'Z3', Threshold: 'Z4', 'VO2 Intervals': 'Z5' };
+
+// resolved lazily and cached per call site for the same TDZ reason as the
+// bike band below: swim-review is still initialising when this module loads
+function swimRepTargets(workout, pc) {
+  try { return plannedSwimReps(workout, pc).filter(r => r.targetSec); } catch (e) { return []; }
+}
 function bikeRepBand(type) {
   return JUDGE_ZONE[type] ? bandForRep(type, JUDGE_ZONE[type]) : null;
 }
@@ -257,7 +266,22 @@ export function intervalRows({ workout, intervals, paces, activity }) {
       if (outdoor && row.tone === 'good' && p < band[0] - REP_TOLERANCE) forgiven++;
     } else if (band && disc !== 'bike' && row.paceSec && pc[disc] && pc[disc][band[0]]) {
       judged++;
-      const target = pc[disc][band[0]], tol = band[1];
+      /* A swim rep is judged against ITS OWN prescribed pace when the card
+         carries one. The flat CSS band judged every CSS Intervals rep at CSS,
+         but the sprint variant prescribes its 50s at the FASTER sprint pace
+         and prints that pace on the card — so a swimmer executing the card
+         exactly read "0 of 24 reps on target", every rep marked hot, directly
+         under a review verdict saying pace sat right on target. The bike
+         fixed this exact class by sharing the generation band; the swim's
+         version is the per-rep target the prescription already stores.
+         Pairing is by order with the engine's own distance tolerance, and a
+         lap that pairs with nothing falls back to the flat band. */
+      const planned = swimRepTargets(workout, pc);
+      const own = planned[idx];
+      const target = own && row.distance
+        && Math.abs(row.distance - own.repM) / own.repM <= 0.12
+        ? own.targetSec : pc[disc][band[0]];
+      const tol = band[1];
       row.tone = row.paceSec < target - tol ? 'warn' : row.paceSec > target + tol ? 'info' : 'good';
     }
     if (row.tone === 'good') onTarget++;

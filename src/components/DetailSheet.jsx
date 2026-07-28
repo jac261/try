@@ -12,19 +12,19 @@ import { BikeLongPlan, PositionTap } from '@/components/BikeLongPlan.jsx';
 const D = T.DISCIPLINES;
 
 const WHY = {
-  'Easy': 'Build your aerobic base. Keep it conversational — easy enough to chat the whole way.',
+  'Easy': 'Build your aerobic base. Keep it conversational, easy enough to chat the whole way.',
   'Long': 'Build endurance for race day. Stay aerobic and relaxed, and practise your fuelling.',
   'Fartlek': 'Play with speed. Surge when it feels right, float in between - structure without the track.',
   'Tempo': 'Raise the pace you can hold for the long haul. Settle into a steady "comfortably hard" effort.',
-  'Threshold': 'Lift your threshold — the effort you could just sustain for an hour. Strong and controlled, never all-out.',
+  'Threshold': 'Lift your threshold, the effort you could just sustain for an hour. Strong and controlled, never all-out.',
   'VO2 Intervals': 'Sharpen your top-end fitness. Commit to the target pace on every rep, then recover fully.',
   'Endurance': 'Lay down aerobic base on the bike. Smooth, steady and mostly Zone 2.',
   'Sweet Spot': 'Big aerobic and threshold gains for the time spent. Sustained, just below threshold.',
   'Technique': 'Groove efficient form while fresh. Focus on a clean catch and a long, balanced body line.',
-  'CSS Intervals': 'Build sustainable swim speed. Hold your CSS pace — smooth and controlled, not a sprint.',
+  'CSS Intervals': 'Build sustainable swim speed. Hold your CSS pace, smooth and controlled, not a sprint.',
   'Race Pace': 'Rehearse race effort so it feels familiar. Strong and relaxed at your goal pace.',
-  'Brick': 'Teach your legs to run off the bike. Expect heaviness at first — find your run rhythm quickly.',
-  'Strength': 'Build durability and power to resist fatigue and injury. Quality over quantity — move well, brace your core.',
+  'Brick': 'Teach your legs to run off the bike. Expect heaviness at first, and find your run rhythm quickly.',
+  'Strength': 'Build durability and power to resist fatigue and injury. Quality over quantity: move well, brace your core.',
   'Open Water': 'Rehearse race-day swimming. Practise sighting, drafting and holding a straight line without walls to push off.',
 };
 
@@ -32,7 +32,7 @@ const WHY = {
 // the wrong one, a discipline-specific entry wins (field report 2026-07-11: an
 // Endurance Swim explained itself as a bike session).
 const WHY_DISC = {
-  'swim:Endurance': 'Build aerobic endurance in the water. Long, smooth and unhurried — hold relaxed form as the distance adds up.',
+  'swim:Endurance': 'Build aerobic endurance in the water. Long, smooth and unhurried, holding relaxed form as the distance adds up.',
   // The shared 'Long' entry talks about fuelling, which is run/bike advice; a
   // pool session needs its own reason to exist.
   // Not "your biggest swim of the week": the other swim sessions can out-
@@ -149,7 +149,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         </div>}
         {w.eased && <div className="testnote"><Icon name="heartrate" size={18} /><span>Eased from your planned {w.easedFrom} session for recovery. {onRestore && <a className="reset" {...tap(onRestore)}>Restore the hard session</a>}</span></div>}
         {w.trimmed && <div className="testnote"><Icon name="trend" size={18} /><span>Trimmed from {T.fmtDuration(w.trimmedFrom)} by the adaptive engine to protect you from overload. {onRestore && <a className="reset" {...tap(onRestore)}>Restore full volume</a>}</span></div>}
-        {w.boosted && <div className="testnote"><Icon name="flame" size={18} /><span>Extended from {T.fmtDuration(w.boostedFrom)} — your form showed room to absorb more load. {onRestore && <a className="reset" {...tap(onRestore)}>Back to the planned volume</a>}</span></div>}
+        {w.boosted && <div className="testnote"><Icon name="flame" size={18} /><span>Extended from {T.fmtDuration(w.boostedFrom)} because your form showed room to absorb more load. {onRestore && <a className="reset" {...tap(onRestore)}>Back to the planned volume</a>}</span></div>}
         {!w.race && <div className="statline">
           <div className="s"><b>{T.fmtDuration(w.durationMin || 0)}</b><span>Duration</span></div>
           {w.distance && <div className="s"><b>{w.distEst ? '~' : ''}{w.distance}</b><span>{w.unit}</span></div>}

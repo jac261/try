@@ -121,7 +121,7 @@ function quality({ plan, log, moves, todayISO }) {
       adherence: metric(null, 'missing'),
       fade: metric(null, 'missing'),
       consistency: metric(null, 'missing'),
-      note: 'Per-session review needs your swims matched to watch recordings with lap data. Nothing here is guessed from averages in the meantime.',
+      note: 'Per-session reviews are computed when a swim sheet is opened with its laps, but they are not stored yet, so this rolling view cannot see them. Nothing here is guessed from averages in the meantime.',
     };
   }
   const usable = reviews.filter(r => r.confidence !== 'low');
@@ -244,27 +244,41 @@ export function swimLimiter(d, today) {
     return out('consistency', 'Consistency is limiting your swim',
       ['You have completed ' + Math.round(comp * 100) + '% of your planned swims.',
         'Progression needs the sessions to happen before it can ask for more.'],
-      ['The plan holds its current progression rather than adding load.',
-        'Missed sessions are never made up: the week moves on.']);
-  }
-  if (!t.cssSecondsPer100m) {
-    return out('threshold-unknown', 'Your swim paces are guesses',
-      ['No CSS has been measured, so every swim target is derived from your level.'],
-      ['A CSS test is scheduled in your plan.', 'Once you swim it, every swim pace re-targets to you.']);
+      ['Missed sessions are never made up: the week moves on rather than piling up behind you.',
+        'Nothing else on this page can mean much until the sessions are happening.']);
   }
   if (d.quality.evidence && d.quality.evidence.direction === 'under') {
     return out('threshold', 'Threshold is limiting your swim',
       ['Recent quality sessions are coming in slower than their targets.',
         'That usually means the paces are set too hot rather than that you are unfit.'],
-      ['A CSS retest is recommended so the targets match you.',
-        'Until then the plan repeats rather than progresses the CSS sets.']);
+      /* Describes the mechanism, not the current nudge state: the actual
+         retest recommendation is silenced for a month after a swum test, and
+         this card asserting "a retest is recommended" rendered on the same
+         page as the retest row correctly saying none was due. */
+      ['When several swims agree like this, the app recommends a fresh CSS test rather than moving your paces on its own.',
+        'Your paces are all built from that one number, so it is the thing worth getting right.']);
   }
   if (d.quality.fade && d.quality.fade.value != null && d.quality.fade.value > DASH_RULES.fadeConcern) {
     return out('endurance', 'Endurance is limiting your swim',
       ['Your pace fades by about ' + d.quality.fade.value + '% in the closing efforts.',
         d.endurance.longestM.value ? 'Longest continuous swim: ' + d.endurance.longestM.value + ' m.' : 'No long continuous swim recorded yet.'],
-      ['The plan holds the current progression until the sets stop fading.',
-        'Long Swims build the continuous distance the fade is asking for.']);
+      ['Your Long Swims build the continuous distance the fade is asking for.',
+        'If it deepens, ease the closing reps rather than chasing the target through them.']);
+  }
+  /* MISSING DATA RANKS BELOW EVERYTHING MEASURED. This branch used to sit
+     second, so a swimmer with recorded fades on every reviewed swim, or an
+     open-water race a month away and zero exposure, was told only that their
+     paces were guesses — the bike limiter was reordered for exactly this in
+     its gauntlet ("absence yields to presence") and the swim sibling never
+     was. And the response now checks whether a CSS test actually remains
+     ahead rather than promising one that has already gone past. */
+  if (!t.cssSecondsPer100m && !(owRaceSoon && d.openWater.exposure.sessions === 0)
+    && !(d.quality.fade && d.quality.fade.value != null && d.quality.fade.value > DASH_RULES.fadeConcern)) {
+    return out('threshold-unknown', 'Your swim paces are guesses',
+      ['No CSS has been measured, so every swim target is derived from your level.'],
+      [d.testAhead
+        ? 'Your plan has a CSS test on ' + d.testAhead + '. Once you swim it, every swim pace re-targets to you.'
+        : 'Your plan’s CSS test has already passed. You can swim the 400/200 test any time and enter the result under Update fitness.']);
   }
   if (owRaceSoon && d.openWater.exposure.sessions === 0) {
     return out('open-water', 'Open-water exposure is limiting your race readiness',
@@ -355,6 +369,11 @@ export function swimDashboard({ plan, log, moves, activities, thresholds, todayI
     completion: dist.completion.value,
     owSessions: exposure.sessions,
   });
+  const cssTests = (plan.weeks || []).flatMap(w => w.workouts)
+    .filter(w => w.test && w.testKind === 'swimCss' && !(log && log[w.id]))
+    .map(w => (moves && moves[w.id]) || w.date)
+    .filter(dt => dt >= today).sort();
+  d.testAhead = cssTests.length ? cssTests[0] : null;
   d.limiter = swimLimiter(d, today);
   return d;
 }

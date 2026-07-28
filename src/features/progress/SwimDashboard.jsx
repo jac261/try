@@ -103,7 +103,9 @@ export function SwimDashboard({ plan, log, moves, activities, todayISO, retest, 
           ? <p className="lead" style={{ margin: 0 }}>{d.quality.note}</p>
           : <>
             <div className="statline">
-              <Stat label="Pace vs target" value={d.quality.adherence.value == null ? null : (d.quality.adherence.value > 0 ? '+' : '') + d.quality.adherence.value} unit="%" m={d.quality.adherence} />
+              <Stat label="Pace vs target" value={d.quality.adherence.value == null ? null
+                : Math.abs(d.quality.adherence.value) + '% ' + (d.quality.adherence.value > 0 ? 'slower' : 'faster')}
+                m={d.quality.adherence} />
               <Stat label="Late fade" value={d.quality.fade.value} unit="%" m={d.quality.fade} />
               <Stat label="Evenness" value={d.quality.consistency.value} unit="%" m={d.quality.consistency} />
               <Stat label="Reviewed" value={d.quality.reviews.length} />
@@ -159,7 +161,7 @@ export function SwimDashboard({ plan, log, moves, activities, todayISO, retest, 
           </div>
         ))}
         <p className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
-          Ranges, because a single number would claim more than your CSS can tell us. They widen with distance and narrow when your training is consistent.
+          Ranges, because a single number would claim more than your CSS can tell us. They are tightest near the distances your training actually rehearses, and widen further from them.
         </p>
       </div>
     </>
