@@ -7,9 +7,10 @@ import { WellnessTrends } from '@/features/wellness/WellnessTrends.jsx';
 import { AthleteStateStrip } from '@/features/wellness/AthleteStateStrip.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 import { SwimDashboard } from '@/features/progress/SwimDashboard.jsx';
+import { BikeDashboard } from '@/features/progress/BikeDashboard.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, powerCurve, previousPowerCurve }) {
+export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, powerCurve, previousPowerCurve, positionLog, bikeReviews }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -327,6 +328,11 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
       {!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
         && plan.profile.excludedDiscipline !== 'swim'
         && <SwimDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO} retest={retest} onSupport={onSupport} />}
+
+        {/* Phase 8: the bike's own dashboard, on the swim's terms. */}
+        <BikeDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO}
+          retest={retest} reviews={bikeReviews} durabilityReads={durability}
+          fuelLog={fuelLog} positionLog={positionLog} />
 
       <div className="section-title">Discipline balance</div>
         <div className="card center">

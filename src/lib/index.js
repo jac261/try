@@ -25,6 +25,8 @@ export * from './bike-position.js';
 export * from './brick.js';
 export * from './bike-power-curve.js';
 export * from './bike-profile.js';
+export * from './bike-dashboard.js';
+export * from './bike-readiness.js';
 export * from './ftp-retest.js';
 export * from './bike-sizing.js';
 export * from './disciplines.js';

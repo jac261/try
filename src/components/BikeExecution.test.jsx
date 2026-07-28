@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { BikeExecution } from '@/components/BikeExecution.jsx';
 import { BikeLongPlan, PositionTap } from '@/components/BikeLongPlan.jsx';
 import { PowerCurveCard } from '@/components/PowerCurveCard.jsx';
+import { BikeDashboard } from '@/features/progress/BikeDashboard.jsx';
 import { powerCurve, CURVE_DURATIONS } from '@/lib/bike-power-curve.js';
 import { generatePlan } from '@/lib/plan.js';
 import { isTrainingRide } from '@/lib/bikeschema.js';
@@ -31,7 +32,8 @@ describe('the barrel exports everything the bike cards reach for', () => {
      'longRideObjective', 'bikeFuellingPlan', 'fuellingOutcome', 'positionAsk', 'positionTolerance',
      'brickExecution', 'brickPattern',
      'powerCurve', 'curvePoint', 'curveComparison', 'staleDurations', 'staleFtpSignal',
-     'riderProfile', 'trainingImplications', 'durationSummary']
+     'riderProfile', 'trainingImplications', 'durationSummary',
+     'bikeDashboard', 'bikeLimiter', 'bikeReadiness']
       .forEach(name => expect(typeof T[name], name + ' is not exported from @/lib').toBe('function'));
   });
 });
@@ -177,5 +179,47 @@ describe('PowerCurveCard: gated now, correct when it opens', () => {
       <PowerCurveCard curve={powerCurve(raw())} ftpWatts={FTP} todayISO="2026-07-28" />);
     expect(html).not.toMatch(/you are an? \w+ rider/i);
     expect(html).not.toMatch(/\b(sprinter|diesel|all-rounder|puncheur|rouleur)\b/i);
+  });
+});
+
+
+describe('BikeDashboard renders', () => {
+  const plan2 = generatePlan(base);
+  const TODAY = '2026-07-20';
+  const log2 = Object.fromEntries(plan2.weeks.flatMap(w => w.workouts)
+    .filter(w => w.date <= TODAY).map(w => [w.id, { done: true }]));
+
+  it('renders the limiter, the plan response and the component readiness', () => {
+    const html = renderToStaticMarkup(
+      <BikeDashboard plan={plan2} log={log2} moves={{}} activities={[]} todayISO={TODAY} />);
+    expect(html).toContain('What the plan does about it');
+    expect(html).toContain('Race readiness');
+    expect(html).toContain('no single readiness score');
+    expect(html).toContain('Where you are');
+  });
+
+  it('shows a measured FTP and no estimate beside it', () => {
+    const html = renderToStaticMarkup(
+      <BikeDashboard plan={plan2} log={log2} moves={{}} activities={[]} todayISO={TODAY} />);
+    expect(html).toContain('>FTP<');
+    expect(html).not.toContain('Estimated FTP');
+  });
+
+  it('shows an estimate, clearly labelled, when there is no measurement', () => {
+    const p3 = generatePlan({ ...base, ftp: null });
+    const log3 = Object.fromEntries(p3.weeks.flatMap(w => w.workouts)
+      .filter(w => w.date <= TODAY).map(w => [w.id, { done: true }]));
+    const html = renderToStaticMarkup(
+      <BikeDashboard plan={p3} log={log3} moves={{}} activities={[]} todayISO={TODAY} />);
+    expect(html).toContain('Estimated FTP');
+    expect(html).toMatch(/not a measurement/);
+  });
+
+  it('never renders a missing metric as a zero', () => {
+    // a brand-new plan has almost nothing to say, and must say nothing
+    const html = renderToStaticMarkup(
+      <BikeDashboard plan={plan2} log={{}} moves={{}} activities={[]} todayISO="2026-06-01" />);
+    expect(html).not.toMatch(/>0<\/b>/);
+    expect(html).not.toMatch(/>0 %/);
   });
 });

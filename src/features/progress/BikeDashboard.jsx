@@ -1,0 +1,175 @@
+import * as T from '@/lib';
+
+/* Phase 8: the bike dashboard.
+ *
+ * Six questions (§1), answered in the order an athlete asks them, and the
+ * limiter and the plan's response placed FIRST because they are the only two
+ * things on the page anybody has to act on. Everything below them is the
+ * evidence for them.
+ *
+ * Every figure renders through Metric, which shows nothing at all when a
+ * value is missing and always says where a number came from. That is §9's
+ * "conclusions expose confidence", and it is the reason a blank on this page
+ * is safe: a missing metric is invisible rather than a zero. */
+
+function Metric({ m, label, unit }) {
+  if (!m || m.value == null) return null;
+  return (
+    <div>
+      <b style={{ fontSize: 15 }}>{m.value}{unit ? ' ' + unit : ''}</b>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function Note({ m }) {
+  if (!m || m.value == null || !m.note) return null;
+  return <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{m.note}</div>;
+}
+
+export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, reviews, durabilityReads, fuelLog, positionLog }) {
+  const d = T.bikeDashboard({
+    plan, log, moves, activities, todayISO, retest, reviews, durabilityReads, fuelLog, positionLog,
+  });
+  if (!d) return null;
+  const readiness = T.bikeReadiness(d);
+  const s = d.status;
+  const q = d.quality;
+  const du = d.durability;
+
+  return (
+    <>
+      <div className="section-title" style={{ marginTop: 18 }}>
+        Bike <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>
+          (last {d.windowWeeks} weeks)
+        </span>
+      </div>
+
+      {/* §5 + §6: one limiter, its evidence, and what the plan does about it. */}
+      <div className="card">
+        <div className="l" style={{ fontWeight: 600, marginBottom: 4 }}>{d.limiter.headline}</div>
+        {d.limiter.evidence.map((e, i) => (
+          <div className="lead" key={i} style={{ margin: '0 0 4px', fontSize: 13 }}>{e}</div>
+        ))}
+        <div className="section-title" style={{ margin: '10px 0 4px' }}>What the plan does about it</div>
+        {d.limiter.response.map((r, i) => (
+          <div className="lead" key={i} style={{ margin: '0 0 4px', fontSize: 13 }}>{r}</div>
+        ))}
+      </div>
+
+      {/* §2. Real and estimated FTP are separate rows, never one row with a
+          caveat: §9's first criterion is that they are never conflated. */}
+      <div className="section-title" style={{ marginTop: 16 }}>Where you are</div>
+      <div className="card">
+        <div className="rd-pmc" style={{ marginTop: 0, flexWrap: 'wrap' }}>
+          <Metric m={s.ftpWatts} label="FTP" unit="W" />
+          <Metric m={s.estimatedFtpWatts} label="Estimated FTP" unit="W" />
+          <Metric m={s.wkg} label="W/kg" />
+          <Metric m={s.ridesPerWeek} label="Rides a week" />
+          <Metric m={s.weeklyMinutes} label="Minutes a week" />
+        </div>
+        {s.ftpWatts.value != null && (
+          <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
+            Measured{s.ftpSource.value ? ' from ' + s.ftpSource.value : ''}
+            {s.ftpDate.value ? ' on ' + T.fmtDate(s.ftpDate.value) : ''}
+            {s.ftpConfidence.value ? ' · ' + s.ftpConfidence.value + ' confidence' : ''}.
+          </div>
+        )}
+        {s.estimatedFtpWatts.value != null && (
+          <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
+            This is an estimate from your level and weight, not a measurement, so nothing
+            on this page judges your riding against it. A ramp test changes that.
+          </div>
+        )}
+        {/* §8: outdoor and indoor kept apart, and the estimate explained. */}
+        <div className="rd-pmc" style={{ flexWrap: 'wrap' }}>
+          <Metric m={s.outdoorDistanceKm} label="Outdoor distance" unit="km" />
+          <Metric m={s.indoorMinutes} label="Indoor minutes" />
+          <Metric m={s.indoorShare} label="Ridden indoors" unit="%" />
+        </div>
+        {s.outdoorDistanceKm.value != null && (
+          <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>
+            ~{s.outdoorDistanceKm.value} km is {s.outdoorDistanceKm.note} Indoor rides
+            contribute their duration and power here, never their distance: a trainer’s
+            kilometres come from its wheel model rather than from the road.
+          </div>
+        )}
+      </div>
+
+      {/* §3, kept separate from §4 — acceptance criterion "quality and
+          durability are separate". */}
+      <div className="section-title" style={{ marginTop: 16 }}>Can you do the work?</div>
+      <div className="card">
+        <div className="rd-pmc" style={{ marginTop: 0, flexWrap: 'wrap' }}>
+          <Metric m={q.sweetSpotMin} label="Sweet spot" unit="min" />
+          <Metric m={q.thresholdMin} label="Threshold" unit="min" />
+          <Metric m={q.vo2Min} label="VO2" unit="min" />
+          {q.completion.value != null && (
+            <div><b style={{ fontSize: 15 }}>{Math.round(q.completion.value * 100)}%</b><span>Completed</span></div>
+          )}
+        </div>
+        {q.completion.value == null && q.completion.note && (
+          <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{q.completion.note}</div>
+        )}
+        <Note m={q.adherence} />
+        <Note m={q.fade} />
+        {q.nextFtp.value != null && (
+          <div className="testnote" style={{ marginTop: 8 }}>
+            <span><b>{q.nextFtp.value}</b> {q.nextFtp.note}</span>
+          </div>
+        )}
+      </div>
+
+      {/* §4 */}
+      <div className="section-title" style={{ marginTop: 16 }}>Does it hold up late?</div>
+      <div className="card">
+        <div className="rd-pmc" style={{ marginTop: 0, flexWrap: 'wrap' }}>
+          <Metric m={du.longestRideMin} label="Longest ride" unit="min" />
+          <Metric m={du.lateFadePct} label="Late fade" unit="%" />
+          <Metric m={du.hrDriftPct} label="HR drift" unit="%" />
+          <Metric m={du.fuellingMet} label="Fuelled to plan" unit="%" />
+        </div>
+        <Note m={du.fuellingMet} />
+        <Note m={du.positionTolerance} />
+        {du.objectives.value && (
+          <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>
+            Long-ride objectives so far: {Object.entries(du.objectives.value)
+              .map(([k, n]) => (du.objectiveLabels[k] ? du.objectiveLabels[k].label.toLowerCase() : k) + ' ×' + n)
+              .join(', ')}.
+          </div>
+        )}
+        {d.brick && d.brick.pattern && (
+          <div className="testnote" style={{ marginTop: 8 }}><span>{d.brick.pattern.text}</span></div>
+        )}
+      </div>
+
+      {/* §7: components, never a score. */}
+      {readiness && <>
+        <div className="section-title" style={{ marginTop: 16 }}>
+          Race readiness <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>
+            (kept in pieces, on purpose)
+          </span>
+        </div>
+        <div className="card">
+          {readiness.components.map(c => (
+            <div className="seg" key={c.id} style={{ padding: '5px 0' }}>
+              <div className="bar" style={{
+                background: c.state === 'ready' ? 'var(--run)'
+                  : c.state === 'at-risk' ? '#f6b27a' : 'var(--chip)',
+              }} />
+              <div>
+                <div className="l">{c.label} · {c.state === 'at-risk' ? 'needs work' : c.state}</div>
+                <div className="d">{c.evidence || c.why}</div>
+              </div>
+            </div>
+          ))}
+          <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
+            There is deliberately no single readiness score. Eight things measured with eight
+            different confidences do not average into one number, and whatever number existed
+            would be the only thing anybody read.
+          </div>
+        </div>
+      </>}
+    </>
+  );
+}
