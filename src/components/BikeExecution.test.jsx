@@ -23,7 +23,8 @@ describe('the barrel exports everything the bike cards reach for', () => {
   // to the barrel. Cheap to assert, so assert it.
   it('exports every symbol the phase 4 UI uses', async () => {
     const T = await import('@/lib');
-    ['bikeExecution', 'bikeEnvironmentNote', 'bikeDistanceEstimate', 'intervalRows', 'bikeTargetMode']
+    ['bikeExecution', 'bikeEnvironmentNote', 'bikeDistanceEstimate', 'intervalRows', 'bikeTargetMode',
+     'bikeReview', 'bikeReviewVerdict', 'bikeReviewEvidence', 'bikeLoad', 'matchBikeIntervals']
       .forEach(name => expect(typeof T[name], name + ' is not exported from @/lib').toBe('function'));
   });
 });

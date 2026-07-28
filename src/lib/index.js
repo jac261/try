@@ -17,6 +17,8 @@ export * from './bikeschema.js';
 export * from './bike-zones.js';
 export * from './bike-distance.js';
 export * from './bike-execution.js';
+export * from './bike-review.js';
+export * from './bike-load.js';
 export * from './ftp-retest.js';
 export * from './bike-sizing.js';
 export * from './disciplines.js';

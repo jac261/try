@@ -479,3 +479,45 @@ EXPLAINED. It would not change the session, the targets or the verdict
 thresholds.
 
 Neither ask changes any existing response, and both are read defensively.
+
+## 28 July — normalized power (the one field bike load is waiting on)
+
+A correction to our own earlier framing first, because it changes what is
+actually needed. We had this recorded as "the client lacks per-ride average
+power". That is not true and has not been for some time: `averageWatts`
+arrives both per ride and per interval, and the review, eFTP and durability
+code all read it. Interval-level bike review now ships on that data alone and
+needs nothing new from you.
+
+What is genuinely missing is **normalized power**, and it is the one field
+that unblocks intensity factor, power-based TSS and variability index.
+
+We cannot compute it. Normalized power is a thirty-second rolling average
+raised to the fourth power, averaged, then rooted: it is a statement about the
+SHAPE of a ride, and shape is exactly what an average discards. We could
+approximate it from per-interval averages, and deliberately do not, because
+the approximation fails in the least useful way possible — it sees variability
+BETWEEN efforts and none within them, so a ragged effort and a metronomic one
+of the same average would score identically, which is the single distinction
+normalized power exists to make. That number would then flow into TSS, into
+fitness and fatigue, into readiness, and into every recommendation built on
+them, with nothing downstream able to tell it was invented.
+
+Requested as `normalizedWatts` on the activity, raw, absent when upstream does
+not provide it. Absent must mean absent: we render nothing rather than
+substituting an average, and every formula is already written, tested against
+known values and gated behind the field's presence, so this is a wiring change
+on our side rather than a maths one.
+
+If a power STREAM is easier to expose than a computed normalized power, that
+works too and is strictly better — we can compute normalized power from a
+stream correctly, and a stream would also settle the outdoor-interruption
+question in the 28 July note above (stopped time, coasting, and the zero-power
+fraction inside an effort).
+
+Priority between the two open bike asks, if it helps: `elapsedTimeSec` is the
+cheaper one and improves review verdicts for every outdoor rider today.
+`normalizedWatts` unblocks a whole feature but affects only riders with a
+power meter and a measured FTP.
+
+Neither changes any existing response.

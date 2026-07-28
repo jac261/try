@@ -206,7 +206,10 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           // speaks with one voice — no average verdict beside a per-rep one.
           const sr = w.discipline === 'swim' && !w.adhoc && reps
             ? T.swimReview({ workout: w, activity, intervals: reps, paces: plan.paces, feel }) : null;
-          const rv = T.reviewActivity({ workout: w, activity, paces: plan.paces, log: null, swimReview: sr });
+          // Phase 5: the bike's interval engine, same contract as the swim's.
+          const br = w.discipline === 'bike' && !w.adhoc
+            ? T.bikeReview({ workout: w, activity, intervals: reps, paces: plan.paces, feel }) : null;
+          const rv = T.reviewActivity({ workout: w, activity, paces: plan.paces, log: null, swimReview: sr, bikeReview: br });
           if (!rv) return null;
           return (
             <div className="review">

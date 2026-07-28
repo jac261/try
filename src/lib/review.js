@@ -15,6 +15,7 @@ import { DEFAULT_POOL } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { isIndoor } from './autolog.js';
 import { swimReviewVerdict } from './swim-review.js';
+import { bikeReviewVerdict } from './bike-review.js';
 import { judgeBandForType } from './bike-zones.js';
 
 // Session types whose whole intent is one steady band — the only ones an
@@ -30,14 +31,20 @@ const secPer100 = a => a.movingTimeSec / (a.distance / 100);
 
 // The review: { stats: [[label, value]], verdicts: [{ tone, text }] } or null.
 // tone: 'good' | 'warn' | 'info'.
-export function reviewActivity({ workout, activity, paces, log, swimReview }) {
+export function reviewActivity({ workout, activity, paces, log, swimReview, bikeReview }) {
   if (!workout || !activity || !activity.movingTimeSec) return null;
   // Phase 4: when the per-rep swim engine can read this session, it is the
   // single voice. A whole-session average verdict rendered beside it can
   // flatly contradict it (an in-band average above a late-fade 'ease the
   // next one'), and the spec's own line is intervals over averages wherever
   // structure exists (review catch 2026-07-27).
-  const perRep = swimReview && swimReview.outcome !== 'insufficient-data' ? swimReview : null;
+  const perRepSwim = swimReview && swimReview.outcome !== 'insufficient-data' ? swimReview : null;
+  // Phase 5: the bike gained the same engine, so it gets the same right to be
+  // the single voice. Everything below that would otherwise speak about this
+  // ride now yields to it, because two verdicts on one screen can flatly
+  // contradict each other and the specific one is the better one.
+  const perRepBike = bikeReview && bikeReview.outcome !== 'insufficient-data' ? bikeReview : null;
+  const perRep = perRepSwim || perRepBike;
   const w = workout, a = activity, pc = paces || {};
   // Swim pace shows and compares per 100 of the athlete's pool unit; the
   // comparison thresholds stay canonical per 100 m, only the display converts.
@@ -103,7 +110,9 @@ export function reviewActivity({ workout, activity, paces, log, swimReview }) {
   // only against a real FTP. A level-and-weight estimate is too weak a basis
   // for a pass/fail verdict, so it stays quiet, the same principle as the
   // missing threshold HR below (design panel 2026-07-18).
-  if (w.discipline === 'bike' && EASY_INTENT[w.type] && a.averageWatts && pc.ftp && !pc.ftpEstimated) {
+  // ...and yields to the phase 5 engine, which reads the same intensity and
+  // says more about it: this line and that one were the same claim.
+  if (!perRepBike && w.discipline === 'bike' && EASY_INTENT[w.type] && a.averageWatts && pc.ftp && !pc.ftpEstimated) {
     const pct = a.averageWatts / pc.ftp;
     if (pct > 0.78) verdicts.push({ tone: 'warn', text: 'Averaged ' + Math.round(pct * 100) + '% of FTP on a ride meant to be easy. Keeping easy rides genuinely easy is what lets the quality days be quality.' });
     else verdicts.push({ tone: 'good', text: 'Kept it easy: ' + Math.round(pct * 100) + '% of FTP on average. Textbook.' });
@@ -136,7 +145,7 @@ export function reviewActivity({ workout, activity, paces, log, swimReview }) {
   // The per-rep coaching read closes the list: it is the verdict the others
   // were standing in for, and it carries the next action.
   if (perRep) {
-    const v = swimReviewVerdict(perRep);
+    const v = perRepSwim ? swimReviewVerdict(perRepSwim) : bikeReviewVerdict(perRepBike);
     if (v) verdicts.push(v);
   }
 

@@ -10,6 +10,7 @@ import { swimPaceLabel } from './swim-units.js';
 import { DEFAULT_POOL } from './domain.js';
 import { effDate } from './schedule.js';
 import { reviewActivity, intervalRows } from './review.js';
+import { bikeReview } from './bike-review.js';
 import { swimReview } from './swim-review.js';
 
 const fmtMin = sec => {
@@ -24,7 +25,10 @@ export function buildRecap({ workout, activity, intervals, route, paces, plan, l
   // says ease the next one (review catch 2026-07-27).
   const sr = workout.discipline === 'swim' && !workout.adhoc && intervals
     ? swimReview({ workout, activity, intervals, paces, feel: (log && log[workout.id] && log[workout.id].feel) || activity.feel }) : null;
-  const rv = reviewActivity({ workout, activity, paces, swimReview: sr }) || { stats: [], verdicts: [] };
+  // Phase 5: the bike's engine, on the same terms as the swim's above.
+  const br = workout.discipline === 'bike' && !workout.adhoc
+    ? bikeReview({ workout, activity, intervals, paces, feel: (log && log[workout.id] && log[workout.id].feel) || activity.feel }) : null;
+  const rv = reviewActivity({ workout, activity, paces, swimReview: sr, bikeReview: br }) || { stats: [], verdicts: [] };
   const it = intervalRows({ workout, intervals, paces, activity });
   const slides = [];
 
