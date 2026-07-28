@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import {
   powerCurve, curvePoint, curveAvailable, curveComparison, comparable,
-  staleDurations, staleFtpSignal, CURVE_DURATIONS, CURVE_LABELS, POWER_CURVE_RULES,
+  staleDurations, staleFtpSignal, CURVE_DURATIONS, CURVE_LABELS, POWER_CURVE_RULES, FTP_FROM_20MIN,
 } from './bike-power-curve.js';
 import { riderProfile, trainingImplications, durationSummary, CAPABILITIES, PROFILE_RULES } from './bike-profile.js';
 import { ftpRetestRecommendation } from './ftp-retest.js';
@@ -13,7 +13,7 @@ const TODAY = '2026-07-28';
 // a rider whose curve is unremarkable against their own threshold
 const balanced = (over = {}) => CURVE_DURATIONS.map(d => ({
   durationSec: d,
-  watts: Math.round(FTP * { 5: 4.0, 15: 3.0, 30: 2.4, 60: 1.8, 180: 1.35, 300: 1.2, 720: 1.08, 1200: 1.03, 2400: 0.97, 3600: 0.95 }[d]),
+  watts: Math.round(FTP * { 5: 4.0, 15: 3.0, 30: 2.4, 60: 1.8, 180: 1.38, 300: 1.25, 720: 1.10, 1200: 1 / 0.95, 2400: 1.0, 3600: 0.97 }[d]),
   date: '2026-07-01', source: 'Assioma', bike: 'tt', indoor: false, quality: 'high', ...over,
 }));
 
@@ -125,6 +125,45 @@ describe('§6: stale durations are surfaced, not hidden', () => {
     expect(d.label).toBe('5 sec');
     expect(d.pctOfFtp).toBeGreaterThan(100);
     expect(d.note).toMatch(/may not describe you now/);
+  });
+});
+
+describe('§3: the reference shape is not asserted against itself', () => {
+  /* The fixture above is built from the module's OWN reference ratios, so
+     every test using it is circular: a wrong reference table would produce a
+     wrong profile and a passing test. This one builds a rider from an
+     INDEPENDENT source — the definition of FTP, plus typical trained values
+     at the short end — and requires them to read as unremarkable. */
+  const INDEPENDENT = {
+    5: 4.0, 15: 3.0, 30: 2.4, 60: 1.8, 180: 1.38,
+    300: 1.25, 720: 1.10, 1200: 1 / 0.95, 2400: 1.0, 3600: 0.97,
+  };
+
+  it('a rider matching a definition-derived reference reads as even, not strong', () => {
+    const raw = CURVE_DURATIONS.map(d => ({
+      durationSec: d, watts: Math.round(FTP * INDEPENDENT[d]),
+      date: '2026-07-01', source: 'A', indoor: false, quality: 'high',
+    }));
+    const p = riderProfile({ curve: powerCurve(raw), ftpWatts: FTP });
+    expect(p.even).toBe(true);
+    p.ranked.forEach(s =>
+      expect(Math.abs(s.pct), s.label + ' reads ' + s.pct + '% for a rider who is average by construction')
+        .toBeLessThan(1.5));
+  });
+
+  it('the reference shape agrees with the threshold conversion it shares', () => {
+    // if these drift, a rider whose 20-minute power exactly implies their own
+    // FTP reads above shape, and durability and VO2 rank top for everybody
+    const raw = CURVE_DURATIONS.map(d => ({
+      durationSec: d, watts: Math.round(FTP * (d === 1200 ? 1 / FTP_FROM_20MIN : 1)),
+      date: '2026-07-01', source: 'A', indoor: false, quality: 'high',
+    }));
+    const p = riderProfile({ curve: powerCurve(raw), ftpWatts: FTP });
+    // the 20-minute point is exactly on shape, so threshold's deviation comes
+    // only from its other duration rather than from a mismatched constant
+    expect(p.scores.threshold.pct).toBeGreaterThan(-15);
+    const twenty = powerCurve(raw).points.find(x => x.durationSec === 1200);
+    expect(Math.round(twenty.watts * FTP_FROM_20MIN)).toBe(FTP);
   });
 });
 

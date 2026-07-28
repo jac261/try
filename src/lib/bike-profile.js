@@ -19,7 +19,7 @@
  * applied. Nothing here writes to a plan, and the one function that produces
  * training suggestions returns text for a human to accept or ignore.
  */
-import { CURVE_LABELS, POWER_CURVE_RULES, QUALITY_ORDER } from './bike-power-curve.js';
+import { CURVE_LABELS, POWER_CURVE_RULES, QUALITY_ORDER, FTP_FROM_20MIN } from './bike-power-curve.js';
 
 /* What a rider whose curve is unremarkable relative to their OWN threshold
    holds at each duration, as a fraction of FTP. These are shape references,
@@ -27,8 +27,17 @@ import { CURVE_LABELS, POWER_CURVE_RULES, QUALITY_ORDER } from './bike-power-cur
    against their own threshold", so a rider with a low FTP and a low sprint is
    balanced, not weak. */
 const SHAPE = {
-  5: 4.0, 15: 3.0, 30: 2.4, 60: 1.8, 180: 1.35,
-  300: 1.2, 720: 1.08, 1200: 1.03, 2400: 0.97, 3600: 0.95,
+  // short end: typical trained-cyclist multiples of threshold
+  5: 4.0, 15: 3.0, 30: 2.4, 60: 1.8, 180: 1.38, 300: 1.25, 720: 1.10,
+  /* long end, derived rather than chosen. FTP is defined here as 0.95 of a
+     twenty-minute best, so a rider whose twenty-minute power is exactly what
+     their FTP implies must read ZERO, not positive. Forty minutes sits just
+     above threshold and an hour just below it. The first cut picked these by
+     eye and every rider came out above shape at the long durations, which
+     ranked durability and VO2 at the top of everyone's profile. */
+  1200: 1 / FTP_FROM_20MIN,
+  2400: 1.00,
+  3600: 0.97,
 };
 
 /* §3's five categories, each reading the durations that actually train it. */

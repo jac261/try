@@ -47,6 +47,18 @@ export const POWER_CURVE_RULES = {
 
 export const QUALITY_ORDER = ['low', 'medium', 'high'];
 
+/* The conventional relationship between a twenty-minute best and a threshold.
+ *
+ * Exported because TWO places depend on it and they must not drift: the stale
+ * FTP signal converts a twenty-minute best into an implied threshold with it,
+ * and the rider profile's reference shape has to place twenty-minute power at
+ * its reciprocal, or a rider whose curve exactly matches the definition of
+ * their own FTP reads as above shape. That is not hypothetical: the first cut
+ * had them independently chosen, and a rider matching a definition-derived
+ * reference read +2% at threshold, +2.7% at durability and +3.3% at VO2 while
+ * being, by construction, exactly average. */
+export const FTP_FROM_20MIN = 0.95;
+
 /* One point, normalised and never trusted blindly. Returns null for anything
    that is not a usable reading, so a caller cannot render a watts figure that
    came from a malformed row. */
@@ -182,7 +194,7 @@ export function staleFtpSignal({ curve, ftpWatts, todayISO }) {
   if (todayISO && staleDurations(curve, todayISO).includes(1200)) return null;
   // a twenty-minute best is conventionally a little above threshold; well
   // above it means the threshold is behind the rider
-  const impliedFtp = p20.watts * 0.95;
+  const impliedFtp = p20.watts * FTP_FROM_20MIN;
   const pct = (impliedFtp - ftpWatts) / ftpWatts * 100;
   if (pct < 5) return null;
   return {
