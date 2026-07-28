@@ -28,7 +28,7 @@ export const BIKE_REVIEW_RULES = {
   minLapSec: 60,         // sub-minute slivers are lap-button stubs, not efforts
   fadeSoftPct: 3,        // final effort this much below the body = repeat
   fadeHardPct: 7,        // this much = the session broke down
-  cvSteady: 0.08,        // power CV under this reads as controlled steady riding
+  cvRepeatable: 8,       // effort-to-effort spread under this % reads as repeatable
   completionFull: 0.9,   // at least this much of the planned work = completed
   completionPoor: 0.7,   // under this (on a credible match) = reduce
   restTol: 0.5,          // recorded recovery within 50% of planned = compliant
@@ -144,7 +144,7 @@ export const TYPE_PRIORITIES = {
   Endurance: ['control', 'variability', 'duration'],
   Tempo: ['timeInTarget', 'consistency', 'completion'],
   'Sweet Spot': ['timeInTarget', 'consistency', 'completion'],
-  Threshold: ['completion', 'adherence', 'fade', 'recovery'],
+  Threshold: ['completion', 'fade', 'recovery', 'adherence'],
   'VO2 Intervals': ['completion', 'repeatability', 'fade', 'recovery'],
   Long: ['duration', 'durability', 'pacing'],
 };
@@ -173,7 +173,7 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
   // the same one-sidedness as the rep table (phase 4 §7).
   const lowTol = indoor ? REP_TOLERANCE : OUTDOOR_REP_TOLERANCE;
 
-  let timeInTarget = null, powerAdherence = null, intervalFadePercent = null, variability = null;
+  let timeInTarget = null, powerAdherence = null, intervalFadePercent = null, variability = null, recoveryCompliance = null;
   const efforts = [];
   if (realFtp && m && m.pairs.length) {
     let inBandMin = 0, totalMin = 0;
@@ -194,6 +194,20 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
       efforts.push({ watts: Math.round(lap.averageWatts), frac, min });
     });
     if (totalMin > 0) timeInTarget = pct1(inBandMin / totalMin * 100);
+    // §4 asks that RECOVERY be compared too, and a rider who cut their
+    // recoveries rode a harder session than the one on the card even if every
+    // effort landed in band. The recorded recovery is the gap between one
+    // effort ending and the next beginning, so it needs start times; without
+    // them this stays null rather than guessing, like every other read here.
+    const rests = [];
+    m.pairs.forEach(({ planned, lap }, i) => {
+      const next = m.pairs[i + 1];
+      if (!next || planned.restMin == null || lap.startTimeSec == null || next.lap.startTimeSec == null) return;
+      const gapMin = (next.lap.startTimeSec - (lap.startTimeSec + lap.movingTimeSec)) / 60;
+      if (gapMin < 0) return;
+      rests.push(gapMin >= planned.restMin * BIKE_REVIEW_RULES.restTol ? 1 : 0);
+    });
+    if (rests.length) recoveryCompliance = pct1(mean(rests) * 100);
     if (devs.length) powerAdherence = pct1(mean(devs));
     if (efforts.length >= 3) {
       // fade: the last effort against the body of the session
@@ -224,7 +238,7 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
 
   const outcome = decideOutcome({
     type, confidence, completion, timeInTarget, powerAdherence,
-    intervalFadePercent, control, feel, realFtp,
+    intervalFadePercent, control, feel, realFtp, variability, recoveryCompliance,
   });
 
   const review = {
@@ -237,7 +251,7 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
     // the same name, and every downstream figure would inherit the fiction.
     normalizedPowerWatts: null, intensityFactor: null, powerTss: null, variabilityIndex: null,
     intervalFadePercent,
-    variability, control, indoor,
+    variability, control, indoor, recoveryCompliance,
     efforts: efforts.length, plannedEfforts: m ? m.planned.length : 0,
     confidence, outcome, type,
     date: activity.date || null,
@@ -246,27 +260,54 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
   return review;
 }
 
+/* One signal per priority name in TYPE_PRIORITIES, each returning an outcome
+   or null. This is what makes that table load-bearing rather than decorative:
+   the type's declared order IS the order the signals are consulted in, so
+   changing the table changes the verdict. A priorities list that no code read
+   would be a comment wearing a const, and this module has shipped one of
+   those before. A test asserts every declared priority has a signal here. */
+const OUTCOME_SIGNALS = {
+  completion: s => (s.completion != null && s.completion < BIKE_REVIEW_RULES.completionFull ? 'repeat' : null),
+  duration: s => (s.completion != null && s.completion < BIKE_REVIEW_RULES.completionFull ? 'repeat' : null),
+  // riding an easy session hard: the most common way an athlete arrives at a
+  // quality day already tired
+  control: s => (s.control != null && s.control > BIKE_REVIEW_RULES.easyCeiling * 100 ? 'repeat' : null),
+  pacing: s => (s.control != null && s.control > BIKE_REVIEW_RULES.easyCeiling * 100 ? 'repeat' : null),
+  fade: s => (s.intervalFadePercent != null && s.intervalFadePercent >= BIKE_REVIEW_RULES.fadeSoftPct ? 'repeat' : null),
+  durability: s => (s.intervalFadePercent != null && s.intervalFadePercent >= BIKE_REVIEW_RULES.fadeSoftPct ? 'repeat' : null),
+  timeInTarget: s => (s.timeInTarget != null && s.timeInTarget < 60 ? 'repeat' : null),
+  repeatability: s => (s.variability != null && s.variability > BIKE_REVIEW_RULES.cvRepeatable ? 'repeat' : null),
+  consistency: s => (s.variability != null && s.variability > BIKE_REVIEW_RULES.cvRepeatable ? 'repeat' : null),
+  variability: s => (s.variability != null && s.variability > BIKE_REVIEW_RULES.cvRepeatable ? 'repeat' : null),
+  // cutting the recoveries makes a different, harder session out of the same
+  // card, so it is worth repeating as written rather than progressing from
+  recovery: s => (s.recoveryCompliance != null && s.recoveryCompliance < 50 ? 'repeat' : null),
+  adherence: s => (s.confidence === 'high' && s.powerAdherence != null && s.powerAdherence >= 6
+    && (s.completion == null || s.completion >= BIKE_REVIEW_RULES.completionFull) ? 'retest-ftp' : null),
+};
+
 function decideOutcome(s) {
   if (s.confidence === 'low') return 'insufficient-data';
   const R = BIKE_REVIEW_RULES;
+  // Floors that outrank whatever the type prioritises: a session mostly not
+  // done, or one that broke down, is the same answer for every type.
   if (s.completion != null && s.completion < R.completionPoor) return 'reduce';
   if (s.intervalFadePercent != null && s.intervalFadePercent >= R.fadeHardPct) return 'reduce';
-  // §5 Endurance/Long: the failure mode is riding an easy session hard, and
-  // it is a real one — it is the most common way an athlete arrives at a
-  // quality day already tired.
-  if (s.control != null && (s.type === 'Endurance' || s.type === 'Long')
-    && s.control > R.easyCeiling * 100) return 'repeat';
-  if (s.intervalFadePercent != null && s.intervalFadePercent >= R.fadeSoftPct) return 'repeat';
-  if (s.timeInTarget != null && s.timeInTarget < 60) return 'repeat';
+  for (const name of (TYPE_PRIORITIES[s.type] || ['completion'])) {
+    const signal = OUTCOME_SIGNALS[name];
+    const out = signal && signal(s);
+    if (out) return out;
+  }
   // Comfortably above the band across a whole session, on a credible match,
   // is the one pattern that argues the THRESHOLD is wrong rather than the
   // rider. It never acts on its own: §7's rolling evidence decides that, and
   // this only ever names the possibility.
-  if (s.confidence === 'high' && s.powerAdherence != null && s.powerAdherence >= 6
-    && (s.completion == null || s.completion >= R.completionFull)) return 'retest-ftp';
+  const adh = OUTCOME_SIGNALS.adherence(s);
+  if (adh) return adh;
   if (s.completion != null && s.completion >= R.completionFull) return 'progress';
   return 'repeat';
 }
+export { OUTCOME_SIGNALS };
 
 const OUTCOME_WORDS = {
   progress: 'Session complete', repeat: 'Worth repeating', reduce: 'Back off a little',
@@ -294,6 +335,9 @@ function reviewText(r, { workout, m, realFtp }) {
   } else {
     if (r.timeInTarget != null) bits.push(r.timeInTarget + '% of your effort time was in the target range.');
     if (r.efforts) bits.push('Judged across ' + r.efforts + ' of ' + r.plannedEfforts + ' planned efforts.');
+    if (r.recoveryCompliance != null && r.recoveryCompliance < 100) {
+      bits.push('You took the full recovery on ' + Math.round(r.recoveryCompliance) + '% of the gaps, and cutting them makes a harder session than the one on the card.');
+    }
     if (r.intervalFadePercent != null && r.intervalFadePercent >= BIKE_REVIEW_RULES.fadeSoftPct) {
       bits.push('Your last effort came in ' + r.intervalFadePercent + '% below the rest, so the session was at the edge of what you could repeat.');
     }

@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { generatePlan } from './plan.js';
 import { isTrainingRide } from './bikeschema.js';
 import { reviewActivity } from './review.js';
 import {
   bikeReview, bikeReviewVerdict, bikeReviewEvidence, matchBikeIntervals,
   plannedBikeEfforts, bandForRep, BIKE_REVIEW_RULES, BIKE_EVIDENCE_RULES, TYPE_PRIORITIES,
+  OUTCOME_SIGNALS,
 } from './bike-review.js';
 import { BIKE_TYPES } from './bikeschema.js';
 
@@ -145,6 +147,59 @@ describe('§4: the band a rep is judged against', () => {
     const thr = bandForRep('Threshold', 'Z4');
     expect(thr[0]).toBeLessThanOrEqual(0.95);
     expect(thr[1]).toBeGreaterThanOrEqual(1.05);
+  });
+});
+
+describe('the tables are load-bearing, not decorative', () => {
+  it('every declared priority has a signal that can actually fire', () => {
+    // TYPE_PRIORITIES used to be read for exactly one thing: which of two
+    // sentences to print. The outcome logic hardcoded the types beside it, so
+    // the table described a decision it did not make. Now the table IS the
+    // order, and a priority with no signal behind it is a comment wearing a
+    // const.
+    Object.entries(TYPE_PRIORITIES).forEach(([type, names]) => {
+      expect(names.length, type).toBeGreaterThan(0);
+      names.forEach(n => expect(typeof OUTCOME_SIGNALS[n], type + ' declares ' + n + ' but nothing implements it').toBe('function'));
+    });
+  });
+
+  it('no rule in the rules table is dead', () => {
+    // restTol and cvSteady were both declared and never referenced, so §4's
+    // recovery comparison was silently skipped while the constant for it sat
+    // in plain sight looking implemented.
+    const src = readFileSync(new URL('./bike-review.js', import.meta.url), 'utf8');
+    Object.keys(BIKE_REVIEW_RULES).forEach(key => {
+      const uses = src.split(key).length - 1;
+      expect(uses, key + ' is declared but never used').toBeGreaterThan(1);
+    });
+  });
+});
+
+describe('§4: recovery is compared, not merely collected', () => {
+  const w = rideOf('Threshold');
+  // efforts placed back to back, so every recovery was skipped
+  function cutRecoveries(workout, frac) {
+    const eff = plannedBikeEfforts(workout);
+    let t = 900;
+    return eff.map(e => {
+      const iv = { type: 'WORK', startTimeSec: t, movingTimeSec: e.min * 60, averageWatts: 250 * frac };
+      t += e.min * 60;      // no gap at all
+      return iv;
+    });
+  }
+  it('notices when the recoveries were skipped, and says so', () => {
+    const r = bikeReview({ workout: w, activity: act(w), intervals: cutRecoveries(w, 1.0), paces: REAL });
+    expect(r.recoveryCompliance).toBe(0);
+    expect(r.text).toMatch(/recovery|recoveries/i);
+    expect(r.outcome).toBe('repeat');
+  });
+  it('is satisfied when the recoveries were taken', () => {
+    const r = bikeReview({ workout: w, activity: act(w), intervals: rodeAsPlanned(w, 1.0), paces: REAL });
+    expect(r.recoveryCompliance).toBe(100);
+  });
+  it('stays null rather than guessing when start times are missing', () => {
+    const noTimes = rodeAsPlanned(w, 1.0).map(i => ({ ...i, startTimeSec: null }));
+    expect(bikeReview({ workout: w, activity: act(w), intervals: noTimes, paces: REAL }).recoveryCompliance).toBe(null);
   });
 });
 
