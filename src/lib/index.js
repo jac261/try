@@ -17,6 +17,7 @@ export * from './runschema.js';
 export * from './run-benchmark.js';
 export * from './run-sizing.js';
 export * from './run-plans.js';
+export * from './run-durability.js';
 export * from './bikeschema.js';
 export * from './bike-zones.js';
 export * from './bike-distance.js';
