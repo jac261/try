@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePlan } from './plan.js';
+import { generatePlan, startVolumeShortfall, START_SHORTFALL_PCT } from './plan.js';
 import { startAnchors, anchorLongCap, grownCap, weeklyHoursScale, START_VOLUME_RULES } from './start-volume.js';
 import { segMinutes } from './plan.js';
 
@@ -119,5 +119,52 @@ describe('the pieces', () => {
     expect(weeklyHoursScale({ anchors, plannedMin: 400, flexibleMin: 200, trainingWeeksElapsed: 0 })).toBe(null);
     const f = weeklyHoursScale({ anchors, plannedMin: 700, flexibleMin: 100, trainingWeeksElapsed: 0 });
     expect(f).toBe(START_VOLUME_RULES.weeklyFloor);
+  });
+});
+
+
+describe('the under-built warning', () => {
+  it('speaks when a low anchor on a short runway cannot reach race preparation', () => {
+    // 12 weeks to a full from a 60-minute longest ride: the safe ramp cannot
+    // close that, and hiding it would make the anchors a comfort feature
+    const short = {
+      ...base, raceDate: '2026-10-25',
+      longestSwimM: 1000, longestRideMin: 60, longestRunMin: 40, weeklyHours: 5,
+    };
+    const sf = startVolumeShortfall(short);
+    expect(sf).toBeTruthy();
+    expect(sf.items.length).toBeGreaterThan(0);
+    sf.items.forEach(i => expect(i.pct).toBeGreaterThanOrEqual(START_SHORTFALL_PCT));
+    expect(sf.text).toMatch(/peaks around/);
+    expect(sf.text).toMatch(/More weeks/);
+    // a statement about the plan, never an instruction to ramp faster
+    expect(sf.text).not.toMatch(/train more|push harder|catch up/i);
+    expect(sf.sig).toContain('start-shortfall:');
+  });
+
+  it('stays silent without anchors, and for anchors the runway absorbs', () => {
+    expect(startVolumeShortfall(base)).toBe(null);
+    // Jon's own case: honest anchors, 18-week runway — the curves meet, so
+    // there is nothing to warn about
+    expect(startVolumeShortfall(ANCHORED)).toBe(null);
+  });
+
+  it('changing the answer changes the signature, so a dismissed warning can speak again', () => {
+    const short = { ...base, raceDate: '2026-10-25', longestRideMin: 60 };
+    const a = startVolumeShortfall(short);
+    const b = startVolumeShortfall({ ...short, longestRideMin: 90 });
+    if (a && b) expect(a.sig).not.toBe(b.sig);
+  });
+});
+
+describe('the anchors are editable after onboarding', () => {
+  it('FitnessEditor carries the four fields and submits them', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../features/settings/FitnessEditor.jsx', import.meta.url), 'utf8');
+    ['weeklyHours', 'longestSwimM', 'longestRideMin', 'longestRunMin'].forEach(k => {
+      expect(src.split(k).length - 1, k + ' missing from the editor').toBeGreaterThanOrEqual(3); // state + input + payload
+    });
+    // clearing a field clears the anchor rather than keeping a stale one
+    expect(src).toMatch(/f\.weeklyHours \? Number\(f\.weeklyHours\) : null/);
   });
 });

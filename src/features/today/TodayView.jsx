@@ -30,6 +30,9 @@ const saveRetestDismiss = v => { try { localStorage.setItem(RETEST_DISMISS, v); 
 const CSSFAIL_DISMISS = 'try.cssTestFailDismissed';
 const loadCssFailDismiss = () => { try { return localStorage.getItem(CSSFAIL_DISMISS); } catch (e) { return null; } };
 const saveCssFailDismiss = v => { try { localStorage.setItem(CSSFAIL_DISMISS, v); } catch (e) { /* private mode */ } };
+const SHORTFALL_DISMISS = 'try.startShortfallDismissed';
+const loadShortfallDismiss = () => { try { return localStorage.getItem(SHORTFALL_DISMISS); } catch (e) { return null; } };
+const saveShortfallDismiss = v => { try { localStorage.setItem(SHORTFALL_DISMISS, v); } catch (e) { /* private mode */ } };
 
 // The user's expand/collapse choice for the week tab sticks across visits.
 const WEEK_PREF = 'try.showWeek';
@@ -91,7 +94,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, ftpRetest, onFtpRetest }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, ftpRetest, onFtpRetest, startShortfall }) {
   const tracker = plan.race === 'tracker';
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);
@@ -103,6 +106,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   const [retestDismissed, setRetestDismissed] = useState(loadRetestDismiss);
   const [ftpRetestDismissed, setFtpRetestDismissed] = useState(loadFtpRetestDismiss);
   const [cssFailDismissed, setCssFailDismissed] = useState(loadCssFailDismiss);
+  const [shortfallDismissed, setShortfallDismissed] = useState(loadShortfallDismiss);
   const [reviewToday, setReviewToday] = useState(false);
   const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile onToggle={() => onToggleWorkout(w.id)} />;
 
@@ -173,6 +177,15 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   // moves. The update-proposal banner above always outranks it (App passes
   // retest as null while a swim proposal is live).
   // §6: the FTP assessment nudge, dismissible per signature like the others.
+  /* The under-built warning. Informational, dismissible per signature: the
+     signature carries the shortfall sizes and the race date, so it speaks
+     again if the athlete changes either. It never blocks anything — it is
+     the one honest sentence the anchors owe the athlete they protect. */
+  if (!tracker && startShortfall && shortfallDismissed !== startShortfall.sig) coach.push({
+    key: 'start-shortfall', cls: 'banner', icon: 'trend', title: 'Your race build starts below where this race usually peaks',
+    sub: startShortfall.text,
+    dismiss: () => { saveShortfallDismiss(startShortfall.sig); setShortfallDismissed(startShortfall.sig); },
+  });
   if (!tracker && ftpRetest && ftpRetestDismissed !== ftpRetest.sig) coach.push({
     key: 'ftp-retest', cls: 'banner', icon: 'trend', title: ftpRetest.headline,
     sub: ftpRetest.why + ' Tap to enter a result →', act: onFtpRetest,

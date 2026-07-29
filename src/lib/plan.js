@@ -1730,6 +1730,51 @@ export const applyTrackerFitness = function (plan, fields, nowISO) {
 // rebuild pins seed 0 unless the workout recorded one — the same shape comes
 // back, now carrying the profile data. Race days, tests and anything already
 // current are left alone; the whole pass is a no-op on an up-to-date plan.
+/* The under-built warning (start anchors, part two).
+ *
+ * An athlete who anchors low on a short runway may reach race day genuinely
+ * under-prepared: the growth curve refuses to ramp faster than is safe, so
+ * the shortfall is a fact the maths already knows, and hiding it would make
+ * the anchors a comfort feature rather than a coaching one. This compares
+ * the anchored plan's peak long sessions against what the same plan reaches
+ * WITHOUT anchors — the race-sized preparation — and speaks only when the
+ * gap is material. It is a statement about the plan, not the athlete: the
+ * honest fixes it can name are more weeks or a shorter race, never "grow
+ * faster".
+ *
+ * Derived on demand rather than stored: it depends only on the profile, so
+ * it survives the wire for free and can never go stale against a retarget. */
+export const START_SHORTFALL_PCT = 15;
+export function startVolumeShortfall(profile) {
+  const p = profile || {};
+  if (p.weeklyHours == null && p.longestSwimM == null && p.longestRideMin == null && p.longestRunMin == null) return null;
+  if (!RACES[p.raceType] || RACES[p.raceType].noRace) return null;
+  const anchored = generatePlan(p);
+  const plain = generatePlan({ ...p, weeklyHours: null, longestSwimM: null, longestRideMin: null, longestRunMin: null });
+  const peak = (plan, disc) => Math.max(0, ...plan.weeks
+    .filter(w => w.phase !== 'Taper')
+    .flatMap(w => w.workouts)
+    .filter(w => (w.role === 'long' || w.discipline === 'brick') && w.discipline === disc && !w.race)
+    .map(w => w.durationMin || 0));
+  const NAMES = { swim: 'longest swim', bike: 'longest ride', run: 'longest run' };
+  const items = ['swim', 'bike', 'run'].map(disc => {
+    const a = peak(anchored, disc), b = peak(plain, disc);
+    if (!a || !b) return null;
+    const pct = Math.round((b - a) / b * 100);
+    return pct >= START_SHORTFALL_PCT ? { disc, anchoredPeakMin: a, plainPeakMin: b, pct } : null;
+  }).filter(Boolean);
+  if (!items.length) return null;
+  const fmt = m => (m >= 90 ? Math.round(m / 30) / 2 + ' h' : m + ' min');
+  const worst = items.reduce((x, y) => (y.pct > x.pct ? y : x));
+  return {
+    items,
+    sig: 'start-shortfall:' + items.map(i => i.disc + i.pct).join(':') + ':' + (p.raceDate || ''),
+    text: 'Starting from where you are and building at a safe rate, your ' + NAMES[worst.disc]
+      + ' peaks around ' + fmt(worst.anchoredPeakMin) + ' before the taper; this race\'s preparation normally peaks nearer '
+      + fmt(worst.plainPeakMin) + '. The plan will not ramp faster than is safe to close that gap. More weeks before race day would; so would a shorter race.',
+  };
+}
+
 export const upgradePlanSegments = function (plan) {
   if (!plan || !plan.weeks || !plan.paces) return plan;
   // The wire drops anything the plan DTO does not type, so a hydrated plan
