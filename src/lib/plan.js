@@ -2286,9 +2286,17 @@ export const generatePlan = function (profile, opts) {
          min() only, so the race-driven curve takes over the moment it is the
          lower one, and peaks are untouched. Without anchors this is a no-op
          and the plan is byte-identical to before the feature existed. */
+      /* The swim anchor applies to EVERY swim slot: a role-'long' swim only
+         exists when the limiter machinery grants swim a third session, so
+         anchoring on role alone meant the longest-swim question was asked of
+         every athlete and bound for almost none — the 4.3 km swim this
+         feature exists for survived unless the swimmer was swim-limited.
+         An athlete whose longest recent swim is 2,500 m should not meet a
+         4 km session of ANY type in week one. Run and bike keep role-based
+         anchoring: their long roles exist in every template. */
       const aCap = anchorLongCap({
         anchors, disc: s.disc,
-        isLong: s.role === 'long' || s.disc === 'brick',
+        isLong: s.role === 'long' || s.disc === 'brick' || s.disc === 'swim',
         trainingWeeksElapsed: trainingWeeksDone,
       });
       if (aCap != null && !soloShakeout) dur = Math.min(dur, aCap);
@@ -2440,16 +2448,35 @@ export const generatePlan = function (profile, opts) {
      Recovery weeks usually fit under the anchor already and pass through
      untouched, which keeps their dips. */
   if (anchors.weeklyMin != null) {
+    /* A long session joins the hours pool UNLESS its own discipline anchor
+       already capped it. The first cut exempted all longs on the assumption
+       they were "already capped", which is only true when the athlete also
+       answered the per-discipline questions — and training hours is the one
+       field a new athlete most plausibly answers alone. That version left a
+       race-sized long swim untouched (the exact session this feature exists
+       for) while gutting every midweek quality session to a stub, and the
+       week still ran fifty per cent over what the athlete said they could
+       absorb. Sharing the cut across everything without its own anchor
+       keeps sessions in proportion and lands the week near the promise. */
+    const hasOwnAnchor = x => (x.discipline === 'swim' && anchors.swimLongMin != null)
+      || (x.discipline === 'run' && anchors.runLongMin != null)
+      || ((x.discipline === 'bike' || x.discipline === 'brick') && anchors.rideLongMin != null);
+    const isLongish = x => x.role === 'long' || x.discipline === 'brick' || x.discipline === 'swim';
     let tw = 0;
     weeks.forEach(wk => {
       const flexible = wk.workouts.filter(x => !x.race && !x.bRace && !x.test && !x.second
-        && x.discipline !== 'rest' && x.discipline !== 'strength' && x.discipline !== 'brick'
-        && x.role !== 'long' && x.durationMin > 20);
+        && x.discipline !== 'rest' && x.discipline !== 'strength'
+        && !(isLongish(x) && hasOwnAnchor(x)) && x.durationMin > 20);
       const f = weeklyHoursScale({
         anchors,
         plannedMin: wk.workouts.reduce((a, b) => a + (b.durationMin || 0), 0),
         flexibleMin: flexible.reduce((a, b) => a + (b.durationMin || 0), 0),
         trainingWeeksElapsed: tw,
+        /* the recovery dip survives the anchor: a binding cap used to pin a
+           recovery week at a ceiling ten per cent HIGHER than the training
+           week before it, so the step-back week carried MORE load and the
+           plan ran four months without a real one */
+        recoveryDepth: wk.isRecovery ? fitness.recoveryDepth : 1,
       });
       if (f != null && f < 1) {
         flexible.forEach(x => {
@@ -2461,6 +2488,9 @@ export const generatePlan = function (profile, opts) {
           if (rebuilt.safety) x.safety = rebuilt.safety;
         });
         wk.totalMin = wk.workouts.reduce((a, b) => a + (b.durationMin || 0), 0);
+        // rebuilt sessions can collide into byte-identical cards; the dedupe
+        // invariant holds per week, so it re-runs where the rebuilds happened
+        dedupeSoloWeek(wk);
       }
       if (!wk.isRecovery) tw += 1;
     });

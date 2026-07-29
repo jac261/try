@@ -183,3 +183,101 @@ describe('App declares every hook above its early returns', () => {
     expect(body.slice(firstReturn)).not.toMatch(/\buse(State|Effect|Memo|Ref|Callback)\s*\(/);
   });
 });
+
+
+/* Gauntlet regressions: every scenario below was demonstrated by the review
+   agents against the first cut. */
+describe('gauntlet: the criticals are covered by the warning', () => {
+  it('fires on the exact silently-under-built config the agents constructed', () => {
+    // 16-week full (minWeeks, so the runway note stays quiet), in-range low
+    // anchors: anchored peak ride 115 min vs 250 unanchored, and the first
+    // cut shipped NO surface saying so anywhere
+    const sf = startVolumeShortfall({
+      ...base, fitness: 'intermediate', raceDate: '2026-11-22',
+      longestRideMin: 45, longestRunMin: 30,
+    });
+    expect(sf, 'the under-built config produced no warning').toBeTruthy();
+    expect(sf.items.some(i => i.disc === 'bike')).toBe(true);
+    expect(sf.items.find(i => i.disc === 'bike').pct).toBeGreaterThanOrEqual(30);
+  });
+});
+
+describe('gauntlet: the hours-only athlete', () => {
+  const hoursOnly = generatePlan({ ...base, weeklyHours: 5 });
+
+  it('the race-sized long swim does not survive an hours-only answer', () => {
+    /* The first cut exempted ALL longs from the hours pool on the assumption
+       their own anchors had capped them — untrue for the athlete who answers
+       only the hours question, the most plausible partial answer. The 4.3 km
+       swim this feature exists for survived, beside quality sessions gutted
+       to stubs. */
+    const w0 = hoursOnly.weeks[0].workouts;
+    const swim = w0.find(w => w.discipline === 'swim' && w.role === 'long');
+    if (swim) expect(swim.durationMin, 'the week-one long swim kept race size').toBeLessThan(80);
+    // and the week lands near the promise instead of 80% over it
+    expect(hoursOnly.weeks[0].totalMin).toBeLessThanOrEqual(5 * 60 * 1.25);
+  });
+
+  it('the cut is proportional: longs shrink with everything else', () => {
+    /* The defect was DISPROPORTION: race-sized longs untouched while every
+       quality session was gutted to a stub and the week ran 50% over. Five
+       hours across six training days legitimately means short sessions —
+       what must never return is the long swim at 80 while a Tempo sits at
+       20. So the pin is on proportion, not on the existence of short
+       sessions. */
+    const w0 = hoursOnly.weeks[0].workouts;
+    const swim = w0.find(w => w.discipline === 'swim' && w.role === 'long');
+    const ride = w0.find(w => w.discipline === 'bike' && w.role === 'long');
+    if (swim) expect(swim.durationMin).toBeLessThanOrEqual(45);
+    if (ride) expect(ride.durationMin).toBeLessThanOrEqual(110);
+    // and the promise is kept, not exceeded by half
+    expect(hoursOnly.weeks[0].totalMin).toBeLessThanOrEqual(5 * 60 * 1.05);
+  });
+});
+
+describe('gauntlet: a binding hours anchor keeps the recovery dip', () => {
+  it('no recovery week carries more load than the training week before it', () => {
+    /* The growth clock advanced past a recovery week, so a binding cap handed
+       it a ceiling ten per cent HIGHER than its neighbour: the step-back week
+       came out BIGGER, and the plan ran months without a real one. */
+    const p = generatePlan({ ...base, fitness: 'elite', raceType: 'full', weeklyHours: 4, raceDate: '2027-01-10' });
+    p.weeks.forEach((wk, i) => {
+      if (!wk.isRecovery || i === 0 || wk.phase === 'Taper') return;
+      const prev = p.weeks[i - 1];
+      if (prev.isRecovery || prev.phase === 'Taper') return;
+      expect(wk.totalMin, 'recovery week ' + i + ' outweighs the week before it')
+        .toBeLessThanOrEqual(prev.totalMin);
+    });
+  });
+});
+
+describe('gauntlet: the swim anchor binds for every athlete, not only the swim-limited', () => {
+  it('caps ordinary swim sessions in a plan where swim is not the limiter', () => {
+    /* role-long swims exist only when the limiter machinery grants swim a
+       third session, so anchoring on role alone meant the longest-swim
+       question was asked of everyone and bound for almost no one. */
+    const p = generatePlan({
+      ...base, raceType: 'half', fitness: 'intermediate',
+      css100Sec: 95, fivekSec: 1500,       // strong swimmer: swim is NOT the limiter
+      longestSwimM: 1200,
+    });
+    const w0Swims = p.weeks[0].workouts.filter(w => w.discipline === 'swim' && !w.test);
+    expect(w0Swims.length).toBeGreaterThan(0);
+    // 1200 m at this swimmer's steady pace is well under 30 minutes
+    w0Swims.forEach(w => expect(w.durationMin, w.type + ' ignored the swim anchor').toBeLessThanOrEqual(30));
+  });
+});
+
+describe('gauntlet: honest edges', () => {
+  it('a couch-start answer is honoured, not discarded as a typo', () => {
+    const a = startAnchors({ weeklyHours: 1.5, longestRunMin: 15 }, {});
+    expect(a.weeklyMin).toBe(90);
+    expect(a.runLongMin).toBe(15);
+  });
+
+  it('the onboarding copy no longer states the growth rate', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../features/onboarding/Onboarding.jsx', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/ten percent|10%/i);
+  });
+});

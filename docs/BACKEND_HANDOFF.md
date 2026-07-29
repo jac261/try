@@ -670,3 +670,26 @@ regardless of how much they ride.
 5. a power-curve endpoint — unblocks the rider profile entirely.
 
 None of them changes an existing response, and every one is read defensively.
+
+## 29 July — four start-anchor fields on the athlete profile
+
+Onboarding now asks four optional questions about where the athlete is
+starting from, and the plan's first weeks build up from those answers
+instead of opening at race-sized volume:
+
+- `weeklyHours` (number, hours)
+- `longestSwimM` (number, metres)
+- `longestRideMin` (number, minutes)
+- `longestRunMin` (number, minutes)
+
+They ride the plan POST inside `profile` today, so a plan carries its own
+anchors and regenerates identically. The gap is the profile PUT/GET: the
+typed UserProfileResponse ignores fields it does not know, so on a fresh
+device with no local store the recovered profile loses the anchors and the
+next regeneration silently reverts to race-sized first weeks — the exact
+behaviour the athlete answered the questions to avoid.
+
+Requested: carry these four columns on the athlete profile, nullable, raw.
+Absent means the athlete never answered, which the client treats as
+"size from the race and level alone". All four are read defensively and
+clamped client-side, so no validation is needed beyond the types.

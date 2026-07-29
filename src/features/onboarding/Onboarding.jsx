@@ -201,8 +201,8 @@ export function Onboarding({ onCreate }) {
               keeps the race-sized start. */}
           <label className="field" style={{ marginTop: 12, marginBottom: 4 }}><span className="lab">Where are you starting from? <span className="hint">optional</span></span></label>
           <p className="lead" style={{ fontSize: 13, marginTop: 0 }}>
-            Your first weeks start from what you are doing now and build up by about ten percent a
-            week, instead of starting at race-level volume. Skip these and the plan sizes itself
+            Your first weeks start from what you are doing now and build up gradually,
+            instead of starting at race-level volume. Skip these and the plan sizes itself
             from your race and level alone.</p>
           <label className="field"><span className="lab">Training hours in a typical recent week <span className="hint">optional · hours</span></span>
             <input value={f.weeklyHours} placeholder="e.g. 8" inputMode="decimal" onChange={e => set('weeklyHours', e.target.value)} /></label>

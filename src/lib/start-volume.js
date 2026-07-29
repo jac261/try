@@ -37,10 +37,13 @@ export const START_VOLUME_RULES = {
   weeklyFloor: 0.4,      // the hours anchor never cuts a week below this share
   sessionFloorMin: 20,   // no anchored session below this
   // sanity clamps: outside these the answer is treated as a typo and ignored
-  hours: [2, 30],
-  swimM: [200, 8000],
-  rideMin: [30, 480],
-  runMin: [20, 300],
+  /* Wide enough that a genuine couch-start answer is honoured: ninety
+     minutes a week and a fifteen-minute longest run are real beginners, not
+     typos. Only the physically implausible is ignored. */
+  hours: [1, 30],
+  swimM: [100, 8000],
+  rideMin: [20, 480],
+  runMin: [15, 300],
 };
 
 const inRange = (v, [lo, hi]) => (typeof v === 'number' && isFinite(v) && v >= lo && v <= hi ? v : null);
@@ -89,15 +92,19 @@ export function anchorLongCap({ anchors, disc, isLong, trainingWeeksElapsed }) {
 /* The weekly-hours anchor, applied to a fully built week.
  *
  * Returns the scale factor the week's flexible sessions should shrink by,
- * or null when the week already fits. Long sessions and bricks are excluded
- * (they carry their own anchors and were already capped at sizing time);
- * tests, races and strength keep their fixed shapes. The floor keeps a
- * mistyped answer from flattening a plan into twenty-minute stubs — below
- * it the week is allowed to exceed the anchor, and honesty about that beats
- * a week of sessions too short to mean anything. */
-export function weeklyHoursScale({ anchors, plannedMin, flexibleMin, trainingWeeksElapsed }) {
+ * or null when the week already fits. A long session is only OUTSIDE the
+ * pool when its own discipline anchor already capped it at sizing time —
+ * exempting all longs unconditionally left a race-sized long swim untouched
+ * for the athlete who answered only the hours question, while their quality
+ * sessions were gutted to stubs. Tests, races and strength keep their fixed
+ * shapes. recoveryDepth carries the engine's own step-back so a binding cap
+ * cannot hand a recovery week a HIGHER ceiling than the training week
+ * before it. The floor keeps a mistyped answer from flattening a plan;
+ * below it the week is allowed to exceed the anchor, and honesty about
+ * that beats a week of sessions too short to mean anything. */
+export function weeklyHoursScale({ anchors, plannedMin, flexibleMin, trainingWeeksElapsed, recoveryDepth }) {
   if (!anchors || anchors.weeklyMin == null || !plannedMin || !flexibleMin) return null;
-  const allowed = grownCap(anchors.weeklyMin, trainingWeeksElapsed);
+  const allowed = grownCap(anchors.weeklyMin, trainingWeeksElapsed) * (recoveryDepth || 1);
   if (plannedMin <= allowed) return null;
   const cut = plannedMin - allowed;                 // minutes that must go
   const f = (flexibleMin - cut) / flexibleMin;      // borne by flexible sessions
