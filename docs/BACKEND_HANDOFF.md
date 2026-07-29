@@ -546,17 +546,9 @@ This would also let us stop pairing bricks purely by calendar date, which is
 the other place the missing time of day costs us: two rides and a run on the
 same day currently cannot be ordered.
 
-Running total of open bike asks, cheapest first, all additive and all read
-defensively:
-
-1. `startedAt` on the activity — orders bricks and measures transitions.
-2. `elapsedTimeSec` on the activity — separates a stop from a bad day, so
-   outdoor rides can be judged on what the rider did.
-3. `normalizedWatts` on the activity (or a power stream, which is strictly
-   better and would subsume both this and #2) — unblocks intensity factor,
-   power-based TSS and variability index.
-
-None of them changes an existing response.
+This ask does not change an existing response. For the current list of open
+bike asks see **Open bike asks** at the end of this document — it supersedes
+the partial lists that were written alongside each individual ask.
 
 ## 28 July — a power-curve endpoint
 
@@ -622,15 +614,10 @@ ride a ramp test, and that is the strongest action available to it. Threshold
 is what a rider can hold repeatedly; a curve point is what they did once,
 possibly downhill, and the two are not interchangeable.
 
-### Running total of open bike asks
-
-1. `startedAt` on the activity — orders bricks, measures transitions.
-2. `elapsedTimeSec` on the activity — separates a stop from a bad day.
-3. `normalizedWatts` on the activity — unblocks IF, power TSS, variability.
-4. a power-curve endpoint, as above — unblocks the rider profile entirely.
-
-A power STREAM would subsume 2, 3 and 4, if that is ever easier to expose than
-three separate computed fields. None of these changes an existing response.
+A power STREAM would subsume this ask, the elapsed-time ask and the
+normalized-power ask together, if that is ever easier to expose than three
+separate computed fields. See **Open bike asks** at the end of this document
+for the current list.
 
 ## 28 July — a `bikeReview` column on the log entry
 
@@ -660,13 +647,31 @@ decides whether an FTP retest is worth recommending, and the review outcome
 history. All three currently render as "not enough data yet" for every athlete
 regardless of how much they ride.
 
-### Running total of open bike asks
+See **Open bike asks** below.
 
-1. `startedAt` on the activity — orders bricks, measures transitions.
-2. `bikeReview` on the log entry — as above, and it pairs with the existing
-   `swimReview` ask.
-3. `elapsedTimeSec` on the activity — separates a stop from a bad day.
-4. `normalizedWatts` on the activity — unblocks IF, power TSS, variability.
-5. a power-curve endpoint — unblocks the rider profile entirely.
 
-None of them changes an existing response, and every one is read defensively.
+## Open bike asks — the current list
+
+**This section supersedes every partial list written alongside an individual
+ask above.** Cheapest first. All additive, all nullable, all read defensively:
+absent means the client renders nothing rather than guessing, so shipping any
+subset is safe and shipping none breaks nothing.
+
+| # | Field | Where | Unblocks |
+|---|---|---|---|
+| 1 | `startedAt` (ISO 8601) | activity | Ordering bricks; measuring transition duration |
+| 2 | `bikeReview` (JSON blob, opaque) | workout log entry | The dashboard's whole quality section, the rolling FTP evidence, review outcome history. Pairs with the existing `swimReview` ask — if that one gets done, this should ride with it |
+| 3 | `elapsedTimeSec` | activity | Separating a stop from a bad day, so outdoor rides are judged on what the rider did |
+| 4 | `normalizedWatts` | activity | Intensity factor, power-based TSS, variability index |
+| 5 | Best power by duration | new endpoint | The rider profile entirely — see the power-curve section for the required per-point metadata |
+
+A power **stream** would subsume 3, 4 and 5 together, if that is ever easier
+to expose than three separate computed fields.
+
+Two notes on what these cost us today. Ask 2 is the one whose absence is most
+visible: without it the bike dashboard's quality section reads "not enough
+data yet" for every athlete however much they ride, because per-session
+reviews are computed when a workout sheet is opened and then lost. And in ask
+5, `source` (the power meter identifier) is the single most valuable field —
+without it a new power meter reads as a sudden fitness gain at every duration,
+which is the one error an athlete has no way to catch for themselves.

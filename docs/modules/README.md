@@ -8,17 +8,18 @@ hypothesis, propose-never-impose, honest numbers, one thing by default) see
 
 Snapshot: React 18 + Vite 6 PWA, plain JS, Clerk-gated, per-user localStorage
 with a backend sync (Jack's ASP.NET Core service). intervals.icu is the
-activity source. 879 tests across 49 files at the time of writing.
+activity source. 1,175 tests across 61 files at the time of writing.
 
 ## The disciplines
 
 Each leg is meant to stand up against a dedicated single-sport app, not just be
-"present". Build order was swim → bike → run, weakest first.
+"present". Build order was swim → bike → run, weakest first. Swim and bike have
+each had a full eight-phase build-out; the run is the next one.
 
 | Module | What it covers | Doc |
 |---|---|---|
 | Swim | The swim library, the pool profile, CSS with provenance and testing, per-session review, technique focus, open water, the swim dashboard | [swim.md](swim.md), deeper in [../SWIM_MODULE.md](../SWIM_MODULE.md) |
-| Bike | The bike library, FTP estimation and W/kg, honest distance, indoor handling | [bike.md](bike.md) |
+| Bike | The bike library and its sizing, FTP with provenance, honest distance, indoor handling, interval-level review, durability and fuelling, bricks, the power curve (gated), the bike dashboard | [bike.md](bike.md), deeper in [../BIKE_MODULE.md](../BIKE_MODULE.md) |
 | Run | The run library, hill work, race projections, weekly volume, and standalone run race plans (Tier 2) | [run.md](run.md) |
 
 ## The systems that turn disciplines into a plan and a coach
@@ -56,4 +57,6 @@ Module docs here are the current-state overview. The reference specs are:
 [ADAPTIVE_ENGINE.md](../ADAPTIVE_ENGINE.md), [WORKOUT_LIBRARY.md](../WORKOUT_LIBRARY.md),
 [WORKOUT_SIZING_SPEC.md](../WORKOUT_SIZING_SPEC.md), [READINESS_MODEL.md](../READINESS_MODEL.md),
 [EXPERIENCE_LEVELS.md](../EXPERIENCE_LEVELS.md), [COACH_BRAIN.md](../COACH_BRAIN.md),
-[BACKEND_HANDOFF.md](../BACKEND_HANDOFF.md), [STYLE_GUIDE.md](../STYLE_GUIDE.md).
+[BACKEND_HANDOFF.md](../BACKEND_HANDOFF.md), [STYLE_GUIDE.md](../STYLE_GUIDE.md),
+and the two discipline build-outs [SWIM_MODULE.md](../SWIM_MODULE.md) and
+[BIKE_MODULE.md](../BIKE_MODULE.md).

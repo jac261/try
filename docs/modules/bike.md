@@ -1,9 +1,10 @@
 # Bike
 
-Mid-depth at the start, brought to honest power-and-distance handling. Shipped
-2026-07-18.
+Taken from a workout ladder and an FTP number to a full power model in eight
+phases, July 2026. This page is the overview; the deeper spec is
+[../BIKE_MODULE.md](../BIKE_MODULE.md).
 
-## Workout library
+## Workout library and sizing
 
 Bike sessions are built by `buildBike` in `src/lib/plan.js`. The ladder
 (`INTENSITY_LADDER.bike`) is:
@@ -13,59 +14,102 @@ Endurance → Tempo → Sweet Spot → Threshold → VO2 Intervals
 ```
 
 plus the **Long** ride. `Endurance` is the bike's easy type (there is no
-separate `Easy` builder branch — falling through would hand it the Threshold
+separate `Easy` branch — falling through would hand it the Threshold
 formatting), and the long ride caps against the maintenance-scale table during
 far-out Maintain lead-in weeks so a distant Full does not schedule months of
-3-hour "maintenance" rides.
+three-hour "maintenance" rides.
 
-## FTP, W/kg, and the estimate
+`bike-sizing.js` gives every type a minimum, a standard band, a coaching
+ceiling, fixed shoulders and a written degradation rule. `LEVEL_GATES` decide
+what each experience level may be given: over-unders and cadence constraints
+unlock at advanced. The progression ladder moves **one variable at a time**,
+with repetitions as the variable and effort length sized to fill the time —
+the reverse of the obvious arrangement, and deliberate, because deriving
+repetitions from the fit makes any rung that adds one a no-op.
 
-Bike intensity is anchored on FTP (functional threshold power, watts):
+Advanced and elite riders on six or more days get a second Endurance ride
+stacked on their quality day: an athlete who needs high volume for progression
+should be able to have it.
 
-- Entered by the athlete, or **estimated** as `level estWkg × weight`
-  (2.0 / 2.6 / 3.2 / 4.0 W/kg for the four levels) so a new rider sees target
-  ranges instead of RPE-only text.
-- The estimate is fenced: it lives only inside `computePaces` and never writes
-  `profile.ftp`. `weakest.js`, `eftp.js`, `tuning.js` and the fitness-history
-  trend all read `profile.ftp` directly, and a guessed FTP would corrupt each
-  of them, so `profile.ftp` stays null until a real number arrives.
-- Both existing bike power review verdicts require a **real** FTP; an estimated
-  FTP never judges a session.
-- Weight routes through the shared `saneWeightKg` guard (30–250 kg); an unusable
-  weight yields no watt estimate rather than a nonsense projection.
+## FTP, provenance, and the anchor
 
-## Distance
+`bikePowerAnchor(profile)` returns a discriminated union — `real`,
+`estimated`, or `none` — and everything gates on it:
+
+- **Real** carries `ftpMeta`: a source (`manual`, `try-test`,
+  `activity-model`, `intervals-icu`), a date and a confidence, written at all
+  five places FTP can change.
+- **Estimated** is `level estWkg × weight` (2.0 / 2.6 / 3.2 / 4.0 W/kg), fenced
+  inside `computePaces` so it never writes `profile.ftp`.
+- **None** when weight is unusable, rather than a nonsense projection.
+
+An estimated FTP may display targets and may never judge a session. Weight
+routes through `saneWeightKg` (30–250 kg).
+
+`bike-zones.js` is the one band table; review reads its judging bands from it
+via `judgeBandForType`, which returns the union of a type's variant cards so
+the judge is never stricter than the card the athlete was given.
+
+## Review
+
+`bike-review.js` matches planned efforts to recorded intervals by duration, in
+order, and reports completion, time in target, power adherence, rep fade,
+recovery compliance and a confidence. Adherence means distance from the
+prescription and is **zero anywhere inside it**. Outdoors the tolerance widens
+on the low side only, because interruptions can only ever remove work from an
+average.
+
+`ftp-retest.js` recommends a test when several comparable sessions agree, or
+when the threshold is stale, unverified or missing. `eftp.js` proposes a
+one-tap retarget from recorded rides or intervals.icu. Both recommend; neither
+applies.
+
+## Distance and indoor handling
 
 Bike distance is a zone-mix estimate (`ZONE_KMH` scaled by
-`(bikeWkg / 2.6) ^ (1/3)`) rather than a flat 30 km/h, so a stronger rider's
-ride reads longer. `bikeWkg` needs no weight (it is already a ratio), so even a
-weightless plan gets speed differentiation. Estimated distances wear a tilde and
-are derived again on hydrate because the plan DTO drops the field.
+`(bikeWkg / 2.6) ^ (1/3)`), derived on read with its assumptions attached, and
+worn with a tilde. Indoor recordings (`VirtualRide`, via `isIndoor`) have their
+derived speed **and distance** suppressed; duration and power still count. A
+turbo's kilometres come from its wheel model, not the road.
 
-## Indoor handling
+Every ride carries an indoor and an outdoor execution variant with its own
+instructions, and a target mode that follows the anchor: watts when measured,
+perceived effort otherwise.
 
-Indoor recordings (`VirtualRide`, `VirtualRun`, via `autolog.js` `INDOOR_TYPES`
-/ `isIndoor`) are labelled as indoor and have their derived speed/distance
-suppressed in both the recorded-activity rows and in `review.js` — a turbo's
-"distance" is meaningless, but its raw duration and power still count.
+## Long rides, fuelling, bricks, position
 
-## eFTP retarget
+Long rides rotate objectives (pure endurance, aerobic durability, late-ride
+stability, race power, brick preparation) read off what the builder produced,
+plus a rehearsal focus that cycles independently. Not every long ride becomes
+harder — a property of the sequence, tested over generated plans.
 
-`eftpProposal` (`eftp.js`) proposes a one-tap FTP retarget when the athlete's
-recorded rides or configured intervals.icu FTP drift from the plan's target.
-Gated off on solo run plans.
+`bike-fuelling.js` gives each session a carbohydrate and fluid target, capped
+one step above what the athlete has logged managing, and compares it against
+the fuel tap they already give. `brick.js` judges a ride by the run that
+follows; only a *pattern* may say somebody's bike pacing is the problem.
+`bike-position.js` accumulates aero tolerance from one-tap answers, guiding
+progression and never diagnosing a bike fit.
 
-## Deferred / backend asks
+## Dashboard and readiness
 
-- Per-ride average and normalized power passthrough for real power-based TSS.
-- A power-curve endpoint.
-- ERG detection.
+`bike-dashboard.js` answers one question — what is limiting my bike, and what
+is the plan doing about it — and puts the limiter and the response first.
+`bike-readiness.js` returns eight separate components and **no score**.
 
-These are recorded in [../BACKEND_HANDOFF.md](../BACKEND_HANDOFF.md). Power-derived
-load and the power curve are currently impossible client-side.
+## Gated on the backend
+
+`bike-load.js` (intensity factor, power TSS, variability) and
+`bike-power-curve.js` / `bike-profile.js` are written, tested and gated: they
+return null until the fields arrive. Per-ride and per-interval average power
+**do** arrive today and the interval engine runs on them. See
+[../BACKEND_HANDOFF.md](../BACKEND_HANDOFF.md) for the five open asks.
 
 ## Key files
 
-`src/lib/plan.js` (`buildBike`), `src/lib/domain.js` (`estWkg`, `saneWeightKg`,
-`INTENSITY_LADDER.bike`), `src/lib/eftp.js`, `src/lib/autolog.js`,
-`src/lib/review.js`.
+`src/lib/plan.js` (`buildBike`), `bikeschema.js`, `bike-zones.js`,
+`bike-sizing.js`, `bike-distance.js`, `bike-execution.js`, `bike-review.js`,
+`bike-load.js`, `bike-long.js`, `bike-fuelling.js`, `bike-position.js`,
+`brick.js`, `bike-power-curve.js`, `bike-profile.js`, `bike-dashboard.js`,
+`bike-readiness.js`, `ftp-retest.js`, `eftp.js`; components
+`BikeExecution.jsx`, `BikeLongPlan.jsx`, `PowerCurveCard.jsx`,
+`features/progress/BikeDashboard.jsx`.
