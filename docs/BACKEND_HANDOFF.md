@@ -722,3 +722,48 @@ without a tap, but the proposal we show them is more confident than the
 evidence deserves. Neither field is urgent on its own; both are cheap if you
 are already touching the activity DTO.
 
+
+---
+
+## Ask - 29 July 2026: three more race types (run maintenance, duathlon, aquathlon)
+
+The run module's final phase asks for run-only maintenance blocks, duathlon
+and aquathlon. All three are blocked on the same one-line change, for the same
+reason the Tier 2 run races were: `PlanCatalog.RaceTypes` is a closed set and
+rejects unknown strings with a 400, which trips the sync-failure banner.
+
+```csharp
+// add to RaceTypes:
+"runmaintenance", "duathlon", "aquathlon"
+```
+
+Nothing is built client-side for these yet, deliberately. A template that
+generates a plan correctly and then fails to save is worse than no template,
+and `runpass9.test.js` pins their absence with the reason so it reads as a
+blocked dependency rather than an oversight.
+
+**`runmaintenance` is the cheap one and worth doing first.** It is a real gap
+today: an athlete with no race who wants to keep running has no plan shape
+that fits. Maintenance exists but is triathlon-shaped — the template choice
+reads `race.solo`, maintenance has none, and excluding swim from it still
+leaves a bike plan. The entry it needs is `{ solo: 'run', noRace: true }`,
+which is a combination no current race has. No new workout types: the run
+library's existing strings cover it.
+
+**Duathlon and aquathlon are the expensive ones, and not only here.** The
+18 July note already said they were not being batched in "until the product
+design exists", and that is still true. The frontend questions that need
+answering before a catalog entry is useful:
+
+- A duathlon has TWO run legs, and the second is run on bike-fatigued legs.
+  The run load guardrails currently model one run per session; a plan that
+  counts both legs as ordinary runs will under-report the load of the second
+  and over-report the athlete's run frequency.
+- Brick frequency for a duathlon is a different question from a triathlon's,
+  because the bike-to-run transition IS the event rather than one third of it.
+- An aquathlon's run follows a swim, so the fatigue model is not the brick
+  model. We have no swim-to-run durability data and no way to gather it until
+  the plan type exists.
+
+None of that is blocked on you. Flagging it so the catalog entry is not added
+in the expectation that plans appear shortly afterwards.
