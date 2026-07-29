@@ -10,6 +10,7 @@ import { bikeDistance } from './bike-distance.js';
 import { OW_SKILLS, OW_SAFETY, OW_SKILL_CEILING, owCategory } from './swim-open-water.js';
 import { weakBias, weakestLink } from './weakest.js';
 import { RIEGEL_EXP } from './runstats.js';
+import { startAnchors, anchorLongCap, weeklyHoursScale } from './start-volume.js';
 
 /* ---- paces derived from the athlete's baselines ---- */
 function computePaces(profile) {
@@ -2076,6 +2077,12 @@ export const generatePlan = function (profile, opts) {
   };
 
   const weeks = [];
+  /* Where the athlete is starting from (optional onboarding answers). The
+     growth clock counts completed TRAINING weeks: recovery weeks reduce
+     load, so they are not evidence more was absorbed, and they hold the
+     clock rather than advancing it. */
+  const anchors = startAnchors(profile, pc);
+  let trainingWeeksDone = 0;
   for (let w = 0; w < totalWeeks; w++) {
     const phase = phases[w];
     // The appended post-race recovery week: everything easy, race-week legs.
@@ -2229,6 +2236,17 @@ export const generatePlan = function (profile, opts) {
       // otherwise generate 10 and 15 minute jogs (the dedupe pass separates
       // any collisions this floor creates).
       if (race.solo && s.disc === 'run' && !soloShakeout) dur = Math.max(20, dur);
+      /* The athlete's own starting point, when they gave one. Long sessions
+         may not exceed their current longest grown ~10% per training week —
+         min() only, so the race-driven curve takes over the moment it is the
+         lower one, and peaks are untouched. Without anchors this is a no-op
+         and the plan is byte-identical to before the feature existed. */
+      const aCap = anchorLongCap({
+        anchors, disc: s.disc,
+        isLong: s.role === 'long' || s.disc === 'brick',
+        trainingWeeksElapsed: trainingWeeksDone,
+      });
+      if (aCap != null && !soloShakeout) dur = Math.min(dur, aCap);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
       const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType, roleOut);
@@ -2365,6 +2383,42 @@ export const generatePlan = function (profile, opts) {
     const wkObj = { index: w, phase: phase, isRecovery: isRecovery, start: iso(addDays(weekStart0, w * 7)), totalMin: totalMin, workouts: workouts };
     dedupeSoloWeek(wkObj);
     weeks.push(wkObj);
+    if (!isRecovery) trainingWeeksDone += 1;
+  }
+
+  /* The weekly-hours anchor, applied to fully built weeks. Long sessions and
+     bricks were already capped at sizing time by their own anchors, so the
+     cut here falls on the flexible sessions — never tests, races, strength
+     or the volume-double second ride, which keep their fixed shapes. Each
+     shrunk session is REBUILT through the same builder with the same seed,
+     so its segments still sum and a retarget regenerates it identically.
+     Recovery weeks usually fit under the anchor already and pass through
+     untouched, which keeps their dips. */
+  if (anchors.weeklyMin != null) {
+    let tw = 0;
+    weeks.forEach(wk => {
+      const flexible = wk.workouts.filter(x => !x.race && !x.bRace && !x.test && !x.second
+        && x.discipline !== 'rest' && x.discipline !== 'strength' && x.discipline !== 'brick'
+        && x.role !== 'long' && x.durationMin > 20);
+      const f = weeklyHoursScale({
+        anchors,
+        plannedMin: wk.workouts.reduce((a, b) => a + (b.durationMin || 0), 0),
+        flexibleMin: flexible.reduce((a, b) => a + (b.durationMin || 0), 0),
+        trainingWeeksElapsed: tw,
+      });
+      if (f != null && f < 1) {
+        flexible.forEach(x => {
+          const nd = Math.max(20, round5(x.durationMin * f));
+          if (nd >= x.durationMin) return;
+          const rebuilt = buildWorkout(x.discipline, x.type, nd, pc, x.phase, x.seed, fitness.intensity, profile.raceType, x.role);
+          x.durationMin = nd; x.title = rebuilt.title; x.distance = rebuilt.distance;
+          x.distEst = !!rebuilt.distEst; x.unit = rebuilt.unit; x.segments = rebuilt.segments;
+          if (rebuilt.safety) x.safety = rebuilt.safety;
+        });
+        wk.totalMin = wk.workouts.reduce((a, b) => a + (b.durationMin || 0), 0);
+      }
+      if (!wk.isRecovery) tw += 1;
+    });
   }
 
   // Tune-up (B) races: drop each valid one onto its calendar day (replacing
