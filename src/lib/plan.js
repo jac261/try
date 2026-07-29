@@ -10,6 +10,7 @@ import { bikeDistance } from './bike-distance.js';
 import { OW_SKILLS, OW_SAFETY, OW_SKILL_CEILING, owCategory } from './swim-open-water.js';
 import { weakBias, weakestLink } from './weakest.js';
 import { RIEGEL_EXP } from './runstats.js';
+import { startAnchors, anchorLongCap, weeklyHoursScale } from './start-volume.js';
 
 /* ---- paces derived from the athlete's baselines ---- */
 function computePaces(profile) {
@@ -1729,6 +1730,51 @@ export const applyTrackerFitness = function (plan, fields, nowISO) {
 // rebuild pins seed 0 unless the workout recorded one — the same shape comes
 // back, now carrying the profile data. Race days, tests and anything already
 // current are left alone; the whole pass is a no-op on an up-to-date plan.
+/* The under-built warning (start anchors, part two).
+ *
+ * An athlete who anchors low on a short runway may reach race day genuinely
+ * under-prepared: the growth curve refuses to ramp faster than is safe, so
+ * the shortfall is a fact the maths already knows, and hiding it would make
+ * the anchors a comfort feature rather than a coaching one. This compares
+ * the anchored plan's peak long sessions against what the same plan reaches
+ * WITHOUT anchors — the race-sized preparation — and speaks only when the
+ * gap is material. It is a statement about the plan, not the athlete: the
+ * honest fixes it can name are more weeks or a shorter race, never "grow
+ * faster".
+ *
+ * Derived on demand rather than stored: it depends only on the profile, so
+ * it survives the wire for free and can never go stale against a retarget. */
+export const START_SHORTFALL_PCT = 15;
+export function startVolumeShortfall(profile) {
+  const p = profile || {};
+  if (p.weeklyHours == null && p.longestSwimM == null && p.longestRideMin == null && p.longestRunMin == null) return null;
+  if (!RACES[p.raceType] || RACES[p.raceType].noRace) return null;
+  const anchored = generatePlan(p);
+  const plain = generatePlan({ ...p, weeklyHours: null, longestSwimM: null, longestRideMin: null, longestRunMin: null });
+  const peak = (plan, disc) => Math.max(0, ...plan.weeks
+    .filter(w => w.phase !== 'Taper')
+    .flatMap(w => w.workouts)
+    .filter(w => (w.role === 'long' || w.discipline === 'brick') && w.discipline === disc && !w.race)
+    .map(w => w.durationMin || 0));
+  const NAMES = { swim: 'longest swim', bike: 'longest ride', run: 'longest run' };
+  const items = ['swim', 'bike', 'run'].map(disc => {
+    const a = peak(anchored, disc), b = peak(plain, disc);
+    if (!a || !b) return null;
+    const pct = Math.round((b - a) / b * 100);
+    return pct >= START_SHORTFALL_PCT ? { disc, anchoredPeakMin: a, plainPeakMin: b, pct } : null;
+  }).filter(Boolean);
+  if (!items.length) return null;
+  const fmt = m => (m >= 90 ? Math.round(m / 30) / 2 + ' h' : m + ' min');
+  const worst = items.reduce((x, y) => (y.pct > x.pct ? y : x));
+  return {
+    items,
+    sig: 'start-shortfall:' + items.map(i => i.disc + i.pct).join(':') + ':' + (p.raceDate || ''),
+    text: 'Starting from where you are and building at a safe rate, your ' + NAMES[worst.disc]
+      + ' peaks around ' + fmt(worst.anchoredPeakMin) + ' before the taper; this race\'s preparation normally peaks nearer '
+      + fmt(worst.plainPeakMin) + '. The plan will not ramp faster than is safe to close that gap. More weeks before race day would; so would a shorter race.',
+  };
+}
+
 export const upgradePlanSegments = function (plan) {
   if (!plan || !plan.weeks || !plan.paces) return plan;
   // The wire drops anything the plan DTO does not type, so a hydrated plan
@@ -2076,6 +2122,12 @@ export const generatePlan = function (profile, opts) {
   };
 
   const weeks = [];
+  /* Where the athlete is starting from (optional onboarding answers). The
+     growth clock counts completed TRAINING weeks: recovery weeks reduce
+     load, so they are not evidence more was absorbed, and they hold the
+     clock rather than advancing it. */
+  const anchors = startAnchors(profile, pc);
+  let trainingWeeksDone = 0;
   for (let w = 0; w < totalWeeks; w++) {
     const phase = phases[w];
     // The appended post-race recovery week: everything easy, race-week legs.
@@ -2229,6 +2281,25 @@ export const generatePlan = function (profile, opts) {
       // otherwise generate 10 and 15 minute jogs (the dedupe pass separates
       // any collisions this floor creates).
       if (race.solo && s.disc === 'run' && !soloShakeout) dur = Math.max(20, dur);
+      /* The athlete's own starting point, when they gave one. Long sessions
+         may not exceed their current longest grown ~10% per training week —
+         min() only, so the race-driven curve takes over the moment it is the
+         lower one, and peaks are untouched. Without anchors this is a no-op
+         and the plan is byte-identical to before the feature existed. */
+      /* The swim anchor applies to EVERY swim slot: a role-'long' swim only
+         exists when the limiter machinery grants swim a third session, so
+         anchoring on role alone meant the longest-swim question was asked of
+         every athlete and bound for almost none — the 4.3 km swim this
+         feature exists for survived unless the swimmer was swim-limited.
+         An athlete whose longest recent swim is 2,500 m should not meet a
+         4 km session of ANY type in week one. Run and bike keep role-based
+         anchoring: their long roles exist in every template. */
+      const aCap = anchorLongCap({
+        anchors, disc: s.disc,
+        isLong: s.role === 'long' || s.disc === 'brick' || s.disc === 'swim',
+        trainingWeeksElapsed: trainingWeeksDone,
+      });
+      if (aCap != null && !soloShakeout) dur = Math.min(dur, aCap);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
       const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType, roleOut);
@@ -2365,6 +2436,64 @@ export const generatePlan = function (profile, opts) {
     const wkObj = { index: w, phase: phase, isRecovery: isRecovery, start: iso(addDays(weekStart0, w * 7)), totalMin: totalMin, workouts: workouts };
     dedupeSoloWeek(wkObj);
     weeks.push(wkObj);
+    if (!isRecovery) trainingWeeksDone += 1;
+  }
+
+  /* The weekly-hours anchor, applied to fully built weeks. Long sessions and
+     bricks were already capped at sizing time by their own anchors, so the
+     cut here falls on the flexible sessions — never tests, races, strength
+     or the volume-double second ride, which keep their fixed shapes. Each
+     shrunk session is REBUILT through the same builder with the same seed,
+     so its segments still sum and a retarget regenerates it identically.
+     Recovery weeks usually fit under the anchor already and pass through
+     untouched, which keeps their dips. */
+  if (anchors.weeklyMin != null) {
+    /* A long session joins the hours pool UNLESS its own discipline anchor
+       already capped it. The first cut exempted all longs on the assumption
+       they were "already capped", which is only true when the athlete also
+       answered the per-discipline questions — and training hours is the one
+       field a new athlete most plausibly answers alone. That version left a
+       race-sized long swim untouched (the exact session this feature exists
+       for) while gutting every midweek quality session to a stub, and the
+       week still ran fifty per cent over what the athlete said they could
+       absorb. Sharing the cut across everything without its own anchor
+       keeps sessions in proportion and lands the week near the promise. */
+    const hasOwnAnchor = x => (x.discipline === 'swim' && anchors.swimLongMin != null)
+      || (x.discipline === 'run' && anchors.runLongMin != null)
+      || ((x.discipline === 'bike' || x.discipline === 'brick') && anchors.rideLongMin != null);
+    const isLongish = x => x.role === 'long' || x.discipline === 'brick' || x.discipline === 'swim';
+    let tw = 0;
+    weeks.forEach(wk => {
+      const flexible = wk.workouts.filter(x => !x.race && !x.bRace && !x.test && !x.second
+        && x.discipline !== 'rest' && x.discipline !== 'strength'
+        && !(isLongish(x) && hasOwnAnchor(x)) && x.durationMin > 20);
+      const f = weeklyHoursScale({
+        anchors,
+        plannedMin: wk.workouts.reduce((a, b) => a + (b.durationMin || 0), 0),
+        flexibleMin: flexible.reduce((a, b) => a + (b.durationMin || 0), 0),
+        trainingWeeksElapsed: tw,
+        /* the recovery dip survives the anchor: a binding cap used to pin a
+           recovery week at a ceiling ten per cent HIGHER than the training
+           week before it, so the step-back week carried MORE load and the
+           plan ran four months without a real one */
+        recoveryDepth: wk.isRecovery ? fitness.recoveryDepth : 1,
+      });
+      if (f != null && f < 1) {
+        flexible.forEach(x => {
+          const nd = Math.max(20, round5(x.durationMin * f));
+          if (nd >= x.durationMin) return;
+          const rebuilt = buildWorkout(x.discipline, x.type, nd, pc, x.phase, x.seed, fitness.intensity, profile.raceType, x.role);
+          x.durationMin = nd; x.title = rebuilt.title; x.distance = rebuilt.distance;
+          x.distEst = !!rebuilt.distEst; x.unit = rebuilt.unit; x.segments = rebuilt.segments;
+          if (rebuilt.safety) x.safety = rebuilt.safety;
+        });
+        wk.totalMin = wk.workouts.reduce((a, b) => a + (b.durationMin || 0), 0);
+        // rebuilt sessions can collide into byte-identical cards; the dedupe
+        // invariant holds per week, so it re-runs where the rebuilds happened
+        dedupeSoloWeek(wk);
+      }
+      if (!wk.isRecovery) tw += 1;
+    });
   }
 
   // Tune-up (B) races: drop each valid one onto its calendar day (replacing

@@ -19,6 +19,7 @@ export function Onboarding({ onCreate }) {
   const [f, setF] = useState(() => ({
     name: clerkDisplayName(user), raceType: 'olympic', fitness: 'intermediate', trainingDays: [0, 1, 3, 5, 6], longDay: 5,
     raceDate: T.iso(T.addDays(new Date(), 84)), fivek: '', css100: '', ftp: '', weightKg: '', excludedDiscipline: null, pool: T.DEFAULT_POOL,
+    weeklyHours: '', longestSwimM: '', longestRideMin: '', longestRunMin: '',
   }));
   // If Clerk loads the profile a beat later, fill the name once — never over typed input.
   useEffect(() => {
@@ -64,6 +65,12 @@ export function Onboarding({ onCreate }) {
       ...(css100Sec != null ? { cssMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } } : {}),
       pool: f.pool,
       ftp: f.ftp ? Number(f.ftp) : null, weightKg: f.weightKg ? Number(f.weightKg) : null,
+      // start anchors: blank stays absent (never zero), and a value typed
+      // before excluding a discipline is dropped with it
+      weeklyHours: f.weeklyHours ? Number(f.weeklyHours) : null,
+      longestSwimM: f.excludedDiscipline === 'swim' ? null : (f.longestSwimM ? Number(f.longestSwimM) : null),
+      longestRideMin: f.longestRideMin ? Number(f.longestRideMin) : null,
+      longestRunMin: f.excludedDiscipline === 'run' ? null : (f.longestRunMin ? Number(f.longestRunMin) : null),
       // a hand-entered starting FTP is a manual source, dated to onboarding
       ...(f.ftp ? { ftpMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } } : {}),
       startDate: T.iso(new Date()),
@@ -187,6 +194,25 @@ export function Onboarding({ onCreate }) {
               2026-07-18). */}
           <label className="field"><span className="lab">Weight <span className="hint">{solo ? 'optional · kg · never judged' : 'optional · kg — lets us estimate your bike targets'}</span></span>
             <input value={f.weightKg} placeholder="e.g. 70" inputMode="decimal" onChange={e => set('weightKg', e.target.value)} /></label>
+
+          {/* Where the athlete is starting from. Without these the plan's
+              first week is sized from the RACE, which for a full-distance
+              plan meant a 4.3 km long swim in week one. Optional: blank
+              keeps the race-sized start. */}
+          <label className="field" style={{ marginTop: 12, marginBottom: 4 }}><span className="lab">Where are you starting from? <span className="hint">optional</span></span></label>
+          <p className="lead" style={{ fontSize: 13, marginTop: 0 }}>
+            Your first weeks start from what you are doing now and build up gradually,
+            instead of starting at race-level volume. Skip these and the plan sizes itself
+            from your race and level alone.</p>
+          <label className="field"><span className="lab">Training hours in a typical recent week <span className="hint">optional · hours</span></span>
+            <input value={f.weeklyHours} placeholder="e.g. 8" inputMode="decimal" onChange={e => set('weeklyHours', e.target.value)} /></label>
+          {!solo && f.excludedDiscipline !== 'swim' && <label className="field"><span className="lab">Longest recent swim <span className="hint">optional · metres</span></span>
+            <input value={f.longestSwimM} placeholder="e.g. 2000" inputMode="numeric" onChange={e => set('longestSwimM', e.target.value)} /></label>}
+          {!solo && <label className="field"><span className="lab">Longest recent ride <span className="hint">optional · minutes</span></span>
+            <input value={f.longestRideMin} placeholder="e.g. 120" inputMode="numeric" onChange={e => set('longestRideMin', e.target.value)} /></label>}
+          {f.excludedDiscipline !== 'run' && <label className="field"><span className="lab">Longest recent run <span className="hint">optional · minutes</span></span>
+            <input value={f.longestRunMin} placeholder="e.g. 75" inputMode="numeric" onChange={e => set('longestRunMin', e.target.value)} /></label>}
+
           <div className="row"><button className="btn ghost" onClick={() => setStep(1)}>Back</button>
             <button className="btn primary" onClick={finish}>Generate plan →</button></div>
         </>}

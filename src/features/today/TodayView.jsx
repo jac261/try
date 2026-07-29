@@ -39,6 +39,12 @@ const loadRetestDismiss = () => dGet('cssRetestDismissed');
 const saveRetestDismiss = v => dSet('cssRetestDismissed', v);
 const loadCssFailDismiss = () => dGet('cssTestFailDismissed');
 const saveCssFailDismiss = v => dSet('cssTestFailDismissed', v);
+/* The under-built warning's dismissal, in the SAME per-user namespace as its
+   siblings. It arrived on a branch cut before that refactor and carried a
+   browser-global literal; merging it unchanged would have reintroduced the
+   cross-account leak the audit had just closed, for one key. */
+const loadShortfallDismiss = () => dGet('startShortfallDismissed');
+const saveShortfallDismiss = v => dSet('startShortfallDismissed', v);
 
 // The user's expand/collapse choice for the week tab sticks across visits.
 const loadWeekPref = () => { try { return JSON.parse(dGet('showWeek')); } catch (e) { return null; } };
@@ -99,7 +105,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, ftpRetest, onFtpRetest }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, ftpRetest, onFtpRetest, startShortfall }) {
   // Align the dismissal keys to THIS user before any lazy initialiser runs.
   // They were browser-global, so two accounts on one device shared them.
   DISMISS_NS = (storage && storage.ns) || 'try.';
@@ -114,6 +120,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   const [retestDismissed, setRetestDismissed] = useState(loadRetestDismiss);
   const [ftpRetestDismissed, setFtpRetestDismissed] = useState(loadFtpRetestDismiss);
   const [cssFailDismissed, setCssFailDismissed] = useState(loadCssFailDismiss);
+  const [shortfallDismissed, setShortfallDismissed] = useState(loadShortfallDismiss);
   const [reviewToday, setReviewToday] = useState(false);
   const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile onToggle={() => onToggleWorkout(w.id)} />;
 
@@ -184,6 +191,15 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   // moves. The update-proposal banner above always outranks it (App passes
   // retest as null while a swim proposal is live).
   // §6: the FTP assessment nudge, dismissible per signature like the others.
+  /* The under-built warning. Informational, dismissible per signature: the
+     signature carries the shortfall sizes and the race date, so it speaks
+     again if the athlete changes either. It never blocks anything — it is
+     the one honest sentence the anchors owe the athlete they protect. */
+  if (!tracker && startShortfall && shortfallDismissed !== startShortfall.sig) coach.push({
+    key: 'start-shortfall', cls: 'banner', icon: 'trend', title: 'Your race build starts below where this race usually peaks',
+    sub: startShortfall.text,
+    dismiss: () => { saveShortfallDismiss(startShortfall.sig); setShortfallDismissed(startShortfall.sig); },
+  });
   if (!tracker && ftpRetest && ftpRetestDismissed !== ftpRetest.sig) coach.push({
     key: 'ftp-retest', cls: 'banner', icon: 'trend', title: ftpRetest.headline,
     sub: ftpRetest.why + ' Tap to enter a result →', act: onFtpRetest,

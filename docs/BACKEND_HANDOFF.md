@@ -650,6 +650,31 @@ regardless of how much they ride.
 See **Open bike asks** below.
 
 
+See **Open bike asks** below.
+
+## 29 July — four start-anchor fields on the athlete profile
+
+Onboarding now asks four optional questions about where the athlete is
+starting from, and the plan's first weeks build up from those answers
+instead of opening at race-sized volume:
+
+- `weeklyHours` (number, hours)
+- `longestSwimM` (number, metres)
+- `longestRideMin` (number, minutes)
+- `longestRunMin` (number, minutes)
+
+They ride the plan POST inside `profile` today, so a plan carries its own
+anchors and regenerates identically. The gap is the profile PUT/GET: the
+typed UserProfileResponse ignores fields it does not know, so on a fresh
+device with no local store the recovered profile loses the anchors and the
+next regeneration silently reverts to race-sized first weeks — the exact
+behaviour the athlete answered the questions to avoid.
+
+Requested: carry these four columns on the athlete profile, nullable, raw.
+Absent means the athlete never answered, which the client treats as
+"size from the race and level alone". All four are read defensively and
+clamped client-side, so no validation is needed beyond the types.
+
 ## Open bike asks — the current list
 
 **This section supersedes every partial list written alongside an individual
@@ -664,9 +689,11 @@ subset is safe and shipping none breaks nothing.
 | 3 | `elapsedTimeSec` | activity | Separating a stop from a bad day, so outdoor rides are judged on what the rider did |
 | 4 | `normalizedWatts` | activity | Intensity factor, power-based TSS, variability index |
 | 5 | Best power by duration | new endpoint | The rider profile entirely — see the power-curve section for the required per-point metadata |
+| 6 | `weeklyHours`, `longestSwimM`, `longestRideMin`, `longestRunMin` | athlete profile | Start anchors surviving a fresh-device recovery; without them a reinstalled athlete silently reverts to race-sized first weeks |
 
 A power **stream** would subsume 3, 4 and 5 together, if that is ever easier
-to expose than three separate computed fields.
+to expose than three separate computed fields. Ask 6 is the only one that is
+not about activities: it is four nullable columns on the athlete profile.
 
 Two notes on what these cost us today. Ask 2 is the one whose absence is most
 visible: without it the bike dashboard's quality section reads "not enough
@@ -675,3 +702,4 @@ reviews are computed when a workout sheet is opened and then lost. And in ask
 5, `source` (the power meter identifier) is the single most valuable field —
 without it a new power meter reads as a sudden fitness gain at every duration,
 which is the one error an athlete has no way to catch for themselves.
+

@@ -23,6 +23,11 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo, fromTest
     weightKg: profile.weightKg || '',
     massGoal: profile.massGoal || null,
     pool: T.sanePool(profile.pool) || T.DEFAULT_POOL,
+    // start anchors: editable so a wrong onboarding answer is not permanent
+    weeklyHours: profile.weeklyHours || '',
+    longestSwimM: profile.longestSwimM || '',
+    longestRideMin: profile.longestRideMin || '',
+    longestRunMin: profile.longestRunMin || '',
   });
   const set = (k, v) => setF(s => ({ ...s, [k]: v }));
   // Switching pool keeps the same physiological CSS but re-displays it in the
@@ -69,6 +74,18 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo, fromTest
           <input value={f.ftp} placeholder={'e.g. ' + (T.saneWeightKg(f.weightKg) ? Math.round(T.FITNESS[f.fitness].estWkg * T.saneWeightKg(f.weightKg)) : 200)} inputMode="numeric" onChange={e => set('ftp', e.target.value)} /></label>
         <label className="field"><span className="lab">Weight <span className="hint">optional · kg — lets the bike join the weakest-link scale (W/kg)</span></span>
           <input value={f.weightKg} placeholder="e.g. 70" inputMode="decimal" onChange={e => set('weightKg', e.target.value)} /></label>
+
+        {/* The start anchors, editable so a wrong onboarding answer is not
+            permanent. Same fields, same units, same optionality. */}
+        <label className="field" style={{ marginTop: 8, marginBottom: 4 }}><span className="lab">Where are you starting from? <span className="hint">optional · sizes your first weeks</span></span></label>
+        <label className="field"><span className="lab">Training hours in a typical week <span className="hint">hours</span></span>
+          <input value={f.weeklyHours} placeholder="e.g. 8" inputMode="decimal" onChange={e => set('weeklyHours', e.target.value)} /></label>
+        <label className="field"><span className="lab">Longest recent swim <span className="hint">metres</span></span>
+          <input value={f.longestSwimM} placeholder="e.g. 2000" inputMode="numeric" onChange={e => set('longestSwimM', e.target.value)} /></label>
+        <label className="field"><span className="lab">Longest recent ride <span className="hint">minutes</span></span>
+          <input value={f.longestRideMin} placeholder="e.g. 120" inputMode="numeric" onChange={e => set('longestRideMin', e.target.value)} /></label>
+        <label className="field"><span className="lab">Longest recent run <span className="hint">minutes</span></span>
+          <input value={f.longestRunMin} placeholder="e.g. 75" inputMode="numeric" onChange={e => set('longestRunMin', e.target.value)} /></label>
         {/* Closed by default on purpose: an athlete who never opens this
             never meets weight-goal language at all. Without a declared goal
             the app tracks weight and never judges it (design panel
@@ -119,6 +136,14 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo, fromTest
             ...(ftpNow != null && ftpNow !== profile.ftp
               ? { ftpMeta: { source: fromTest === 'bikeFtp' ? 'try-test' : 'manual', measuredAt: T.iso(new Date()), confidence: fromTest === 'bikeFtp' ? 'high' : 'medium' } }
               : ftpNow == null && profile.ftp != null ? { ftpMeta: null } : {}),
+            /* Start anchors carry no provenance: they are the athlete's own
+               statement about their own volume, and clearing one clears it.
+               A changed anchor re-targets like any other fitness change, so
+               the run-in resizes from the corrected number. */
+            weeklyHours: f.weeklyHours ? Number(f.weeklyHours) : null,
+            longestSwimM: f.longestSwimM ? Number(f.longestSwimM) : null,
+            longestRideMin: f.longestRideMin ? Number(f.longestRideMin) : null,
+            longestRunMin: f.longestRunMin ? Number(f.longestRunMin) : null,
           });
         }}>{noPlan ? 'Save to fitness history' : 'Save & re-target plan'}</button>
       </div>
