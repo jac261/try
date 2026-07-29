@@ -490,6 +490,14 @@ export function App({ storage, getToken, user }) {
      hardware-versus-fitness protection is unreachable however good the data
      gets. Kept in the same local store the fuel and position answers use. */
   const [prevPowerCurve] = useState(() => storage.loadPowerCurve());
+  /* The under-built warning: only when anchors exist and the gap is material.
+     Memoized because it generates the plan twice to compare — and declared UP
+     HERE with every other hook, above the no-plan early return. The first
+     version sat below it, so creating a plan changed App's hook count and
+     React threw its hook-order error: the exact defect class the audit had
+     just fixed in WeeklyDigest, reintroduced the same week, one level up. */
+  const startShortfall = useMemo(() => (plan && plan.profile && plan.race !== 'tracker'
+    ? T.startVolumeShortfall(plan.profile) : null), [plan]);
   /* The phase 5 bike reviews, read off the log exactly as the swim evidence
      above is. They arrive on the log entry from the backend and that column
      is still an open ask, so this is empty today — but it is empty because
@@ -1102,10 +1110,6 @@ export function App({ storage, getToken, user }) {
   // §6: the FTP assessment nudge. Muted while a bike proposal is live, for
   // the same reason the swim one is: measuring and updating are different
   // things, but two banners about one number is nagging.
-  /* The under-built warning: only when anchors exist and the gap is
-     material. Memoized because it generates the plan twice to compare. */
-  const startShortfall = useMemo(() => (plan && plan.profile && plan.race !== 'tracker'
-    ? T.startVolumeShortfall(plan.profile) : null), [plan]);
   const ftpRetest = (!eftp || eftp.sport !== 'bike')
     ? T.ftpRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()) , powerCurve: T.powerCurve(powerCurveRaw), reviews: bikeReviews })
     : null;

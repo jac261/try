@@ -168,3 +168,18 @@ describe('the anchors are editable after onboarding', () => {
     expect(src).toMatch(/f\.weeklyHours \? Number\(f\.weeklyHours\) : null/);
   });
 });
+
+
+describe('App declares every hook above its early returns', () => {
+  it('no useState/useMemo/useEffect after the first conditional return', async () => {
+    /* The shortfall useMemo was first placed below App's no-plan return, so
+       CREATING A PLAN changed the hook count and React threw — the same
+       class the audit fixed in WeeklyDigest, reintroduced one level up. */
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../app/App.jsx', import.meta.url), 'utf8');
+    const body = src.slice(src.indexOf('export function App'));
+    const firstReturn = body.search(/\n  if \([^)]*\) return /);
+    expect(firstReturn).toBeGreaterThan(0);
+    expect(body.slice(firstReturn)).not.toMatch(/\buse(State|Effect|Memo|Ref|Callback)\s*\(/);
+  });
+});
