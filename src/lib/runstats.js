@@ -21,10 +21,16 @@ const EXP = RIEGEL_EXP;
 const EXP_MARATHON_HI = RIEGEL_MARATHON_HI;
 
 export function predictRaceTimes(profile) {
-  if (!profile || !profile.fivekSec) return null;
-  const t = profile.fivekSec;
-  const at = (km, exp) => Math.round(t * Math.pow(km / 5, exp));
+  /* Gated on the ANCHOR, not on profile.fivekSec. The raw field is true for a
+     feel-nudged level estimate as well as for a time the athlete ran, and
+     projecting a marathon off the former quotes a finish time derived from
+     nothing they have ever done (phase 5 §3, §5). runAnchor is the only thing
+     that knows the difference. */
+  if (!profile) return null;
   const anchor = runAnchor(profile);
+  if (anchor.kind !== 'real') return null;
+  const t = anchor.timeSec;
+  const at = (km, exp) => Math.round(t * Math.pow(km / 5, exp));
   /* The bare numbers stay exactly where every existing caller reads them.
      `projections` and the model metadata are additive (phase 2 §3), so the
      assumptions behind a quoted time can be SHOWN rather than being folklore

@@ -54,8 +54,13 @@ describe('the benchmark type: real only, with provenance', () => {
        function: a value test passes happily while the write point that would
        produce it has been deleted. Removing the editor's fivekMeta block is
        exactly the regression this catches. */
+    /* tuning.js was missing from this list when the guard was written, and
+       that is exactly how the fifth write point survived: it stamped cssMeta
+       and ftpMeta, wrote a bare fivekSec, and no test looked. A guard is only
+       as good as the set of files it is pointed at. */
     const files = {
       'eftp.js': './eftp.js',
+      'tuning.js': './tuning.js',
       'FitnessEditor.jsx': '../features/settings/FitnessEditor.jsx',
       'Onboarding.jsx': '../features/onboarding/Onboarding.jsx',
       'plan.js': './plan.js',

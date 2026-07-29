@@ -2,7 +2,7 @@
 import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { runMainSet, runReps, runHillsAllowed, RUN_MIN_SESSION_MIN } from './run-sizing.js';
-import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL } from './domain.js';
+import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL, runAnchor } from './domain.js';
 import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
 import { swimZoneTargets } from './swim-zones.js';
 import { drillPool, focusOrder, saneTechnique } from './swim-drills.js';
@@ -39,7 +39,13 @@ function computePaces(profile) {
   const ftpEstimated = !profile.ftp && !!kg;
   const ftp = profile.ftp || (ftpEstimated ? Math.round(lvl.estWkg * kg) : null);
   return {
-    runEstimated: !profile.fivekSec,               // true when paces are level-based guesses
+    /* True when the run paces are a guess rather than a performance. Reads
+       the ANCHOR, not the raw field: a feel-based tuning nudge writes a
+       fivekSec derived from the level table, and !profile.fivekSec called
+       that measured. The marathon long run then quoted an exact "~5:12 /km"
+       race pace off a number the athlete never ran, which §3 forbids
+       explicitly. One expression, so this and runAnchor cannot disagree. */
+    runEstimated: runAnchor(profile).kind !== 'real',
     swimEstimated: !profile.css100Sec,
     // The athlete's pool rides along so buildSwim can round lengths and label
     // in the pool's unit. Display/construction only; it never touches css.

@@ -157,17 +157,42 @@ export function hasRealFtp(profile) {
 // sits alongside 'try-test' rather than under 'manual'. There is deliberately
 // no 'activity-model' entry, the bike's rolling estimate: a 5 km time is a
 // performance, not something to be modelled from easy runs.
-export const RUN_5K_SOURCES = ['manual', 'recorded-race', 'try-test', 'intervals-icu'];
+export const RUN_5K_SOURCES = ['manual', 'estimated', 'recorded-race', 'try-test', 'intervals-icu'];
+/* 'estimated' is in the set for the same reason CSS_SOURCES carries it: a
+ * feel-based tuning nudge writes a fivekSec DERIVED FROM THE LEVEL TABLE when
+ * the athlete has no real 5 km, and that number must never be mistaken for a
+ * performance. Before this existed, one "that felt easy" nudge on a blank-5k
+ * solo plan turned a 28:00 level guess into a real benchmark: runAnchor
+ * reported kind 'real', hasReal5k went true, the number entered benchmark
+ * history, and the app quoted a 4h23-5h19 marathon prediction from a time the
+ * athlete had never run. That is four of phase 5's acceptance criteria at
+ * once (§3 and §5).
+ *
+ * A nudged estimate is still the right number to SIZE sessions from, which is
+ * why it stays on profile.fivekSec and computePaces keeps reading it. It is
+ * simply not evidence, so kind stays 'estimated'.
+ */
 export function runAnchor(profile) {
   const p = profile || {};
-  if (p.fivekSec) {
-    const meta = p.fivekMeta || {};
+  const meta = p.fivekMeta || {};
+  if (p.fivekSec && meta.source !== 'estimated') {
     return {
       kind: 'real',
       timeSec: p.fivekSec,
       // Provenance falls back to 'manual' the way the bike's does: a number
       // on the profile with no meta got there by someone typing it.
       source: RUN_5K_SOURCES.includes(meta.source) ? meta.source : 'manual',
+      measuredAt: meta.measuredAt || null,
+      confidence: FTP_CONFIDENCE.includes(meta.confidence) ? meta.confidence : null,
+    };
+  }
+  // A stored-but-estimated time: keep the number the plan is actually sized
+  // from, and say plainly where it came from.
+  if (p.fivekSec) {
+    return {
+      kind: 'estimated',
+      timeSec: p.fivekSec,
+      source: 'estimated',
       measuredAt: meta.measuredAt || null,
       confidence: FTP_CONFIDENCE.includes(meta.confidence) ? meta.confidence : null,
     };

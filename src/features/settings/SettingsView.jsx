@@ -189,7 +189,15 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
           return <div className="statline">
             {/* runner-levels: a solo run plan seeds its estimate from the
                 runner anchor. swim phase 2b: the swim figure is pool-aware. */}
-            <div className="s"><b>{p.fivekSec ? T.fmtPace(p.fivekSec / 5) : '~' + T.fmtPace(((T.FITNESS[p.fitness] || T.FITNESS.intermediate)[solo ? 'runEst5k' : 'est5k']) / 5)}</b><span>{p.fivekSec ? '5k pace/km' : '5k pace · est'}</span></div>
+            {/* §5 "estimated values are always labelled": read the ANCHOR, not
+                the raw field. A feel-based tuning nudge stores a fivekSec
+                derived from the level table, and p.fivekSec alone labelled
+                that as a measured pace with no 'est' on it. */}
+            {(() => {
+              const a = T.runAnchor(p);
+              const real = a.kind === 'real';
+              return <div className="s"><b>{(real ? '' : '~') + T.fmtPace(a.timeSec / 5)}</b><span>{real ? '5k pace/km' : '5k pace · est'}</span></div>;
+            })()}
             {!solo && (() => { const pool = T.poolFor(p); const u = pool.unit === 'yards' ? 'yd' : 'm'; return <div className="s"><b>{p.css100Sec ? T.fmtPace(T.pacePer100ForDisplay(p.css100Sec, pool)) : '~' + T.fmtPace(T.pacePer100ForDisplay((T.FITNESS[p.fitness] || T.FITNESS.intermediate).estCss, pool))}</b><span>{p.css100Sec ? 'swim /100' + u : 'swim · est'}</span></div>; })()}
             {!solo && <div className="s"><b>{p.ftp || 'RPE'}</b><span>{p.ftp ? 'FTP watts' : 'bike by feel'}</span></div>}
             {solo && T.saneWeightKg(p.weightKg) ? <div className="s"><b>{T.saneWeightKg(p.weightKg)}</b><span>kg</span></div> : null}
