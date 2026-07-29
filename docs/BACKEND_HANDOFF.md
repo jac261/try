@@ -619,38 +619,64 @@ normalized-power ask together, if that is ever easier to expose than three
 separate computed fields. See **Open bike asks** at the end of this document
 for the current list.
 
-## 28 July — a `bikeReview` column on the log entry
+## 28 July — a `bikeReview` column on the log entry — **WITHDRAWN 29 July**
 
-Small, and the same shape as the `swimReview` column already asked for, so if
-that one gets done this should ride along with it.
+**This ask is withdrawn. Nothing is needed from the backend. It is left here
+rather than deleted because the reasoning is the useful part.**
 
-The bike now has a per-session review engine: it matches the efforts an
-athlete actually rode against the ones their card prescribed, and returns
-power adherence, rep-to-rep fade, completion and a confidence. It is computed
-client-side from the workout, the recording and its intervals.
+What was asked for: a `bikeReview` JSON blob on the workout log entry, opaque,
+write-back-what-the-client-sends. The bike's per-session review engine matches
+the efforts an athlete rode against the ones their card prescribed and returns
+power adherence, rep-to-rep fade, completion and a confidence — and it was
+computed and then lost, because intervals are fetched per workout on demand
+and the review existed only while that sheet was open. The dashboard's quality
+section, the rolling FTP evidence and the outcome history therefore read "not
+enough data yet" for every athlete however much they rode.
 
-The problem is that it is computed and then lost. Intervals are fetched per
-workout on demand, so the review exists only while that sheet is open. The
-bike dashboard therefore cannot show adherence, fade or review outcomes over a
-six-week window, because five of those six weeks are not in memory. It
-currently says so plainly rather than substituting a whole-ride average, which
-is exactly the thing the review engine exists to avoid — but saying so is not
-the same as answering the question.
+Jack's question was the right one: why is a cache going in the database? A
+review is **derived** — from the plan (the backend has it), the recording and
+its laps (the passthrough has both) — so any device can rebuild it from
+sources it can already reach. Asking for a column was asking the backend to
+own a cache of a function it does not run. What was actually missing was a
+cache on the client, and that is where it now is.
 
-Requested as `bikeReview` on the workout log entry, a JSON blob, opaque to
-you: write back whatever the client sends and return it unchanged. The client
-already reads `swimReview` from the same place in the same way.
+Two further reasons the blob was the wrong shape, both of which fall away with
+it. Nothing on the backend would ever have queried it — no filter, no sort, no
+join, no index — so it bought the cost of a column with none of the benefit.
+And a *stored* review is a number meaning whatever the engine meant on the day
+it was written: `powerAdherence` has already changed once, from deviation off
+the band midpoint to deviation off the band edge, and a six-week average
+mixing both is arithmetic over two different quantities. Caching the **laps**
+instead has neither problem, because the laps of a finished ride are a fact
+and never change — there is no invalidation rule to get wrong and nothing to
+go stale.
 
-It is worth noting what this unblocks, because it is more than one number:
-the dashboard's whole quality section, the rolling multi-session evidence that
-decides whether an FTP retest is worth recommending, and the review outcome
-history. All three currently render as "not enough data yet" for every athlete
-regardless of how much they ride.
+What shipped client-side instead:
 
-See **Open bike asks** below.
+- `storage.saveBikeLaps` / `loadBikeLaps` — the WORK laps of past rides, keyed
+  by activity id, trimmed to the four fields the engine reads
+  (`type`, `startTimeSec`, `movingTimeSec`, `averageWatts`), capped at 60
+  recordings and evicted oldest-first. A six-week window is tens of KB.
+- A bounded backfill in `App.jsx` — at most six recordings per load, newest
+  first, never refetching one already cached. A window converges over a few
+  opens instead of firing eighteen requests at a fresh device.
+- `bikeReviewsFrom` in `bike-review.js` — recomputes every review in the
+  window from those laps on each load, so every number in a rolling average
+  was judged by the code currently running.
 
+The one thing that would still help, and it is a header rather than an ask:
+**`Cache-Control` on `/api/integrations/intervals-icu/activities/{id}/intervals`.**
+The laps of a completed activity never change, so that response can be cached
+for a very long time — the same treatment the wellness endpoint already gets
+with `max-age=900`, only more so. If the per-device backfill ever looks heavy
+against intervals.icu's rate limits, a server-side cache on that passthrough
+is the place to put it. Neither is blocking; both are cheap.
 
-See **Open bike asks** below.
+One consequence worth stating rather than leaving implied: if an athlete
+disconnects intervals.icu, the local cache plus recompute means their review
+history goes with it, where a stored blob would have survived. That is
+accepted — the ride data itself is gone at that point, so the dashboard has
+larger holes than the quality section.
 
 ## 29 July — four start-anchor fields on the athlete profile
 
@@ -685,21 +711,28 @@ subset is safe and shipping none breaks nothing.
 | # | Field | Where | Unblocks |
 |---|---|---|---|
 | 1 | `startedAt` (ISO 8601) | activity | Ordering bricks; measuring transition duration |
-| 2 | `bikeReview` (JSON blob, opaque) | workout log entry | The dashboard's whole quality section, the rolling FTP evidence, review outcome history. Pairs with the existing `swimReview` ask — if that one gets done, this should ride with it |
-| 3 | `elapsedTimeSec` | activity | Separating a stop from a bad day, so outdoor rides are judged on what the rider did |
-| 4 | `normalizedWatts` | activity | Intensity factor, power-based TSS, variability index |
-| 5 | Best power by duration | new endpoint | The rider profile entirely — see the power-curve section for the required per-point metadata |
-| 6 | `weeklyHours`, `longestSwimM`, `longestRideMin`, `longestRunMin` | athlete profile | Start anchors surviving a fresh-device recovery; without them a reinstalled athlete silently reverts to race-sized first weeks |
+| 2 | `elapsedTimeSec` | activity | Separating a stop from a bad day, so outdoor rides are judged on what the rider did |
+| 3 | `normalizedWatts` | activity | Intensity factor, power-based TSS, variability index |
+| 4 | Best power by duration | new endpoint | The rider profile entirely — see the power-curve section for the required per-point metadata |
+| 5 | `weeklyHours`, `longestSwimM`, `longestRideMin`, `longestRunMin` | athlete profile | Start anchors surviving a fresh-device recovery; without them a reinstalled athlete silently reverts to race-sized first weeks |
 
-A power **stream** would subsume 3, 4 and 5 together, if that is ever easier
-to expose than three separate computed fields. Ask 6 is the only one that is
+Not in the table, because it is a response header rather than a field:
+**`Cache-Control` on the per-activity intervals passthrough**. The laps of a
+completed activity never change, so that response can be cached for a long
+time. Nothing blocks on it — the client caches the laps itself now — it just
+makes the backfill cheaper. See the withdrawn 28 July ask above.
+
+**Withdrawn:** the `bikeReview` JSON blob on the workout log entry, which was
+ask 2 in earlier versions of this table. It was a request to store a cache of
+a client-side computation in the database; it is now cached client-side and
+recomputed per load. The section above says why in full.
+
+A power **stream** would subsume 2, 3 and 4 together, if that is ever easier
+to expose than three separate computed fields. Ask 5 is the only one that is
 not about activities: it is four nullable columns on the athlete profile.
 
-Two notes on what these cost us today. Ask 2 is the one whose absence is most
-visible: without it the bike dashboard's quality section reads "not enough
-data yet" for every athlete however much they ride, because per-session
-reviews are computed when a workout sheet is opened and then lost. And in ask
-5, `source` (the power meter identifier) is the single most valuable field —
+One note on what these cost us today. In ask
+4, `source` (the power meter identifier) is the single most valuable field —
 without it a new power meter reads as a sudden fitness gain at every duration,
 which is the one error an athlete has no way to catch for themselves.
 

@@ -21,7 +21,7 @@
  */
 import { BIKE_ZONES, judgeBandForType } from './bike-zones.js';
 import { OUTDOOR_REP_TOLERANCE, REP_TOLERANCE } from './review.js';
-import { isIndoor } from './autolog.js';
+import { isIndoor, activityFor } from './autolog.js';
 import { bikeLoad } from './bike-load.js';
 
 /* §4 asks that PAUSES AND COASTING be compared, and nothing here does.
@@ -494,6 +494,50 @@ export function bikeReviewVerdict(review) {
     tone: review.outcome === 'progress' ? 'good' : review.outcome === 'reduce' ? 'warn' : 'info',
     text: OUTCOME_WORDS[review.outcome] + ' · ' + review.confidence + ' confidence. ' + review.text,
   };
+}
+
+/* Every review in a window, RECOMPUTED from cached laps.
+ *
+ * The dashboard's quality section, the FTP evidence and the outcome history
+ * all want the last six weeks of reviews, and a review needs the laps of the
+ * recording it judges. Laps arrive one activity at a time, so this takes
+ * `lapsById` — whatever the caller has cached — and reviews every completed
+ * ride it can reach. A ride whose laps are not cached yet is SKIPPED rather
+ * than guessed at from the whole-ride average, which is the thing this whole
+ * module exists to avoid; the window fills in as the cache backfills.
+ *
+ * RECOMPUTED, NEVER STORED, and that is the point rather than a shortcut.
+ * A stored review is a number meaning whatever the engine meant on the day it
+ * was written, and these definitions have already moved once: powerAdherence
+ * was deviation from the band MIDPOINT before it was deviation from the band
+ * EDGE (see the note where it is computed). Averaging a six-week window that
+ * mixes both is arithmetic over two different quantities. Recomputing from
+ * the laps means every review in the window was judged by the code running
+ * now, so the average is comparable with itself — and the laps of a finished
+ * ride never change, which is what makes them safe to cache and a review not.
+ */
+export function bikeReviewsFrom({ plan, log, moves, activities, lapsById, paces }) {
+  if (!plan || !Array.isArray(plan.weeks) || !lapsById) return [];
+  const out = [];
+  plan.weeks.flatMap(w => w.workouts).forEach(w => {
+    if (!w || w.discipline !== 'bike' || w.adhoc) return;
+    const entry = log && log[w.id];
+    if (!entry) return;
+    const activity = activityFor({ workout: w, activities, moves });
+    if (!activity) return;
+    const laps = lapsById[activity.id];
+    if (!laps) return;
+    const r = bikeReview({
+      workout: w, activity, intervals: laps, paces,
+      feel: entry.feel || activity.feel,
+    });
+    if (!r) return;
+    /* Dated by when the session was COMPLETED, not when the recording was
+       filed — the same rule the swim evidence uses, so a late-logged or
+       moved ride keeps the date the athlete trained on. */
+    out.push({ ...r, date: (entry.at || '').slice(0, 10) || (moves && moves[w.id]) || w.date });
+  });
+  return out.sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
 /* §7: rolling adaptation. ONE RIDE NEVER MOVES ANYTHING.

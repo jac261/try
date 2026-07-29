@@ -52,9 +52,9 @@ function NoteOnly({ m }) {
   return <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{m.note}</div>;
 }
 
-export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog }) {
+export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog, reviews }) {
   const d = T.bikeDashboard({
-    plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog,
+    plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog, reviews,
   });
   if (!d) return null;
   const readiness = T.bikeReadiness(d);

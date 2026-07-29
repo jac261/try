@@ -507,15 +507,33 @@ export function App({ storage, getToken, user }) {
      just fixed in WeeklyDigest, reintroduced the same week, one level up. */
   const startShortfall = useMemo(() => (plan && plan.profile && plan.race !== 'tracker'
     ? T.startVolumeShortfall(plan.profile) : null), [plan]);
-  /* The phase 5 bike reviews, read off the log exactly as the swim evidence
-     above is. They arrive on the log entry from the backend and that column
-     is still an open ask, so this is empty today — but it is empty because
-     there is nothing stored, not because nothing asked. */
-  const bikeReviews = useMemo(() => (plan && plan.weeks
-    ? plan.weeks.flatMap(w => w.workouts)
-      .filter(w => w.discipline === 'bike' && log[w.id] && log[w.id].bikeReview)
-      .map(w => ({ ...log[w.id].bikeReview, date: (log[w.id].at || '').slice(0, 10) || w.date }))
-    : []), [plan, log]);
+  /* The cached laps behind the bike reviews, and the guards for the backfill
+     that fills them in. Same machinery as durability's further down, for the
+     same reason: laps come one recording at a time, so a window has to be
+     walked into rather than fetched. Declared HERE, above the reviews memo
+     that reads it — a const read before its declaration is a TDZ throw at
+     mount, not a lint warning. */
+  const [bikeLaps, setBikeLaps] = useState(() => storage.loadBikeLaps());
+  const bikeLapsRef = useRef(bikeLaps);
+  bikeLapsRef.current = bikeLaps;
+  const bikeLapsBusy = useRef(false);
+  /* The phase 5 bike reviews, recomputed from the cached laps.
+   *
+   * This used to read a `bikeReview` field off the log entry, waiting on a
+   * backend column to store it. The column was the wrong ask: a review is
+   * derived from the plan, the recording and its laps, all of which any
+   * device can already fetch, so what was missing was a cache on this side
+   * and not a table on the backend. The laps are cached now
+   * (storage.saveBikeLaps) and the reviews are recomputed here every load.
+   *
+   * The log-entry read is gone rather than left dangling for the column that
+   * is no longer coming. It never worked in the first place: api.js maps no
+   * such field off the log DTO, so the filter could only ever be false, and
+   * the dashboard said "not enough data yet" for every athlete however much
+   * they rode — while the plumbing read as complete. */
+  const bikeReviews = useMemo(() => T.bikeReviewsFrom({
+    plan, log, moves, activities, lapsById: bikeLaps, paces: plan && plan.paces,
+  }), [plan, log, moves, activities, bikeLaps]);
   const [focusLog, setFocusLog] = useState(() => storage.loadFocusLog());
   const [blockReviewed, setBlockReviewed] = useState(() => storage.loadBlockReviewed());
   // The one narrow write a focus change is allowed: patch the single field,
@@ -589,6 +607,49 @@ export function App({ storage, getToken, user }) {
       (inReviewed(b) ? 1 : 0) - (inReviewed(a) ? 1 : 0)
       || (a.activity.date < b.activity.date ? 1 : -1));
   };
+  /* Backfill the lap cache for the reviewable window.
+   *
+   * Bounded per load, because each ride is its own request to the
+   * passthrough: the cache is permanent once written, so a window converges
+   * over a few opens rather than firing eighteen requests at intervals.icu on
+   * a fresh device. Rides already cached are never refetched — the laps of a
+   * finished ride are a fact — and a FAILED fetch stores nothing, so it
+   * retries next load. An empty result is stored: no structured laps is an
+   * answer, and treating it as a miss would refetch it forever. */
+  const BIKE_LAP_BUDGET = 6;
+  const bikeLapCandidates = () => {
+    if (!Array.isArray(activities) || !plan || !Array.isArray(plan.weeks)) return [];
+    const have = bikeLapsRef.current;
+    const from = T.iso(T.addDays(T.startOfWeekMonday(new Date()), -7 * (T.BIKE_DASH_RULES.weeks - 1)));
+    return plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline === 'bike' && !w.adhoc && log[w.id])
+      .map(w => ({ w, date: (log[w.id].at || '').slice(0, 10) || moves[w.id] || w.date }))
+      .filter(x => x.date >= from)
+      .map(x => ({ ...x, activity: T.activityFor({ workout: x.w, activities, moves }) }))
+      .filter(x => x.activity && !have[x.activity.id])
+      // newest first: the weeks an athlete is most likely to be looking at
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+  };
+  useEffect(() => {
+    if (!hydrated || !fetchesSettled || bikeLapsBusy.current) return;
+    const picks = bikeLapCandidates().slice(0, BIKE_LAP_BUDGET);
+    if (!picks.length) return;
+    bikeLapsBusy.current = true;
+    (async () => {
+      try {
+        for (const c of picks) {
+          const rows = await sync.loadActivityIntervals(c.activity.id).catch(() => null);
+          if (rows === null) continue;   // fetch failed — store nothing, retry next load
+          setBikeLaps(storage.saveBikeLaps(c.activity.id, c.activity.date, rows));
+        }
+      } finally {
+        bikeLapsBusy.current = false;
+      }
+    })();
+    // bikeLaps is read via ref, not depended on: the writes inside the loop
+    // must not cancel the loop that is making them (durability's rule below)
+  }, [hydrated, fetchesSettled, activities, plan, log, moves, storage, sync]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!hydrated || !fetchesSettled || durabilityBusy.current || durabilityDone) return;
     if (!Array.isArray(activities)) { setDurabilityDone(true); return; }
@@ -1335,7 +1396,7 @@ export function App({ storage, getToken, user }) {
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} bikeReviews={bikeReviews} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}

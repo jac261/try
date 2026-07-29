@@ -239,43 +239,40 @@ describe('nothing here is a model without a caller', () => {
 });
 
 
-describe('the quality section reads STORED reviews, not a caller-supplied array', () => {
+describe('the quality section reads REAL reviews, never a whole-ride average', () => {
   it('says plainly that it has none rather than looking wired', () => {
-    /* The first cut took `reviews` as a parameter, App had none to give and
+    /* An early cut took `reviews` as a parameter, App had none to give and
        passed an empty array, and every metric here read "missing" while the
-       plumbing looked complete. Absence has to be visible. */
+       plumbing looked complete. App now recomputes them from its lap cache,
+       so the parameter is real again — but absence still has to be visible,
+       and an empty window must never fill itself in from ride averages. */
     const d = dash();
     expect(d.quality.reviews).toBe(0);
     expect(d.quality.adherence.value).toBe(null);
-    expect(d.quality.reviewNote).toMatch(/stored/);
+    expect(d.quality.reviewNote).toMatch(/lap data/);
   });
 
-  it('reads them off the log the way the swim dashboard does', () => {
+  it('takes a caller-supplied window, which is how App feeds it now', () => {
     const w = rides.find(x => ['Threshold', 'Sweet Spot'].includes(x.type)
       && x.date <= TODAY && x.date >= '2026-06-15');
     if (!w) return;
-    const log2 = { ...doneLog() };
-    log2[w.id] = {
-      done: true, at: w.date + 'T10:00:00Z',
-      bikeReview: { outcome: 'progress', confidence: 'high', powerAdherence: 0, intervalFadePercent: 1.2, type: w.type },
-    };
-    const d = dash({ log: log2 });
+    const d = dash({
+      reviews: [{
+        outcome: 'progress', confidence: 'high', powerAdherence: 2, intervalFadePercent: 3.4,
+        type: w.type, date: w.date,
+      }],
+    });
     expect(d.quality.reviews).toBe(1);
-    expect(d.quality.adherence.value).toBe(0);
-    expect(d.quality.fade.value).toBe(1.2);
-    expect(d.quality.outcomes.progress).toBe(1);
+    expect(d.quality.adherence.value).toBe(2);
+    expect(d.quality.fade.value).toBe(3.4);
     expect(d.quality.reviewNote).toBe(null);
   });
 
-  it('a review from before the window does not count towards it', () => {
-    const w = rides.find(x => x.date < '2026-06-08');
-    if (!w) return;
-    const log2 = { ...doneLog() };
-    log2[w.id] = {
-      done: true, at: w.date + 'T10:00:00Z',
-      bikeReview: { outcome: 'reduce', confidence: 'high', powerAdherence: -20, type: w.type },
-    };
-    expect(dash({ log: log2 }).quality.reviews).toBe(0);
+  it('a caller-supplied review from before the window still does not count', () => {
+    const d = dash({
+      reviews: [{ outcome: 'reduce', confidence: 'high', powerAdherence: -20, type: 'Threshold', date: '2026-01-01' }],
+    });
+    expect(d.quality.reviews).toBe(0);
   });
 });
 

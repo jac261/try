@@ -261,17 +261,20 @@ additive, read defensively, and gated so its absence renders nothing rather
 than guessing.
 
 1. **`startedAt`** on the activity — orders bricks and measures transitions.
-2. **`bikeReview`** on the log entry — pairs with the existing `swimReview`
-   ask. Without it the dashboard's whole quality section, the rolling FTP
-   evidence and the outcome history read "not enough data yet" for every
-   athlete however much they ride.
-3. **`elapsedTimeSec`** — separates a stop from a bad day, so outdoor rides
+2. **`elapsedTimeSec`** — separates a stop from a bad day, so outdoor rides
    can be judged on what the rider did.
-4. **`normalizedWatts`** — unblocks intensity factor, power TSS and
+3. **`normalizedWatts`** — unblocks intensity factor, power TSS and
    variability index.
-5. **A power-curve endpoint** — unblocks the rider profile entirely.
+4. **A power-curve endpoint** — unblocks the rider profile entirely.
 
-A power *stream* would subsume 3, 4 and 5.
+A power *stream* would subsume 2, 3 and 4.
+
+**No longer waiting on:** `bikeReview` on the log entry. That ask asked the
+backend to store a cache of a client-side computation. The reviews are now
+recomputed each load from a client-side cache of the ride's laps
+(`storage.loadBikeLaps` → `bikeReviewsFrom`), which is both the backend's
+problem solved without the backend and immune to the stored-review staleness
+the blob would have carried. See the withdrawn 28 July ask in the handoff.
 
 ## Deliberately not built
 

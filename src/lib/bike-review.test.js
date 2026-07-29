@@ -6,7 +6,7 @@ import { reviewActivity, intervalRows } from './review.js';
 import {
   bikeReview, bikeReviewVerdict, bikeReviewEvidence, matchBikeIntervals,
   plannedBikeEfforts, bandForRep, BIKE_REVIEW_RULES, BIKE_EVIDENCE_RULES, TYPE_PRIORITIES,
-  OUTCOME_SIGNALS,
+  OUTCOME_SIGNALS, bikeReviewsFrom,
 } from './bike-review.js';
 import { BIKE_TYPES } from './bikeschema.js';
 
@@ -435,5 +435,50 @@ describe('gauntlet: the remaining honesty defects', () => {
     expect(withNp.intensityFactor).toBe(0.94);
     expect(withNp.powerTss).toBe(88);
     expect(withNp.variabilityIndex).toBe(1.02);
+  });
+});
+
+/* The window recompute — what replaced the withdrawn `bikeReview` column.
+ *
+ * The dashboard, the FTP evidence and the outcome history all read this, and
+ * before it they read a log field the API layer never mapped, so all three
+ * said "not enough data yet" for every athlete however much they rode. */
+describe('bikeReviewsFrom: a window rebuilt from cached laps', () => {
+  const ridden = rides.filter(w => w.type === 'Threshold' && (w.segments || []).some(s => s.blocks)).slice(0, 2);
+  const built = (over = {}) => {
+    const activities = ridden.map((w, i) => act(w, { id: 'act' + i, date: w.date }));
+    const lapsById = {};
+    ridden.forEach((w, i) => { lapsById['act' + i] = rodeAsPlanned(w, 1.0); });
+    const log = {};
+    ridden.forEach(w => { log[w.id] = { done: true, at: w.date + 'T10:00:00Z' }; });
+    return bikeReviewsFrom({ plan, log, moves: {}, activities, lapsById, paces: REAL, ...over });
+  };
+
+  it('reviews every completed ride whose laps are cached', () => {
+    const out = built();
+    expect(out.length).toBe(ridden.length);
+    out.forEach(r => expect(r.outcome).not.toBe('insufficient-data'));
+  });
+
+  it('skips a ride whose laps are not cached rather than guessing from the average', () => {
+    // the exact failure the engine exists to prevent: a whole-ride average
+    // standing in for a review, recoveries and all
+    expect(built({ lapsById: {} })).toEqual([]);
+  });
+
+  it('skips a ride with no log entry, and one with no matching recording', () => {
+    expect(built({ log: {} })).toEqual([]);
+    expect(built({ activities: [] })).toEqual([]);
+  });
+
+  it('dates each review by when the session was completed, newest first', () => {
+    const out = built();
+    expect(out.every(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date))).toBe(true);
+    expect([...out].sort((a, b) => (a.date < b.date ? 1 : -1))).toEqual(out);
+  });
+
+  it('returns nothing rather than throwing when the caller has no cache yet', () => {
+    expect(bikeReviewsFrom({ plan, log: {}, moves: {}, activities: [], lapsById: null, paces: REAL })).toEqual([]);
+    expect(bikeReviewsFrom({ plan: null, lapsById: {} })).toEqual([]);
   });
 });

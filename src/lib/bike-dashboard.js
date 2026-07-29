@@ -177,28 +177,31 @@ function status({ plan, log, moves, activities, todayISO }) {
  * is fifteen minutes of threshold and seventy-five of everything else, and
  * counting the session would make the number about how long the athlete rode
  * rather than about how much work they did. */
-function quality({ plan, log, moves, todayISO, retest }) {
+function quality({ plan, log, moves, todayISO, retest, reviews }) {
   const from = iso(addDays(startOfWeekMonday(new Date(todayISO)), -7 * (BIKE_DASH_RULES.weeks - 1)));
   const window = ridesIn({ plan, moves, from, to: todayISO }).filter(x => QUALITY_TYPES.includes(x.w.type));
   const done = window.filter(x => log && log[x.w.id]);
   const minutesIn = zone => done.reduce((t, x) =>
     t + plannedBikeEfforts(x.w).filter(e => e.zone === zone).reduce((s, e) => s + e.min, 0), 0);
 
-  /* STORED reviews are the only honest source, exactly as the swim dashboard
-     decided. They ride on the log entry, the way swimReview does, and that
-     column is still an open backend ask — so today this is empty and the
-     dashboard SAYS SO rather than guessing adherence from whole-ride
-     averages, which is the very thing the phase 5 engine exists to avoid.
-     A caller-supplied array was the first cut and it was worse than nothing:
-     App had no reviews to give, so it passed an empty one, and every metric
-     here read "missing" while the plumbing looked complete. */
-  const rv = (plan.weeks ? plan.weeks.flatMap(w => w.workouts) : [])
-    .filter(w => log && log[w.id] && log[w.id].bikeReview)
-    .map(w => ({
-      ...log[w.id].bikeReview,
-      date: (log[w.id].at || '').slice(0, 10) || (moves && moves[w.id]) || w.date,
-    }))
-    .filter(r => r.date >= from && r.date <= todayISO)
+  /* REAL reviews are the only honest source, exactly as the swim dashboard
+     decided: no metric here is ever derived from a whole-ride average, which
+     is the very thing the phase 5 engine exists to avoid.
+   *
+   * Caller-supplied, which was tried once before and abandoned because App
+   * had nothing to give — it passed an empty array and every metric read
+   * "missing" while the plumbing looked complete. What changed is that App
+   * now recomputes the window from its lap cache (bikeReviewsFrom), so the
+   * array arriving here is real. An empty one still SAYS so rather than
+   * filling itself in.
+   *
+   * There is deliberately NO fallback to a `bikeReview` field on the log
+   * entry. That field was a backend ask, the ask was withdrawn, and api.js
+   * never mapped it — so the read it replaced could only ever be false. A
+   * fallback to a field nothing writes is the same defect in a new place:
+   * a path that looks like a source of data and is not one. */
+  const rv = (Array.isArray(reviews) ? reviews : [])
+    .filter(r => r && r.date >= from && r.date <= todayISO)
     .sort((a, b) => (a.date < b.date ? 1 : -1));
   const adh = rv.filter(r => r.powerAdherence != null);
   const fades = rv.filter(r => r.intervalFadePercent != null);
@@ -225,7 +228,7 @@ function quality({ plan, log, moves, todayISO, retest }) {
     outcomes: rv.length ? rv.reduce((m, r) => { m[r.outcome] = (m[r.outcome] || 0) + 1; return m; }, {}) : null,
     reviews: rv.length,
     reviewNote: rv.length ? null
-      : 'Per-session review needs your rides matched to recordings with lap data, and those reviews stored. Nothing here is guessed from ride averages in the meantime.',
+      : 'Per-session review needs your rides matched to recordings with lap data. Those are still loading, or these rides were recorded without laps. Nothing here is guessed from ride averages in the meantime.',
     nextFtp: retest ? metric(retest.headline, 'derived', retest.why) : metric(null, 'missing'),
     sessions: done.length,
     planned: window.length,
@@ -412,12 +415,12 @@ export function bikeLimiter(d) {
 /* The whole model. One call, one pure object. */
 export function bikeDashboard({
   plan, log, moves, activities, todayISO, retest,
-  durabilityReads, fuelLog, positionLog,
+  durabilityReads, fuelLog, positionLog, reviews,
 }) {
   if (!plan || !plan.weeks) return null;
   const today = todayISO || iso(new Date());
   const st = status({ plan, log, moves, activities, todayISO: today });
-  const ql = quality({ plan, log, moves, todayISO: today, retest });
+  const ql = quality({ plan, log, moves, todayISO: today, retest, reviews });
   const du = durability({
     plan, log, moves, activities, todayISO: today, durabilityReads, fuelLog, positionLog, paces: plan.paces,
   });

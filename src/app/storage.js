@@ -147,6 +147,60 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'position', JSON.stringify(m)); } catch (e) {}
       return m;
     },
+    /* The WORK laps of past rides, keyed by activity id: the bike review's
+       INPUTS, cached so the six-week window survives a reload.
+     *
+     * Cached here rather than persisted server-side, which was an open
+     * backend ask until it was withdrawn. A review is derived — from the
+     * plan (the server has it), the recording and its laps (the passthrough
+     * has both) — so any device can rebuild it, and asking the backend to
+     * store one was asking it to own a cache of a function it does not run.
+     * What was actually missing was a cache on this side, which is this.
+     *
+     * THE LAPS AND NOT THE REVIEW, deliberately: laps of a finished ride are
+     * a fact and never change, so a stale entry is impossible and there is
+     * no invalidation rule to get wrong. A stored review would instead go
+     * quietly stale every time the engine's definitions moved.
+     *
+     * Trimmed to the four fields the engine reads (matchBikeIntervals filters
+     * on type and sorts on startTimeSec; the band maths reads averageWatts;
+     * recovery compliance reads the gaps between them), so a full window is
+     * tens of KB rather than hundreds. Non-WORK laps are dropped on the way
+     * in — the matcher discards them anyway — and `type` is restored on the
+     * way out rather than stored 25 times per ride.
+     *
+     * Keyed by the RECORDING, so like durability, fuel and position it spans
+     * plans and must NOT join clear()'s removal list. */
+    loadBikeLaps() {
+      let m = {};
+      try { m = JSON.parse(localStorage.getItem(ns + 'bikeLaps') || '{}'); } catch (e) { return {}; }
+      const out = {};
+      Object.keys(m).forEach(id => {
+        out[id] = (m[id].laps || []).map(l => ({
+          type: 'WORK', startTimeSec: l.s, movingTimeSec: l.m, averageWatts: l.w,
+        }));
+      });
+      return out;
+    },
+    saveBikeLaps(activityId, date, rows) {
+      let m = {};
+      try { m = JSON.parse(localStorage.getItem(ns + 'bikeLaps') || '{}'); } catch (e) { m = {}; }
+      /* An empty array is a real answer — a ride recorded with no structured
+         laps — and must be stored as one, or every load refetches it forever
+         and the review never settles on "steady ride, judged on control".
+         Only a failed FETCH stores nothing, and that is the caller's call. */
+      m[activityId] = {
+        date: date || null,
+        laps: (rows || [])
+          .filter(l => l && l.type === 'WORK')
+          .map(l => ({ s: l.startTimeSec ?? null, m: l.movingTimeSec, w: l.averageWatts ?? null })),
+      };
+      // evict oldest by ride date; six weeks of riding is well under this
+      const ids = Object.keys(m).sort((a, b) => ((m[a].date || '') < (m[b].date || '') ? -1 : 1));
+      ids.slice(0, Math.max(0, ids.length - 60)).forEach(id => delete m[id]);
+      try { localStorage.setItem(ns + 'bikeLaps', JSON.stringify(m)); } catch (e) {}
+      return this.loadBikeLaps();
+    },
     /* Phase 7 §5/§6: the last power curve we showed, so the next one has
        something to be compared against. Without a stored previous there is no
        historical comparison and, more importantly, no device-change

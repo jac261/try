@@ -10,7 +10,7 @@ import { SwimDashboard } from '@/features/progress/SwimDashboard.jsx';
 import { BikeDashboard } from '@/features/progress/BikeDashboard.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog }) {
+export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog, bikeReviews }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -340,7 +340,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           && plan.profile.excludedDiscipline !== 'bike'
           && <BikeDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO}
             retest={ftpRetest} durabilityReads={durability}
-            fuelLog={fuelLog} positionLog={positionLog} />}
+            fuelLog={fuelLog} positionLog={positionLog} reviews={bikeReviews} />}
 
       <div className="section-title">Discipline balance</div>
         <div className="card center">
