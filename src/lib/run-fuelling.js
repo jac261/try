@@ -59,8 +59,14 @@ export function runCarbTarget(durationMin) {
    the highest level the athlete has actually completed a long run on, which
    is the only evidence available about their gut. */
 export function provenTolerance(fuelLog) {
-  const grams = (fuelLog || [])
-    .filter(f => f && f.level && RUN_FUEL_LEVEL_GRAMS[f.level] != null && !f.gutUpset)
+  /* Accepts the app's store shape (a map of activityId to {discipline,
+     level}) as well as a plain array. Entries carrying a discipline count
+     only when it is a RUN: what a gut handled on the bike says little about
+     what it handles at running impact, which is the whole reason this module
+     has its own lower numbers (audit wiring 2026-07-30). */
+  const grams = Object.values(fuelLog || {})
+    .filter(f => f && typeof f === 'object' && (!f.discipline || f.discipline === 'run'))
+    .filter(f => f.level && RUN_FUEL_LEVEL_GRAMS[f.level] != null && !f.gutUpset)
     .map(f => RUN_FUEL_LEVEL_GRAMS[f.level]);
   return grams.length ? Math.max(...grams) : null;
 }
@@ -110,12 +116,15 @@ export function runFuellingOutcome({ plan, level, gutUpset }) {
   const took = RUN_FUEL_LEVEL_GRAMS[level];
   if (took == null) return { status: 'unlogged', plannedPerHour: plan.carbPerHour };
   const gap = plan.carbPerHour - took;
-  return {
-    plannedPerHour: plan.carbPerHour,
-    takenPerHour: took,
-    gutUpset: !!gutUpset,
-    status: gutUpset ? 'gut-limited'
-      : gap >= RUN_FUELLING_RULES.shortfallGrams ? 'short'
-        : took > plan.carbPerHour ? 'above-plan' : 'on-plan',
+  const status = gutUpset ? 'gut-limited'
+    : gap >= RUN_FUELLING_RULES.shortfallGrams ? 'short'
+      : took > plan.carbPerHour ? 'above-plan' : 'on-plan';
+  // Display-ready, so the sheet does not compose its own second opinion.
+  const TEXT = {
+    'gut-limited': 'Your gut pushed back this time. That happens; the target holds where it is until a run goes down well.',
+    short: 'That came in around ' + took + ' g/h against a ' + plan.carbPerHour + ' g/h plan. Worth practising: race day asks for the full amount.',
+    'above-plan': 'More than the plan asked for and it went down fine, which is exactly how tolerance is built.',
+    'on-plan': 'On plan at roughly ' + took + ' g/h. This is the rehearsal that makes race-day fuelling boring.',
   };
+  return { plannedPerHour: plan.carbPerHour, takenPerHour: took, gutUpset: !!gutUpset, status, text: TEXT[status] };
 }

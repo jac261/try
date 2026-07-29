@@ -57,8 +57,12 @@ export function runVolumeModel({ activities, log, plan, todayISO, weeks }) {
   const today = todayISO || iso(new Date());
   const monday = iso(startOfWeekMonday(today));
   const starts = Array.from({ length: n }, (_, i) => iso(addDays(monday, -7 * (n - 1 - i))));
+  /* A run counts if it carries EITHER a duration or a distance. Requiring
+     movingTimeSec dropped distance-only diary entries that weeklyRunKm — the
+     Progress chart — counts, so the dashboard and the chart disagreed on the
+     same week's kilometres for identical inputs (audit catch 2026-07-29). */
   const runs = (Array.isArray(activities) ? activities : [])
-    .filter(a => a && a.date && DISCIPLINE[a.type] === 'run' && a.movingTimeSec);
+    .filter(a => a && a.date && DISCIPLINE[a.type] === 'run' && (a.movingTimeSec || a.distance));
 
   // planned type by date, so a recorded run can be told easy from quality.
   // Reads the plan rather than guessing from pace: a hard session run badly
@@ -71,7 +75,7 @@ export function runVolumeModel({ activities, log, plan, todayISO, weeks }) {
   return starts.map(start => {
     const end = iso(addDays(start, 7));
     const wk = runs.filter(a => a.date >= start && a.date < end);
-    const min = a => a.movingTimeSec / 60;
+    const min = a => (a.movingTimeSec || 0) / 60;
     const totalMin = wk.reduce((t, a) => t + min(a), 0);
     const qualityMin = wk.reduce((t, a) => t + (RUN_QUALITY_TYPES.includes(plannedType[a.date]) ? min(a) : 0), 0);
     const longestMin = wk.reduce((m, a) => Math.max(m, min(a)), 0);

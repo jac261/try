@@ -3,6 +3,7 @@ import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { runMainSet, runReps, runHillsAllowed, RUN_MIN_SESSION_MIN } from './run-sizing.js';
 import { racePaceForWeek, racePaceSession } from './run-race-pace.js';
+import { SOLO_SPACING } from './run-plans.js';
 import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL, runAnchor } from './domain.js';
 import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
 import { swimZoneTargets } from './swim-zones.js';
@@ -293,15 +294,28 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType, racePaceM
        four-week recovery cadence; with race pace off the menu there are three
        slots at most and the historic selector is correct again. The trap it
        guarded against cannot occur, because the calendar does not select. */
-    if (racePaceMin) {
+    /* The block is RESCALED against the duration this long actually has.
+       The calendar sizes it for a race-sized long; a start-volume anchor or a
+       trim can hand this builder a far shorter session, and keeping the block
+       fixed inverted the session's character — an anchored athlete whose
+       longest recent run was 20 minutes got a 45-minute long that was 89%
+       marathon effort, and one rung further down the fitFlex fallback dropped
+       the block entirely while w.racePaceMin survived to resurrect it on the
+       next boost (audit catch 2026-07-29). The lead-in keeps at least 25
+       minutes; a block squeezed under 10 minutes is not a rehearsal and the
+       session falls back to a plain long. Unanchored plans never trigger
+       this: measured across the whole matrix, no race-sized long is within
+       25 minutes of its block. */
+    const rpEff = racePaceMin ? Math.min(racePaceMin, dur - 25) : 0;
+    if (rpEff >= 10) {
       const km = raceType === 'runmarathon' ? 42.195 : 21.0975;
       const rp = pc.runEstimated ? null : racePaceKm(pc, km, RIEGEL_EXP);
       const name = raceType === 'runmarathon' ? 'marathon' : 'half marathon';
-      const lead = Math.max(5, dur - racePaceMin - 10);
+      const lead = Math.max(5, dur - rpEff - 10);
       segs = [
         { label: 'Steady aerobic', min: lead, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
         {
-          label: racePaceMin + ' min at your ' + name + ' effort', min: racePaceMin, zone: 'Z3',
+          label: rpEff + ' min at your ' + name + ' effort', min: rpEff, zone: 'Z3',
           /* Per-distance wording, restored rather than flattened. A single
              generic line lost a deliberate distinction: the marathon effort
              sits BETWEEN long-run and tempo pace while the half sits AT
@@ -313,7 +327,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType, racePaceM
             : (rp ? '~' + fmtPace(rp) + ' /km · settle in, do not chase it'
               : 'Around your tempo pace, controlled'),
         },
-        { label: 'Ease home', min: Math.max(0, dur - lead - racePaceMin), detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Ease home', min: Math.max(0, dur - lead - rpEff), detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ].filter(x => x.min > 0);
     } else {
       segs = menu[v(menu.length)];
@@ -1970,7 +1984,7 @@ export const upgradePlanSegments = function (plan) {
       // easy and quality slots, and a roleless rebuild would quietly swap a
       // session for the other slot's (swim sizing pass 2026-07-18). A workout
       // somehow missing role rebuilds forwards, as the roleless code did.
-      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType, w.role);
+      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType, w.role, w.racePaceMin);
       if (!(built.segments || []).some(s => s.zone || s.blocks)) return w; // swims/strength stay as they are
       changed = true;
       return Object.assign({}, w, { segments: built.segments, distance: built.distance, distEst: !!built.distEst, safety: built.safety || undefined });
@@ -2199,7 +2213,19 @@ export const generatePlan = function (profile, opts) {
         // four-consecutive-day athlete (gauntlet catch)
         if (dist > bestDist || (dist === bestDist && dq1 > bestQ1)) { best = d; bestDist = dist; bestQ1 = dq1; }
       });
-      if (best != null) { dayMap[best] = qs[1]; usedD.add(best); }
+      if (best != null) {
+        /* When the athlete's chosen days make both spacing rules impossible
+           (e.g. Tue/Wed/Fri/Sat with the long on Saturday: every candidate is
+           adjacent to the first quality or to the long), the second quality
+           DEMOTES to an easy run rather than being placed adjacent. Spacing
+           outranks density: the spec's own rules are "avoid adjacent
+           high-intensity sessions" and "protect the Long Run", and a quality
+           session the day before the long compromises both sessions to keep
+           a count (audit catch 2026-07-29). */
+        dayMap[best] = bestDist < SOLO_SPACING.minQualityGapDays
+          ? { disc: qs[1].disc, role: 'easy' } : qs[1];
+        usedD.add(best);
+      }
     }
     days.filter(d => !usedD.has(d)).forEach((d, i) => { if (es[i]) dayMap[d] = es[i]; });
   };
@@ -2223,7 +2249,7 @@ export const generatePlan = function (profile, opts) {
         let m = null;
         for (let d2 = cur.durationMin - 5; d2 >= 20; d2 -= 5) if (!taken(cur.type, d2)) { m = d2; break; }
         for (let d2 = cur.durationMin + 5; m == null; d2 += 5) if (!taken(cur.type, d2)) m = d2;
-        const built = buildWorkout(cur.discipline, cur.type, m, pc, cur.phase, cur.seed, fitness.intensity, profile.raceType, cur.role);
+        const built = buildWorkout(cur.discipline, cur.type, m, pc, cur.phase, cur.seed, fitness.intensity, profile.raceType, cur.role, cur.racePaceMin);
         cur = { ...cur, durationMin: m, title: built.title, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments, safety: built.safety || undefined };
         wk.workouts[i] = cur;
       }
@@ -2242,8 +2268,16 @@ export const generatePlan = function (profile, opts) {
   const phaseWeeksDone = {};
   for (let w = 0; w < totalWeeks; w++) {
     const phase = phases[w];
-    // The appended post-race recovery week: everything easy, race-week legs.
-    const postRaceWeek = raceRecovery && w === buildWeeks;
+    /* Post-race weeks: the appended recovery week, AND any in-plan week
+       after race week. The clamp to race.minWeeks can put the race in an
+       early week of a short-runway plan, and the weeks after it used to run
+       the untouched Base/Build/Peak/Taper program — a 5k ten days out
+       generated two more VO2/Threshold weeks and a taper toward nothing,
+       the exact class phase 1b removed from race week itself (audit catch
+       2026-07-29). Nothing changes for a normal runway, where race week is
+       the final build week and the only week after it is the appended one. */
+    const postRaceWeek = (raceRecovery && w === buildWeeks)
+      || (raceWeekIdx >= 0 && w > raceWeekIdx);
     phasePos[phase] = phasePos[phase] === undefined ? 0 : phasePos[phase] + 1;
     const isRecovery = postRaceWeek || (profile.postRace && w === 0)
       || (((w + 1) % fitness.recoveryEvery === 0) && phase !== 'Taper' && w < buildWeeks - 2); // buildWeeks: see the eligibleTestWeeks note
@@ -2253,7 +2287,9 @@ export const generatePlan = function (profile, opts) {
     // off the periodization curve entirely.
     if (postRaceWeek) load = fitness.factor * fitness.recoveryDepth * 0.8;
 
-    const testKind = testByWeek[w] || null;
+    // A post-race week never hosts a benchmark test: with the race already
+    // run there is nothing the test would retarget toward this cycle.
+    const testKind = postRaceWeek ? null : (testByWeek[w] || null);
 
     // split template into weekend (long/brick) vs weekday slots. The post-race
     // week keeps the athlete's weekly rhythm but every slot becomes an easy
@@ -2607,6 +2643,13 @@ export const generatePlan = function (profile, opts) {
           discipline: disc, role: 'easy', type: easyType, title: built.title, durationMin: dur,
           distance: built.distance, distEst: !!built.distEst, unit: built.unit,
           segments: built.segments, safety: built.safety || undefined,
+          /* A demoted Test stops being a test. Leaving test/testKind on the
+             easy jog it becomes made the auto-5k matcher treat the pre-race
+             shakeout as the benchmark test day: it would pair the jog's
+             recording, find no 5 km lap, and (once failures surface) show a
+             false "your test did not parse" banner two days before a race
+             (audit catch 2026-07-29). */
+          test: undefined, testKind: undefined, note: undefined,
           key: false, raceWeek: recover ? 'recover' : 'sharpen', raceWeekFrom: wo.type,
         });
       }
@@ -2662,7 +2705,13 @@ export const generatePlan = function (profile, opts) {
         flexible.forEach(x => {
           const nd = Math.max(20, round5(x.durationMin * f));
           if (nd >= x.durationMin) return;
-          const rebuilt = buildWorkout(x.discipline, x.type, nd, pc, x.phase, x.seed, fitness.intensity, profile.raceType, x.role);
+          /* racePaceMin rides along or the anchor cut silently deletes the
+             calendar's race-pace block from the card while the stored field
+             survives — and a later boost would silently reinstate it (audit
+             catch 2026-07-29). buildRun rescales the block against the new
+             duration, so a hard cut shrinks the block rather than keeping a
+             40-minute effort inside a 45-minute long. */
+          const rebuilt = buildWorkout(x.discipline, x.type, nd, pc, x.phase, x.seed, fitness.intensity, profile.raceType, x.role, x.racePaceMin);
           x.durationMin = nd; x.title = rebuilt.title; x.distance = rebuilt.distance;
           x.distEst = !!rebuilt.distEst; x.unit = rebuilt.unit; x.segments = rebuilt.segments;
           if (rebuilt.safety) x.safety = rebuilt.safety;
@@ -2732,7 +2781,7 @@ export const generatePlan = function (profile, opts) {
           touched = true;
           const t = typeFor(wo.discipline, wo.role, wo.phase, true, fitness.intensity);
           const dur = Math.max(20, round5(wo.durationMin * 0.6));
-          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity, profile.raceType, wo.role);
+          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity, profile.raceType, wo.role, t === wo.type ? wo.racePaceMin : undefined);
           return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments, safety: built.safety || undefined };
         }
         return wo;

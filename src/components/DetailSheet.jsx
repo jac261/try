@@ -131,9 +131,15 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
               {(() => {
                 // §3: the tap they just gave, measured against what the
                 // session actually asked for. Silent until they answer.
-                const fp = T.bikeFuellingPlan({ workout: w, profile: plan.profile, fuelLog, brickFollows });
-                const out = T.fuellingOutcome({ plan: fp, level: fuel });
-                return out ? <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{out.text}</div> : null;
+                // The run judges its taps against its own lower gut numbers
+                // (audit wiring 2026-07-30); rides and bricks keep the bike's.
+                const fp = w.discipline === 'run'
+                  ? T.runFuellingPlan({ workout: w, profile: plan.profile, fuelLog })
+                  : T.bikeFuellingPlan({ workout: w, profile: plan.profile, fuelLog, brickFollows });
+                const out = w.discipline === 'run'
+                  ? T.runFuellingOutcome({ plan: fp, level: fuel })
+                  : T.fuellingOutcome({ plan: fp, level: fuel });
+                return out && out.text ? <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{out.text}</div> : null;
               })()}
             </>;
           })()}
@@ -184,6 +190,20 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         <BikeExecution w={w} profile={plan.profile} />
         {/* Phase 6 §1/§3: what this long ride is for, and what to eat on it. */}
         <BikeLongPlan w={w} plan={plan} fuelLog={fuelLog} brickFollows={brickFollows} />
+        {/* The run long's fuelling plan, on the bike's terms (audit wiring
+            2026-07-30): what to take, when to start, and why the number is
+            where it is. Renders nothing for a run short enough not to need
+            fuel, so no card appears on a forty-minute easy run. */}
+        {w.discipline === 'run' && !w.race && (() => {
+          const fp = T.runFuellingPlan({ workout: w, profile: plan.profile, fuelLog });
+          if (!fp) return null;
+          return (
+            <div className="testnote" style={{ marginTop: 8 }}>
+              <Icon name="flame" size={18} />
+              <span><b>{fp.carbPerHour} g of carbs an hour</b> ({fp.carbTotal} g total), starting inside the first {fp.startAfterMin} minutes, with {fp.fluidMlPerHour[0]}–{fp.fluidMlPerHour[1]} ml of fluid an hour. {fp.why}</span>
+            </div>
+          );
+        })()}
         {!w.race && !w.bRace && onMove && <>
           <div className="section-title" style={{ margin: '18px 0 8px' }}>Reschedule
             {moved && <a className="reset" {...tap(() => onResetMove(w.id))}> ↺ reset</a>}</div>
@@ -233,7 +253,12 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           // Phase 5: the bike's interval engine, same contract as the swim's.
           const br = w.discipline === 'bike' && !w.adhoc
             ? T.bikeReview({ workout: w, activity, intervals: reps, paces: plan.paces, feel }) : null;
-          const rv = T.reviewActivity({ workout: w, activity, paces: plan.paces, log: null, swimReview: sr, bikeReview: br });
+          // Phase 8's run review, computed from the SAME intervalRows the
+          // splits table below renders, so the two cannot disagree. It was
+          // built with no caller (audit catch 2026-07-30).
+          const rr = w.discipline === 'run' && !w.adhoc
+            ? T.runReview({ workout: w, activity, rows: T.intervalRows({ workout: w, intervals: reps, paces: plan.paces, activity }), profile: plan.profile, feel }) : null;
+          const rv = T.reviewActivity({ workout: w, activity, paces: plan.paces, log: null, swimReview: sr, bikeReview: br, runReview: rr });
           if (!rv) return null;
           return (
             <div className="review">

@@ -171,7 +171,9 @@ export function fivekTestIssues(intervals, activity) {
   return null;
 }
 
-/* The evidence behind a run benchmark proposal, for the tap-through sheet.
+/* The evidence behind a run benchmark proposal. Built for a tap-through
+   sheet like the swim's and bike's; the run currently keeps the one-tap
+   retarget flow (deliberate, App.jsx), so nothing renders this yet.
    (§5 steps 6 and 7, §7 "projection assumptions are visible")
 
    Everything display-ready. The effect is shown twice, because a 5 km time

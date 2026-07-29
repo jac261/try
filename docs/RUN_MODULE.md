@@ -167,7 +167,10 @@ deliberately.
 and the quality CATEGORY apart: Race Pace is quality, but it is prescribed by
 a calendar rather than climbed toward.
 
-`run-units.js` added miles, which the app had nowhere.
+`run-units.js` added miles as an engine capability, which the app had
+nowhere. No UI consumes it yet: cards still render km, and the unit
+preference awaits a Settings control. The docs claiming otherwise was itself
+an audit finding.
 
 ### Phase 8: review, fuelling and race readiness
 
@@ -181,7 +184,25 @@ components, and an athlete with no data reads `unknown` on every one.
 ### Phase 9: the dashboard
 
 `run-dashboard.js`, computing nothing of its own. Projections are absent
-rather than approximate when the anchor is not real.
+rather than approximate when the anchor is not real. Rendered by
+`RunDashboard.jsx` in Progress, beside the swim's and bike's.
+
+### The audit (2026-07-29)
+
+A three-lens audit (coherence, correctness by execution, completeness) with
+adversarial verification closed the arc. Six engine defects were found by
+executing generated output and fixed the same day: rebuild paths dropped the
+race-pace block while its stored field survived; the block was never rescaled
+when an anchor shrank the long under it; a race clamped to an early week left
+full training weeks after it; a demoted race-week test kept its test flags;
+the dashboard and the Progress chart disagreed on a week's kilometres; and
+daysets whose geometry makes spacing impossible placed quality beside the
+long, with the engine's own checker flagging the engine's own output (the
+second quality now demotes to easy there — spacing outranks density).
+
+Its completeness lens also found the phase 8 and 9 surfaces built with no
+callers, which is why the review, fuelling, dashboard and test-failure
+banners are wired above.
 
 ## After the arc
 

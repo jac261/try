@@ -47,6 +47,34 @@ export const RUN_REVIEW_PRIORITIES = {
 
 export const RUN_OUTCOMES = ['progress', 'repeat', 'reduce', 'retest-5k', 'insufficient-data'];
 
+// Outcome words for the sheet, one register with the swim's and bike's.
+const OUTCOME_WORDS = {
+  progress: 'Move on',
+  repeat: 'Repeat this one',
+  reduce: 'Ease back',
+  'retest-5k': 'Time to retest your 5 km',
+};
+
+/* A runReview as the single closing verdict for the sheet, mirroring
+   swimReviewVerdict: reviewActivity renders it as the last word so a
+   whole-session average never contradicts the per-rep read beside it. */
+export function runReviewVerdict(review) {
+  if (!review || review.outcome === 'insufficient-data') return null;
+  const bits = [];
+  if (review.terrainAdjusted) bits.push('Hills, so judged by completion and effort rather than pace.');
+  else if (review.paceAdherence != null && review.paceAdherence > 0) bits.push(Math.round(review.paceAdherence) + '% of reps landed off target.');
+  if (review.intervalFadePercent != null && review.intervalFadePercent > RUN_REVIEW_RULES.fadeConcern) {
+    bits.push('The late reps faded ' + review.intervalFadePercent + '% against the early ones.');
+  }
+  if (review.completion != null && review.completion < RUN_REVIEW_RULES.completionFull) {
+    bits.push('About ' + Math.round(review.completion * 100) + '% of the session happened.');
+  }
+  return {
+    tone: review.outcome === 'progress' ? 'good' : review.outcome === 'reduce' ? 'warn' : 'info',
+    text: OUTCOME_WORDS[review.outcome] + ' · ' + review.confidence + ' confidence.' + (bits.length ? ' ' + bits.join(' ') : ''),
+  };
+}
+
 /* Late-vs-early fade across the graded reps: the number §1 calls
    intervalFadePercent. Positive means the later reps were slower. Needs at
    least four reps to split, because "first half vs second half" of a

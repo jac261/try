@@ -17,6 +17,17 @@
  * choices): zero adjacent qualities, zero qualities the day before a long
  * run, zero the day after. The rules below are the ones the engine already
  * keeps.
+ *
+ * ONE HONEST CAVEAT to that measurement: the swept daysets never contained a
+ * geometry where no placement can satisfy both rules (e.g. Tue/Wed/Fri/Sat
+ * with the long on Saturday). The shipped tie-break resolved those by
+ * placing the second quality adjacent to the long — so this contract's
+ * "zero violations" was fixture luck, and the engine's own checker flagged
+ * the engine's own output (audit catch 2026-07-29). Resolution: where the
+ * athlete's chosen days make spacing impossible, the second quality DEMOTES
+ * to an easy run. Spacing outranks density, because "avoid adjacent
+ * high-intensity sessions" and "protect the Long Run" are the spec's rules
+ * and a session count is not.
  */
 
 import { RUN_QUALITY_TYPES } from './runschema.js';

@@ -76,15 +76,24 @@ account in [../RUN_MODULE.md](../RUN_MODULE.md); the short version:
 
 - **Race pace is a calendar**, not a seed walk, with a dedicated midweek
   `Race Pace` type (`run-race-pace.js`).
-- **Distance prescriptions** in kilometres or miles, minutes still canonical
-  (`run-units.js`).
+- **Distance conversion** in kilometres or miles as an engine-layer
+  capability (`run-units.js`): honest tilde-marked conversion and the unit
+  preference table exist and are tested, but no UI surfaces them yet — cards
+  render km only. Wiring them is a product decision (a unit preference needs
+  a Settings control), not a missing import.
 - **The 5 km benchmark** has provenance, history, and a test-to-proposal flow
   (`run-benchmark.js`).
 - **Sizing, spacing, load and durability** each live in one readable table
   (`run-sizing.js`, `run-plans.js`, `run-durability.js`).
 - **Review, fuelling and readiness** turn completed runs into evidence
-  (`run-review.js`, `run-fuelling.js`, `run-readiness.js`).
-- **A dashboard** answering five questions (`run-dashboard.js`).
+  (`run-review.js`, `run-fuelling.js`, `run-readiness.js`): the review renders
+  on every recorded run's sheet, long runs carry a fuelling plan and grade the
+  athlete's fuel tap, and a failed or unmatched 5 km test explains itself in
+  the same banner voice the swim uses. Rolling review EVIDENCE (several runs
+  arguing together) is dormant until the backend stores a per-run review, the
+  same ask the bike has open.
+- **A dashboard** answering five questions (`run-dashboard.js`,
+  `RunDashboard.jsx` in Progress).
 
 ## Still deferred
 

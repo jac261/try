@@ -1136,6 +1136,27 @@ export function App({ storage, getToken, user }) {
   const cssFail = cssFresh && cssTest && !cssTest.test && cssTest.issue
     ? { sig: cssTest.actId, issue: cssTest.issue }
     : unmatchedTest;
+  /* The run test's failure surfaces, mirroring the swim's two above (audit
+     catch 2026-07-30: fivekTestIssues was computed, stored on runTest.issue,
+     and read by nothing — a partial or treadmill 5 km test was silent at the
+     UI while the module promised the athlete the actual reason). The
+     unmatched branch is the same gauntlet catch the swim earned: a logged
+     test whose recording never arrived must say so, not go quiet. */
+  const unmatchedRunTest = (() => {
+    if (plan.race === 'tracker' || !Array.isArray(plan.weeks) || !Array.isArray(activities) || !activities.length) return null;
+    const today = T.iso(new Date());
+    const t = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.test && w.testKind === 'run5k' && log[w.id])
+      .map(w => ({ w, date: (moves && moves[w.id]) || w.date }))
+      .filter(x => x.date < today && T.daysBetween(x.date, today) <= T.EFTP_RULES.freshDays)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+    if (!t) return null;
+    return T.run5kTestActivityFor({ activities, date: t.date }) ? null
+      : { sig: 'nomatch:' + t.w.id, issue: 'We could not find a run recording on your test day.' };
+  })();
+  const runFail = runFresh && runTest && !runTest.test && runTest.issue
+    ? { sig: runTest.actId, issue: runTest.issue }
+    : unmatchedRunTest;
   // Phase 3b (§5): the retest nudge. Muted while a swim update proposal or a
   // failure explanation is live — one message about the number at a time.
   // unresolvedTest keeps the module's swum-a-test-recently suppression from
@@ -1373,7 +1394,7 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} runFail={runFail} onFixRun={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}

@@ -166,12 +166,25 @@ describe('gauntlet round 1 pins', () => {
     });
   });
 
-  it('four consecutive training days still space the two qualities', () => {
+  it('four consecutive training days demote the second quality rather than crowd the long', () => {
+    /* This pin used to assert TWO qualities here, measuring only their
+       distance from each other — and the geometry it chose (Mon-Thu, long on
+       Thursday) has no placement that also honours the long-run gap, so the
+       shipped tie-break quietly put the second quality the day before the
+       long. Phase 4's spacing contract forbids exactly that, and the two
+       rules coexisted only because no fixture exercised this geometry (audit
+       catch 2026-07-29). Resolution: spacing outranks density — "avoid
+       adjacent high-intensity sessions" and "protect the Long Run" are the
+       spec's own rules, and a session count is not. The second quality
+       demotes to easy where the athlete's chosen days make spacing
+       impossible; the original catch (Mon+Tue stacked qualities) stays
+       impossible too, now by demotion rather than by lesser-evil placement. */
     const p = gen({ raceType: 'runhalf', daysPerWeek: 4, trainingDays: [0, 1, 2, 3], longDay: 3 });
     const wk = p.weeks.find(w => !w.isRecovery && !w.workouts.some(x => x.test || x.race));
     const qDays = wk.workouts.filter(w => w.role === 'quality').map(w => Number(w.id.split('-')[1]));
-    expect(qDays.length).toBe(2);
-    expect(Math.abs(qDays[0] - qDays[1])).toBeGreaterThanOrEqual(2);
+    expect(qDays.length).toBe(1);
+    const runs = wk.workouts.filter(x => x.discipline === 'run' && !x.race);
+    expect(runs.length).toBe(4); // the demoted slot is still a run, not a hole
   });
 
   it('the post-race recovery week is a real week, not one jog', () => {
