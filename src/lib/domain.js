@@ -132,6 +132,49 @@ export function hasRealFtp(profile) {
   return bikePowerAnchor(profile).kind === 'real';
 }
 
+/* The same distinction for the run: is this 5 km time something the athlete
+ * ACTUALLY RAN, or a number the level table guessed for them? (run phase 1 §4)
+ *
+ * It matters more here than anywhere else in the app, because the 5 km anchor
+ * is what race projections extrapolate from. Projecting a marathon time off a
+ * level-table guess would quote an athlete a finish time derived from nothing
+ * they have ever done. predictRaceTimes already gates on profile.fivekSec for
+ * exactly this reason; this makes the rule a value a caller can ask about
+ * instead of a convention each caller has to remember.
+ *
+ * The estimated branch carries WHICH table it came from, because there are two
+ * and they disagree: est5k is calibrated to triathletes, runEst5k to runners
+ * (a beginner runner is slower than a beginner triathlete over 5 km, an elite
+ * runner faster). The soloRun test below is the same expression computePaces
+ * uses, so the anchor cannot disagree with the paces actually printed on the
+ * card. RACES[undefined] === {} collapses it for an absent raceType, matching
+ * computePaces exactly.
+ *
+ * Only kind 'real' may drive race projections or exact race-pace quoting.
+ */
+export function runAnchor(profile) {
+  const p = profile || {};
+  if (p.fivekSec) {
+    const meta = p.fivekMeta || {};
+    return { kind: 'real', timeSec: p.fivekSec, measuredAt: meta.measuredAt || null };
+  }
+  const lvl = FITNESS[p.fitness] || FITNESS.intermediate;
+  const soloRun = (RACES[p.raceType] || {}).solo === 'run';
+  return {
+    kind: 'estimated',
+    timeSec: soloRun ? lvl.runEst5k : lvl.est5k,
+    source: soloRun ? 'runner-level' : 'triathlete-level',
+  };
+}
+
+// The one question every consumer of the run anchor actually wants to ask.
+// There is no 'none' kind: unlike FTP, which needs a weight to estimate and
+// must fail closed without one, every level has a 5 km estimate, so the run
+// always has SOME anchor. What varies is whether it is real.
+export function hasReal5k(profile) {
+  return runAnchor(profile).kind === 'real';
+}
+
 export const FTP_CONFIDENCE = ['low', 'medium', 'high'];
 
 /* Phase 2 §3: the accepted real FTPs over time, newest last.
