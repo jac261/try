@@ -40,6 +40,14 @@ export function tuneFields(profile, suggestions) {
       // moment an athlete accepts a run suggestion on a blank-5k plan
       const soloRun = (T.RACES[profile.raceType] || {}).solo === 'run';
       fields.fivekSec = Math.round((profile.fivekSec || (soloRun ? lvl.runEst5k : lvl.est5k)) * t);
+      // The fifth 5 km write point, and the one that could launder a guess
+      // into evidence. A feel-based nudge means the number is no longer
+      // whatever was measured — and on a blank-5k plan it was never measured
+      // at all, it is the level table nudged two per cent. Stamping it
+      // 'estimated' keeps runAnchor from calling it real, which is what kept
+      // race projections and benchmark history off a number the athlete never
+      // ran. Mirrors the swim's cssMeta below, which fixed this exact class.
+      fields.fivekMeta = { source: 'estimated', measuredAt: T.iso(new Date()), confidence: 'low' };
     }
     if (s.discipline === 'swim') {
       fields.css100Sec = Math.round((profile.css100Sec || lvl.estCss) * t);

@@ -117,9 +117,10 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo, fromTest
           // metre pool is the identity, so existing saves are unchanged
           const css100Sec = untouched ? (profile.css100Sec || null)
             : (() => { const d = T.parseTimeToSec(f.css100); return d != null ? Math.round(T.css100mFromDisplay(d, f.pool)) : null; })();
+          const fivekSec = T.parseTimeToSec(f.fivek);
           onSave({
             fitness: f.fitness,
-            fivekSec: T.parseTimeToSec(f.fivek),
+            fivekSec,
             css100Sec,
             ftp: ftpNow,
             weightKg: f.weightKg ? Number(f.weightKg) : null,
@@ -136,6 +137,13 @@ export function FitnessEditor({ profile, onClose, onSave, noPlan, solo, fromTest
             ...(ftpNow != null && ftpNow !== profile.ftp
               ? { ftpMeta: { source: fromTest === 'bikeFtp' ? 'try-test' : 'manual', measuredAt: T.iso(new Date()), confidence: fromTest === 'bikeFtp' ? 'high' : 'medium' } }
               : ftpNow == null && profile.ftp != null ? { ftpMeta: null } : {}),
+            // The run's 5 km, on the same rule as the two above. run5k is a
+            // first-class test kind and was the only one of the three whose
+            // result reached the profile with no source, date or confidence,
+            // for the one anchor race projections extrapolate from.
+            ...(fivekSec != null && fivekSec !== profile.fivekSec
+              ? { fivekMeta: { source: fromTest === 'run5k' ? 'try-test' : 'manual', measuredAt: T.iso(new Date()), confidence: fromTest === 'run5k' ? 'high' : 'medium' } }
+              : fivekSec == null && profile.fivekSec != null ? { fivekMeta: null } : {}),
             /* Start anchors carry no provenance: they are the athlete's own
                statement about their own volume, and clearing one clears it.
                A changed anchor re-targets like any other fitness change, so

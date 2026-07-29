@@ -132,6 +132,88 @@ export function hasRealFtp(profile) {
   return bikePowerAnchor(profile).kind === 'real';
 }
 
+/* The same distinction for the run: is this 5 km time something the athlete
+ * ACTUALLY RAN, or a number the level table guessed for them? (run phase 1 §4)
+ *
+ * It matters more here than anywhere else in the app, because the 5 km anchor
+ * is what race projections extrapolate from. Projecting a marathon time off a
+ * level-table guess would quote an athlete a finish time derived from nothing
+ * they have ever done. predictRaceTimes already gates on profile.fivekSec for
+ * exactly this reason; this makes the rule a value a caller can ask about
+ * instead of a convention each caller has to remember.
+ *
+ * The estimated branch carries WHICH table it came from, because there are two
+ * and they disagree: est5k is calibrated to triathletes, runEst5k to runners
+ * (a beginner runner is slower than a beginner triathlete over 5 km, an elite
+ * runner faster). The soloRun test below is the same expression computePaces
+ * uses, so the anchor cannot disagree with the paces actually printed on the
+ * card. RACES[undefined] === {} collapses it for an absent raceType, matching
+ * computePaces exactly.
+ *
+ * Only kind 'real' may drive race projections or exact race-pace quoting.
+ */
+// The sources a REAL 5 km can have (run phase 2 §1). 'recorded-race' is an
+// actual race result rather than a self-administered test, which is why it
+// sits alongside 'try-test' rather than under 'manual'. There is deliberately
+// no 'activity-model' entry, the bike's rolling estimate: a 5 km time is a
+// performance, not something to be modelled from easy runs.
+export const RUN_5K_SOURCES = ['manual', 'estimated', 'recorded-race', 'try-test', 'intervals-icu'];
+/* 'estimated' is in the set for the same reason CSS_SOURCES carries it: a
+ * feel-based tuning nudge writes a fivekSec DERIVED FROM THE LEVEL TABLE when
+ * the athlete has no real 5 km, and that number must never be mistaken for a
+ * performance. Before this existed, one "that felt easy" nudge on a blank-5k
+ * solo plan turned a 28:00 level guess into a real benchmark: runAnchor
+ * reported kind 'real', hasReal5k went true, the number entered benchmark
+ * history, and the app quoted a 4h23-5h19 marathon prediction from a time the
+ * athlete had never run. That is four of phase 5's acceptance criteria at
+ * once (§3 and §5).
+ *
+ * A nudged estimate is still the right number to SIZE sessions from, which is
+ * why it stays on profile.fivekSec and computePaces keeps reading it. It is
+ * simply not evidence, so kind stays 'estimated'.
+ */
+export function runAnchor(profile) {
+  const p = profile || {};
+  const meta = p.fivekMeta || {};
+  if (p.fivekSec && meta.source !== 'estimated') {
+    return {
+      kind: 'real',
+      timeSec: p.fivekSec,
+      // Provenance falls back to 'manual' the way the bike's does: a number
+      // on the profile with no meta got there by someone typing it.
+      source: RUN_5K_SOURCES.includes(meta.source) ? meta.source : 'manual',
+      measuredAt: meta.measuredAt || null,
+      confidence: FTP_CONFIDENCE.includes(meta.confidence) ? meta.confidence : null,
+    };
+  }
+  // A stored-but-estimated time: keep the number the plan is actually sized
+  // from, and say plainly where it came from.
+  if (p.fivekSec) {
+    return {
+      kind: 'estimated',
+      timeSec: p.fivekSec,
+      source: 'estimated',
+      measuredAt: meta.measuredAt || null,
+      confidence: FTP_CONFIDENCE.includes(meta.confidence) ? meta.confidence : null,
+    };
+  }
+  const lvl = FITNESS[p.fitness] || FITNESS.intermediate;
+  const soloRun = (RACES[p.raceType] || {}).solo === 'run';
+  return {
+    kind: 'estimated',
+    timeSec: soloRun ? lvl.runEst5k : lvl.est5k,
+    source: soloRun ? 'runner-level' : 'triathlete-level',
+  };
+}
+
+// The one question every consumer of the run anchor actually wants to ask.
+// There is no 'none' kind: unlike FTP, which needs a weight to estimate and
+// must fail closed without one, every level has a 5 km estimate, so the run
+// always has SOME anchor. What varies is whether it is real.
+export function hasReal5k(profile) {
+  return runAnchor(profile).kind === 'real';
+}
+
 export const FTP_CONFIDENCE = ['low', 'medium', 'high'];
 
 /* Phase 2 §3: the accepted real FTPs over time, newest last.

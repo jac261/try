@@ -179,7 +179,7 @@ export function ftpProposalDetails({ proposal, plan, todayISO }) {
 
 const RIDE_TYPES = new Set(['Ride', 'VirtualRide', 'MountainBikeRide', 'GravelRide', 'TrackRide', 'Cyclocross']);
 
-export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }) {
+export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest, runTest }) {
   const candidates = [];
   const profile = plan && plan.profile;
   const pc = plan && plan.paces;
@@ -211,6 +211,39 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
         // itself; accepting it records that provenance on the profile so the
         // threshold model (domain.swimThreshold) can reason about staleness.
         retarget: { css100Sec: meas, cssMeta: { source: 'try-test', measuredAt: cssTest.date || todayISO, confidence: 'high' } },
+      };
+    }
+  }
+
+  /* Run, from the athlete's own recorded 5 km test (runTest.test is a
+     fivekFromTestIntervals result, fetched and cached by the app when the
+     plan's run test is logged and matched). Same standing as the swim test
+     above: a directly run effort outranks every passive signal below, so it
+     returns immediately instead of competing on drift size.
+
+     The guardrails live in fivekFromTestIntervals, which returns null for a
+     partial 5 km, an ambiguous recording or an implausible time; a treadmill
+     recording is rejected by fivekTestIssues before it reaches here. Weak
+     evidence must never move the number every run target is built from. */
+  if (trains('run') && runTest && runTest.test && pc && pc.run) {
+    const meas = runTest.test.fivekSec;
+    const curFivek = (profile && profile.fivekSec) || pc.run.fivekPace * 5;
+    const drift = (curFivek - meas) / curFivek;
+    if (Math.abs(drift) >= EFTP_RULES.minDriftPct) {
+      return {
+        kind: 'runtest', sport: 'run', drift: Math.abs(drift), up: drift > 0,
+        headline: drift > 0 ? 'Your 5 km test says you are faster than the plan' : 'Your 5 km test says the plan paces are too hot',
+        // Quote the RECORDED lap, not a nominal 5 km: a lap of 4,960 m
+        // normalised up must not be dressed up as an exact 5 km split.
+        why: 'You ran ' + fmtPace(runTest.test.lapSec) + ' for ' + runTest.test.lapMetres + ' m'
+          + (runTest.test.scaled ? ' (a 5 km time of ' + fmtPace(meas) + ')' : '')
+          + '; the plan trains to a ' + fmtPace(Math.round(curFivek)) + ' 5 km.',
+        // A directly run test is the highest-trust source, dated to the run
+        // itself, so the benchmark model can reason about staleness.
+        retarget: {
+          fivekSec: meas,
+          fivekMeta: { source: 'try-test', measuredAt: runTest.date || todayISO, confidence: 'high' },
+        },
       };
     }
   }
@@ -280,7 +313,15 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest }
           kind: 'eftp', sport: 'run', drift: Math.abs(drift), up: drift > 0,
           headline: drift > 0 ? 'Your run fitness has moved up' : 'Your run paces may be set too hot',
           why: 'Your run threshold is now set at ' + fmtPace(icuSec) + ' /km; the plan trains to ' + fmtPace(planSec) + ' /km.',
-          retarget: { fivekSec: Math.round((icuSec - 12) * 5) },
+          // Provenance, as the swim and bike branches have always written.
+          // Without it the run was the only anchor the app could not date or
+          // attribute, for the one number race projections extrapolate from.
+          // 'medium' because a configured threshold pace is a setting the
+          // athlete or intervals.icu maintains, not an effort we watched.
+          retarget: {
+            fivekSec: Math.round((icuSec - 12) * 5),
+            fivekMeta: { source: 'intervals-icu', measuredAt: todayISO, confidence: 'medium' },
+          },
         });
       }
     }

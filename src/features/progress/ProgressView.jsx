@@ -8,6 +8,7 @@ import { AthleteStateStrip } from '@/features/wellness/AthleteStateStrip.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 import { SwimDashboard } from '@/features/progress/SwimDashboard.jsx';
 import { BikeDashboard } from '@/features/progress/BikeDashboard.jsx';
+import { RunDashboard } from '@/features/progress/RunDashboard.jsx';
 const D = T.DISCIPLINES;
 
 export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog }) {
@@ -341,6 +342,12 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           && <BikeDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO}
             retest={ftpRetest} durabilityReads={durability}
             fuelLog={fuelLog} positionLog={positionLog} />}
+
+        {/* Phase 9: the run's dashboard, guarded exactly as the two above.
+            (Audit catch 2026-07-30: it was built with no component.) */}
+        {!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'run')
+          && plan.profile.excludedDiscipline !== 'run'
+          && <RunDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO} fuelLog={fuelLog} />}
 
       <div className="section-title">Discipline balance</div>
         <div className="card center">

@@ -38,6 +38,8 @@ const saveFtpRetestDismiss = v => dSet('ftpRetestDismissed', v);
 const loadRetestDismiss = () => dGet('cssRetestDismissed');
 const saveRetestDismiss = v => dSet('cssRetestDismissed', v);
 const loadCssFailDismiss = () => dGet('cssTestFailDismissed');
+const loadRunFailDismiss = () => dGet('runTestFailDismissed');
+const saveRunFailDismiss = v => dSet('runTestFailDismissed', v);
 const saveCssFailDismiss = v => dSet('cssTestFailDismissed', v);
 /* The under-built warning's dismissal, in the SAME per-user namespace as its
    siblings. It arrived on a branch cut before that refactor and carried a
@@ -105,7 +107,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, ftpRetest, onFtpRetest, startShortfall }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, runFail, onFixRun, ftpRetest, onFtpRetest, startShortfall }) {
   // Align the dismissal keys to THIS user before any lazy initialiser runs.
   // They were browser-global, so two accounts on one device shared them.
   DISMISS_NS = (storage && storage.ns) || 'try.';
@@ -120,6 +122,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   const [retestDismissed, setRetestDismissed] = useState(loadRetestDismiss);
   const [ftpRetestDismissed, setFtpRetestDismissed] = useState(loadFtpRetestDismiss);
   const [cssFailDismissed, setCssFailDismissed] = useState(loadCssFailDismiss);
+  const [runFailDismissed, setRunFailDismissed] = useState(loadRunFailDismiss);
   const [shortfallDismissed, setShortfallDismissed] = useState(loadShortfallDismiss);
   const [reviewToday, setReviewToday] = useState(false);
   const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile onToggle={() => onToggleWorkout(w.id)} />;
@@ -185,6 +188,15 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
     sub: cssFail.issue + ' You can enter the result by hand. Tap to update fitness →',
     act: onFixCss,
     dismiss: () => { saveCssFailDismiss(cssFail.sig); setCssFailDismissed(cssFail.sig); },
+  });
+  // The run test's version of the same promise: a test that produced no 5 km
+  // says why, and points at the by-hand path (audit catch 2026-07-30).
+  if (!tracker && runFail && runFail.issue && runFailDismissed !== runFail.sig) coach.push({
+    key: 'runfail', cls: 'banner ramp', icon: 'run',
+    title: 'We could not read a 5 km time from your test run',
+    sub: runFail.issue + ' You can enter the result by hand. Tap to update fitness →',
+    act: onFixRun,
+    dismiss: () => { saveRunFailDismiss(runFail.sig); setRunFailDismissed(runFail.sig); },
   });
   // Phase 3b (§5): the retest nudge. A recommendation, never a change: it
   // opens the protocol sheet, and dismissing it sticks until its signature

@@ -8,7 +8,7 @@ hypothesis, propose-never-impose, honest numbers, one thing by default) see
 
 Snapshot: React 18 + Vite 6 PWA, plain JS, Clerk-gated, per-user localStorage
 with a backend sync (Jack's ASP.NET Core service). intervals.icu is the
-activity source. 1,212 tests across 64 files at the time of writing.
+activity source. 1,392 tests across 73 files at the time of writing.
 
 ## The disciplines
 
@@ -20,7 +20,7 @@ each had a full eight-phase build-out; the run is the next one.
 |---|---|---|
 | Swim | The swim library, the pool profile, CSS with provenance and testing, per-session review, technique focus, open water, the swim dashboard | [swim.md](swim.md), deeper in [../SWIM_MODULE.md](../SWIM_MODULE.md) |
 | Bike | The bike library and its sizing, FTP with provenance, honest distance, indoor handling, interval-level review, durability and fuelling, bricks, the power curve (gated), the bike dashboard | [bike.md](bike.md), deeper in [../BIKE_MODULE.md](../BIKE_MODULE.md) |
-| Run | The run library, hill work, race projections, weekly volume, and standalone run race plans (Tier 2) | [run.md](run.md) |
+| Run | The run library and its sizing, the 5 km benchmark with provenance, hill work, the race-pace calendar, distance in km or miles, load and durability, review and fuelling, race readiness, the run dashboard | [run.md](run.md), deeper in [../RUN_MODULE.md](../RUN_MODULE.md) |
 
 ## The systems that turn disciplines into a plan and a coach
 
@@ -58,5 +58,5 @@ Module docs here are the current-state overview. The reference specs are:
 [WORKOUT_SIZING_SPEC.md](../WORKOUT_SIZING_SPEC.md), [READINESS_MODEL.md](../READINESS_MODEL.md),
 [EXPERIENCE_LEVELS.md](../EXPERIENCE_LEVELS.md), [COACH_BRAIN.md](../COACH_BRAIN.md),
 [BACKEND_HANDOFF.md](../BACKEND_HANDOFF.md), [STYLE_GUIDE.md](../STYLE_GUIDE.md),
-and the two discipline build-outs [SWIM_MODULE.md](../SWIM_MODULE.md) and
-[BIKE_MODULE.md](../BIKE_MODULE.md).
+and the three discipline build-outs [SWIM_MODULE.md](../SWIM_MODULE.md),
+[BIKE_MODULE.md](../BIKE_MODULE.md) and [RUN_MODULE.md](../RUN_MODULE.md).

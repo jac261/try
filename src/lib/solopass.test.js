@@ -166,12 +166,25 @@ describe('gauntlet round 1 pins', () => {
     });
   });
 
-  it('four consecutive training days still space the two qualities', () => {
+  it('four consecutive training days demote the second quality rather than crowd the long', () => {
+    /* This pin used to assert TWO qualities here, measuring only their
+       distance from each other — and the geometry it chose (Mon-Thu, long on
+       Thursday) has no placement that also honours the long-run gap, so the
+       shipped tie-break quietly put the second quality the day before the
+       long. Phase 4's spacing contract forbids exactly that, and the two
+       rules coexisted only because no fixture exercised this geometry (audit
+       catch 2026-07-29). Resolution: spacing outranks density — "avoid
+       adjacent high-intensity sessions" and "protect the Long Run" are the
+       spec's own rules, and a session count is not. The second quality
+       demotes to easy where the athlete's chosen days make spacing
+       impossible; the original catch (Mon+Tue stacked qualities) stays
+       impossible too, now by demotion rather than by lesser-evil placement. */
     const p = gen({ raceType: 'runhalf', daysPerWeek: 4, trainingDays: [0, 1, 2, 3], longDay: 3 });
     const wk = p.weeks.find(w => !w.isRecovery && !w.workouts.some(x => x.test || x.race));
     const qDays = wk.workouts.filter(w => w.role === 'quality').map(w => Number(w.id.split('-')[1]));
-    expect(qDays.length).toBe(2);
-    expect(Math.abs(qDays[0] - qDays[1])).toBeGreaterThanOrEqual(2);
+    expect(qDays.length).toBe(1);
+    const runs = wk.workouts.filter(x => x.discipline === 'run' && !x.race);
+    expect(runs.length).toBe(4); // the demoted slot is still a run, not a hole
   });
 
   it('the post-race recovery week is a real week, not one jog', () => {
@@ -191,9 +204,19 @@ describe('race-pace long runs', () => {
     const withRp = p.weeks.filter(w => w.workouts.some(x =>
       x.segments && x.segments.some(s => s.label && s.label.indexOf('marathon effort') >= 0)));
     expect(withRp.length).toBeGreaterThan(0);
+    /* Taper joins Build and Peak as of run phase 7. §1 asks for "shorter
+       familiar race-pace exposures" in the taper, and they arrive as a short
+       MIDWEEK session rather than inside the long run, so the taper's longest
+       session stays easy in the week it most needs to be. Base is still never
+       race-specific, and recovery weeks still carry none. */
     withRp.forEach(w => {
-      expect(['Build', 'Peak']).toContain(w.phase);
+      expect(['Build', 'Peak', 'Taper']).toContain(w.phase);
       expect(w.isRecovery).toBe(false);
+    });
+    // and any race-pace work in Taper is the midweek session, never the long
+    withRp.filter(w => w.phase === 'Taper').forEach(w => {
+      w.workouts.filter(x => (x.segments || []).some(s => (s.label || '').includes('marathon effort')))
+        .forEach(x => expect(x.type).toBe('Race Pace'));
     });
     // pace range quoted with a tilde from the real 5k
     const seg = withRp[0].workouts.flatMap(x => x.segments || []).find(s => s.label.indexOf('marathon effort') >= 0);

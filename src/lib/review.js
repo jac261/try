@@ -15,6 +15,7 @@ import { DEFAULT_POOL } from './domain.js';
 import { estimateTss } from './adapt.js';
 import { isIndoor } from './autolog.js';
 import { swimReviewVerdict, plannedSwimReps } from './swim-review.js';
+import { runReviewVerdict } from './run-review.js';
 import { bikeReviewVerdict, bandForRep } from './bike-review.js';
 import { judgeBandForType } from './bike-zones.js';
 
@@ -31,7 +32,7 @@ const secPer100 = a => a.movingTimeSec / (a.distance / 100);
 
 // The review: { stats: [[label, value]], verdicts: [{ tone, text }] } or null.
 // tone: 'good' | 'warn' | 'info'.
-export function reviewActivity({ workout, activity, paces, log, swimReview, bikeReview }) {
+export function reviewActivity({ workout, activity, paces, log, swimReview, bikeReview, runReview }) {
   if (!workout || !activity || !activity.movingTimeSec) return null;
   // Phase 4: when the per-rep swim engine can read this session, it is the
   // single voice. A whole-session average verdict rendered beside it can
@@ -44,7 +45,11 @@ export function reviewActivity({ workout, activity, paces, log, swimReview, bike
   // ride now yields to it, because two verdicts on one screen can flatly
   // contradict each other and the specific one is the better one.
   const perRepBike = bikeReview && bikeReview.outcome !== 'insufficient-data' ? bikeReview : null;
-  const perRep = perRepSwim || perRepBike;
+  // Phase 8's run review, wired the same way (audit catch 2026-07-30: it was
+  // built and had no caller, so the splits table it claims to agree with was
+  // rendering above nothing).
+  const perRepRun = runReview && runReview.outcome !== 'insufficient-data' ? runReview : null;
+  const perRep = perRepSwim || perRepBike || perRepRun;
   const w = workout, a = activity, pc = paces || {};
   // Swim pace shows and compares per 100 of the athlete's pool unit; the
   // comparison thresholds stay canonical per 100 m, only the display converts.
@@ -148,7 +153,8 @@ export function reviewActivity({ workout, activity, paces, log, swimReview, bike
   // The per-rep coaching read closes the list: it is the verdict the others
   // were standing in for, and it carries the next action.
   if (perRep) {
-    const v = perRepSwim ? swimReviewVerdict(perRepSwim) : bikeReviewVerdict(perRepBike);
+    const v = perRepSwim ? swimReviewVerdict(perRepSwim)
+      : perRepBike ? bikeReviewVerdict(perRepBike) : runReviewVerdict(perRepRun);
     if (v) verdicts.push(v);
   }
 
@@ -167,7 +173,12 @@ function fmtDur(sec) {
    laps, which render as plain splits with no verdicts — a split has no target
    to fail. Sub-30-second slivers (lap-button stubs) are dropped. */
 const REP_BANDS = {
-  run: { 'Threshold': ['threshold', 10], 'Tempo': ['tempo', 12], 'VO2 Intervals': ['interval', 10] },
+  /* 'Race Pace' resolves through pc.run.racePace, which computePaces sets
+     ONLY for a solo half or marathon with a real 5 km anchor. The lookup
+     below is pc[disc][band[0]], so an estimated athlete finds nothing there
+     and the session simply is not graded — the same condition that decided
+     whether their card printed a pace at all (phase 7 §2). */
+  run: { 'Threshold': ['threshold', 10], 'Tempo': ['tempo', 12], 'VO2 Intervals': ['interval', 10], 'Race Pace': ['racePace', 12] },
   // The Long swim stays OUT of the STEADY map on purpose: its broken and
   // pyramid variants bake planned rest into the recording, so the whole-
   // session average would read slow against a flat steady target. Every rep

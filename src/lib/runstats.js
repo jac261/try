@@ -11,6 +11,7 @@
 
 import { DISCIPLINE } from './autolog.js';
 import { iso, addDays, startOfWeekMonday } from './date.js';
+import { runAnchor } from './domain.js';
 
 // Exported so the plan builder's race-pace long runs quote the same
 // projection the Progress tab shows; two Riegel exponents would drift.
@@ -20,13 +21,51 @@ const EXP = RIEGEL_EXP;
 const EXP_MARATHON_HI = RIEGEL_MARATHON_HI;
 
 export function predictRaceTimes(profile) {
-  if (!profile || !profile.fivekSec) return null;
-  const t = profile.fivekSec;
+  /* Gated on the ANCHOR, not on profile.fivekSec. The raw field is true for a
+     feel-nudged level estimate as well as for a time the athlete ran, and
+     projecting a marathon off the former quotes a finish time derived from
+     nothing they have ever done (phase 5 §3, §5). runAnchor is the only thing
+     that knows the difference. */
+  if (!profile) return null;
+  const anchor = runAnchor(profile);
+  if (anchor.kind !== 'real') return null;
+  const t = anchor.timeSec;
   const at = (km, exp) => Math.round(t * Math.pow(km / 5, exp));
+  /* The bare numbers stay exactly where every existing caller reads them.
+     `projections` and the model metadata are additive (phase 2 §3), so the
+     assumptions behind a quoted time can be SHOWN rather than being folklore
+     living in this file's header comment.
+
+     sourceBenchmark is built from runAnchor rather than from
+     run-benchmark.js: that module imports RIEGEL_EXP from here, and importing
+     it back would close a cycle. domain.js imports nothing, so this direction
+     is safe. (Circular-module TDZ has bitten this codebase twice.) */
+  const benchmark = {
+    distanceMetres: 5000,
+    timeSeconds: t,
+    source: anchor.source,
+    measuredAt: anchor.measuredAt,
+    confidence: anchor.confidence,
+  };
+  const one = (distance, seconds, hi) => ({
+    distance,
+    optimisticSeconds: seconds,
+    ...(hi != null ? { realisticSeconds: hi } : {}),
+    sourceBenchmark: benchmark,
+    model: 'riegel',
+    exponentRange: { min: EXP, max: hi != null ? EXP_MARATHON_HI : EXP },
+  });
   return {
     tenK: at(10, EXP),
     halfMarathon: at(21.0975, EXP),
     marathon: { lo: at(42.195, EXP), hi: at(42.195, EXP_MARATHON_HI) },
+    model: 'riegel',
+    sourceBenchmark: benchmark,
+    projections: [
+      one('10k', at(10, EXP)),
+      one('half', at(21.0975, EXP)),
+      one('marathon', at(42.195, EXP), at(42.195, EXP_MARATHON_HI)),
+    ],
   };
 }
 

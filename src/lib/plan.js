@@ -1,7 +1,10 @@
 /* Try — periodized plan generator + structured workout builder */
 import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
-import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL } from './domain.js';
+import { runMainSet, runReps, runHillsAllowed, RUN_MIN_SESSION_MIN } from './run-sizing.js';
+import { racePaceForWeek, racePaceSession } from './run-race-pace.js';
+import { SOLO_SPACING } from './run-plans.js';
+import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL, runAnchor } from './domain.js';
 import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
 import { swimZoneTargets } from './swim-zones.js';
 import { drillPool, focusOrder, saneTechnique } from './swim-drills.js';
@@ -38,7 +41,13 @@ function computePaces(profile) {
   const ftpEstimated = !profile.ftp && !!kg;
   const ftp = profile.ftp || (ftpEstimated ? Math.round(lvl.estWkg * kg) : null);
   return {
-    runEstimated: !profile.fivekSec,               // true when paces are level-based guesses
+    /* True when the run paces are a guess rather than a performance. Reads
+       the ANCHOR, not the raw field: a feel-based tuning nudge writes a
+       fivekSec derived from the level table, and !profile.fivekSec called
+       that measured. The marathon long run then quoted an exact "~5:12 /km"
+       race pace off a number the athlete never ran, which §3 forbids
+       explicitly. One expression, so this and runAnchor cannot disagree. */
+    runEstimated: runAnchor(profile).kind !== 'real',
     swimEstimated: !profile.css100Sec,
     // The athlete's pool rides along so buildSwim can round lengths and label
     // in the pool's unit. Display/construction only; it never touches css.
@@ -59,7 +68,22 @@ function computePaces(profile) {
     // fivekPace rides along for the solo race-pace variants (Riegel needs the
     // raw 5k pace, not an offset); plans stored before it existed simply fall
     // to effort wording via the null guard in racePaceKm.
-    run: { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8, fivekPace: p },
+    /* racePace is the ONE pace that exists only sometimes, and deliberately.
+       It is the target for the half/marathon race-pace work, and it resolves
+       only for a solo half or marathon whose 5 km anchor is real. That single
+       condition governs both surfaces: the card prints an exact pace when it
+       exists and effort wording when it does not, and the review's rep band
+       looks up this very key, so an estimated athlete is never GRADED against
+       a number they were never SHOWN (phase 7 §2). */
+    run: (() => {
+      const r = { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8, fivekPace: p };
+      const rk = (RACES[profile.raceType] || {}).key;
+      const dist = rk === 'runmarathon' ? 42.195 : rk === 'runhalf' ? 21.0975 : null;
+      if (dist && profile.fivekSec && runAnchor(profile).kind === 'real') {
+        r.racePace = Math.round(p * Math.pow(dist / 5, RIEGEL_EXP - 1));
+      }
+      return r;
+    })(),
     // Swim zones are defined once in swim-zones.js; pc.swim carries every
     // zone target keyed by id, plus the legacy easy/steady/fast aliases so the
     // builders and review keep reading the same keys (byte-identical values).
@@ -222,7 +246,7 @@ function racePaceKm(pc, km, exp) {
   return pc.run && pc.run.fivekPace ? pc.run.fivekPace * Math.pow(km / 5, exp - 1) : null;
 }
 
-function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
+function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType, racePaceMin) {
   const v = n => (seed || 0) % n;
   // Durability: intervals on tired legs at the end of the long session build
   // fatigue resistance — a Build/Peak tool, never Base or recovery weeks, and
@@ -234,7 +258,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
   // variant-menu size v(durability ? 3 : 2) stays constant and a rebuilt session
   // keeps its format. Short durations are handled by clamping the lead-ins, not
   // by shrinking the menu (which would flip the variant on a trim across 45).
-  const durability = (phase === 'Build' || phase === 'Peak') && intensity >= 0;
+  const durability = runHillsAllowed(phase, intensity);
   let segs = [], title = 'Run';
   if (type === 'Long') {
     title = 'Long Run';
@@ -261,42 +285,53 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     // steady-aerobic pace (gauntlet catch). Fallback wording per distance:
     // marathon effort sits between long and tempo pace; half effort sits at
     // tempo, and claiming otherwise contradicted the quoted number.
-    let hasRacePace = false;
-    if (raceType === 'runmarathon' && (phase === 'Build' || phase === 'Peak')) {
-      hasRacePace = true;
-      const mp = pc.runEstimated ? null : racePaceKm(pc, 42.195, RIEGEL_EXP);
-      menu.push([
-        { label: 'Steady aerobic', min: Math.max(5, dur - 35), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+    /* Race pace in the long run is now a CALENDAR decision, not a menu slot
+       (phase 7 §1). racePaceMin arrives from racePaceForWeek and is stored on
+       the workout so an ease or trim rebuild reproduces the same session.
+
+       This also retires the stepped seed walk here. That walk existed to break
+       the modulo alignment that made a four-slot menu unreachable under the
+       four-week recovery cadence; with race pace off the menu there are three
+       slots at most and the historic selector is correct again. The trap it
+       guarded against cannot occur, because the calendar does not select. */
+    /* The block is RESCALED against the duration this long actually has.
+       The calendar sizes it for a race-sized long; a start-volume anchor or a
+       trim can hand this builder a far shorter session, and keeping the block
+       fixed inverted the session's character — an anchored athlete whose
+       longest recent run was 20 minutes got a 45-minute long that was 89%
+       marathon effort, and one rung further down the fitFlex fallback dropped
+       the block entirely while w.racePaceMin survived to resurrect it on the
+       next boost (audit catch 2026-07-29). The lead-in keeps at least 25
+       minutes; a block squeezed under 10 minutes is not a rehearsal and the
+       session falls back to a plain long. Unanchored plans never trigger
+       this: measured across the whole matrix, no race-sized long is within
+       25 minutes of its block. */
+    const rpEff = racePaceMin ? Math.min(racePaceMin, dur - 25) : 0;
+    if (rpEff >= 10) {
+      const km = raceType === 'runmarathon' ? 42.195 : 21.0975;
+      const rp = pc.runEstimated ? null : racePaceKm(pc, km, RIEGEL_EXP);
+      const name = raceType === 'runmarathon' ? 'marathon' : 'half marathon';
+      const lead = Math.max(5, dur - rpEff - 10);
+      segs = [
+        { label: 'Steady aerobic', min: lead, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
         {
-          label: 'Final 35 min at your marathon effort', min: 35, zone: 'Z3',
-          detail: mp ? '~' + fmtPace(mp) + ' /km · smooth and controlled'
-            : 'Between your long run and tempo pace, smooth and controlled',
+          label: rpEff + ' min at your ' + name + ' effort', min: rpEff, zone: 'Z3',
+          /* Per-distance wording, restored rather than flattened. A single
+             generic line lost a deliberate distinction: the marathon effort
+             sits BETWEEN long-run and tempo pace while the half sits AT
+             tempo, and saying otherwise contradicted the quoted number when
+             one existed (the original gauntlet catch). */
+          detail: raceType === 'runmarathon'
+            ? (rp ? '~' + fmtPace(rp) + ' /km · smooth and controlled'
+              : 'Between your long run and tempo pace, smooth and controlled')
+            : (rp ? '~' + fmtPace(rp) + ' /km · settle in, do not chase it'
+              : 'Around your tempo pace, controlled'),
         },
-      ]);
-    } else if (raceType === 'runhalf' && (phase === 'Build' || phase === 'Peak')) {
-      hasRacePace = true;
-      const hp = pc.runEstimated ? null : racePaceKm(pc, 21.0975, RIEGEL_EXP);
-      menu.push([
-        { label: 'Steady aerobic', min: Math.max(5, dur - 35), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
-        {
-          label: '25 min at your half marathon effort', min: 25, zone: 'Z3',
-          detail: hp ? '~' + fmtPace(hp) + ' /km · settle in, do not chase it'
-            : 'Around your tempo pace, controlled',
-        },
-        { label: 'Ease home', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
-      ]);
+        { label: 'Ease home', min: Math.max(0, dur - lead - rpEff), detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+      ].filter(x => x.min > 0);
+    } else {
+      segs = menu[v(menu.length)];
     }
-    // The recovery-cadence selector trap, third sighting: flat seed % len
-    // strands whichever slot the cadence never reaches. Beginners recover
-    // every 3rd week, so their non-recovery seeds are never 2 mod 3 and a
-    // flat % 3 could NEVER pick the race-pace slot (gauntlet catch). The
-    // stepped walk applies whenever the race-pace variant is in the menu;
-    // menus without it keep their historic selectors so triathlon and
-    // 5k/10k output stays untouched.
-    const s0 = seed || 0;
-    segs = menu.length === 4 || (menu.length === 3 && hasRacePace)
-      ? menu[(s0 + Math.floor(s0 / menu.length)) % menu.length]
-      : menu[v(menu.length)];
   } else if (type === 'Easy') {
     title = 'Easy Run';
     const half = Math.round(dur / 2);
@@ -313,19 +348,19 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     ][v(3)];
   } else if (type === 'Tempo') {
     title = 'Tempo Run';
-    const main = Math.max(15, dur - 22);
+    const { warmup: wu, main, cooldown: cd } = runMainSet('Tempo', dur);
     const half = Math.max(8, Math.round(main / 2) - 2);
     const third = Math.round(dur / 3);
     segs = [
       [
-        { label: 'Warm-up', min: 12, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: 'Tempo block', min: main, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 12, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: '2 × (' + half + ' min tempo / 4 min float)', min: main, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3', blocks: rep(2, half, 'Z3', 4, 'Z2') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
         { label: 'Settle in · relaxed', min: third, detail: runDetail(pc, 'easy', 'Z2') + ' · easy rhythm, quick turnover', zone: 'Z2' },
@@ -335,58 +370,96 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     ][v(3)];
   } else if (type === 'VO2 Intervals') {
     title = 'VO2 Intervals';
-    const reps = clamp(Math.round((dur - 25) / 5), 4, 8);
-    const sets = clamp(Math.round((dur - 25) / 12), 2, 3);
-    const hills = clamp(Math.round((dur - 25) / 4), 5, 10);
+    const { warmup: wu, cooldown: cd } = runMainSet('VO2 Intervals', dur);
+    const reps = runReps('VO2 Intervals', dur, 5, 4, 8);
+    const sets = runReps('VO2 Intervals', dur, 12, 2, 3);
+    const hills = runReps('VO2 Intervals', dur, 4, 5, 10);
     const thirties = Array.from({ length: sets }).flatMap((x, i) =>
       rep(10, 0.5, 'Z5', 0.5, 'Z1').concat(i < sets - 1 ? [{ min: 3, zone: 'Z1' }] : []));
     segs = [
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: reps + ' × (3 min hard / 2 min easy)', min: reps * 5, detail: runDetail(pc, 'interval', 'Z5'), zone: 'Z5', blocks: rep(reps, 3, 'Z5', 2, 'Z1') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: sets + ' × 10 × (30 s hard / 30 s easy) · 3 min between sets', min: sets * 12, detail: runDetail(pc, 'interval', 'Z5'), zone: 'Z5', blocks: thirties },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: hills + ' × 75 s uphill hard · jog down', min: hills * 4, detail: 'By effort, not pace · ' + ZONES.Z5.rpe + ' · uphill pace reads slower', zone: 'Z5', terrain: 'hill', blocks: rep(hills, 1.25, 'Z5', 2.75, 'Z1') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
-    ][v(3)];
+      /* The uphill repetitions ride the SAME gate as the Threshold hill
+         circuit and the long run's tired-legs finish. They did not: this
+         variant sat in the base menu selected by a flat v(3), so uphill hard
+         reps appeared in Taper weeks — 80 of them across the race-type,
+         level and day-count matrix, every one a VO2 session, while the
+         Threshold hill circuit next door was correctly gated. Two hill
+         formats, two different rules, and the spec assumes the gate for
+         both (§2).
+
+         Menu size varies with the gate, exactly as buildBike's Long does.
+         That is safe here for the reason the header gives: the gate reads
+         phase and level, both of which survive an ease or trim rebuild, so
+         a stored session cannot change format when it is resized. */
+    ][v(durability ? 3 : 2)];
   } else if (type === 'Fartlek') {
     title = 'Fartlek Run';
-    const surges = clamp(Math.round((dur - 18) / 3), 6, 12);
+    const { warmup: wu, cooldown: cd } = runMainSet('Fartlek', dur);
+    const surges = runReps('Fartlek', dur, 3, 6, 12);
     // Pick the tallest pyramid that fits the session (work + equal-jog = 2 × sum).
     const steps = dur - 18 >= 32 ? [1, 2, 3, 4, 3, 2, 1] : dur - 18 >= 24 ? [1, 2, 3, 3, 2, 1] : [1, 2, 3, 2, 1];
     const pyramidMin = 2 * steps.reduce((a, b) => a + b, 0);
     const pyramid = steps.flatMap(m => [{ min: m, zone: 'Z3' }, { min: m, zone: 'Z2' }]);
     segs = [
       [
-        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: surges + ' × (1 min brisk / 2 min easy)', min: surges * 3, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3', blocks: rep(surges, 1, 'Z3', 2, 'Z2') },
-        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: 'Pyramid: ' + steps.join('-') + ' min brisk / equal easy jog', min: pyramidMin, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3', blocks: pyramid },
-        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: 'Surges by feel · 8–12 × 30–60 s quick on rolling terrain', min: Math.max(12, dur - 18), detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
-        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
+  } else if (type === 'Race Pace') {
+    /* The midweek race-pace session (§2). Rep-based rather than one long
+       block: the intent is to rehearse the pace repeatedly and arrive able to
+       do it again, not to grind a single effort. Its band is pc.run.racePace,
+       which exists only for a real benchmark, so the fallback below is not a
+       degraded version of this card, it IS the card for an estimated athlete. */
+    title = 'Race-Pace Run';
+    const { warmup: wu, cooldown: cd, main: room } = runMainSet('Race Pace', dur);
+    /* The CALENDAR sizes the race-pace block, not the slot it landed in. The
+       slot's duration comes from the week's quality budget, so sizing off it
+       built 48 minutes of race pace into a session the calendar prescribed 25
+       for — the cap existed and the builder never consulted it. The slot's
+       remaining minutes go to the warm-up and cool-down, which is what the
+       flex pass does with them. */
+    const main = Math.min(room, racePaceMin || room);
+    const spec = racePaceSession({ raceKey: raceType, minutes: main, pacePerKm: pc.run && pc.run.racePace });
+    segs = spec ? [
+      { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+      { label: spec.label, min: main, detail: spec.detail, zone: 'Z3',
+        blocks: rep(spec.reps, spec.perMin, 'Z3', spec.floatMin, 'Z2') },
+      { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+    ] : [{ label: 'Steady', min: dur, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' }];
   } else { // Threshold
     title = 'Threshold Run';
-    const reps = clamp(Math.round((dur - 25) / 12), 2, 4);
-    const cruise = clamp(Math.round((dur - 25) / 7), 3, 6);
-    const blocks = clamp(Math.round((dur - 25) / 16), 2, 3);
-    const climbs = clamp(Math.round((dur - 25) / 7), 3, 5);
+    const { warmup: wu, cooldown: cd } = runMainSet('Threshold', dur);
+    const reps = runReps('Threshold', dur, 12, 2, 4);
+    const cruise = runReps('Threshold', dur, 7, 3, 6);
+    const blocks = runReps('Threshold', dur, 16, 2, 3);
+    const climbs = runReps('Threshold', dur, 7, 3, 5);
     // The hill circuit rides the same durability gate as the long run's
     // hardest variant: sustained climbing at threshold effort is a
     // Build/Peak tool with real impact load, not a Base or beginner session.
@@ -394,19 +467,19 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     // strength versus neuromuscular power (design panel 2026-07-18).
     segs = [
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: reps + ' × (9 min threshold / 3 min easy)', min: reps * 12, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(reps, 9, 'Z4', 3, 'Z2') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: cruise + ' × (5 min threshold / 2 min easy)', min: cruise * 7, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(cruise, 5, 'Z4', 2, 'Z2') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: blocks + ' × (12 min cruise / 4 min easy)', min: blocks * 16, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(blocks, 12, 'Z4', 4, 'Z2') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ];
     // The hill circuit joins as a 4th format in Build/Peak. A 4-slot menu
@@ -417,9 +490,9 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     // re-verify catches 2026-07-18). The selector below breaks the alignment
     // instead of shuffling the victim.
     if (durability) segs.splice(2, 0, [
-      { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+      { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
       { label: climbs + ' × (4 min uphill at threshold effort / jog down)', min: climbs * 7, detail: 'By effort, not pace · ' + ZONES.Z4.rpe + ' · uphill pace reads slower', zone: 'Z4', terrain: 'hill', blocks: rep(climbs, 4, 'Z4', 3, 'Z1') },
-      { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+      { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
     ]);
     // Stepping the index one extra notch every 4 seeds walks all four slots
     // across ordinary building weeks while staying a pure, rebuild-stable
@@ -437,6 +510,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     Fartlek: { label: 'Fartlek by feel', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
     'VO2 Intervals': { label: 'Hard aerobic effort', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
     Threshold: { label: 'Threshold effort', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
+    'Race Pace': { label: 'Race-pace effort', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
   };
   segs = fitFlex(segs, dur, (type === 'Long' || type === 'Easy') ? 'lead' : 'tail', FB[type] || FB.Tempo);
   const dist = runDistance(segs, pc);
@@ -1257,6 +1331,37 @@ const LONG_RUN_CAP = 180;
 // thing a marathon buyer inspects. Solo Taper weeks before race week cap the
 // long run; race week demotes it to a shakeout entirely.
 const SOLO_TAPER_LONG_CAP = 90;
+/* Race week stops at the race (run phase 1b).
+ *
+ * The taper scaled race week's DURATIONS down but never touched its
+ * INTENSITY ladder, and nothing ended the week at race day. So an advanced
+ * Olympic plan put a bike VO2 session (3 × 4 min at Z5) on the Thursday
+ * before a Saturday race, and a 65 minute Long ride with sweet-spot blocks
+ * on the Sunday morning after it. Across the race-type × level × day-count
+ * matrix that was 300 Long rides and 80 bricks scheduled AFTER the goal
+ * race, and several hundred hard sessions inside the final 48 hours.
+ *
+ * Three windows:
+ *   - The 48 hours BEFORE the race are for sharpening, not training. Easy
+ *     legs only. A short easy session with strides the day before a race is
+ *     textbook; a threshold session is not.
+ *   - The DAY AFTER the race is recovery and nothing else.
+ *   - The REST of the week after the race is easy aerobic. Still capped,
+ *     because a Long demoted to 'Easy' would otherwise keep its 140 minute
+ *     duration three days after a marathon, but capped loosely: an easy
+ *     45 minutes four days after a 5 km is a normal thing to do.
+ * Sessions three or more days BEFORE the race are untouched: that is still
+ * taper week proper, where a short sharpener belongs.
+ *
+ * These caps are a target rather than a hard ceiling. dedupeSoloWeek runs
+ * after this pass, and demoting several sessions onto the same easy type can
+ * collide them; dedupe then steps a duration up a few minutes so no two
+ * sessions in a week are byte-identical. An easy session landing at 40
+ * instead of 30 is a fine outcome and not worth defeating the dedupe for.
+ */
+const RACE_WEEK_SHARPEN_CAP = 40;
+const RACE_WEEK_RECOVER_CAP = 30;
+const RACE_WEEK_AFTER_CAP = 45;
 const LONG_BIKE = { sprint: 70, olympic: 100, half: 160, t100: 170, full: 210, maintenance: 100 };
 const LONG_BRICK = { sprint: 70, olympic: 95, half: 135, t100: 145, full: 165, maintenance: 90 };
 // The long swim only enters a week via the limiter frequency swap (no base
@@ -1437,16 +1542,34 @@ const INTENSITY_LADDER = {
 // beginners get structured play (Fartlek / Tempo Ride) instead of jumping
 // straight to hard reps, elites top out at VO2 on the bike too.
 const LADDER_ANCHOR = { Base: 0, Build: 2, Peak: 3, Maintain: 1 };
-// Distance flavour for solo run plans, applied to the primary quality slot
-// only: a 5k or 10k plan climbs one extra rung (an intermediate 5k plan peaks
-// at VO2 Intervals, genuinely 5k work; Threshold is genuinely 10k work). The
-// half peaks at Threshold, correct for the distance; the marathon keeps
-// Tempo/Threshold and gets its specificity from the long run instead.
-const RACE_QUALITY_BIAS = { run5k: 1, run10k: 1, runhalf: 0, runmarathon: 0 };
+/* Distance flavour for solo run plans, applied to the primary quality slot
+ * only: the short races climb one extra rung (an intermediate 5k plan peaks
+ * at VO2 Intervals, genuinely 5k work; Threshold is genuinely 10k work).
+ *
+ * The HALF climbs one rung too, and is CAPPED at Threshold (Jon, 2026-07-29,
+ * on the evidence). Half-marathon race intensity sits at lactate threshold,
+ * so threshold work is the specific stimulus, and the training-distribution
+ * literature on half and full marathoners is pyramidal: threshold-dominant
+ * quality, small VO2 doses at most. Before the bias an intermediate half plan
+ * was 58% Fartlek and 11% Threshold, and a beginner's plan never contained a
+ * single Threshold session — the athlete never once trained at the intensity
+ * they would race at. The cap keeps advanced and elite halves from tipping
+ * into the polarised VO2-heavy shape that fits 1500m-10k instead; their VO2
+ * exposure still arrives via the 5k test weeks.
+ *
+ * The MARATHON stays at 0 deliberately: race intensity sits well below
+ * threshold, and its specificity comes from the long run and the race-pace
+ * calendar, which now supply it directly.
+ */
+const RACE_QUALITY_BIAS = { run5k: 1, run10k: 1, runhalf: 1, runmarathon: 0 };
+// The ladder index a race's quality may not exceed (see the half above).
+// Applied to BOTH quality slots: the occ slot derives from the capped index,
+// so the second session lands one rung under the cap, never above it.
+const RACE_LADDER_CAP = { runhalf: 3 }; // 3 = Threshold on the run ladder
 // occ and raceBias are only ever non-zero for solo plans (the caller gates
 // them), so every triathlon plan builds byte-identically. occ 1 is the second
 // quality of the week: one rung adjacent to the first, easier when possible.
-function typeFor(discipline, role, phase, isRecovery, intensity, occ = 0, raceBias = 0, owEarly = false, weekIdx = 0) {
+function typeFor(discipline, role, phase, isRecovery, intensity, occ = 0, raceBias = 0, owEarly = false, weekIdx = 0, capIdx = null) {
   // Templates encode bricks as 'brick:long' — the discipline, not the role,
   // is the brick signal, so it must win before the generic long check.
   if (discipline === 'brick') return 'Brick';
@@ -1474,7 +1597,8 @@ function typeFor(discipline, role, phase, isRecovery, intensity, occ = 0, raceBi
   if (isRecovery) return discipline === 'swim' ? 'Technique' : (discipline === 'bike' ? 'Endurance' : 'Easy');
   const ladder = INTENSITY_LADDER[discipline] || ['Easy'];
   const anchor = LADDER_ANCHOR[phase] != null ? LADDER_ANCHOR[phase] : LADDER_ANCHOR.Peak;
-  const idx = clamp(anchor + (intensity || 0) + (raceBias || 0), 0, ladder.length - 1);
+  const top = capIdx != null ? Math.min(capIdx, ladder.length - 1) : ladder.length - 1;
+  const idx = clamp(anchor + (intensity || 0) + (raceBias || 0), 0, top);
   if (occ) return ladder[idx > 0 ? idx - 1 : idx + 1];
   return ladder[idx];
 }
@@ -1505,8 +1629,8 @@ function intensityOf(profile) {
 // `role` is appended last so every existing positional call stays valid; only
 // buildSwim reads it today (see its note). Any new rebuild path MUST pass the
 // stored w.role — omitting it silently rebuilds a quality swim as an easy one.
-function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0, raceType, role) {
-  if (discipline === 'run') return buildRun(type, dur, pc, seed, phase, intensity, raceType);
+function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0, raceType, role, racePaceMin) {
+  if (discipline === 'run') return buildRun(type, dur, pc, seed, phase, intensity, raceType, racePaceMin);
   if (discipline === 'bike') return buildBike(type, dur, pc, seed, phase, intensity);
   if (discipline === 'swim') return buildSwim(type, dur, pc, seed, phase, intensity, role);
   if (discipline === 'brick') return buildBrick(dur, pc, phase, seed, raceType);
@@ -1521,7 +1645,7 @@ export const easeWorkout = function (w, plan) {
   if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
   const easyType = disc === 'swim' ? 'Technique' : (disc === 'bike' ? 'Endurance' : 'Easy');
   const dur = Math.max(25, round5(w.durationMin * 0.65));
-  const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role);
+  const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role, w.racePaceMin);
   return Object.assign({}, w, {
     type: easyType, title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
@@ -1542,7 +1666,7 @@ export const trimWorkout = function (w, plan, factor) {
   // raceType must ride along: the solo race-pace Long's variant menu is
   // sized by it, and a rebuild without it would flip a stored session's
   // format (the same class of bug as omitting w.role).
-  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role);
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role, w.racePaceMin);
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
@@ -1568,7 +1692,7 @@ export const boostWorkout = function (w, plan, factor) {
   // raceType must ride along: the solo race-pace Long's variant menu is
   // sized by it, and a rebuild without it would flip a stored session's
   // format (the same class of bug as omitting w.role).
-  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role);
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role, w.racePaceMin);
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
@@ -1712,7 +1836,8 @@ export const applyTrackerFitness = function (plan, fields, nowISO) {
   // Local calendar day, matching retarget's snapshot convention (iso(), not the
   // UTC slice of the timestamp — they differ around midnight).
   const snapshot = { date: iso(new Date(nowISO)), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness,
-    ...(old.ftpMeta ? { ftpMeta: old.ftpMeta } : {}), ...(old.cssMeta ? { cssMeta: old.cssMeta } : {}) };
+    ...(old.ftpMeta ? { ftpMeta: old.ftpMeta } : {}), ...(old.cssMeta ? { cssMeta: old.cssMeta } : {}),
+    ...(old.fivekMeta ? { fivekMeta: old.fivekMeta } : {}) };
   // fitnessUpdatedAt lives on the PROFILE (stored verbatim as ProfileJson, so it
   // survives the server round-trip; a top-level plan field would be dropped by
   // toClientState). It exists so Settings can attribute "Fitness updated" to a
@@ -1859,7 +1984,7 @@ export const upgradePlanSegments = function (plan) {
       // easy and quality slots, and a roleless rebuild would quietly swap a
       // session for the other slot's (swim sizing pass 2026-07-18). A workout
       // somehow missing role rebuilds forwards, as the roleless code did.
-      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType, w.role);
+      const built = buildWorkout(w.discipline, w.type, w.durationMin, plan.paces, w.phase, w.seed != null ? w.seed : 0, intensityOf(plan.profile), plan.profile.raceType, w.role, w.racePaceMin);
       if (!(built.segments || []).some(s => s.zone || s.blocks)) return w; // swims/strength stay as they are
       changed = true;
       return Object.assign({}, w, { segments: built.segments, distance: built.distance, distEst: !!built.distEst, safety: built.safety || undefined });
@@ -2088,7 +2213,19 @@ export const generatePlan = function (profile, opts) {
         // four-consecutive-day athlete (gauntlet catch)
         if (dist > bestDist || (dist === bestDist && dq1 > bestQ1)) { best = d; bestDist = dist; bestQ1 = dq1; }
       });
-      if (best != null) { dayMap[best] = qs[1]; usedD.add(best); }
+      if (best != null) {
+        /* When the athlete's chosen days make both spacing rules impossible
+           (e.g. Tue/Wed/Fri/Sat with the long on Saturday: every candidate is
+           adjacent to the first quality or to the long), the second quality
+           DEMOTES to an easy run rather than being placed adjacent. Spacing
+           outranks density: the spec's own rules are "avoid adjacent
+           high-intensity sessions" and "protect the Long Run", and a quality
+           session the day before the long compromises both sessions to keep
+           a count (audit catch 2026-07-29). */
+        dayMap[best] = bestDist < SOLO_SPACING.minQualityGapDays
+          ? { disc: qs[1].disc, role: 'easy' } : qs[1];
+        usedD.add(best);
+      }
     }
     days.filter(d => !usedD.has(d)).forEach((d, i) => { if (es[i]) dayMap[d] = es[i]; });
   };
@@ -2112,7 +2249,7 @@ export const generatePlan = function (profile, opts) {
         let m = null;
         for (let d2 = cur.durationMin - 5; d2 >= 20; d2 -= 5) if (!taken(cur.type, d2)) { m = d2; break; }
         for (let d2 = cur.durationMin + 5; m == null; d2 += 5) if (!taken(cur.type, d2)) m = d2;
-        const built = buildWorkout(cur.discipline, cur.type, m, pc, cur.phase, cur.seed, fitness.intensity, profile.raceType, cur.role);
+        const built = buildWorkout(cur.discipline, cur.type, m, pc, cur.phase, cur.seed, fitness.intensity, profile.raceType, cur.role, cur.racePaceMin);
         cur = { ...cur, durationMin: m, title: built.title, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments, safety: built.safety || undefined };
         wk.workouts[i] = cur;
       }
@@ -2128,10 +2265,19 @@ export const generatePlan = function (profile, opts) {
      clock rather than advancing it. */
   const anchors = startAnchors(profile, pc);
   let trainingWeeksDone = 0;
+  const phaseWeeksDone = {};
   for (let w = 0; w < totalWeeks; w++) {
     const phase = phases[w];
-    // The appended post-race recovery week: everything easy, race-week legs.
-    const postRaceWeek = raceRecovery && w === buildWeeks;
+    /* Post-race weeks: the appended recovery week, AND any in-plan week
+       after race week. The clamp to race.minWeeks can put the race in an
+       early week of a short-runway plan, and the weeks after it used to run
+       the untouched Base/Build/Peak/Taper program — a 5k ten days out
+       generated two more VO2/Threshold weeks and a taper toward nothing,
+       the exact class phase 1b removed from race week itself (audit catch
+       2026-07-29). Nothing changes for a normal runway, where race week is
+       the final build week and the only week after it is the appended one. */
+    const postRaceWeek = (raceRecovery && w === buildWeeks)
+      || (raceWeekIdx >= 0 && w > raceWeekIdx);
     phasePos[phase] = phasePos[phase] === undefined ? 0 : phasePos[phase] + 1;
     const isRecovery = postRaceWeek || (profile.postRace && w === 0)
       || (((w + 1) % fitness.recoveryEvery === 0) && phase !== 'Taper' && w < buildWeeks - 2); // buildWeeks: see the eligibleTestWeeks note
@@ -2141,7 +2287,9 @@ export const generatePlan = function (profile, opts) {
     // off the periodization curve entirely.
     if (postRaceWeek) load = fitness.factor * fitness.recoveryDepth * 0.8;
 
-    const testKind = testByWeek[w] || null;
+    // A post-race week never hosts a benchmark test: with the race already
+    // run there is nothing the test would retarget toward this cycle.
+    const testKind = postRaceWeek ? null : (testByWeek[w] || null);
 
     // split template into weekend (long/brick) vs weekday slots. The post-race
     // week keeps the athlete's weekly rhythm but every slot becomes an easy
@@ -2211,6 +2359,15 @@ export const generatePlan = function (profile, opts) {
       }
     }
 
+    /* This week's race-pace prescription (phase 7 §1). phaseWeek counts the
+       non-recovery weeks of THIS phase already trained, which is what makes
+       the progression a calendar rather than a seed. */
+    const rpPlan = racePaceForWeek({
+      raceKey: race.key, phase, phaseWeek: phaseWeeksDone[phase] || 0,
+      isRecovery, isRaceWeek: w === raceWeekIdx,
+    }) || {};
+    if (!isRecovery) phaseWeeksDone[phase] = (phaseWeeksDone[phase] || 0) + 1;
+
     const workouts = [];
     // Per-week occurrence counter for duplicate disc:role tokens (solo
     // templates are the only source). Positional in day order, independent of
@@ -2238,7 +2395,8 @@ export const generatePlan = function (profile, opts) {
       const roleOut = soloShakeout ? 'easy' : s.role;
       const type = soloShakeout ? 'Easy'
         : typeFor(s.disc, s.role, phase, isRecovery, fitness.intensity, occ,
-          race.solo ? (RACE_QUALITY_BIAS[race.key] || 0) : 0, owEarly, w);
+          race.solo ? (RACE_QUALITY_BIAS[race.key] || 0) : 0, owEarly, w,
+          race.solo && RACE_LADDER_CAP[race.key] != null ? RACE_LADDER_CAP[race.key] : null);
       // Lead-in Maintain weeks hold fitness, they don't rehearse the race:
       // long sessions cap at maintenance scale (a far-out full would otherwise
       // spend months on 3h+ "maintenance" rides). Standalone maintenance and
@@ -2280,7 +2438,7 @@ export const generatePlan = function (profile, opts) {
       // No solo run session under 20 minutes: beginner 7-day recovery weeks
       // otherwise generate 10 and 15 minute jogs (the dedupe pass separates
       // any collisions this floor creates).
-      if (race.solo && s.disc === 'run' && !soloShakeout) dur = Math.max(20, dur);
+      if (race.solo && s.disc === 'run' && !soloShakeout) dur = Math.max(RUN_MIN_SESSION_MIN, dur);
       /* The athlete's own starting point, when they gave one. Long sessions
          may not exceed their current longest grown ~10% per training week —
          min() only, so the race-driven curve takes over the moment it is the
@@ -2302,10 +2460,15 @@ export const generatePlan = function (profile, opts) {
       if (aCap != null && !soloShakeout) dur = Math.min(dur, aCap);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
-      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType, roleOut);
+      // Only the long run carries the in-run block; the midweek session is
+      // injected separately below.
+      const rpMin = (s.disc === 'run' && type === 'Long' && !soloShakeout) ? rpPlan.longMin : undefined;
+      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType, roleOut, rpMin);
       workouts.push({
         id: w + '-' + d, week: w, phase: phase, date: date, seed: seed,
         discipline: s.disc, role: roleOut, type: type, title: built.title,
+        // stored so an ease or trim rebuild reproduces the same session
+        ...(rpMin ? { racePaceMin: rpMin } : {}),
         durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
         segments: built.segments, safety: built.safety || undefined,
         key: !soloShakeout && (s.role === 'long' || s.role === 'brick'),
@@ -2375,6 +2538,25 @@ export const generatePlan = function (profile, opts) {
       }
     }
 
+    /* The midweek race-pace session (phase 7 §2). Replaces the week's LATER
+       quality run, so the primary ladder session of the week is untouched and
+       the week does not gain a hard day — it swaps one. Never on a test week:
+       a test is already the week's race-specific effort. */
+    if (rpPlan.midweekMin && race.solo === 'run' && !testKind) {
+      const slots = workouts
+        .map((x, i) => ({ x, i }))
+        .filter(({ x }) => x.discipline === 'run' && x.role === 'quality' && !x.race && !x.test);
+      const target = slots.length ? slots[slots.length - 1] : null;
+      if (target) {
+        const dur = target.x.durationMin;
+        const built = buildWorkout('run', 'Race Pace', dur, pc, phase, target.x.seed, fitness.intensity, profile.raceType, 'quality', rpPlan.midweekMin);
+        workouts[target.i] = Object.assign({}, target.x, {
+          type: 'Race Pace', racePaceMin: rpPlan.midweekMin, title: built.title, distance: built.distance,
+          distEst: !!built.distEst, unit: built.unit, segments: built.segments,
+        });
+      }
+    }
+
     // VOLUME DOUBLE (Jon, 2026-07-27: "sessions shouldn't be capped per week
     // if an athlete requires high volume for progression"). Total sessions
     // used to equal training days, so a 7-day athlete could never ride more
@@ -2432,6 +2614,47 @@ export const generatePlan = function (profile, opts) {
       });
     }
 
+    /* Race week stops at the race. See RACE_WEEK_SHARPEN_CAP above.
+       Runs last in week assembly, after the race-day replacement, the test
+       injection and both doubles, so nothing can re-harden the week behind
+       it. Sessions are DEMOTED rather than deleted: the id, date and day
+       count survive, so a logged session still matches and an athlete who
+       chose five training days still sees five. */
+    if (w === raceWeekIdx && raceISO) {
+      for (let i = 0; i < workouts.length; i++) {
+        const wo = workouts[i];
+        if (wo.race || wo.discipline === 'rest' || wo.discipline === 'strength') continue;
+        const gap = daysBetween(raceISO, wo.date); // positive = after the race
+        if (gap === 0 || gap < -2) continue;
+        const recover = gap > 0;
+        // A brick has no easy form: it is a race rehearsal by construction.
+        // The day either side of a race it becomes the ride alone.
+        const disc = wo.discipline === 'brick' ? 'bike' : wo.discipline;
+        const easyType = disc === 'swim' ? 'Technique' : disc === 'bike' ? 'Endurance' : 'Easy';
+        const cap = gap === 1 ? RACE_WEEK_RECOVER_CAP
+          : gap > 1 ? RACE_WEEK_AFTER_CAP : RACE_WEEK_SHARPEN_CAP;
+        const dur = Math.min(wo.durationMin, cap);
+        // Already easy and already short enough: leave it exactly as it is
+        // rather than rebuilding it into the same thing.
+        if (wo.discipline === disc && wo.type === easyType && dur === wo.durationMin) continue;
+        const seed = wo.seed != null ? wo.seed : w;
+        const built = buildWorkout(disc, easyType, dur, pc, phase, seed, fitness.intensity, profile.raceType, 'easy');
+        workouts[i] = Object.assign({}, wo, {
+          discipline: disc, role: 'easy', type: easyType, title: built.title, durationMin: dur,
+          distance: built.distance, distEst: !!built.distEst, unit: built.unit,
+          segments: built.segments, safety: built.safety || undefined,
+          /* A demoted Test stops being a test. Leaving test/testKind on the
+             easy jog it becomes made the auto-5k matcher treat the pre-race
+             shakeout as the benchmark test day: it would pair the jog's
+             recording, find no 5 km lap, and (once failures surface) show a
+             false "your test did not parse" banner two days before a race
+             (audit catch 2026-07-29). */
+          test: undefined, testKind: undefined, note: undefined,
+          key: false, raceWeek: recover ? 'recover' : 'sharpen', raceWeekFrom: wo.type,
+        });
+      }
+    }
+
     const totalMin = workouts.reduce((a, b) => a + (b.durationMin || 0), 0);
     const wkObj = { index: w, phase: phase, isRecovery: isRecovery, start: iso(addDays(weekStart0, w * 7)), totalMin: totalMin, workouts: workouts };
     dedupeSoloWeek(wkObj);
@@ -2482,7 +2705,13 @@ export const generatePlan = function (profile, opts) {
         flexible.forEach(x => {
           const nd = Math.max(20, round5(x.durationMin * f));
           if (nd >= x.durationMin) return;
-          const rebuilt = buildWorkout(x.discipline, x.type, nd, pc, x.phase, x.seed, fitness.intensity, profile.raceType, x.role);
+          /* racePaceMin rides along or the anchor cut silently deletes the
+             calendar's race-pace block from the card while the stored field
+             survives — and a later boost would silently reinstate it (audit
+             catch 2026-07-29). buildRun rescales the block against the new
+             duration, so a hard cut shrinks the block rather than keeping a
+             40-minute effort inside a 45-minute long. */
+          const rebuilt = buildWorkout(x.discipline, x.type, nd, pc, x.phase, x.seed, fitness.intensity, profile.raceType, x.role, x.racePaceMin);
           x.durationMin = nd; x.title = rebuilt.title; x.distance = rebuilt.distance;
           x.distEst = !!rebuilt.distEst; x.unit = rebuilt.unit; x.segments = rebuilt.segments;
           if (rebuilt.safety) x.safety = rebuilt.safety;
@@ -2552,7 +2781,7 @@ export const generatePlan = function (profile, opts) {
           touched = true;
           const t = typeFor(wo.discipline, wo.role, wo.phase, true, fitness.intensity);
           const dur = Math.max(20, round5(wo.durationMin * 0.6));
-          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity, profile.raceType, wo.role);
+          const built = buildWorkout(wo.discipline, t, dur, pc, wo.phase, wo.seed, fitness.intensity, profile.raceType, wo.role, t === wo.type ? wo.racePaceMin : undefined);
           return { ...wo, type: t, title: built.title, durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments, safety: built.safety || undefined };
         }
         return wo;
