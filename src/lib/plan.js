@@ -1528,16 +1528,34 @@ const INTENSITY_LADDER = {
 // beginners get structured play (Fartlek / Tempo Ride) instead of jumping
 // straight to hard reps, elites top out at VO2 on the bike too.
 const LADDER_ANCHOR = { Base: 0, Build: 2, Peak: 3, Maintain: 1 };
-// Distance flavour for solo run plans, applied to the primary quality slot
-// only: a 5k or 10k plan climbs one extra rung (an intermediate 5k plan peaks
-// at VO2 Intervals, genuinely 5k work; Threshold is genuinely 10k work). The
-// half peaks at Threshold, correct for the distance; the marathon keeps
-// Tempo/Threshold and gets its specificity from the long run instead.
-const RACE_QUALITY_BIAS = { run5k: 1, run10k: 1, runhalf: 0, runmarathon: 0 };
+/* Distance flavour for solo run plans, applied to the primary quality slot
+ * only: the short races climb one extra rung (an intermediate 5k plan peaks
+ * at VO2 Intervals, genuinely 5k work; Threshold is genuinely 10k work).
+ *
+ * The HALF climbs one rung too, and is CAPPED at Threshold (Jon, 2026-07-29,
+ * on the evidence). Half-marathon race intensity sits at lactate threshold,
+ * so threshold work is the specific stimulus, and the training-distribution
+ * literature on half and full marathoners is pyramidal: threshold-dominant
+ * quality, small VO2 doses at most. Before the bias an intermediate half plan
+ * was 58% Fartlek and 11% Threshold, and a beginner's plan never contained a
+ * single Threshold session — the athlete never once trained at the intensity
+ * they would race at. The cap keeps advanced and elite halves from tipping
+ * into the polarised VO2-heavy shape that fits 1500m-10k instead; their VO2
+ * exposure still arrives via the 5k test weeks.
+ *
+ * The MARATHON stays at 0 deliberately: race intensity sits well below
+ * threshold, and its specificity comes from the long run and the race-pace
+ * calendar, which now supply it directly.
+ */
+const RACE_QUALITY_BIAS = { run5k: 1, run10k: 1, runhalf: 1, runmarathon: 0 };
+// The ladder index a race's quality may not exceed (see the half above).
+// Applied to BOTH quality slots: the occ slot derives from the capped index,
+// so the second session lands one rung under the cap, never above it.
+const RACE_LADDER_CAP = { runhalf: 3 }; // 3 = Threshold on the run ladder
 // occ and raceBias are only ever non-zero for solo plans (the caller gates
 // them), so every triathlon plan builds byte-identically. occ 1 is the second
 // quality of the week: one rung adjacent to the first, easier when possible.
-function typeFor(discipline, role, phase, isRecovery, intensity, occ = 0, raceBias = 0, owEarly = false, weekIdx = 0) {
+function typeFor(discipline, role, phase, isRecovery, intensity, occ = 0, raceBias = 0, owEarly = false, weekIdx = 0, capIdx = null) {
   // Templates encode bricks as 'brick:long' — the discipline, not the role,
   // is the brick signal, so it must win before the generic long check.
   if (discipline === 'brick') return 'Brick';
@@ -1565,7 +1583,8 @@ function typeFor(discipline, role, phase, isRecovery, intensity, occ = 0, raceBi
   if (isRecovery) return discipline === 'swim' ? 'Technique' : (discipline === 'bike' ? 'Endurance' : 'Easy');
   const ladder = INTENSITY_LADDER[discipline] || ['Easy'];
   const anchor = LADDER_ANCHOR[phase] != null ? LADDER_ANCHOR[phase] : LADDER_ANCHOR.Peak;
-  const idx = clamp(anchor + (intensity || 0) + (raceBias || 0), 0, ladder.length - 1);
+  const top = capIdx != null ? Math.min(capIdx, ladder.length - 1) : ladder.length - 1;
+  const idx = clamp(anchor + (intensity || 0) + (raceBias || 0), 0, top);
   if (occ) return ladder[idx > 0 ? idx - 1 : idx + 1];
   return ladder[idx];
 }
@@ -2340,7 +2359,8 @@ export const generatePlan = function (profile, opts) {
       const roleOut = soloShakeout ? 'easy' : s.role;
       const type = soloShakeout ? 'Easy'
         : typeFor(s.disc, s.role, phase, isRecovery, fitness.intensity, occ,
-          race.solo ? (RACE_QUALITY_BIAS[race.key] || 0) : 0, owEarly, w);
+          race.solo ? (RACE_QUALITY_BIAS[race.key] || 0) : 0, owEarly, w,
+          race.solo && RACE_LADDER_CAP[race.key] != null ? RACE_LADDER_CAP[race.key] : null);
       // Lead-in Maintain weeks hold fitness, they don't rehearse the race:
       // long sessions cap at maintenance scale (a far-out full would otherwise
       // spend months on 3h+ "maintenance" rides). Standalone maintenance and

@@ -207,11 +207,16 @@ describe('progression moves one principal dimension at a time', () => {
 
 describe('level and recovery shape the week', () => {
   it('lower levels get simpler structures, by ceiling and by terrain', () => {
+    /* Measured on the MARATHON, whose ladder is uncapped. The half was the
+       fixture until the 2026-07-29 threshold bias: its ladder is now capped
+       at Threshold for every level (pyramidal on the evidence), so its zone
+       ceiling is deliberately flat across levels and no longer demonstrates
+       the level-scaling this test is about. */
     const maxZoneFor = fit => {
-      const runs = planFor('runhalf', fit, 5).weeks.flatMap(w => runsIn(w));
+      const runs = planFor('runmarathon', fit, 5).weeks.flatMap(w => runsIn(w));
       return Math.max(...runs.flatMap(x => (x.segments || []).map(s => ZONE_RANK[s.zone] || 0)));
     };
-    const hillsFor = fit => planFor('runhalf', fit, 5).weeks
+    const hillsFor = fit => planFor('runmarathon', fit, 5).weeks
       .flatMap(w => runsIn(w)).filter(x => (x.segments || []).some(isEffortPrescribed)).length;
     // the intensity ceiling rises with level and never falls
     const zones = LEVELS.map(maxZoneFor);

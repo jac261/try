@@ -313,12 +313,20 @@ describe('the regression matrix: every race, level and day count', () => {
         }
       }
     }
-    // and the two narrower shapes, pinned as they actually are
-    const beginnerBuild = planFor('runhalf', 'beginner', 5).weeks.find(w => w.phase === 'Build' && !w.isRecovery);
+    /* The narrower shapes, pinned as they actually are. The MARATHON carries
+       them now: the half gained the +1 threshold bias (2026-07-29), which
+       lifts a beginner half's Build week to two quality sessions, so it no
+       longer demonstrates the beginner one-quality collapse. The marathon
+       keeps bias 0 and still does. */
+    const beginnerBuild = planFor('runmarathon', 'beginner', 5).weeks.find(w => w.phase === 'Build' && !w.isRecovery);
     expect(runsIn(beginnerBuild).filter(x => RUN_QUALITY_TYPES.includes(x.type)).length).toBe(1);
-    const interBase = planFor('runhalf', 'intermediate', 5).weeks
+    const interBase = planFor('runmarathon', 'intermediate', 5).weeks
       .find(w => w.phase === 'Base' && !w.isRecovery && !runsIn(w).some(x => x.type === 'Test'));
     expect(runsIn(interBase).filter(x => RUN_QUALITY_TYPES.includes(x.type)).length).toBe(1);
+    // and the half's new shape: a beginner half DOES train threshold now,
+    // because the race is run at threshold and they never once trained it
+    const begHalf = planFor('runhalf', 'beginner', 5);
+    expect(begHalf.weeks.flatMap(w => runsIn(w)).some(x => x.type === 'Threshold')).toBe(true);
   });
 
   it('quality sessions are spaced, never back to back', () => {
