@@ -419,26 +419,123 @@ describe('solo behaviour is driven by the race, not by profile state', () => {
   });
 });
 
-describe('RACE_WEEK_OPEN: current behaviour, pinned pending a decision', () => {
-  /* These pin what the engine does TODAY so a fix is a deliberate edit here
-     rather than a silent drift. Both are believed wrong; see the header. */
+describe('race week stops at the race', () => {
+  /* Phase 1b. The taper scaled race week's durations but never its intensity
+     ladder, and nothing ended the week at race day: an advanced Olympic plan
+     put a bike VO2 session two days before a Saturday race and a 65 minute
+     Long ride with sweet-spot blocks on the Sunday after it.
 
-  it('race week currently schedules a session the day AFTER the goal race', () => {
-    const p = planFor('olympic', 'advanced', 5);
-    const rw = p.weeks[raceWeekIdx(p)];
+     The sweep runs across five race WEEKDAYS, not one. Race day position
+     drives the whole shape, and a Saturday-only fixture never exercises the
+     'four days still to go after the race' case that a Wednesday race
+     creates. */
+  const HARD = /VO2|Threshold|Tempo|Long|Sweet|Race Pace|Fartlek|CSS|Brick/;
+  const RACE_DATES = ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'];
+  const raceWeekSessions = (raceType, fitness, d, raceDate) => {
+    const p = mk({ raceType, fitness, raceDate, daysPerWeek: d, trainingDays: DAYSETS[d], longDay: 5 });
+    const i = raceWeekIdx(p);
+    if (i < 0) return [];
+    const rw = p.weeks[i];
     const race = rw.workouts.find(x => x.race);
-    const after = rw.workouts.filter(x => !x.race && x.discipline !== 'rest' && dayOf(x) > dayOf(race));
-    expect(after.length).toBe(1);
-    expect(after[0].type).toBe('Long'); // a 65 min ride with sweet-spot blocks
+    return rw.workouts
+      .filter(x => !x.race && x.discipline !== 'rest' && x.discipline !== 'strength')
+      .map(x => ({ w: x, gap: dayOf(x) - dayOf(race), tag: raceType + '/' + fitness + '/' + d + 'd/' + raceDate }));
+  };
+
+  it('nothing hard runs inside the final 48 hours, or at any point after the race', () => {
+    let checked = 0;
+    for (const raceDate of RACE_DATES) {
+      for (const rt of [...SOLO, ...TRI]) {
+        for (const fit of LEVELS) {
+          for (const d of [3, 5, 7]) {
+            raceWeekSessions(rt, fit, d, raceDate).forEach(({ w, gap, tag }) => {
+              if (gap === 0 || gap < -2) return;
+              checked++;
+              expect(HARD.test(w.type), tag + ' gap=' + gap + ' ' + w.discipline + '/' + w.type).toBe(false);
+            });
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(1000); // the sweep really did sweep
   });
 
-  it('race week currently schedules hard intervals inside the final 48 hours', () => {
-    const p = planFor('olympic', 'advanced', 5);
-    const rw = p.weeks[raceWeekIdx(p)];
-    const race = rw.workouts.find(x => x.race);
-    const hard = rw.workouts.filter(x => !x.race && /VO2|Threshold/.test(x.type || '')
-      && dayOf(x) < dayOf(race) && dayOf(race) - dayOf(x) <= 2);
-    expect(hard.length).toBeGreaterThan(0);
+  it('a brick never survives either side of race day', () => {
+    /* A brick is a race rehearsal by construction: there is no easy form of
+       it, so next to the race it becomes the ride alone.
+
+       Swept across every level AND day count, not one config. At advanced /
+       5 days alone no brick ever lands in the window, so a narrower sweep
+       passed even with the brick handling deleted. */
+    let bricksSeen = 0;
+    for (const raceDate of RACE_DATES) {
+      for (const rt of TRI) {
+        for (const fit of LEVELS) {
+          for (const d of [3, 4, 5, 6, 7]) {
+            raceWeekSessions(rt, fit, d, raceDate).forEach(({ w, gap, tag }) => {
+              if (gap === 0 || gap < -2) return;
+              expect(w.discipline, tag + ' gap=' + gap).not.toBe('brick');
+              if (w.raceWeekFrom === 'Brick') bricksSeen++;
+            });
+          }
+        }
+      }
+    }
+    // and the window really does contain bricks to demote, so the assertion
+    // above is exercised rather than vacuous
+    expect(bricksSeen).toBeGreaterThan(0);
+  });
+
+  it('the day after the goal race is recovery, and demotions are marked', () => {
+    for (const raceDate of RACE_DATES) {
+      for (const rt of [...SOLO, ...TRI]) {
+        raceWeekSessions(rt, 'advanced', 5, raceDate).forEach(({ w, gap, tag }) => {
+          if (gap !== 1) return;
+          expect(w.durationMin, tag + ' day-after is ' + w.durationMin + ' min').toBeLessThanOrEqual(45);
+          // demoted sessions say so, and say what they were, so the card can
+          // explain itself rather than looking like a generation bug
+          if (w.raceWeek) {
+            expect(w.raceWeek).toBe('recover');
+            expect(w.raceWeekFrom).toBeTruthy();
+            expect(w.key).toBe(false);
+          }
+        });
+      }
+    }
+  });
+
+  it('demoted sessions keep their id, date and day count', () => {
+    // Demotion, not deletion: a logged session must still match, and an
+    // athlete who chose five training days still sees five.
+    for (const raceDate of ['2026-09-30', '2026-10-03']) {
+      // Mon=0 … Sun=6. A race landing on a chosen training day REPLACES that
+      // session; one landing on a rest day ADDS to the week. Both are right,
+      // and the demotion pass must not change either count.
+      const raceDow = (new Date(raceDate).getDay() + 6) % 7;
+      const expected = DAYSETS[5].length + (DAYSETS[5].includes(raceDow) ? 0 : 1);
+      for (const rt of [...SOLO, ...TRI]) {
+        const p = mk({ raceType: rt, fitness: 'advanced', raceDate, daysPerWeek: 5, trainingDays: DAYSETS[5], longDay: 5 });
+        const rw = p.weeks[raceWeekIdx(p)];
+        const sessions = rw.workouts.filter(x => x.discipline !== 'rest' && !x.second);
+        expect(sessions.length, rt + ' ' + raceDate).toBe(expected);
+        expect(sessions.filter(x => x.race).length).toBe(1);
+        rw.workouts.forEach(x => expect(x.id).toBeTruthy());
+      }
+    }
+  });
+
+  it('sessions three or more days before the race still carry their quality', () => {
+    // The fix must not flatten the whole of race week: an athlete racing on
+    // Sunday should still get a sharpener on the Wednesday.
+    const found = [];
+    for (const raceDate of RACE_DATES) {
+      for (const rt of [...SOLO, ...TRI]) {
+        raceWeekSessions(rt, 'elite', 6, raceDate).forEach(({ w, gap }) => {
+          if (gap <= -3 && HARD.test(w.type)) found.push(w.type);
+        });
+      }
+    }
+    expect(found.length).toBeGreaterThan(0);
   });
 });
 

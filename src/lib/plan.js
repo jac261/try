@@ -1257,6 +1257,37 @@ const LONG_RUN_CAP = 180;
 // thing a marathon buyer inspects. Solo Taper weeks before race week cap the
 // long run; race week demotes it to a shakeout entirely.
 const SOLO_TAPER_LONG_CAP = 90;
+/* Race week stops at the race (run phase 1b).
+ *
+ * The taper scaled race week's DURATIONS down but never touched its
+ * INTENSITY ladder, and nothing ended the week at race day. So an advanced
+ * Olympic plan put a bike VO2 session (3 × 4 min at Z5) on the Thursday
+ * before a Saturday race, and a 65 minute Long ride with sweet-spot blocks
+ * on the Sunday morning after it. Across the race-type × level × day-count
+ * matrix that was 300 Long rides and 80 bricks scheduled AFTER the goal
+ * race, and several hundred hard sessions inside the final 48 hours.
+ *
+ * Three windows:
+ *   - The 48 hours BEFORE the race are for sharpening, not training. Easy
+ *     legs only. A short easy session with strides the day before a race is
+ *     textbook; a threshold session is not.
+ *   - The DAY AFTER the race is recovery and nothing else.
+ *   - The REST of the week after the race is easy aerobic. Still capped,
+ *     because a Long demoted to 'Easy' would otherwise keep its 140 minute
+ *     duration three days after a marathon, but capped loosely: an easy
+ *     45 minutes four days after a 5 km is a normal thing to do.
+ * Sessions three or more days BEFORE the race are untouched: that is still
+ * taper week proper, where a short sharpener belongs.
+ *
+ * These caps are a target rather than a hard ceiling. dedupeSoloWeek runs
+ * after this pass, and demoting several sessions onto the same easy type can
+ * collide them; dedupe then steps a duration up a few minutes so no two
+ * sessions in a week are byte-identical. An easy session landing at 40
+ * instead of 30 is a fine outcome and not worth defeating the dedupe for.
+ */
+const RACE_WEEK_SHARPEN_CAP = 40;
+const RACE_WEEK_RECOVER_CAP = 30;
+const RACE_WEEK_AFTER_CAP = 45;
 const LONG_BIKE = { sprint: 70, olympic: 100, half: 160, t100: 170, full: 210, maintenance: 100 };
 const LONG_BRICK = { sprint: 70, olympic: 95, half: 135, t100: 145, full: 165, maintenance: 90 };
 // The long swim only enters a week via the limiter frequency swap (no base
@@ -2430,6 +2461,40 @@ export const generatePlan = function (profile, opts) {
         discipline: 'strength', role: 'strength', type: 'Strength', title: built.title,
         durationMin: built.durationMin, distance: null, unit: '', segments: built.segments, second: true,
       });
+    }
+
+    /* Race week stops at the race. See RACE_WEEK_SHARPEN_CAP above.
+       Runs last in week assembly, after the race-day replacement, the test
+       injection and both doubles, so nothing can re-harden the week behind
+       it. Sessions are DEMOTED rather than deleted: the id, date and day
+       count survive, so a logged session still matches and an athlete who
+       chose five training days still sees five. */
+    if (w === raceWeekIdx && raceISO) {
+      for (let i = 0; i < workouts.length; i++) {
+        const wo = workouts[i];
+        if (wo.race || wo.discipline === 'rest' || wo.discipline === 'strength') continue;
+        const gap = daysBetween(raceISO, wo.date); // positive = after the race
+        if (gap === 0 || gap < -2) continue;
+        const recover = gap > 0;
+        // A brick has no easy form: it is a race rehearsal by construction.
+        // The day either side of a race it becomes the ride alone.
+        const disc = wo.discipline === 'brick' ? 'bike' : wo.discipline;
+        const easyType = disc === 'swim' ? 'Technique' : disc === 'bike' ? 'Endurance' : 'Easy';
+        const cap = gap === 1 ? RACE_WEEK_RECOVER_CAP
+          : gap > 1 ? RACE_WEEK_AFTER_CAP : RACE_WEEK_SHARPEN_CAP;
+        const dur = Math.min(wo.durationMin, cap);
+        // Already easy and already short enough: leave it exactly as it is
+        // rather than rebuilding it into the same thing.
+        if (wo.discipline === disc && wo.type === easyType && dur === wo.durationMin) continue;
+        const seed = wo.seed != null ? wo.seed : w;
+        const built = buildWorkout(disc, easyType, dur, pc, phase, seed, fitness.intensity, profile.raceType, 'easy');
+        workouts[i] = Object.assign({}, wo, {
+          discipline: disc, role: 'easy', type: easyType, title: built.title, durationMin: dur,
+          distance: built.distance, distEst: !!built.distEst, unit: built.unit,
+          segments: built.segments, safety: built.safety || undefined,
+          key: false, raceWeek: recover ? 'recover' : 'sharpen', raceWeekFrom: wo.type,
+        });
+      }
     }
 
     const totalMin = workouts.reduce((a, b) => a + (b.durationMin || 0), 0);
