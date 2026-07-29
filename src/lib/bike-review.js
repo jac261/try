@@ -48,7 +48,12 @@ export const BIKE_REVIEW_RULES = {
   completionFull: 0.9,   // at least this much of the planned work = completed
   completionPoor: 0.7,   // under this (on a credible match) = reduce
   restTol: 0.5,          // recorded recovery within 50% of planned = compliant
-  easyCeiling: 0.78,     // an easy ride above this much of threshold was not easy
+  /* The most permissive endurance card prescribes a low-cadence block up to
+     0.80 of threshold, so a ceiling of 0.78 marked riders down for executing
+     that card exactly — the judge must be at least as permissive as the most
+     permissive card, which is the phase 2 rule. 0.80 plus the standard rep
+     tolerance. */
+  easyCeiling: 0.83,
 };
 
 /* The band a single planned effort is judged against.

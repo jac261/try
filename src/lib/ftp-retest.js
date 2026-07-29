@@ -45,11 +45,22 @@ export const DRIFT_TYPES = ['Threshold', 'Sweet Spot', 'VO2 Intervals', 'Tempo']
 export function prescribedWatts(workout, ftpWatts) {
   if (!workout || !ftpWatts) return null;
   let min = 0, watts = 0;
+  const add = (m, zone) => {
+    const z = ZONE_BY_NAME[zone];
+    if (!z || !m) return;
+    min += m;
+    watts += m * ftpWatts * z;
+  };
   (workout.segments || []).forEach(s => {
-    const z = ZONE_BY_NAME[s.zone];
-    if (!z || !s.min) return;
-    min += s.min;
-    watts += s.min * ftpWatts * z;
+    /* Walk the BLOCKS when a segment has them. Charging an interval
+       segment's whole minutes at its work zone ignored the recoveries
+       inside it, which inflated the prescribed average — so a rider
+       executing every card exactly read as riding under it, and three such
+       weeks fired "your rides are coming in under" about targets nobody
+       missed. The recovery is a third of an interval segment's time and it
+       is prescribed at Z1, not at threshold. */
+    if (s.blocks && s.blocks.length) s.blocks.forEach(b => add(b.min, b.zone));
+    else add(s.min, s.zone);
   });
   return min ? { avgWatts: watts / min, minutes: min } : null;
 }
@@ -93,6 +104,13 @@ function driftSignal({ plan, activities, log, moves, todayISO, sinceISO }) {
 }
 
 export function ftpRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO, reviews, powerCurve }) {
+  /* No retest nudges inside the final two weeks. The gates covered a
+     recently swum test and an upcoming one, but not the taper: an athlete
+     opening the app on race morning was told their threshold was stale and
+     nudged to schedule a test. Whatever the number is now, race week is not
+     when it changes. */
+  const raceISO = plan && plan.profile && plan.profile.raceDate;
+  if (raceISO && todayISO && daysBetween(todayISO, raceISO) >= 0 && daysBetween(todayISO, raceISO) <= 14) return null;
   if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
   const profile = plan.profile || {};
   // nothing to assess on a plan that does not ride towards a race

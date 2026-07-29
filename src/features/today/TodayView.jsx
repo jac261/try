@@ -14,27 +14,35 @@ const D = T.DISCIPLINES;
 // targets) is unchanged: the engine re-derives the same proposal every render,
 // so without this the banner returns the moment it is dismissed. A materially
 // different proposal (new week, new targets, new kind) speaks again.
-const WEEKLY_DISMISS = 'try.weeklyProposalDismissed';
-const loadWeeklyDismiss = () => { try { return localStorage.getItem(WEEKLY_DISMISS); } catch (e) { return null; } };
-const saveWeeklyDismiss = v => { try { localStorage.setItem(WEEKLY_DISMISS, v); } catch (e) { /* private mode */ } };
+/* Dismissal keys are PER USER, like every store in storage.js. They were
+   browser-global literals, so two accounts on one device shared dismissal
+   state: a nudge user A dismissed stayed silent for user B whenever the
+   signatures matched — a real coaching signal suppressed for the wrong
+   athlete. Reads fall back to the legacy global key once so existing
+   dismissals are honoured; writes go to the user key only. */
+let DISMISS_NS = 'try.';
+const dGet = name => {
+  try { return localStorage.getItem(DISMISS_NS + name) ?? localStorage.getItem('try.' + name); }
+  catch (e) { return null; }
+};
+const dSet = (name, v) => { try { localStorage.setItem(DISMISS_NS + name, v); } catch (e) { /* private mode */ } };
+
+const loadWeeklyDismiss = () => dGet('weeklyProposalDismissed');
+const saveWeeklyDismiss = v => dSet('weeklyProposalDismissed', v);
 
 // Phase 3b: the CSS retest nudge and the failed-test explanation dismiss the
 // same way the weekly proposal does — sticky per signature, so a dismissed
 // nudge stays quiet until the situation genuinely changes.
-const FTP_RETEST_DISMISS = 'try.ftpRetestDismissed';
-const loadFtpRetestDismiss = () => { try { return localStorage.getItem(FTP_RETEST_DISMISS); } catch (e) { return null; } };
-const saveFtpRetestDismiss = v => { try { localStorage.setItem(FTP_RETEST_DISMISS, v); } catch (e) { /* private mode */ } };
-const RETEST_DISMISS = 'try.cssRetestDismissed';
-const loadRetestDismiss = () => { try { return localStorage.getItem(RETEST_DISMISS); } catch (e) { return null; } };
-const saveRetestDismiss = v => { try { localStorage.setItem(RETEST_DISMISS, v); } catch (e) { /* private mode */ } };
-const CSSFAIL_DISMISS = 'try.cssTestFailDismissed';
-const loadCssFailDismiss = () => { try { return localStorage.getItem(CSSFAIL_DISMISS); } catch (e) { return null; } };
-const saveCssFailDismiss = v => { try { localStorage.setItem(CSSFAIL_DISMISS, v); } catch (e) { /* private mode */ } };
+const loadFtpRetestDismiss = () => dGet('ftpRetestDismissed');
+const saveFtpRetestDismiss = v => dSet('ftpRetestDismissed', v);
+const loadRetestDismiss = () => dGet('cssRetestDismissed');
+const saveRetestDismiss = v => dSet('cssRetestDismissed', v);
+const loadCssFailDismiss = () => dGet('cssTestFailDismissed');
+const saveCssFailDismiss = v => dSet('cssTestFailDismissed', v);
 
 // The user's expand/collapse choice for the week tab sticks across visits.
-const WEEK_PREF = 'try.showWeek';
-const loadWeekPref = () => { try { return JSON.parse(localStorage.getItem(WEEK_PREF)); } catch (e) { return null; } };
-const saveWeekPref = v => { try { localStorage.setItem(WEEK_PREF, JSON.stringify(v)); } catch (e) {} };
+const loadWeekPref = () => { try { return JSON.parse(dGet('showWeek')); } catch (e) { return null; } };
+const saveWeekPref = v => dSet('showWeek', JSON.stringify(v));
 
 /* One glanceable card for the rest of the week: a 7-day strip of discipline
    dots (faded = logged, gold = race day, dash = rest), tap to fold out the
@@ -92,6 +100,9 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
 }
 
 export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, ftpRetest, onFtpRetest }) {
+  // Align the dismissal keys to THIS user before any lazy initialiser runs.
+  // They were browser-global, so two accounts on one device shared them.
+  DISMISS_NS = (storage && storage.ns) || 'try.';
   const tracker = plan.race === 'tracker';
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts);

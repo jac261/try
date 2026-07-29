@@ -362,7 +362,12 @@ export function bikeLimiter(d) {
       ['Every long ride carries a carbohydrate target, and it only ever moves one step above what you have logged managing.',
         'That step is the training: the gut adapts to it the way the legs adapt to the riding.']);
   }
-  if (d.quality.adherence.value != null && d.quality.adherence.value <= -BIKE_DASH_RULES.fadeConcern) {
+  /* Three agreeing sessions, the same bar the retest evidence uses: one bad
+     ride flipped the page's largest headline while the copy spoke in the
+     plural and promised a recommendation that the evidence rules correctly
+     refused to make. The headline and the nudge now share a threshold. */
+  if (d.quality.adherence.value != null && d.quality.adherence.value <= -BIKE_DASH_RULES.fadeConcern
+    && d.quality.reviews >= 3) {
     return out('threshold', 'Threshold is limiting your bike',
       ['Recent quality efforts are coming in below their targets.',
         'That usually means the targets are set too high rather than that you are unfit.'],

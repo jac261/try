@@ -88,7 +88,10 @@ describe('§6 drift: read from rides, and only rides that can speak', () => {
     let anchor = -1;
     for (let i = dates.length - 1; i >= 2; i--) {
       const span = (new Date(dates[i]) - new Date(dates[i - 2])) / 86400000;
-      if (span <= FTP_RETEST_RULES.lookbackDays - 4) { anchor = i; break; }
+      // the drift window must also sit clear of the race-week gate, which
+      // silences every retest nudge inside the final fortnight
+      const clearOfRace = (new Date(base.raceDate) - new Date(dates[i])) / 86400000 > 17;
+      if (span <= FTP_RETEST_RULES.lookbackDays - 4 && clearOfRace) { anchor = i; break; }
     }
     expect(anchor).toBeGreaterThanOrEqual(2);
     const cluster = [dates[anchor - 2], dates[anchor - 1], dates[anchor]];

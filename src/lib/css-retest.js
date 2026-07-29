@@ -114,6 +114,13 @@ function perfSignal({ plan, activities, log, moves, todayISO, sinceISO }) {
 }
 
 export function cssRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO, unresolvedTest, reviewEvidence }) {
+  /* No retest nudges inside the final two weeks. The gates covered a
+     recently swum test and an upcoming one, but not the taper: an athlete
+     opening the app on race morning was told their threshold was stale and
+     nudged to schedule a test. Whatever the number is now, race week is not
+     when it changes. */
+  const raceISO = plan && plan.profile && plan.profile.raceDate;
+  if (raceISO && todayISO && daysBetween(todayISO, raceISO) >= 0 && daysBetween(todayISO, raceISO) <= 14) return null;
   if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
   const profile = plan.profile || {};
   // §6's gate, applied to the nudge as well: a solo run or bike plan has no

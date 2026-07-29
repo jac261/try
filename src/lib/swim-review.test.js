@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { iso, addDays } from './date.js';
 import { generatePlan } from './plan.js';
 import { prescribedSwim, cssRetestRecommendation } from './css-retest.js';
 import {
@@ -253,9 +254,12 @@ describe('Phase 4 review fixes: one coaching voice, and silence where nothing ca
 
 describe('review evidence feeds the retest nudge (§7: outcomes feed selection)', () => {
   it('rolling over-performance evidence recommends the retest, outranking the whole-session heuristic', () => {
-    const quiet = generatePlan({ ...base, cssMeta: { source: 'try-test', measuredAt: '2026-06-20', confidence: 'high' } });
+    // a longer runway, because retest nudges now stay silent inside the
+    // final fortnight and the old today sat exactly there
+    const quiet = generatePlan({ ...base, raceDate: '2026-12-20', cssMeta: { source: 'try-test', measuredAt: '2026-06-20', confidence: 'high' } });
     const tests = quiet.weeks.flatMap(w => w.workouts).filter(w => w.test && w.testKind === 'swimCss');
-    const today = '2026-09-20' > tests.map(w => w.date).sort().pop() ? '2026-09-20' : '2026-09-25';
+    const lastTest = tests.map(w => w.date).sort().pop();
+    const today = iso(addDays(new Date(lastTest), 2));
     const r = cssRetestRecommendation({
       plan: quiet, todayISO: today,
       reviewEvidence: { direction: 'over', sessions: 3 },

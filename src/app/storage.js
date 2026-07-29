@@ -12,6 +12,8 @@ const NS = 'try.';
 
 export function storageForUser(userId) {
   const ns = NS + 'user.' + userId + '.';
+  // exposed so surfaces that keep their own localStorage keys (TodayView's
+  // dismissals) can share this user's namespace instead of a global literal
   const wellnessKey = ns + 'wellness';
   const loadWellness = () => { try { return JSON.parse(localStorage.getItem(wellnessKey) || '[]'); } catch (e) { return []; } };
   const saveWellness = arr => { try { localStorage.setItem(wellnessKey, JSON.stringify(arr)); } catch (e) {} };
@@ -31,6 +33,7 @@ export function storageForUser(userId) {
   const saveManual = arr => { try { localStorage.setItem(manualKey, JSON.stringify(arr)); } catch (e) {} };
 
   return {
+    ns,
     load(k, fb) { try { const v = localStorage.getItem(ns + k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
     save(k, v) { try { localStorage.setItem(ns + k, JSON.stringify(v)); } catch (e) {} },
     // Note: calibration and manualActivities deliberately survive clear() —
@@ -57,8 +60,13 @@ export function storageForUser(userId) {
       const a = loadWellness().filter(r => r.date !== rec.date);
       a.push(rec);
       a.sort((x, y) => (x.date < y.date ? -1 : 1));
-      saveWellness(a);
-      return a;
+      /* Capped like every sibling store — this was the only uncapped one,
+         and the server sync re-upserts the whole merged history on every
+         load, so a multi-year intervals.icu history grew the store and the
+         per-load work together. 800 daily records is over two years, more
+         than anything here reads. Oldest evicted first: a is date-sorted. */
+      saveWellness(a.slice(-800));
+      return a.slice(-800);
     },
     // The one-tap answer for a missed session, keyed by WORKOUT id (never the
     // log dict: a bare log[id] means done all over the codebase, and never

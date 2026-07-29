@@ -12,6 +12,14 @@ import { Icon } from '@/components/Icon.jsx';
  * only the seen flag persists. */
 export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, storage, todayISO, coachLog, blockReviewed, onBlockReviewed, onFocus }) {
   const [gone, setGone] = useState(false);
+  /* HOISTED above the early returns, where every hook must live. This sat
+     below them, so the first render mounted two hooks and the render after
+     Dismiss (gone=true, early return) mounted one — React's fewer-hooks
+     invariant threw, the error escaped to the app boundary, and DISMISSING
+     THE DIGEST CRASHED THE WHOLE APP, once a week, for every athlete. The
+     seen flag was saved before the crash, so a reload looked fine and the
+     field signature was a transient glitch nobody could reproduce. */
+  const [reviewOpen, setReviewOpen] = useState(false);
   const weekMonday = T.reviewedWeekMonday(todayISO, new Date().getHours());
   const seen = storage.load('digestSeenWeek', null);
   if (gone || seen === weekMonday || !T.digestWindowOpen(weekMonday, todayISO)) return null;
@@ -34,7 +42,6 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
   const fx = T.resolveFocus(plan && plan.profile, plan && plan.profile ? T.weakestLink({ profile: plan.profile }) : null, solo);
   const review = coach && blockReviewed !== weekMonday
     ? T.buildBlockReview({ plan, coachLog, weekMonday, focus: fx.focus, lastReviewedMonday: blockReviewed }) : null;
-  const [reviewOpen, setReviewOpen] = useState(false);
 
   return (
     <>

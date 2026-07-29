@@ -490,6 +490,15 @@ export function App({ storage, getToken, user }) {
      hardware-versus-fitness protection is unreachable however good the data
      gets. Kept in the same local store the fuel and position answers use. */
   const [prevPowerCurve] = useState(() => storage.loadPowerCurve());
+  /* The store's WRITER. savePowerCurve had zero callers, so the previous
+     curve was permanently null on every device and the whole
+     hardware-versus-fitness comparison was unreachable — even on the day the
+     endpoint lands. Saved only when a real curve exists and differs from
+     what is stored, so the null of today never overwrites a curve. */
+  useEffect(() => {
+    const cur = T.powerCurve(powerCurveRaw);
+    if (cur && JSON.stringify(cur) !== JSON.stringify(prevPowerCurve)) storage.savePowerCurve(cur);
+  }, [powerCurveRaw, prevPowerCurve, storage]);
   /* The phase 5 bike reviews, read off the log exactly as the swim evidence
      above is. They arrive on the log entry from the backend and that column
      is still an open ask, so this is empty today — but it is empty because
@@ -1089,10 +1098,19 @@ export function App({ storage, getToken, user }) {
   // Ordered by when the swim actually HAPPENED (a moved or late-completed
   // session keeps its planned date), and each review carries that date so a
   // dismissed evidence nudge can speak again on genuinely new swims.
+  /* Reviews of swims completed BEFORE the current CSS was measured cannot
+     argue against it: logs survive a retarget by id, so without this filter
+     an athlete who accepted a new CSS was told three days later that their
+     swims were coming in slow — by swims swum against the old number.
+     perfSignal inside css-retest carries exactly this guard and names this
+     failure; this higher-priority path bypassed it. The bike side filters
+     its reviews the same way (ftp-retest, sinceISO = measuredAt). */
+  const cssSince = (plan.profile && plan.profile.cssMeta && plan.profile.cssMeta.measuredAt) || null;
   const reviewEvidence = T.swimReviewEvidence(
     plan.weeks && Array.isArray(plan.weeks) ? plan.weeks.flatMap(wk => wk.workouts)
       .filter(w => w.discipline === 'swim' && log[w.id] && log[w.id].swimReview)
       .map(w => ({ w, date: (log[w.id].at || '').slice(0, 10) || moves[w.id] || w.date }))
+      .filter(x => !cssSince || !x.date || x.date >= cssSince)
       .sort((a, b) => (a.date < b.date ? 1 : -1))
       .map(x => ({ ...log[x.w.id].swimReview, date: x.date })) : []
   );

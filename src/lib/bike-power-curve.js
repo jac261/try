@@ -166,9 +166,17 @@ export function curveComparison({ current, previous }) {
     if (!comparable(p, q)) {
       return {
         durationSec: p.durationSec, status: 'incomparable', watts: p.watts, wasWatts: q.watts,
-        why: p.source && q.source && p.source !== q.source
-          ? 'recorded on a different power meter'
-          : 'recorded in a different environment',
+        /* An UNKNOWN source is a source problem, not an environment one.
+           This used to require both sides to name a meter before saying
+           "different power meter", so the exact case the comparability guard
+           fails closed for — one side missing its source — was refused
+           correctly but explained wrongly, and sourceChanged stayed false, so
+           the device-change banner never appeared for it. */
+        why: p.source !== q.source
+          ? (p.source && q.source ? 'recorded on a different power meter'
+            : 'recorded without a power-meter identifier, so it cannot be compared safely')
+          : p.bike !== q.bike ? 'recorded on a different bike'
+            : 'recorded in a different environment',
       };
     }
     const deltaPct = (p.watts - q.watts) / q.watts * 100;
@@ -189,7 +197,7 @@ export function curveComparison({ current, previous }) {
   });
   rows.sort((a, b) => a.durationSec - b.durationSec);
   const incomparable = rows.filter(r => r.status === 'incomparable');
-  const sourceChanged = incomparable.length > 0 && incomparable.some(r => /power meter/.test(r.why || ''));
+  const sourceChanged = incomparable.length > 0 && incomparable.some(r => /power.meter/.test(r.why || ''));
   // Only the rows that changed METER. Averaging in rows that differ for some
   // other reason (a ride moved indoors, a different bike) produced a number
   // presented as a calibration offset that was partly not one, and both error

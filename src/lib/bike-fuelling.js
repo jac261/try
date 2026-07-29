@@ -110,7 +110,10 @@ function baseCarbs({ durationMin, hasQualityBlock, brickFollows, raceType }) {
  * such an athlete on a sensible default rather than either extreme. */
 function provenIntake(fuelLog) {
   const grams = Object.values(fuelLog || {})
-    .filter(v => v && typeof v === 'object' && v.discipline === 'bike')
+    // a brick IS a ride with a run on the end, and it is the session the
+    // fuelling model itself calls the one that most needs a plan — so its
+    // answers train the same gut ceiling rides do
+    .filter(v => v && typeof v === 'object' && (v.discipline === 'bike' || v.discipline === 'brick'))
     .map(v => v.level)
     .filter(l => l && l !== 'none' && FUEL_LEVEL_GRAMS[l] != null)
     .map(l => FUEL_LEVEL_GRAMS[l]);

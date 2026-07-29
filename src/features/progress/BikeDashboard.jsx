@@ -30,15 +30,26 @@ function Metric({ m, label, unit }) {
  * numbers they belong to nowhere on the page. It also returned null whenever
  * the value was missing, which hid the note in exactly the case the note
  * exists to explain. */
-function Note({ m, label }) {
+/* A number and its note as one sentence — for NUMERIC metrics whose note is
+   a unit fragment. `signed` marks deltas that deserve a leading plus; shares
+   never get one (a "+100% of long rides fuelled to plan" is a signed glyph on
+   a percentage that cannot be negative). Verdict-word metrics render through
+   NoteOnly below: fusing the word to the sentence printed
+   "buildYour position has been comfortable..." on the athlete's screen. */
+function Note({ m, label, signed }) {
   if (!m || !m.note) return null;
   return (
     <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>
       {m.value != null
-        ? (label ? label + ': ' : '') + (m.value > 0 && /^%/.test(m.note) ? '+' : '') + m.value + m.note
+        ? (label ? label + ': ' : '') + (signed && m.value > 0 ? '+' : '') + m.value + m.note
         : m.note}
     </div>
   );
+}
+
+function NoteOnly({ m }) {
+  if (!m || !m.note) return null;
+  return <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{m.note}</div>;
 }
 
 export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog }) {
@@ -83,8 +94,18 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
           <Metric m={s.weeklyMinutes} label="Minutes a week" />
         </div>
         {s.ftpWatts.value != null && (
+          /* "Measured from manual." labelled a hand-typed number as measured,
+             while the retest nudge for the same state says it came from a
+             hand entry — two surfaces disagreeing about whether a figure was
+             measured, in a module whose rule is that a derived number can
+             never read as a measured one. */
           <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
-            Measured{s.ftpSource.value ? ' from ' + s.ftpSource.value : ''}
+            {{
+              manual: 'Entered by hand',
+              'try-test': 'Measured in your bike test',
+              'activity-model': 'From the rolling estimate of your rides',
+              'intervals-icu': 'From intervals.icu',
+            }[s.ftpSource.value] || 'Recorded'}
             {s.ftpDate.value ? ' on ' + T.fmtDate(s.ftpDate.value) : ''}
             {s.ftpConfidence.value && s.ftpConfidence.value !== 'unknown'
               ? ' · ' + s.ftpConfidence.value + ' confidence' : ''}.
@@ -148,8 +169,8 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
         {s.completion.value == null && s.completion.note && (
           <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>{s.completion.note}</div>
         )}
-        <Note m={q.adherence} label="Power adherence" />
-        <Note m={q.fade} label="Rep fade" />
+        <Note m={q.adherence} label="Power adherence" signed />
+        <Note m={q.fade} label="Rep fade" signed />
         {q.outcomes && (
           <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>
             Review outcomes: {Object.entries(q.outcomes).map(([k, n]) => k.replace('-', ' ') + ' ×' + n).join(', ')}.
@@ -174,8 +195,8 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
           <Metric m={du.hrDriftPct} label="HR drift" unit="%" />
           <Metric m={du.fuellingMet} label="Fuelled to plan" unit="%" />
         </div>
-        <Note m={du.fuellingMet} />
-        <Note m={du.positionTolerance} />
+        <NoteOnly m={du.fuellingMet} />
+        <NoteOnly m={du.positionTolerance} />
         {du.objectives.value && (
           <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>
             Long-ride objectives so far: {Object.entries(du.objectives.value)

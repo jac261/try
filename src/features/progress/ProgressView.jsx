@@ -140,6 +140,15 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
         </div>
       </>}
 
+      {/* Phase 7 §6: silent until a power curve exists. A SIBLING of the
+          durability card, not a child — it was nested inside the durability
+          IIFE's early return, so an athlete with no durability reads would
+          never have seen the curve: two unrelated features accidentally
+          coupled, invisible today because the curve is gated, and a silent
+          suppression on exactly the day it goes live. */}
+      <PowerCurveCard curve={powerCurve} previous={previousPowerCurve}
+        ftpWatts={plan.profile && plan.profile.ftp} todayISO={todayISO} />
+
       {(() => {
         // Durability: how the long sessions ended, from their recorded laps.
         // Trends are strictly per discipline (a run/ride mix-shift must
@@ -160,12 +169,6 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
         const trends = ['run', 'bike'].map(d => ({ d, t: T.durabilityTrend(reads.filter(e => e.discipline === d)) }))
           .filter(x => x.t);
         return <>
-          {/* Phase 7 §6: silent until a power curve exists, which needs a
-              backend endpoint Try does not have yet. Wired now so the model
-              has a real path to the athlete rather than being a module
-              nobody calls. */}
-          <PowerCurveCard curve={powerCurve} previous={previousPowerCurve}
-            ftpWatts={plan.profile && plan.profile.ftp} todayISO={todayISO} />
           <div className="section-title">Durability <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(how the long sessions ended)</span></div>
           <div className="card">
             {trends.map(x => <div className="du-trend" key={x.d}>{x.d === 'bike' ? 'Long rides: ' : 'Long runs: '}{x.t}</div>)}
