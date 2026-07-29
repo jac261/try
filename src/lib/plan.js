@@ -1,6 +1,7 @@
 /* Try — periodized plan generator + structured workout builder */
 import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
+import { runMainSet, runReps, runHillsAllowed, RUN_MIN_SESSION_MIN } from './run-sizing.js';
 import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL } from './domain.js';
 import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
 import { swimZoneTargets } from './swim-zones.js';
@@ -234,7 +235,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
   // variant-menu size v(durability ? 3 : 2) stays constant and a rebuilt session
   // keeps its format. Short durations are handled by clamping the lead-ins, not
   // by shrinking the menu (which would flip the variant on a trim across 45).
-  const durability = (phase === 'Build' || phase === 'Peak') && intensity >= 0;
+  const durability = runHillsAllowed(phase, intensity);
   let segs = [], title = 'Run';
   if (type === 'Long') {
     title = 'Long Run';
@@ -313,19 +314,19 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     ][v(3)];
   } else if (type === 'Tempo') {
     title = 'Tempo Run';
-    const main = Math.max(15, dur - 22);
+    const { warmup: wu, main, cooldown: cd } = runMainSet('Tempo', dur);
     const half = Math.max(8, Math.round(main / 2) - 2);
     const third = Math.round(dur / 3);
     segs = [
       [
-        { label: 'Warm-up', min: 12, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: 'Tempo block', min: main, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 12, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: '2 × (' + half + ' min tempo / 4 min float)', min: main, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3', blocks: rep(2, half, 'Z3', 4, 'Z2') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
         { label: 'Settle in · relaxed', min: third, detail: runDetail(pc, 'easy', 'Z2') + ' · easy rhythm, quick turnover', zone: 'Z2' },
@@ -335,58 +336,74 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     ][v(3)];
   } else if (type === 'VO2 Intervals') {
     title = 'VO2 Intervals';
-    const reps = clamp(Math.round((dur - 25) / 5), 4, 8);
-    const sets = clamp(Math.round((dur - 25) / 12), 2, 3);
-    const hills = clamp(Math.round((dur - 25) / 4), 5, 10);
+    const { warmup: wu, cooldown: cd } = runMainSet('VO2 Intervals', dur);
+    const reps = runReps('VO2 Intervals', dur, 5, 4, 8);
+    const sets = runReps('VO2 Intervals', dur, 12, 2, 3);
+    const hills = runReps('VO2 Intervals', dur, 4, 5, 10);
     const thirties = Array.from({ length: sets }).flatMap((x, i) =>
       rep(10, 0.5, 'Z5', 0.5, 'Z1').concat(i < sets - 1 ? [{ min: 3, zone: 'Z1' }] : []));
     segs = [
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: reps + ' × (3 min hard / 2 min easy)', min: reps * 5, detail: runDetail(pc, 'interval', 'Z5'), zone: 'Z5', blocks: rep(reps, 3, 'Z5', 2, 'Z1') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: sets + ' × 10 × (30 s hard / 30 s easy) · 3 min between sets', min: sets * 12, detail: runDetail(pc, 'interval', 'Z5'), zone: 'Z5', blocks: thirties },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: hills + ' × 75 s uphill hard · jog down', min: hills * 4, detail: 'By effort, not pace · ' + ZONES.Z5.rpe + ' · uphill pace reads slower', zone: 'Z5', terrain: 'hill', blocks: rep(hills, 1.25, 'Z5', 2.75, 'Z1') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
-    ][v(3)];
+      /* The uphill repetitions ride the SAME gate as the Threshold hill
+         circuit and the long run's tired-legs finish. They did not: this
+         variant sat in the base menu selected by a flat v(3), so uphill hard
+         reps appeared in Taper weeks — 80 of them across the race-type,
+         level and day-count matrix, every one a VO2 session, while the
+         Threshold hill circuit next door was correctly gated. Two hill
+         formats, two different rules, and the spec assumes the gate for
+         both (§2).
+
+         Menu size varies with the gate, exactly as buildBike's Long does.
+         That is safe here for the reason the header gives: the gate reads
+         phase and level, both of which survive an ease or trim rebuild, so
+         a stored session cannot change format when it is resized. */
+    ][v(durability ? 3 : 2)];
   } else if (type === 'Fartlek') {
     title = 'Fartlek Run';
-    const surges = clamp(Math.round((dur - 18) / 3), 6, 12);
+    const { warmup: wu, cooldown: cd } = runMainSet('Fartlek', dur);
+    const surges = runReps('Fartlek', dur, 3, 6, 12);
     // Pick the tallest pyramid that fits the session (work + equal-jog = 2 × sum).
     const steps = dur - 18 >= 32 ? [1, 2, 3, 4, 3, 2, 1] : dur - 18 >= 24 ? [1, 2, 3, 3, 2, 1] : [1, 2, 3, 2, 1];
     const pyramidMin = 2 * steps.reduce((a, b) => a + b, 0);
     const pyramid = steps.flatMap(m => [{ min: m, zone: 'Z3' }, { min: m, zone: 'Z2' }]);
     segs = [
       [
-        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: surges + ' × (1 min brisk / 2 min easy)', min: surges * 3, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3', blocks: rep(surges, 1, 'Z3', 2, 'Z2') },
-        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: 'Pyramid: ' + steps.join('-') + ' min brisk / equal easy jog', min: pyramidMin, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3', blocks: pyramid },
-        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 10, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: 'Surges by feel · 8–12 × 30–60 s quick on rolling terrain', min: Math.max(12, dur - 18), detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
-        { label: 'Cool-down', min: 8, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
   } else { // Threshold
     title = 'Threshold Run';
-    const reps = clamp(Math.round((dur - 25) / 12), 2, 4);
-    const cruise = clamp(Math.round((dur - 25) / 7), 3, 6);
-    const blocks = clamp(Math.round((dur - 25) / 16), 2, 3);
-    const climbs = clamp(Math.round((dur - 25) / 7), 3, 5);
+    const { warmup: wu, cooldown: cd } = runMainSet('Threshold', dur);
+    const reps = runReps('Threshold', dur, 12, 2, 4);
+    const cruise = runReps('Threshold', dur, 7, 3, 6);
+    const blocks = runReps('Threshold', dur, 16, 2, 3);
+    const climbs = runReps('Threshold', dur, 7, 3, 5);
     // The hill circuit rides the same durability gate as the long run's
     // hardest variant: sustained climbing at threshold effort is a
     // Build/Peak tool with real impact load, not a Base or beginner session.
@@ -394,19 +411,19 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     // strength versus neuromuscular power (design panel 2026-07-18).
     segs = [
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: reps + ' × (9 min threshold / 3 min easy)', min: reps * 12, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(reps, 9, 'Z4', 3, 'Z2') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: cruise + ' × (5 min threshold / 2 min easy)', min: cruise * 7, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(cruise, 5, 'Z4', 2, 'Z2') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
       [
-        { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+        { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
         { label: blocks + ' × (12 min cruise / 4 min easy)', min: blocks * 16, detail: runDetail(pc, 'threshold', 'Z4'), zone: 'Z4', blocks: rep(blocks, 12, 'Z4', 4, 'Z2') },
-        { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+        { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ];
     // The hill circuit joins as a 4th format in Build/Peak. A 4-slot menu
@@ -417,9 +434,9 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     // re-verify catches 2026-07-18). The selector below breaks the alignment
     // instead of shuffling the victim.
     if (durability) segs.splice(2, 0, [
-      { label: 'Warm-up', min: 15, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+      { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
       { label: climbs + ' × (4 min uphill at threshold effort / jog down)', min: climbs * 7, detail: 'By effort, not pace · ' + ZONES.Z4.rpe + ' · uphill pace reads slower', zone: 'Z4', terrain: 'hill', blocks: rep(climbs, 4, 'Z4', 3, 'Z1') },
-      { label: 'Cool-down', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+      { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
     ]);
     // Stepping the index one extra notch every 4 seeds walks all four slots
     // across ordinary building weeks while staying a pure, rebuild-stable
@@ -2312,7 +2329,7 @@ export const generatePlan = function (profile, opts) {
       // No solo run session under 20 minutes: beginner 7-day recovery weeks
       // otherwise generate 10 and 15 minute jogs (the dedupe pass separates
       // any collisions this floor creates).
-      if (race.solo && s.disc === 'run' && !soloShakeout) dur = Math.max(20, dur);
+      if (race.solo && s.disc === 'run' && !soloShakeout) dur = Math.max(RUN_MIN_SESSION_MIN, dur);
       /* The athlete's own starting point, when they gave one. Long sessions
          may not exceed their current longest grown ~10% per training week —
          min() only, so the race-driven curve takes over the moment it is the
