@@ -208,6 +208,26 @@ recommendation" heading — both objects are `{headline, why, sig}`, so nothing
 threw. And four of the eight plan responses described engine behaviour no
 phase ever built.
 
+## After the arc
+
+Two things landed after the eight phases and change what a rider sees.
+
+**A post-merge audit** of swim and bike together — the first look at the merged
+whole, since every phase gauntlet reviewed a diff. Its thesis was that defect
+classes fixed in bike phases survived in the older swim code, because the
+generalised guards only covered bike files, and that held: swim recovery was
+collected and never compared, the stroke gate had no door, the swim limiter
+gave day one an all-clear. On the bike side it found the curve's missing-source
+refusal was labelled an environment change and never raised the device banner.
+The guards now cover both modules.
+
+**Start-volume anchors.** Session minutes are sized from the race, so a
+full-distance plan at advanced level opened week one with a 4.3 km long swim.
+Onboarding now asks four optional questions about where the athlete currently
+is, and long sessions start there and grow at a safe rate until the race-driven
+curve takes over. Blank answers keep the previous behaviour byte-identically.
+See [modules/plans.md](modules/plans.md).
+
 ## Files
 
 | File | What it holds |

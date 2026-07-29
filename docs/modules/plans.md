@@ -1,7 +1,8 @@
 # Plans — generation, periodisation, race catalog
 
 How a profile becomes a full periodised plan. The entry point is `generatePlan`
-in `src/lib/plan.js`; the domain constants are in `src/lib/domain.js`.
+in `src/lib/plan.js`; the domain constants are in `src/lib/domain.js` and the
+athlete's starting point in `src/lib/start-volume.js`.
 
 ## The race catalog (`RACES`)
 
@@ -69,6 +70,41 @@ then the discipline builder (`buildRun` / `buildBike` / `buildSwim` /
 the prescribed duration. See [../WORKOUT_SIZING_SPEC.md](../WORKOUT_SIZING_SPEC.md)
 and [../WORKOUT_LIBRARY.md](../WORKOUT_LIBRARY.md).
 
+## Where the plan starts (`start-volume.js`)
+
+Session minutes above are sized from the **race**, so before this existed the
+first week of a full-distance plan at advanced level opened with a 4.3 km long
+swim: the level factor makes advanced *bigger*, and nothing anywhere asked
+where the athlete currently is.
+
+Onboarding now asks four optional questions — training hours in a typical
+recent week, and the longest recent swim (metres), ride and run (minutes) —
+editable afterwards in Update fitness. They are **anchors, not targets**:
+
+- Long sessions start at the athlete's current longest and grow about ten per
+  cent per completed training week until the race-driven curve is lower, which
+  then takes over unchanged. Anchors only ever *lower* a session, so peaks are
+  untouched and high volume stays possible.
+- Recovery weeks hold the growth clock rather than advancing it, and carry the
+  engine's own step-back so a binding cap cannot hand a recovery week a higher
+  ceiling than the training week before it.
+- The weekly-hours anchor is applied to the fully built week. The cut falls on
+  everything without its own discipline anchor — never tests, races, strength
+  or the volume double — and each shrunk session is rebuilt through the same
+  builder with the same seed, so cards still sum and a retarget regenerates
+  them identically.
+- A brick rides the bike anchor.
+
+Blank answers mean the previous behaviour exactly: generation is byte-identical
+across the full config sweep for a profile with no anchors, and an answer
+outside the sane ranges is ignored rather than obeyed.
+
+`startVolumeShortfall(profile)` compares the anchored plan's peak long sessions
+against the same plan without anchors. When the gap is material the athlete
+gets a dismissible note saying so — the growth curve will not ramp faster than
+is safe, so the honest fixes it names are more weeks or a shorter race, never
+"train harder".
+
 ## Experience levels
 
 `FITNESS` carries per-level dials: `factor` (volume), `intensity` (ladder shift,
@@ -88,5 +124,6 @@ decisions stay attached. See [../ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## Key files
 
-`src/lib/plan.js`, `src/lib/domain.js`, `src/lib/schedule.js`,
-`src/features/onboarding/`, `src/features/settings/`, `src/features/plan/PlanView.jsx`.
+`src/lib/plan.js`, `src/lib/domain.js`, `src/lib/start-volume.js`,
+`src/lib/schedule.js`, `src/features/onboarding/`, `src/features/settings/`,
+`src/features/plan/PlanView.jsx`.

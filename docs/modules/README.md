@@ -8,7 +8,7 @@ hypothesis, propose-never-impose, honest numbers, one thing by default) see
 
 Snapshot: React 18 + Vite 6 PWA, plain JS, Clerk-gated, per-user localStorage
 with a backend sync (Jack's ASP.NET Core service). intervals.icu is the
-activity source. 1,175 tests across 61 files at the time of writing.
+activity source. 1,212 tests across 64 files at the time of writing.
 
 ## The disciplines
 
@@ -26,7 +26,7 @@ each had a full eight-phase build-out; the run is the next one.
 
 | Module | What it covers | Doc |
 |---|---|---|
-| Plans | Plan generation, periodisation, the race catalog, templates, race day, tune-ups, experience levels | [plans.md](plans.md) |
+| Plans | Plan generation, periodisation, the race catalog, templates, race day, tune-ups, experience levels, and where a plan starts from | [plans.md](plans.md) |
 | Coach brain | The weekly decision engine and its six passes (decisions, durability, body mass, blocks, the durability veto, mass goals) | [coach-brain.md](coach-brain.md), deeper in [../COACH_BRAIN.md](../COACH_BRAIN.md) |
 | Body mass & fuel | Weight tracking, the gain and hold goals (lose deliberately unshipped), long-session fuelling capture | [body-mass-and-fuel.md](body-mass-and-fuel.md) |
 | Wellness & readiness | Daily readiness, the athlete-state strip, the what-if sheet, injury/illness handling | [wellness-and-readiness.md](wellness-and-readiness.md) |
