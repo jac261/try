@@ -36,7 +36,7 @@ Available on every plan shape, triathlon or run:
 ## Tier 2: standalone run race plans
 
 Race types `run5k / run10k / runhalf / runmarathon`, each carrying `solo: 'run'`
-on its `RACES` entry — a race property (never a profile field, so it cannot go
+on its `RACES` entry, a race property (never a profile field, so it cannot go
 stale) that means the plan trains and races exactly one discipline. This one
 flag drives the whole feature; the generation and coach details live in
 [plans.md](plans.md) and [coach-brain.md](coach-brain.md). Highlights:
@@ -60,19 +60,48 @@ flag drives the whole feature; the generation and coach details live in
 
 Solo run plans estimate a blank 5k from `runEst5k` (runner-calibrated:
 36:00 / 28:00 / 22:00 / 17:30 for the four levels) rather than the
-triathlete-scaled `est5k`. See [plans.md](plans.md) and
-[../EXPERIENCE_LEVELS.md](../EXPERIENCE_LEVELS.md). **Status: built on the
-`runner-levels` branch, PR open, not yet merged at the time of writing.**
+triathlete-scaled `est5k`. Merged and shipped. See [plans.md](plans.md) and
+[../EXPERIENCE_LEVELS.md](../EXPERIENCE_LEVELS.md).
 
-## Deferred
+An estimate may size training and may never become evidence. It prints paces
+with a tilde and is barred from race projections, benchmark history, exact
+race-pace quoting and automatic retargeting. That includes a 5k that arrived
+by a feel-based tuning nudge, which is stored but stamped `estimated`
+(`runAnchor` in `domain.js` is the one place that decides).
+
+## Since Tier 2: the nine-phase build-out
+
+The run arc formalised what was already shipped and added the rest. Full
+account in [../RUN_MODULE.md](../RUN_MODULE.md); the short version:
+
+- **Race pace is a calendar**, not a seed walk, with a dedicated midweek
+  `Race Pace` type (`run-race-pace.js`).
+- **Distance prescriptions** in kilometres or miles, minutes still canonical
+  (`run-units.js`).
+- **The 5 km benchmark** has provenance, history, and a test-to-proposal flow
+  (`run-benchmark.js`).
+- **Sizing, spacing, load and durability** each live in one readable table
+  (`run-sizing.js`, `run-plans.js`, `run-durability.js`).
+- **Review, fuelling and readiness** turn completed runs into evidence
+  (`run-review.js`, `run-fuelling.js`, `run-readiness.js`).
+- **A dashboard** answering five questions (`run-dashboard.js`).
+
+## Still deferred
 
 Duathlon and aquathlon; swim-only and bike-only races; run-only maintenance
-blocks; a deterministic race-pace calendar (rehearsals currently follow the seed
-walk); a dedicated midweek Race Pace workout type; distance-based prescriptions
-(Try stays minutes-first with honest ~km).
+blocks. All three need race-type strings the backend catalog does not yet
+carry, so nothing is built client-side: a plan that generates correctly and
+then fails to save is worse than no plan. `runpass9.test.js` pins their
+absence with the reason. Duathlon and aquathlon additionally need product
+design, a second run on bike-fatigued legs is not an ordinary run, and the
+load guardrails model one run per session.
 
 ## Key files
 
-`src/lib/plan.js` (`buildRun`, `TEMPLATES_RUN_ONLY`, `LONG_RUN`/`_CAP`,
-race-pace variants), `src/lib/runstats.js`, `src/lib/runload.js`,
-`src/lib/domain.js`.
+`src/lib/plan.js` (`buildRun`, `TEMPLATES_RUN_ONLY`, `LONG_RUN`/`_CAP`),
+`runschema.js`, `runstats.js`, `runload.js`, `run-benchmark.js`,
+`run-sizing.js`, `run-plans.js`, `run-durability.js`, `run-race-pace.js`,
+`run-units.js`, `run-review.js`, `run-fuelling.js`, `run-readiness.js`,
+`run-dashboard.js`, `domain.js` (`runAnchor`).
+
+Tests: `runpass1` through `runpass9`, plus `runpass`, `solopass`, `runload`.
