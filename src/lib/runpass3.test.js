@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { generatePlan } from './plan.js';
-import { RUN_TYPES, RUN_QUALITY_TYPES, isEffortPrescribed, runWorkoutIssues } from './runschema.js';
+import { RUN_TYPES, RUN_LADDER_TYPES, RUN_QUALITY_TYPES, isEffortPrescribed, runWorkoutIssues } from './runschema.js';
 import {
   RUN_SIZING, RUN_MIN_SESSION_MIN, RUN_HILL_GATE,
   runMainSet, runReps, runHillsAllowed, runSizingIssues,
@@ -106,7 +106,9 @@ describe('the sizing table is the one the engine reads', () => {
 
 describe('the ladder is stable and hills stay gated', () => {
   it('the ladder is exactly the shipped five, in order', () => {
-    expect(['Easy', ...RUN_QUALITY_TYPES]).toEqual(LADDER);
+    // the LADDER, not the quality category: phase 7 added 'Race Pace' to
+    // the latter, and it is deliberately not a rung
+    expect(['Easy', ...RUN_LADDER_TYPES]).toEqual(LADDER);
   });
 
   it('the hill gate is phase and level only, never duration', () => {

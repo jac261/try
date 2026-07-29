@@ -167,7 +167,12 @@ function fmtDur(sec) {
    laps, which render as plain splits with no verdicts — a split has no target
    to fail. Sub-30-second slivers (lap-button stubs) are dropped. */
 const REP_BANDS = {
-  run: { 'Threshold': ['threshold', 10], 'Tempo': ['tempo', 12], 'VO2 Intervals': ['interval', 10] },
+  /* 'Race Pace' resolves through pc.run.racePace, which computePaces sets
+     ONLY for a solo half or marathon with a real 5 km anchor. The lookup
+     below is pc[disc][band[0]], so an estimated athlete finds nothing there
+     and the session simply is not graded — the same condition that decided
+     whether their card printed a pace at all (phase 7 §2). */
+  run: { 'Threshold': ['threshold', 10], 'Tempo': ['tempo', 12], 'VO2 Intervals': ['interval', 10], 'Race Pace': ['racePace', 12] },
   // The Long swim stays OUT of the STEADY map on purpose: its broken and
   // pyramid variants bake planned rest into the recording, so the whole-
   // session average would read slow against a flat steady target. Every rep

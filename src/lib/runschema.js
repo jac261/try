@@ -65,23 +65,40 @@
 // The closed set, spelled exactly as the backend stores them. 'Long' is a
 // separate type rather than a role-flavoured Easy: it has its own builder
 // branch, its own duration table and its own caps.
-export const RUN_TYPES = ['Easy', 'Fartlek', 'Tempo', 'Threshold', 'VO2 Intervals', 'Long', 'Test'];
+export const RUN_TYPES = ['Easy', 'Fartlek', 'Tempo', 'Threshold', 'VO2 Intervals', 'Long', 'Test', 'Race Pace'];
 
 // The run's easy session. Named here so a fallthrough lands on Easy rather
 // than the first entry of some other table (the bike's recovery-week lesson,
 // where a missing easy type resolved into the Threshold branch).
 export const RUN_EASY_TYPE = 'Easy';
 
-// The quality rungs, in ladder order. INTENSITY_LADDER.run in plan.js is the
-// generation-side copy of this order; runpass1.test.js asserts the two agree,
-// because a ladder that disagrees with the judge is the failure that recurred
-// four times across the swim and bike arcs.
-export const RUN_QUALITY_TYPES = ['Fartlek', 'Tempo', 'Threshold', 'VO2 Intervals'];
+/* THE LADDER and THE CATEGORY are two different things, and phase 7 forced
+ * them apart. The ladder is a PROGRESSION: five rungs, and which one an
+ * athlete trains is a function of phase, level and race. 'Race Pace' is not
+ * a rung on it — a race-pace session is not "harder than Threshold", it is a
+ * different intent, prescribed by a calendar rather than climbed toward.
+ *
+ * But it IS quality, and everything that reasons about quality must count it:
+ * the spacing contract must keep it away from the other hard day, and the
+ * density signal must see it. Merging the two lists would put 'Race Pace' on
+ * the ladder; keeping only one would hide it from both.
+ */
+// The generation ladder, easiest to hardest. INTENSITY_LADDER.run in plan.js
+// is the generation-side copy of this order; runpass1.test.js asserts the two
+// agree, because a ladder that disagrees with the judge is the failure that
+// recurred four times across the swim and bike arcs.
+export const RUN_LADDER_TYPES = ['Fartlek', 'Tempo', 'Threshold', 'VO2 Intervals'];
+
+// Everything that counts as a hard day, ladder or not.
+export const RUN_QUALITY_TYPES = [...RUN_LADDER_TYPES, 'Race Pace'];
 
 // Types whose card carries a PACE target a review can grade against.
 // Fartlek is deliberately absent: it is prescribed by feel ('surges by feel'),
-// so there is no target to miss and no verdict to give.
-export const RUN_PACE_TYPES = ['Tempo', 'Threshold', 'VO2 Intervals'];
+// so there is no target to miss and no verdict to give. 'Race Pace' is here
+// only conditionally in practice: its band resolves through pc.run.racePace,
+// which exists only for a real benchmark, so an estimated athlete gets the
+// effort wording and no verdict, which is the same gate (§2).
+export const RUN_PACE_TYPES = ['Tempo', 'Threshold', 'VO2 Intervals', 'Race Pace'];
 
 export function isRunWorkout(w) {
   return !!w && w.discipline === 'run' && RUN_TYPES.includes(w.type)

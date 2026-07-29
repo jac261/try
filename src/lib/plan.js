@@ -2,6 +2,7 @@
 import { clamp, round5, lerp, fmtPace } from './units.js';
 import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
 import { runMainSet, runReps, runHillsAllowed, RUN_MIN_SESSION_MIN } from './run-sizing.js';
+import { racePaceForWeek, racePaceSession } from './run-race-pace.js';
 import { RACES, B_RACES, FITNESS, ZONES, saneWeightKg, poolFor, DEFAULT_POOL, runAnchor } from './domain.js';
 import { roundToPoolLength, poolLabel, unitShort, poolLengthM, pacePer100ForDisplay } from './swim-units.js';
 import { swimZoneTargets } from './swim-zones.js';
@@ -66,7 +67,22 @@ function computePaces(profile) {
     // fivekPace rides along for the solo race-pace variants (Riegel needs the
     // raw 5k pace, not an offset); plans stored before it existed simply fall
     // to effort wording via the null guard in racePaceKm.
-    run: { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8, fivekPace: p },
+    /* racePace is the ONE pace that exists only sometimes, and deliberately.
+       It is the target for the half/marathon race-pace work, and it resolves
+       only for a solo half or marathon whose 5 km anchor is real. That single
+       condition governs both surfaces: the card prints an exact pace when it
+       exists and effort wording when it does not, and the review's rep band
+       looks up this very key, so an estimated athlete is never GRADED against
+       a number they were never SHOWN (phase 7 §2). */
+    run: (() => {
+      const r = { recovery: p + 85, easy: p + 70, long: p + 78, tempo: p + 35, threshold: p + 12, interval: p - 8, fivekPace: p };
+      const rk = (RACES[profile.raceType] || {}).key;
+      const dist = rk === 'runmarathon' ? 42.195 : rk === 'runhalf' ? 21.0975 : null;
+      if (dist && profile.fivekSec && runAnchor(profile).kind === 'real') {
+        r.racePace = Math.round(p * Math.pow(dist / 5, RIEGEL_EXP - 1));
+      }
+      return r;
+    })(),
     // Swim zones are defined once in swim-zones.js; pc.swim carries every
     // zone target keyed by id, plus the legacy easy/steady/fast aliases so the
     // builders and review keep reading the same keys (byte-identical values).
@@ -229,7 +245,7 @@ function racePaceKm(pc, km, exp) {
   return pc.run && pc.run.fivekPace ? pc.run.fivekPace * Math.pow(km / 5, exp - 1) : null;
 }
 
-function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
+function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType, racePaceMin) {
   const v = n => (seed || 0) % n;
   // Durability: intervals on tired legs at the end of the long session build
   // fatigue resistance — a Build/Peak tool, never Base or recovery weeks, and
@@ -268,42 +284,40 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     // steady-aerobic pace (gauntlet catch). Fallback wording per distance:
     // marathon effort sits between long and tempo pace; half effort sits at
     // tempo, and claiming otherwise contradicted the quoted number.
-    let hasRacePace = false;
-    if (raceType === 'runmarathon' && (phase === 'Build' || phase === 'Peak')) {
-      hasRacePace = true;
-      const mp = pc.runEstimated ? null : racePaceKm(pc, 42.195, RIEGEL_EXP);
-      menu.push([
-        { label: 'Steady aerobic', min: Math.max(5, dur - 35), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
+    /* Race pace in the long run is now a CALENDAR decision, not a menu slot
+       (phase 7 §1). racePaceMin arrives from racePaceForWeek and is stored on
+       the workout so an ease or trim rebuild reproduces the same session.
+
+       This also retires the stepped seed walk here. That walk existed to break
+       the modulo alignment that made a four-slot menu unreachable under the
+       four-week recovery cadence; with race pace off the menu there are three
+       slots at most and the historic selector is correct again. The trap it
+       guarded against cannot occur, because the calendar does not select. */
+    if (racePaceMin) {
+      const km = raceType === 'runmarathon' ? 42.195 : 21.0975;
+      const rp = pc.runEstimated ? null : racePaceKm(pc, km, RIEGEL_EXP);
+      const name = raceType === 'runmarathon' ? 'marathon' : 'half marathon';
+      const lead = Math.max(5, dur - racePaceMin - 10);
+      segs = [
+        { label: 'Steady aerobic', min: lead, detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
         {
-          label: 'Final 35 min at your marathon effort', min: 35, zone: 'Z3',
-          detail: mp ? '~' + fmtPace(mp) + ' /km · smooth and controlled'
-            : 'Between your long run and tempo pace, smooth and controlled',
+          label: racePaceMin + ' min at your ' + name + ' effort', min: racePaceMin, zone: 'Z3',
+          /* Per-distance wording, restored rather than flattened. A single
+             generic line lost a deliberate distinction: the marathon effort
+             sits BETWEEN long-run and tempo pace while the half sits AT
+             tempo, and saying otherwise contradicted the quoted number when
+             one existed (the original gauntlet catch). */
+          detail: raceType === 'runmarathon'
+            ? (rp ? '~' + fmtPace(rp) + ' /km · smooth and controlled'
+              : 'Between your long run and tempo pace, smooth and controlled')
+            : (rp ? '~' + fmtPace(rp) + ' /km · settle in, do not chase it'
+              : 'Around your tempo pace, controlled'),
         },
-      ]);
-    } else if (raceType === 'runhalf' && (phase === 'Build' || phase === 'Peak')) {
-      hasRacePace = true;
-      const hp = pc.runEstimated ? null : racePaceKm(pc, 21.0975, RIEGEL_EXP);
-      menu.push([
-        { label: 'Steady aerobic', min: Math.max(5, dur - 35), detail: runDetail(pc, 'long', 'Z2'), zone: 'Z2' },
-        {
-          label: '25 min at your half marathon effort', min: 25, zone: 'Z3',
-          detail: hp ? '~' + fmtPace(hp) + ' /km · settle in, do not chase it'
-            : 'Around your tempo pace, controlled',
-        },
-        { label: 'Ease home', min: 10, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
-      ]);
+        { label: 'Ease home', min: Math.max(0, dur - lead - racePaceMin), detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+      ].filter(x => x.min > 0);
+    } else {
+      segs = menu[v(menu.length)];
     }
-    // The recovery-cadence selector trap, third sighting: flat seed % len
-    // strands whichever slot the cadence never reaches. Beginners recover
-    // every 3rd week, so their non-recovery seeds are never 2 mod 3 and a
-    // flat % 3 could NEVER pick the race-pace slot (gauntlet catch). The
-    // stepped walk applies whenever the race-pace variant is in the menu;
-    // menus without it keep their historic selectors so triathlon and
-    // 5k/10k output stays untouched.
-    const s0 = seed || 0;
-    segs = menu.length === 4 || (menu.length === 3 && hasRacePace)
-      ? menu[(s0 + Math.floor(s0 / menu.length)) % menu.length]
-      : menu[v(menu.length)];
   } else if (type === 'Easy') {
     title = 'Easy Run';
     const half = Math.round(dur / 2);
@@ -403,6 +417,28 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
         { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
       ],
     ][v(3)];
+  } else if (type === 'Race Pace') {
+    /* The midweek race-pace session (§2). Rep-based rather than one long
+       block: the intent is to rehearse the pace repeatedly and arrive able to
+       do it again, not to grind a single effort. Its band is pc.run.racePace,
+       which exists only for a real benchmark, so the fallback below is not a
+       degraded version of this card, it IS the card for an estimated athlete. */
+    title = 'Race-Pace Run';
+    const { warmup: wu, cooldown: cd, main: room } = runMainSet('Race Pace', dur);
+    /* The CALENDAR sizes the race-pace block, not the slot it landed in. The
+       slot's duration comes from the week's quality budget, so sizing off it
+       built 48 minutes of race pace into a session the calendar prescribed 25
+       for — the cap existed and the builder never consulted it. The slot's
+       remaining minutes go to the warm-up and cool-down, which is what the
+       flex pass does with them. */
+    const main = Math.min(room, racePaceMin || room);
+    const spec = racePaceSession({ raceKey: raceType, minutes: main, pacePerKm: pc.run && pc.run.racePace });
+    segs = spec ? [
+      { label: 'Warm-up', min: wu, detail: runDetail(pc, 'easy', 'Z2'), zone: 'Z2' },
+      { label: spec.label, min: main, detail: spec.detail, zone: 'Z3',
+        blocks: rep(spec.reps, spec.perMin, 'Z3', spec.floatMin, 'Z2') },
+      { label: 'Cool-down', min: cd, detail: runDetail(pc, 'easy', 'Z1'), zone: 'Z1' },
+    ] : [{ label: 'Steady', min: dur, detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' }];
   } else { // Threshold
     title = 'Threshold Run';
     const { warmup: wu, cooldown: cd } = runMainSet('Threshold', dur);
@@ -460,6 +496,7 @@ function buildRun(type, dur, pc, seed, phase, intensity = 0, raceType) {
     Fartlek: { label: 'Fartlek by feel', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
     'VO2 Intervals': { label: 'Hard aerobic effort', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
     Threshold: { label: 'Threshold effort', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
+    'Race Pace': { label: 'Race-pace effort', detail: runDetail(pc, 'tempo', 'Z3'), zone: 'Z3' },
   };
   segs = fitFlex(segs, dur, (type === 'Long' || type === 'Easy') ? 'lead' : 'tail', FB[type] || FB.Tempo);
   const dist = runDistance(segs, pc);
@@ -1559,8 +1596,8 @@ function intensityOf(profile) {
 // `role` is appended last so every existing positional call stays valid; only
 // buildSwim reads it today (see its note). Any new rebuild path MUST pass the
 // stored w.role — omitting it silently rebuilds a quality swim as an easy one.
-function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0, raceType, role) {
-  if (discipline === 'run') return buildRun(type, dur, pc, seed, phase, intensity, raceType);
+function buildWorkout(discipline, type, dur, pc, phase, seed, intensity = 0, raceType, role, racePaceMin) {
+  if (discipline === 'run') return buildRun(type, dur, pc, seed, phase, intensity, raceType, racePaceMin);
   if (discipline === 'bike') return buildBike(type, dur, pc, seed, phase, intensity);
   if (discipline === 'swim') return buildSwim(type, dur, pc, seed, phase, intensity, role);
   if (discipline === 'brick') return buildBrick(dur, pc, phase, seed, raceType);
@@ -1575,7 +1612,7 @@ export const easeWorkout = function (w, plan) {
   if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return w;
   const easyType = disc === 'swim' ? 'Technique' : (disc === 'bike' ? 'Endurance' : 'Easy');
   const dur = Math.max(25, round5(w.durationMin * 0.65));
-  const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role);
+  const built = buildWorkout(disc, easyType, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role, w.racePaceMin);
   return Object.assign({}, w, {
     type: easyType, title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
@@ -1596,7 +1633,7 @@ export const trimWorkout = function (w, plan, factor) {
   // raceType must ride along: the solo race-pace Long's variant menu is
   // sized by it, and a rebuild without it would flip a stored session's
   // format (the same class of bug as omitting w.role).
-  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role);
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role, w.racePaceMin);
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
@@ -1622,7 +1659,7 @@ export const boostWorkout = function (w, plan, factor) {
   // raceType must ride along: the solo race-pace Long's variant menu is
   // sized by it, and a rebuild without it would flip a stored session's
   // format (the same class of bug as omitting w.role).
-  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role);
+  const built = buildWorkout(disc, w.type, dur, plan.paces, w.phase, w.seed != null ? w.seed : w.week, intensityOf(plan.profile), plan.profile.raceType, w.role, w.racePaceMin);
   return Object.assign({}, w, {
     title: built.title, durationMin: dur,
     distance: built.distance, distEst: !!built.distEst, unit: built.unit, segments: built.segments,
@@ -2183,6 +2220,7 @@ export const generatePlan = function (profile, opts) {
      clock rather than advancing it. */
   const anchors = startAnchors(profile, pc);
   let trainingWeeksDone = 0;
+  const phaseWeeksDone = {};
   for (let w = 0; w < totalWeeks; w++) {
     const phase = phases[w];
     // The appended post-race recovery week: everything easy, race-week legs.
@@ -2265,6 +2303,15 @@ export const generatePlan = function (profile, opts) {
         mids.forEach(s => { const wd = weekdayQueue.shift(); if (wd !== undefined) dayMap[wd] = s; });
       }
     }
+
+    /* This week's race-pace prescription (phase 7 §1). phaseWeek counts the
+       non-recovery weeks of THIS phase already trained, which is what makes
+       the progression a calendar rather than a seed. */
+    const rpPlan = racePaceForWeek({
+      raceKey: race.key, phase, phaseWeek: phaseWeeksDone[phase] || 0,
+      isRecovery, isRaceWeek: w === raceWeekIdx,
+    }) || {};
+    if (!isRecovery) phaseWeeksDone[phase] = (phaseWeeksDone[phase] || 0) + 1;
 
     const workouts = [];
     // Per-week occurrence counter for duplicate disc:role tokens (solo
@@ -2357,10 +2404,15 @@ export const generatePlan = function (profile, opts) {
       if (aCap != null && !soloShakeout) dur = Math.min(dur, aCap);
       // Recovery weeks pin the canonical format; every other week rotates.
       const seed = isRecovery ? 0 : w;
-      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType, roleOut);
+      // Only the long run carries the in-run block; the midweek session is
+      // injected separately below.
+      const rpMin = (s.disc === 'run' && type === 'Long' && !soloShakeout) ? rpPlan.longMin : undefined;
+      const built = buildWorkout(s.disc, type, dur, pc, phase, seed, fitness.intensity, profile.raceType, roleOut, rpMin);
       workouts.push({
         id: w + '-' + d, week: w, phase: phase, date: date, seed: seed,
         discipline: s.disc, role: roleOut, type: type, title: built.title,
+        // stored so an ease or trim rebuild reproduces the same session
+        ...(rpMin ? { racePaceMin: rpMin } : {}),
         durationMin: dur, distance: built.distance, distEst: !!built.distEst, unit: built.unit,
         segments: built.segments, safety: built.safety || undefined,
         key: !soloShakeout && (s.role === 'long' || s.role === 'brick'),
@@ -2426,6 +2478,25 @@ export const generatePlan = function (profile, opts) {
           // open-water session; a pool 400/200 must not inherit its safety
           // wording (review catch 2026-07-27).
           safety: undefined,
+        });
+      }
+    }
+
+    /* The midweek race-pace session (phase 7 §2). Replaces the week's LATER
+       quality run, so the primary ladder session of the week is untouched and
+       the week does not gain a hard day — it swaps one. Never on a test week:
+       a test is already the week's race-specific effort. */
+    if (rpPlan.midweekMin && race.solo === 'run' && !testKind) {
+      const slots = workouts
+        .map((x, i) => ({ x, i }))
+        .filter(({ x }) => x.discipline === 'run' && x.role === 'quality' && !x.race && !x.test);
+      const target = slots.length ? slots[slots.length - 1] : null;
+      if (target) {
+        const dur = target.x.durationMin;
+        const built = buildWorkout('run', 'Race Pace', dur, pc, phase, target.x.seed, fitness.intensity, profile.raceType, 'quality', rpPlan.midweekMin);
+        workouts[target.i] = Object.assign({}, target.x, {
+          type: 'Race Pace', racePaceMin: rpPlan.midweekMin, title: built.title, distance: built.distance,
+          distEst: !!built.distEst, unit: built.unit, segments: built.segments,
         });
       }
     }

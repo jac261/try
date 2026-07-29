@@ -5,7 +5,7 @@ import { intervalRows } from './review.js';
 import { predictRaceTimes } from './runstats.js';
 import { runAnchor, hasReal5k, FITNESS, RACES } from './domain.js';
 import {
-  RUN_TYPES, RUN_EASY_TYPE, RUN_QUALITY_TYPES, RUN_PACE_TYPES,
+  RUN_TYPES, RUN_EASY_TYPE, RUN_LADDER_TYPES, RUN_QUALITY_TYPES, RUN_PACE_TYPES,
   isRunWorkout, isRunSegment, isEffortPrescribed, runWorkoutIssues, isTrainingRun,
 } from './runschema.js';
 
@@ -131,7 +131,14 @@ describe('the ladder and the judge read the same table', () => {
     expect(m, 'INTENSITY_LADDER.run not found in plan.js').toBeTruthy();
     const ladder = m[1].split(',').map(s => s.trim().replace(/^'|'$/g, ''));
     expect(ladder[0]).toBe(RUN_EASY_TYPE);
-    expect(ladder.slice(1)).toEqual(RUN_QUALITY_TYPES);
+    /* Compared against RUN_LADDER_TYPES, not RUN_QUALITY_TYPES. Phase 7 split
+       the two: the ladder is a progression the athlete climbs, while quality
+       is the category of hard days. 'Race Pace' is quality but is prescribed
+       by a calendar rather than climbed toward, so it belongs in one and not
+       the other. Comparing against the category here would demand a ladder
+       rung that must not exist. */
+    expect(ladder.slice(1)).toEqual(RUN_LADDER_TYPES);
+    expect(RUN_QUALITY_TYPES).toEqual([...RUN_LADDER_TYPES, 'Race Pace']);
   });
 
   it('every pace-graded type is a quality type, and Fartlek is not graded', () => {

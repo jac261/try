@@ -65,6 +65,8 @@ export const RUN_SIZING = {
   Tempo: { warmup: 12, cooldown: 10, lead: 22, mainFloor: 15, flex: 'tail' },
   Threshold: { warmup: 15, cooldown: 10, lead: 25, mainFloor: null, flex: 'tail' },
   'VO2 Intervals': { warmup: 15, cooldown: 10, lead: 25, mainFloor: null, flex: 'tail' },
+  // The midweek race-pace session, sized like the other quality formats.
+  'Race Pace': { warmup: 15, cooldown: 10, lead: 25, mainFloor: 12, flex: 'tail' },
   // The 5 km test is a fixed protocol, not a sized session: its shape is the
   // test, and scaling it would stop it being comparable to the last one.
   Test: { warmup: 0, cooldown: 0, lead: 0, mainFloor: null, flex: 'tail' },

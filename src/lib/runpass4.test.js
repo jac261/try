@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generatePlan } from './plan.js';
 import { RACES } from './domain.js';
-import { RUN_QUALITY_TYPES } from './runschema.js';
+import { RUN_LADDER_TYPES, RUN_QUALITY_TYPES } from './runschema.js';
 import { SOLO_SPACING, soloWeekSpacingIssues, soloPlanIssues } from './run-plans.js';
 
 /* Run phase 4 — the standalone run plan's architecture.
@@ -153,14 +153,18 @@ describe('distance-specific long run behaviour', () => {
             if (!(x.segments || []).some(s => RP.test(s.label || ''))) return;
             seen.byRace[rt] = (seen.byRace[rt] || 0) + 1;
             seen.byPhase[w.phase] = (seen.byPhase[w.phase] || 0) + 1;
-            // race pace belongs to the long run, never to a midweek session
-            expect(x.type, rt + '/' + fit + ' race pace on a ' + x.type).toBe('Long');
+            /* Race-pace work lives in exactly two places as of phase 7: a
+               block inside the long run, and the dedicated midweek 'Race
+               Pace' session §2 adds. Anything else carrying race-pace copy
+               is a leak into a session that was never meant to hold it. */
+            expect(['Long', 'Race Pace'], rt + '/' + fit + ' race pace on a ' + x.type).toContain(x.type);
           }));
         }
       }
     }
     expect(Object.keys(seen.byRace).sort()).toEqual(['runhalf', 'runmarathon']);
-    expect(Object.keys(seen.byPhase).sort()).toEqual(['Build', 'Peak']);
+    // Taper carries the short familiar exposure, midweek only (§1)
+    expect(Object.keys(seen.byPhase).sort()).toEqual(['Build', 'Peak', 'Taper']);
   });
 
   it('the long run share of the week grows with race distance', () => {
@@ -190,7 +194,9 @@ describe('distance-specific long run behaviour', () => {
       const p = planFor(rt, 'intermediate', 5);
       const types = new Set();
       p.weeks.forEach(w => runsIn(w).forEach(x => { if (RUN_QUALITY_TYPES.includes(x.type)) types.add(x.type); }));
-      return RUN_QUALITY_TYPES.filter(t => types.has(t)).pop();
+      // the ladder rung reached, so a Race Pace session does not read as a
+      // higher rung than VO2 simply by sorting last
+      return RUN_LADDER_TYPES.filter(t => types.has(t)).pop();
     };
     expect(topRung('run5k')).toBe('VO2 Intervals');
     expect(topRung('run10k')).toBe('VO2 Intervals');

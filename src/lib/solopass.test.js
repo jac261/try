@@ -191,9 +191,19 @@ describe('race-pace long runs', () => {
     const withRp = p.weeks.filter(w => w.workouts.some(x =>
       x.segments && x.segments.some(s => s.label && s.label.indexOf('marathon effort') >= 0)));
     expect(withRp.length).toBeGreaterThan(0);
+    /* Taper joins Build and Peak as of run phase 7. §1 asks for "shorter
+       familiar race-pace exposures" in the taper, and they arrive as a short
+       MIDWEEK session rather than inside the long run, so the taper's longest
+       session stays easy in the week it most needs to be. Base is still never
+       race-specific, and recovery weeks still carry none. */
     withRp.forEach(w => {
-      expect(['Build', 'Peak']).toContain(w.phase);
+      expect(['Build', 'Peak', 'Taper']).toContain(w.phase);
       expect(w.isRecovery).toBe(false);
+    });
+    // and any race-pace work in Taper is the midweek session, never the long
+    withRp.filter(w => w.phase === 'Taper').forEach(w => {
+      w.workouts.filter(x => (x.segments || []).some(s => (s.label || '').includes('marathon effort')))
+        .forEach(x => expect(x.type).toBe('Race Pace'));
     });
     // pace range quoted with a tilde from the real 5k
     const seg = withRp[0].workouts.flatMap(x => x.segments || []).find(s => s.label.indexOf('marathon effort') >= 0);
