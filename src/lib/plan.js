@@ -1743,7 +1743,8 @@ export const applyTrackerFitness = function (plan, fields, nowISO) {
   // Local calendar day, matching retarget's snapshot convention (iso(), not the
   // UTC slice of the timestamp — they differ around midnight).
   const snapshot = { date: iso(new Date(nowISO)), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness,
-    ...(old.ftpMeta ? { ftpMeta: old.ftpMeta } : {}), ...(old.cssMeta ? { cssMeta: old.cssMeta } : {}) };
+    ...(old.ftpMeta ? { ftpMeta: old.ftpMeta } : {}), ...(old.cssMeta ? { cssMeta: old.cssMeta } : {}),
+    ...(old.fivekMeta ? { fivekMeta: old.fivekMeta } : {}) };
   // fitnessUpdatedAt lives on the PROFILE (stored verbatim as ProfileJson, so it
   // survives the server round-trip; a top-level plan field would be dropped by
   // toClientState). It exists so Settings can attribute "Fitness updated" to a

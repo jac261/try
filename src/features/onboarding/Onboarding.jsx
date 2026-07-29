@@ -49,6 +49,7 @@ export function Onboarding({ onCreate }) {
     const mon = T.startOfWeekMonday(new Date());
     const maintenance = f.raceType === 'maintenance';
     const css100Sec = f.excludedDiscipline === 'swim' ? null : (() => { const d = T.parseTimeToSec(f.css100); return d != null ? Math.round(T.css100mFromDisplay(d, f.pool)) : null; })();
+    const fivekSec0 = f.excludedDiscipline === 'run' ? null : T.parseTimeToSec(f.fivek);
     onCreate({
       name: f.name.trim() || 'Athlete', raceType: f.raceType, fitness: f.fitness,
       trainingDays: f.trainingDays, longDay: f.longDay,
@@ -58,7 +59,11 @@ export function Onboarding({ onCreate }) {
       // never submit a number for the excluded discipline: the field hides,
       // but a value typed BEFORE selecting the exclusion would still be in
       // state (gauntlet catch: type a 5k time, go back, exclude running)
-      fivekSec: f.excludedDiscipline === 'run' ? null : T.parseTimeToSec(f.fivek),
+      fivekSec: fivekSec0,
+      // a hand-entered starting 5 km is a manual source, dated to onboarding.
+      // It is a time the athlete ran, so it is a real benchmark from the
+      // first day, and runAnchor reports it as such.
+      ...(fivekSec0 != null ? { fivekMeta: { source: 'manual', measuredAt: T.iso(new Date()), confidence: 'medium' } } : {}),
       css100Sec,
       // a hand-entered starting CSS is a manual source, dated to onboarding;
       // no value stays 'estimated' (domain.swimThreshold's null-css default)

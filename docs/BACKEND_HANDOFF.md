@@ -690,6 +690,7 @@ subset is safe and shipping none breaks nothing.
 | 4 | `normalizedWatts` | activity | Intensity factor, power-based TSS, variability index |
 | 5 | Best power by duration | new endpoint | The rider profile entirely — see the power-curve section for the required per-point metadata |
 | 6 | `weeklyHours`, `longestSwimM`, `longestRideMin`, `longestRunMin` | athlete profile | Start anchors surviving a fresh-device recovery; without them a reinstalled athlete silently reverts to race-sized first weeks |
+| 7 | `totalElevationGain`, `totalElevationLoss` (metres) | activity | Rejecting a downhill-assisted 5 km before it becomes the benchmark race projections extrapolate from |
 
 A power **stream** would subsume 3, 4 and 5 together, if that is ever easier
 to expose than three separate computed fields. Ask 6 is the only one that is
@@ -702,4 +703,22 @@ reviews are computed when a workout sheet is opened and then lost. And in ask
 5, `source` (the power meter identifier) is the single most valuable field —
 without it a new power meter reads as a sudden fitness gain at every duration,
 which is the one error an athlete has no way to catch for themselves.
+
+Ask 7 is new and small, and it pairs with ask 3. The run's 5 km benchmark now
+accepts a recorded test automatically, and its spec asks us to refuse three
+kinds of effort we currently cannot detect:
+
+| Refuse | Needs | Status |
+|---|---|---|
+| A partial 5 km | nothing | done — the lap must be a real 5 km, never scaled up from short |
+| A treadmill result | nothing | done — `VirtualRun` is rejected outright |
+| A heavily interrupted effort | ask 3 (`elapsedTimeSec`) | not possible today |
+| A downhill-assisted effort | ask 7 (elevation) | not possible today |
+
+Until 3 and 7 land, a point-to-point downhill 5 km or a run with three long
+stops at traffic lights can set the benchmark that every race projection is
+extrapolated from. The anchor is athlete-controlled, so nothing is applied
+without a tap, but the proposal we show them is more confident than the
+evidence deserves. Neither field is urgent on its own; both are cheap if you
+are already touching the activity DTO.
 

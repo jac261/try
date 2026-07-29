@@ -152,11 +152,25 @@ export function hasRealFtp(profile) {
  *
  * Only kind 'real' may drive race projections or exact race-pace quoting.
  */
+// The sources a REAL 5 km can have (run phase 2 §1). 'recorded-race' is an
+// actual race result rather than a self-administered test, which is why it
+// sits alongside 'try-test' rather than under 'manual'. There is deliberately
+// no 'activity-model' entry, the bike's rolling estimate: a 5 km time is a
+// performance, not something to be modelled from easy runs.
+export const RUN_5K_SOURCES = ['manual', 'recorded-race', 'try-test', 'intervals-icu'];
 export function runAnchor(profile) {
   const p = profile || {};
   if (p.fivekSec) {
     const meta = p.fivekMeta || {};
-    return { kind: 'real', timeSec: p.fivekSec, measuredAt: meta.measuredAt || null };
+    return {
+      kind: 'real',
+      timeSec: p.fivekSec,
+      // Provenance falls back to 'manual' the way the bike's does: a number
+      // on the profile with no meta got there by someone typing it.
+      source: RUN_5K_SOURCES.includes(meta.source) ? meta.source : 'manual',
+      measuredAt: meta.measuredAt || null,
+      confidence: FTP_CONFIDENCE.includes(meta.confidence) ? meta.confidence : null,
+    };
   }
   const lvl = FITNESS[p.fitness] || FITNESS.intermediate;
   const soloRun = (RACES[p.raceType] || {}).solo === 'run';

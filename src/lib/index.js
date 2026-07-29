@@ -14,6 +14,7 @@ export * from './swim-open-water.js';
 export * from './swim-dashboard.js';
 export * from './swim-strokes.js';
 export * from './runschema.js';
+export * from './run-benchmark.js';
 export * from './bikeschema.js';
 export * from './bike-zones.js';
 export * from './bike-distance.js';

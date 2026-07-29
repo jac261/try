@@ -192,11 +192,15 @@ describe('hill work is prescribed by effort, never graded by pace', () => {
 });
 
 describe('the 5 km anchor: real and estimated stay distinct', () => {
-  it('a real time is real, and carries no invented source', () => {
+  it('a real time is real, and defaults its provenance to manual', () => {
+    // Phase 2 gave the real branch provenance too. A bare fivekSec with no
+    // meta got onto the profile by someone typing it, so 'manual' is the
+    // honest default rather than a guess.
     const a = runAnchor({ ...base, raceType: 'run10k' });
     expect(a.kind).toBe('real');
     expect(a.timeSec).toBe(1500);
-    expect(a.source).toBeUndefined();
+    expect(a.source).toBe('manual');
+    expect(a.confidence).toBe(null);
     expect(hasReal5k({ ...base })).toBe(true);
   });
 

@@ -60,7 +60,13 @@ describe('fitness watcher v2 (run and swim thresholds)', () => {
     const r = eftpProposal({ thresholds: { runThresholdPace: 1000 / 310 }, plan: p2, todayISO: TODAY });
     expect(r.sport).toBe('run');
     expect(r.up).toBe(true); // 310 s/km is faster than the plan's 336
-    expect(r.retarget).toEqual({ fivekSec: Math.round((310 - 12) * 5) });
+    // Provenance rides along, as it always has for the swim and bike. The run
+    // used to retarget with a bare fivekSec, leaving the one anchor that
+    // powers race projections undateable and unattributable (phase 2 §1).
+    expect(r.retarget).toEqual({
+      fivekSec: Math.round((310 - 12) * 5),
+      fivekMeta: { source: 'intervals-icu', measuredAt: TODAY, confidence: 'medium' },
+    });
     expect(r.why).toContain('/km');
   });
 

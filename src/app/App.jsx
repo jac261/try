@@ -142,6 +142,7 @@ export function App({ storage, getToken, user }) {
   // fetch error or ambiguous laps), so the plan surface never re-fetches or
   // blocks on it. date is the test's effective day, for freshness gating.
   const [cssTest, setCssTest] = useState(null);
+  const [runTest, setRunTest] = useState(null);
   // Phase 3b: the two swim CSS sheets — the retarget evidence (spec §6) and
   // the retest protocol (§4). Booleans/objects, not routes: they ride the
   // same scrim pattern as every other sheet.
@@ -466,6 +467,39 @@ export function App({ storage, getToken, user }) {
       .catch(() => { if (!cancelled) setCssTest({ actId: a.id, date: tests[0].date, test: null, issue: 'The laps for that recording could not be loaded.' }); });
     return () => { cancelled = true; };
   }, [plan, activities, log, moves, cssTest, sync]);
+
+  // Auto-5k: the same machinery for the plan's run 5 km test (phase 2 §5).
+  // run5k is a first-class test kind and was the only one of the three whose
+  // result never reached the profile on its own, so an athlete who ran the
+  // test still had to read their watch and retype the time.
+  useEffect(() => {
+    if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !Array.isArray(activities) || !activities.length) return;
+    const today = T.iso(new Date());
+    const tests = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.test && w.testKind === 'run5k' && log[w.id])
+      .map(w => ({ w, date: (moves && moves[w.id]) || w.date }))
+      .filter(x => {
+        const age = T.daysBetween(x.date, today);
+        return age >= 0 && age <= T.EFTP_RULES.freshDays;
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    if (!tests.length) return;
+    const a = T.run5kTestActivityFor({ activities, date: tests[0].date });
+    if (!a || (runTest && runTest.actId === a.id)) return;
+    let cancelled = false;
+    sync.loadActivityIntervals(a.id)
+      // As with the swim: when the laps do not parse, keep WHY, so a partial
+      // 5 km or a treadmill recording explains itself instead of the app
+      // going quiet. fivekTestIssues takes the ACTIVITY too, because the
+      // treadmill rejection is a property of the recording, not its laps.
+      .then(rows => {
+        if (cancelled) return;
+        const test = T.isIndoor(a) ? null : T.fivekFromTestIntervals(rows);
+        setRunTest({ actId: a.id, date: tests[0].date, test, issue: test ? null : T.fivekTestIssues(rows, a) });
+      })
+      .catch(() => { if (!cancelled) setRunTest({ actId: a.id, date: tests[0].date, test: null, issue: 'The laps for that recording could not be loaded.' }); });
+    return () => { cancelled = true; };
+  }, [plan, activities, log, moves, runTest, sync]);
 
   // Durability (coach brain pass 2): reads for matched long sessions,
   // computed from each recording's laps, cached per activity id. Bounded
@@ -935,7 +969,8 @@ export function App({ storage, getToken, user }) {
     // threshold history can say where each past number came from rather
     // than only what it was (phase 2 §3 auditability).
     const snapshot = { date: T.iso(new Date()), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness,
-      ...(old.ftpMeta ? { ftpMeta: old.ftpMeta } : {}), ...(old.cssMeta ? { cssMeta: old.cssMeta } : {}) };
+      ...(old.ftpMeta ? { ftpMeta: old.ftpMeta } : {}), ...(old.cssMeta ? { cssMeta: old.cssMeta } : {}),
+      ...(old.fivekMeta ? { fivekMeta: old.fivekMeta } : {}) };
     const profile = withWeight(Object.assign({}, old, fields, { fitnessHistory: (old.fitnessHistory || []).concat([snapshot]) }));
     // Hold the frequency-swap verdict steady: a retarget keeps the structure,
     // and a flipped verdict would change disciplines at ids the log joins on.
@@ -1053,7 +1088,13 @@ export function App({ storage, getToken, user }) {
   // stale state entry simply stops being passed once the test ages out.
   const cssFresh = cssTest && cssTest.date
     && T.daysBetween(cssTest.date, T.iso(new Date())) <= T.EFTP_RULES.freshDays;
-  const eftp = T.eftpProposal({ activities, thresholds, plan, todayISO: T.iso(new Date()), cssTest: cssFresh ? cssTest : null });
+  const runFresh = runTest && runTest.date
+    && T.daysBetween(runTest.date, T.iso(new Date())) <= T.EFTP_RULES.freshDays;
+  const eftp = T.eftpProposal({
+    activities, thresholds, plan, todayISO: T.iso(new Date()),
+    cssTest: cssFresh ? cssTest : null,
+    runTest: runFresh ? runTest : null,
+  });
   // The open week's decision, computed live for Progress and labelled as in
   // progress there; never stored (only closed weeks freeze).
   const coachNow = T.decideWeek({
