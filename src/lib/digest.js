@@ -131,7 +131,7 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
       load: loads.length ? Math.round(loads.reduce((s, v) => s + v, 0)) : null,
       loadEstimated: acts.some(a => a.estimated),
       fitness: fitnessLine(wellness, weekMonday, weekEnd),
-      missed: [], engine: [], ahead: null,
+      missed: [], raceUnlogged: [], engine: [], ahead: null,
     };
   }
 
@@ -156,12 +156,18 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
   // Races stay OUT of this list: the A race is unloggable by design — every
   // toggle gates on !w.race, autolog too — so "no log entry" is the app's
   // ignorance, not the athlete's absence; a "didn't happen" line here fired
-  // for every athlete post-race (gauntlet catch 2026-07-30). Tune-ups
-  // (bRace) stay IN because they are tickable — this line is a prompt the
-  // athlete can act on, not a verdict. A run tune-up's lone in-window
-  // recording also proposes itself, but brick tune-ups, ambiguous days and
-  // out-of-window recordings only ever close by the athlete's own tap.
-  const missed = sessions.filter(w => eff(w) < todayISO && !(log || {})[w.id])
+  // for every athlete post-race (gauntlet catch 2026-07-30).
+  const missed = sessions.filter(w => eff(w) < todayISO && !w.bRace && !(log || {})[w.id])
+    .map(w => ({ title: w.title || w.type, day: eff(w) }));
+  // The unmarked tune-up keeps its own prompt line rather than a "didn't
+  // happen" verdict (2026-07-31, reconciling two rounds of gauntlet catches):
+  // it must stay visible and actionable — brick tune-ups, ambiguous days and
+  // out-of-window recordings only ever close by the athlete's own tap, even
+  // though a run tune-up's lone in-window recording proposes itself — but
+  // the coach card on the same screen says the race counts neither way, so
+  // asserting the miss here would contradict it. It also stays in the
+  // planned count, so this line explains the shortfall the counts show.
+  const raceUnlogged = sessions.filter(w => w.bRace && eff(w) < todayISO && !(log || {})[w.id])
     .map(w => ({ title: w.title || w.type, day: eff(w) }));
 
   // Engine rows: the accepted weekly proposals quoted VERBATIM from the
@@ -223,7 +229,7 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
     // the digest can say when it was, never whether or how it went.
     raceDays: races.map(w => ({ title: w.title || 'Race', day: eff(w) })),
     fitness: fitnessLine(wellness, weekMonday, weekEnd),
-    missed, engine, ahead,
+    missed, raceUnlogged, engine, ahead,
   };
 }
 

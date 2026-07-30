@@ -233,9 +233,9 @@ describe('durability at the weekly decision', () => {
     expect(d.disciplines.run.decision).toBe('progress'); // held-strong adds no positive weight, it just fails to veto
   });
 
-  it('ruleVersion stamps 2 and every new string obeys the copy rules', () => {
+  it('ruleVersion stamps the current version and every new string obeys the copy rules', () => {
     const d = atProgress({ durabilityByDiscipline: { run: { read: corroborated } } });
-    expect(d.ruleVersion).toBe(2);
+    expect(d.ruleVersion).toBe(3); // v3: tune-up races judged as races (a literal, so an accidental bump fails here)
     const texts = [d.disciplines.run.headline]
       .concat(d.disciplines.run.evidence.map(e => e.reading))
       .concat(d.overall.evidence.map(e => e.reading));
