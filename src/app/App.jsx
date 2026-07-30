@@ -1097,6 +1097,33 @@ export function App({ storage, getToken, user }) {
     setLog(l => ({ ...l, [id]: entry }));
     if (gid(id)) sync.saveLog(gid(id), entry);
   };
+  /* Phase 1 (2026-07-30): persist a computed review. The sheet and the recap
+     REPORT what they computed; this decides whether it is worth a write.
+     reviewChanges skips nulls (a still-loading reps fetch must not clear a
+     stored review) and deep-diffs against the stored copy (reopening is
+     free). Entry-less ids — ad-hoc sessions, races — never persist: a review
+     rides a done log entry or not at all. The local merge means the
+     dashboards and retest evidence see the review THIS session, not only
+     after a rehydrate. */
+  const persistReview = (id, fields) => {
+    const entry = log[id];
+    const changes = T.reviewChanges(entry, fields);
+    if (!changes) return;
+    const merged = { ...entry, ...changes };
+    setLog(l => ({ ...l, [id]: merged }));
+    if (gid(id)) sync.saveReview(gid(id), merged, changes, T.REVIEW_ENGINE_VERSIONS);
+  };
+  /* The technique-cue answer. Same endpoint, bare enum rather than an
+     envelope; deselecting clears with an explicit null (the backend's
+     omitted-preserves semantics mean only a named null deletes). */
+  const answerCue = (id, cue) => {
+    const entry = log[id];
+    if (!entry) return;
+    const merged = { ...entry };
+    if (cue) merged.techniqueCue = cue; else delete merged.techniqueCue;
+    setLog(l => ({ ...l, [id]: merged }));
+    if (gid(id)) sync.saveReview(gid(id), merged, { techniqueCue: cue || null });
+  };
   const todaysHard = () => { const t = T.iso(new Date()); return plan.weeks.flatMap(wk => wk.workouts).filter(w => effDate(w, moves) === t && INTENSITY_TYPES[w.type] && !w.race); };
   const easeToday = () => {
     const hard = todaysHard(); if (!hard.length) return;
@@ -1482,6 +1509,7 @@ export function App({ storage, getToken, user }) {
         const a = recap.activity || recordingFor(w);
         return a ? <RecapSlides workout={w} activity={a} plan={plan} log={log} moves={moves}
           onLoadIntervals={sync.loadActivityIntervals} onLoadRoute={sync.loadActivityRoute} onClose={() => setRecap(null)}
+          onReview={persistReview}
           onDetails={() => { setRecap(null); setDetail(w); }} /> : null;
       })()}
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
@@ -1511,6 +1539,8 @@ export function App({ storage, getToken, user }) {
           ? (displayActivities || []).find(x => 'adhoc-' + x.id === detail.id) || null
           : (log[detail.id] ? recordingFor(detail) : null)}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
+        onCue={answerCue} cueAnswer={(log[detail.id] || {}).techniqueCue}
+        onReview={persistReview}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}
         onLogResult={() => {

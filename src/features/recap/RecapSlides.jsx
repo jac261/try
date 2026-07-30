@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { useSheetFocus } from '@/utils/useSheetFocus.js';
@@ -116,7 +116,7 @@ function RouteMap({ route, discipline }) {
   );
 }
 
-export function RecapSlides({ workout, activity, plan, log, moves, onLoadIntervals, onLoadRoute, onClose, onDetails }) {
+export function RecapSlides({ workout, activity, plan, log, moves, onLoadIntervals, onLoadRoute, onClose, onDetails, onReview }) {
   const [curKind, setCurKind] = useState(null); // track the slide by kind, not
   const [reps, setReps] = useState(null);       // position — the deck grows when reps load
   // Same modal conventions as every sheet: focus moves in, Tab is trapped,
@@ -141,6 +141,20 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
     onLoadRoute(actId).then(r => { if (!gone) setRoute(r); });
     return () => { gone = true; };
   }, [actId, onLoadRoute]);
+
+  /* Phase 1 (2026-07-30): the deck is a write surface too. Closing the recap
+     is closing the review — many athletes watch the deck and never open the
+     sheet — so the same computeReviews the sheet persists from runs here and
+     reports upward. The app's handler diffs, so the deck and the sheet can
+     both report the same session and only one write happens. */
+  const feel = (log && log[workout.id] && log[workout.id].feel) || activity.feel;
+  const reviews = useMemo(() => T.computeReviews({
+    workout, activity, intervals: reps, paces: plan.paces, profile: plan.profile, feel,
+  }), [workout, activity, reps, plan, feel]);
+  useEffect(() => {
+    if (!onReview) return;
+    if (reviews.swimReview || reviews.bikeReview || reviews.runReview) onReview(workout.id, reviews);
+  }, [onReview, reviews, workout.id]);
 
   const slides = T.buildRecap({
     workout, activity, intervals: reps, route, paces: plan.paces,

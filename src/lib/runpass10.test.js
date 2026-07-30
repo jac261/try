@@ -159,9 +159,15 @@ describe('audit completeness: the phase 8 and 9 surfaces have callers', () => {
   };
 
   it('DetailSheet feeds the run review into the one review voice', async () => {
+    /* Phase 1 moved the computation into computeReviews (review-persist.js)
+       so the sheet and the recap share one write path; the wiring this
+       guard protects — a run review actually reaching reviewActivity —
+       now spans two files. */
     const src = await read('../components/DetailSheet.jsx');
-    expect(src).toMatch(/runReview\(\{ workout: w/);
-    expect(src).toMatch(/reviewActivity\(\{[^}]*runReview: rr/);
+    expect(src).toMatch(/T\.computeReviews\(\{ workout: w/);
+    expect(src).toMatch(/reviewActivity\(\{[\s\S]{0,200}runReview: reviews\.runReview/);
+    const persist = await read('./review-persist.js');
+    expect(persist).toMatch(/runReview\(\{ workout,/);
     // and the fuel tap is graded against the RUN's numbers on a run
     expect(src).toMatch(/runFuellingOutcome/);
     expect(src).toMatch(/runFuellingPlan/);

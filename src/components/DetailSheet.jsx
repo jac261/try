@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { useSheetFocus } from '@/utils/useSheetFocus.js';
@@ -40,7 +40,7 @@ const WHY_DISC = {
   'swim:Long': 'Steady, patient distance work. An even rhythm from the first length to the last: the volume does the work when your form holds it together.',
 };
 
-export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed, fuelLog, onFuel, positionLog, onPosition, brick, onCue, cueAnswer }) {
+export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onResetMove, onLogResult, feel, onFeel, onRestore, onRemove, activity, onLoadIntervals, onSupport, onWhatIf, onReplayRecap, missedReason, onMissed, fuelLog, onFuel, positionLog, onPosition, brick, onCue, cueAnswer, onReview }) {
   // The rep table: lazily fetch the recording's interval analysis once the
   // session is done and matched. null → loading/none; [] handled by the lib.
   const [reps, setReps] = useState(null);
@@ -51,6 +51,21 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
     onLoadIntervals(actId).then(list => { if (!gone) setReps(list); });
     return () => { gone = true; };
   }, [actId, onLoadIntervals]);
+  /* Phase 1 (2026-07-30): the reviews, computed once per input change rather
+     than inline in the render, because they are now WRITTEN as well as
+     shown. The same conditions the render always used; ad-hoc exclusion
+     lives inside computeReviews. */
+  const reviews = useMemo(() => (done && activity
+    ? T.computeReviews({ workout: w, activity, intervals: reps, paces: plan.paces, profile: plan.profile, feel })
+    : {}), [done, activity, w, reps, plan, feel]);
+  /* Report the computed reviews upward for persistence. The sheet only ever
+     REPORTS — the app's handler diffs against the stored copy and decides
+     whether anything is worth a write, so reopening a sheet is free and a
+     still-loading reps fetch (no swim review yet) can never clear one. */
+  useEffect(() => {
+    if (!onReview) return;
+    if (reviews.swimReview || reviews.bikeReview || reviews.runReview) onReview(w.id, reviews);
+  }, [onReview, reviews, w.id]);
   const disc = D[w.discipline];
   /* §1/§3: does a run follow this ride? A brick session is one by definition,
      and that is the only way it happens — the generator never schedules a
@@ -96,10 +111,11 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
               <button key={k} className={'feelbtn' + (feel === k ? ' on ' + k : '')} onClick={() => onFeel(w.id, k)}>{lab}</button>)}
           </div>
           {/* Phase 5 (§5): one question after a technique session, and only
-              a technique session. It biases which drills come next; it makes
-              no claim to have measured anyone's stroke. Dormant until the
-              backend carries the field, so it is offered only when the app
-              can actually store the answer. */}
+              a technique session. It makes no claim to have measured anyone's
+              stroke, and it deliberately does NOT yet bias drill selection —
+              that write would change generated plans (the phase 1 boundary).
+              Live since 2026-07-30: the backend stores the answer and App
+              passes onCue. */}
           {onCue && w.type === 'Technique' && (() => {
             const chosen = cueAnswer || null;
             return <>
@@ -254,17 +270,12 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           // Phase 4: the per-rep coaching read for swims, computed from the
           // same laps the rep table shows. reviewActivity takes it and
           // speaks with one voice — no average verdict beside a per-rep one.
-          const sr = w.discipline === 'swim' && !w.adhoc && reps
-            ? T.swimReview({ workout: w, activity, intervals: reps, paces: plan.paces, feel }) : null;
-          // Phase 5: the bike's interval engine, same contract as the swim's.
-          const br = w.discipline === 'bike' && !w.adhoc
-            ? T.bikeReview({ workout: w, activity, intervals: reps, paces: plan.paces, feel }) : null;
-          // Phase 8's run review, computed from the SAME intervalRows the
-          // splits table below renders, so the two cannot disagree. It was
-          // built with no caller (audit catch 2026-07-30).
-          const rr = w.discipline === 'run' && !w.adhoc
-            ? T.runReview({ workout: w, activity, rows: T.intervalRows({ workout: w, intervals: reps, paces: plan.paces, activity }), profile: plan.profile, feel }) : null;
-          const rv = T.reviewActivity({ workout: w, activity, paces: plan.paces, log: null, swimReview: sr, bikeReview: br, runReview: rr });
+          // Computed in the reviews memo above (they persist now, so the
+          // computation is shared with the report-upward effect). Run is
+          // built from the SAME intervalRows the splits table below renders,
+          // so the two cannot disagree (audit catch 2026-07-30).
+          const rv = T.reviewActivity({ workout: w, activity, paces: plan.paces, log: null,
+            swimReview: reviews.swimReview || null, bikeReview: reviews.bikeReview || null, runReview: reviews.runReview || null });
           if (!rv) return null;
           return (
             <div className="review">
