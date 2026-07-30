@@ -23,12 +23,17 @@ describe('reviewActivity (post-session analysis)', () => {
     expect(rv.verdicts.some(v => /in the band|quicker than/i.test(v.text))).toBe(false);
   });
 
-  it('a race day is never graded: no review at all for race or tune-up slots', () => {
-    // a raced 5k tune-up, 20 minutes against its 30-minute calendar slot,
-    // used to read "Cut short" plus the interval no-average note
-    const tune = { discipline: 'run', type: 'RACE', bRace: true, durationMin: 30 };
-    expect(reviewActivity({ workout: tune, activity: act({ movingTimeSec: 1200 }), paces })).toBe(null);
-    expect(reviewActivity({ workout: { discipline: 'run', type: 'RACE', race: true, durationMin: 30 }, activity: act(), paces })).toBe(null);
+  it('a tune-up race earns stats and no verdicts at all', () => {
+    // Every verdict here judges the session against its planned intent, and
+    // a race has none it should be judged by: "Cut short", then "Interval
+    // session", then "a much bigger dose than intended" each took the recap
+    // headline in turn as the one before was gated (gauntlet catch
+    // 2026-07-30). Zero verdicts lets the recap fall back to its neutral
+    // line.
+    const w = { discipline: 'run', type: 'RACE', bRace: true, title: 'TUNE-UP — 5k Run Race', durationMin: 30 };
+    const rv = reviewActivity({ workout: w, activity: act({ movingTimeSec: 22 * 60, distance: 5000, trainingLoad: 70, rpe: 9 }), paces });
+    expect(rv.verdicts).toEqual([]);
+    expect(rv.stats.some(s => s[0] === 'Time')).toBe(true);
   });
 
   it('an ad-hoc (unplanned) recording gets stats but no plan-relative verdicts', () => {

@@ -109,9 +109,10 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             attributed (wellness never infers it), it feeds the weekly
             decision, and answering is always optional. */}
         {!done && !w.race && !w.test && onMissed && shown < T.iso(new Date()) && <div className="feel" style={{ marginTop: 4, marginBottom: 14 }}>
-          {/* A tune-up gets the conditional form: the app cannot see whether
-              a race happened (autolog never matches race days), so it must
-              not assert the miss it is asking about (gauntlet 2026-07-30). */}
+          {/* A tune-up gets the conditional form: the app cannot always see
+              whether a race happened (bricks and ambiguous days never
+              auto-close), so it must not assert the miss it is asking about
+              (gauntlet 2026-07-30). */}
           <div className="feel-q">{w.bRace ? 'If this race didn\'t happen, what got in the way?' : 'This one didn\'t happen. What got in the way?'}</div>
           <div className="feel-row missed">
             {Object.entries(T.MISSED_REASONS).map(([k, lab]) =>
@@ -355,7 +356,12 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         })()}
         {activity && <a className="act-link" href={T.activityUrl(activity)} target="_blank" rel="noopener noreferrer">
           <Icon name="watch" size={15} /> See the full recording{activity.name ? ' · ' + activity.name : ''} ↗</a>}
-        {(w.race || w.bRace) && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
+        {/* Future-tense encouragement ends with race day — opened from the
+            calendar a week later, "You've got this" reads as a glitch — and
+            ends the moment a tune-up is ticked done, or the same sheet would
+            ask "How did it feel?" above it (gauntlet catch 2026-07-30). The
+            A race can never be done, so for it the gate is date-only. */}
+        {(w.race || w.bRace) && !done && shown >= T.iso(new Date()) && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
         {w.custom && onRemove && <>
           <div style={{ height: 10 }} />
           <button className="btn ghost remove" onClick={onRemove}>Remove this session</button>

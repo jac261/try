@@ -153,21 +153,20 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
 
   // Missed = strictly past sessions with no log entry. A session sitting on
   // today is not missed yet — the digest can be read before an evening swim.
-  // A tune-up race stays out (2026-07-30): autolog never auto-closes a
-  // bRace, so "no log entry" there is the app's blindness, not the
-  // athlete's absence — and the coach card on the same screen now says the
-  // race counts neither way, which "Didn't happen" would contradict.
+  // Races stay OUT of this list: the A race is unloggable by design — every
+  // toggle gates on !w.race, autolog too — so "no log entry" is the app's
+  // ignorance, not the athlete's absence; a "didn't happen" line here fired
+  // for every athlete post-race (gauntlet catch 2026-07-30).
   const missed = sessions.filter(w => eff(w) < todayISO && !w.bRace && !(log || {})[w.id])
-    .map(w => ({ title: w.title || w.type, day: eff(w) }))
-    // a race that passed without a recording is the most important miss of
-    // all; it lives outside `sessions` (load math excludes races) so it is
-    // appended here explicitly
-    .concat(races.filter(w => eff(w) < todayISO && !(log || {})[w.id])
-      .map(w => ({ title: w.title || 'Race', day: eff(w) })));
-  // The unmarked tune-up gets its own named line instead: it stays in the
-  // planned count, so an unexplained shortfall under "trained the week as
-  // written" would be the same contradiction from the other side
-  // (re-verify catch 2026-07-30).
+    .map(w => ({ title: w.title || w.type, day: eff(w) }));
+  // The unmarked tune-up keeps its own prompt line rather than a "didn't
+  // happen" verdict (2026-07-31, reconciling two rounds of gauntlet catches):
+  // it must stay visible and actionable — brick tune-ups, ambiguous days and
+  // out-of-window recordings only ever close by the athlete's own tap, even
+  // though a run tune-up's lone in-window recording proposes itself — but
+  // the coach card on the same screen says the race counts neither way, so
+  // asserting the miss here would contradict it. It also stays in the
+  // planned count, so this line explains the shortfall the counts show.
   const raceUnlogged = sessions.filter(w => w.bRace && eff(w) < todayISO && !(log || {})[w.id])
     .map(w => ({ title: w.title || w.type, day: eff(w) }));
 
@@ -226,7 +225,9 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
     done: doneOnes.length, planned: sessions.length, totalMin,
     load: doneOnes.length ? load : null,
     loadEstimated: true,
-    raceDone: races.filter(w => (log || {})[w.id]).map(w => w.title || 'Race'),
+    // The race is a calendar fact, nothing more: with no log entry possible,
+    // the digest can say when it was, never whether or how it went.
+    raceDays: races.map(w => ({ title: w.title || 'Race', day: eff(w) })),
     fitness: fitnessLine(wellness, weekMonday, weekEnd),
     missed, raceUnlogged, engine, ahead,
   };

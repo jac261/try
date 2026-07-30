@@ -77,9 +77,14 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
           </div>
         )}
 
-        {d.raceDone && d.raceDone.length > 0 && d.raceDone.map((r, n) => (
+        {/* Calendar language only: the race can't be logged, so the digest
+            knows when it was — not whether it happened or how it went
+            (gauntlet catch 2026-07-30, house honest-data rule). The title
+            is rendered bare because it already carries its own "RACE DAY —"
+            prefix, same as the week-ahead row below. */}
+        {d.raceDays && d.raceDays.length > 0 && d.raceDays.map((r, n) => (
           <div className="testnote" key={'race' + n} style={{ marginTop: 10 }}>
-            <Icon name="trophy" size={18} /><span>Race day: {r}. Done.</span>
+            <Icon name="trophy" size={18} /><span>{r.title} ({T.fmtDate(r.day, { weekday: 'short' })}).</span>
           </div>
         ))}
 
@@ -157,8 +162,9 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
         )}
 
         {/* the unmarked tune-up is named, never asserted missed: the app
-            cannot see a race day for itself (autolog skips bRace), so this
-            line explains the planned/done gap without claiming an absence */}
+            cannot always see a race day for itself (bricks and ambiguous
+            days never auto-close), so this line explains the planned/done
+            gap without claiming an absence */}
         {(d.raceUnlogged || []).length > 0 && (
           <div className="muted" style={{ fontSize: 12.5, margin: '8px 2px 0' }}>
             No result marked: {d.raceUnlogged.map(m => m.title + ' (' + T.fmtDate(m.day, { weekday: 'short' }) + ')').join(', ')}

@@ -24,12 +24,13 @@
  * - A missed session is 'missed-unknown' until the athlete's own one-tap
  *   answer says otherwise. Wellness context never infers the reason.
  * - A tune-up race is judged as a race, not a workout: done is done, and an
- *   unmarked one never reads as missed. The matcher deliberately never
- *   auto-closes a bRace (autolog excludes race days from matching outright),
- *   so silence there is the app being blind, not the athlete missing work;
- *   the athlete's tick or one-tap answer is the only evidence. An unmarked
- *   tune-up keeps the week clean but holds the progression call until it has
- *   an answer, the same shape as the corroborated-fade veto.
+ *   unmarked one never reads as missed. A run tune-up self-closes only when
+ *   its day holds exactly one recording; brick tune-ups, ambiguous days and
+ *   missing uploads never auto-close (autolog's own rules), so silence there
+ *   is the app being blind, not the athlete missing work — the athlete's
+ *   tick or one-tap answer is the evidence. An unmarked tune-up keeps the
+ *   week clean but holds the progression call until it has an answer, the
+ *   same shape as the corroborated-fade veto.
  * - Discipline-scoped reductions exist only for the run: it is the one
  *   discipline with its own mechanical strain signal (runload.js). Aggregate
  *   ramp and form signals speak only through the overall decision.
@@ -124,10 +125,11 @@ export function classifyCompletion({ workout, entry, adjustEntry, missedReason, 
   // A tune-up race (v3, 2026-07-30). Done is done: finishing a 5k well
   // inside its calendar slot is a fast race, not a partial workout, and no
   // engine adjustment ever targets a race day. An unmarked one past its date
-  // is 'unlogged-race', never 'missed-unknown': autolog excludes race days
-  // from matching outright, so silence is the app being blind. The athlete's
-  // own one-tap answer still stands: they know it did not happen; the app
-  // does not.
+  // is 'unlogged-race', never 'missed-unknown': a bRace auto-closes only in
+  // autolog's narrowest case (a run tune-up on a day with exactly one
+  // recording), so silence is the app being blind, not evidence of a miss.
+  // The athlete's own one-tap answer still stands: they know it did not
+  // happen; the app does not.
   if (workout.bRace) {
     if (entry && entry.done) return 'completed';
     const effective = day || workout.date;

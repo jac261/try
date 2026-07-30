@@ -96,12 +96,10 @@ export function repFade(rows) {
  * disagreeing with the table printed directly above it.
  */
 export function runReview({ workout, activity, rows, profile, feel }) {
-  // bRace joins the race gate (2026-07-30): a raced tune-up is not workout
-  // execution, and grading one against its nominal calendar slot called
-  // every fast 5k finish "too little of it happened". This narrows which
-  // workouts get a review at all, not what any field means, so
-  // REVIEW_ENGINE_VERSIONS stays put; the stale tune-up reviews already
-  // persisted are filtered where they are read (run-dashboard.js).
+  // bRace too: runschema's isTrainingRun already rules that races are not
+  // built by buildRun and must not be judged as if they were — a tune-up
+  // was getting "Repeat this one · 73% of the session happened" for a
+  // finished 5k race (gauntlet catch 2026-07-30).
   if (!workout || workout.discipline !== 'run' || workout.race || workout.bRace) return null;
   const planned = workout.durationMin || 0;
   const actualMin = activity && activity.movingTimeSec ? activity.movingTimeSec / 60 : null;

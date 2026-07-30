@@ -135,6 +135,11 @@ export function runStoredReviews(plan, log, moves) {
   // the stale ones are filtered at this shared derivation and age out with
   // their plan.
   return (plan.weeks || []).flatMap(w => w.workouts || [])
+    // bRace excluded: runReview no longer computes for tune-ups, but a
+    // review persisted BEFORE that gate can never be diffed away
+    // (reviewChanges skips nulls) — without this filter a stale "73%
+    // completed" from a raced 5k drags the consistency read forever
+    // (gauntlet catch 2026-07-30).
     .filter(w => w.discipline === 'run' && !w.bRace && log[w.id] && log[w.id].runReview)
     .map(w => ({ ...log[w.id].runReview, date: (log[w.id].at || '').slice(0, 10) || (moves && moves[w.id]) || w.date }))
     .sort((a, b) => (a.date < b.date ? 1 : -1));

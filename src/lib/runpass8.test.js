@@ -45,6 +45,14 @@ describe('the review is session specific and always states confidence', () => {
     expect(r.type).toBe('Threshold');
   });
 
+  it('a race is never reviewed as a training run', () => {
+    // runschema's isTrainingRun rules races out of judgment; without the
+    // bRace gate a finished 5k tune-up read "Repeat this one · about 73%
+    // of the session happened" (gauntlet catch 2026-07-30)
+    expect(runReview({ workout: wo('RACE', { race: true }), activity: act(22), rows: null, profile: base })).toBe(null);
+    expect(runReview({ workout: wo('RACE', { bRace: true, durationMin: 30 }), activity: act(22), rows: null, profile: base })).toBe(null);
+  });
+
   it('every verdict exposes a confidence, and it is never invented', () => {
     const r = runReview({ workout: wo('Threshold'), activity: act(60), rows: rows(4, 'good'), profile: base });
     expect(['low', 'medium', 'high']).toContain(r.confidence);
@@ -86,15 +94,6 @@ describe('the review is session specific and always states confidence', () => {
     expect(runOutcome({ completion: 1, paceAdherence: 50, confidence: 'high' })).toBe('repeat');
     expect(runOutcome({ completion: 1, fade: 12, confidence: 'high' })).toBe('repeat');
     expect(runOutcome({ completion: 1, confidence: 'low' })).toBe('insufficient-data');
-  });
-});
-
-describe('a tune-up race is never graded as a workout', () => {
-  it('runReview refuses a bRace slot: a race is not workout execution', () => {
-    const tune = { discipline: 'run', type: 'RACE', bRace: true, durationMin: 30, segments: [] };
-    // a 20-minute 5k against the 30-minute calendar slot must not become
-    // low confidence "too little of it happened"
-    expect(runReview({ workout: tune, activity: act(20), rows: null, profile: base })).toBe(null);
   });
 });
 

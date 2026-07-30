@@ -154,8 +154,8 @@ describe('tune-up races are judged as races, not workouts', () => {
   });
 
   it('silence stays neutral; the athlete\'s own answer still stands', () => {
-    // autolog excludes race days from matching outright, so silence is the
-    // app being blind, never a miss
+    // a bRace auto-closes only in autolog's narrowest case, so silence is
+    // the app being blind, never a miss
     expect(classifyCompletion({ workout: tuneup, day: tuneup.date, todayISO: today })).toBe('unlogged-race');
     expect(classifyCompletion({ workout: tuneup, missedReason: 'life', day: tuneup.date, todayISO: today })).toBe('missed-life');
     expect(classifyCompletion({ workout: tuneup, day: today, todayISO: today })).toBe('upcoming');
@@ -206,8 +206,9 @@ describe('tune-up races are judged as races, not workouts', () => {
   });
 
   it('an unmarked BRICK tune-up leaves both the run and the bike rows clean, and both are told', () => {
-    // autolog excludes bRace slots from matching, so this one can only ever
-    // be closed by the athlete: permanent 'missed' here was the original defect
+    // a brick tune-up NEVER auto-closes (pairing would bank the race minus
+    // its swim leg), so only the athlete can close it: permanent 'missed'
+    // here was the original defect
     const planC = generatePlan({ ...profile, bRaces: [{ date: bDate, kind: 'sprint' }] });
     const wkC = planC.weeks.find(w => w.start === weekMonday);
     const tuneC = wkC.workouts.find(x => x.bRace);

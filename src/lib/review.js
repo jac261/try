@@ -35,13 +35,6 @@ const secPer100 = a => a.movingTimeSec / (a.distance / 100);
 // tone: 'good' | 'warn' | 'info'.
 export function reviewActivity({ workout, activity, paces, log, swimReview, bikeReview, runReview }) {
   if (!workout || !activity || !activity.movingTimeSec) return null;
-  // Race days are not workouts to grade (2026-07-30 gauntlet): every verdict
-  // below judges the recording against the PLAN (planned duration, easy-day
-  // bands, interval structure), and a race has no plan target in that sense.
-  // A ticked tune-up with a fast finish read "Cut short: 20:00 of a planned
-  // 30 min". The A race never gets here (its slot has no duration and no
-  // toggle); the bRace did.
-  if (workout.race || workout.bRace) return null;
   /* One voice per session (phase 2 §6): the authority question — which
      review source may speak — now lives in coaching/review-authority.js,
      shared with the recap so the two surfaces cannot disagree about who is
@@ -88,8 +81,11 @@ export function reviewActivity({ workout, activity, paces, log, swimReview, bike
   if (a.rpe != null) stats.push(['RPE', Math.round(a.rpe) + '/10']);
 
   // Duration vs plan (the plan's number, after any ease/trim the athlete saw).
+  // Not for tune-ups: their planned number is a slot estimate, and "Cut
+  // short" was headlining the recap of a finished 5k race (gauntlet catch
+  // 2026-07-30).
   const planned = w.durationMin || 0;
-  if (planned) {
+  if (planned && !w.bRace) {
     const r = actualMin / planned;
     if (r < 0.8) verdicts.push({ tone: 'info', text: 'Cut short: ' + fmtDur(a.movingTimeSec) + ' of a planned ' + planned + ' min. Fine occasionally — the load model counts what you did.' });
     else if (r > 1.25) verdicts.push({ tone: 'info', text: 'Ran long: ' + fmtDur(a.movingTimeSec) + ' against a planned ' + planned + ' min. Extra volume adds up — make sure it was deliberate.' });
@@ -135,12 +131,18 @@ export function reviewActivity({ workout, activity, paces, log, swimReview, bike
   // No promise of a rep table either: that view loads separately and can
   // legitimately be absent (no WORK laps, fetch failure), so this verdict
   // must stand alone without pointing at numbers that may never render.
-  if (!w.adhoc && !perRep && !steadyKey && !EASY_INTENT[w.type] && (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim')) {
+  // (Not for tune-ups either: a race is not an interval session, and with
+  // the duration verdict gone this line was next in queue to headline the
+  // recap of a finished 5k — same class, one block down.)
+  if (!w.adhoc && !w.bRace && !perRep && !steadyKey && !EASY_INTENT[w.type] && (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim')) {
     verdicts.push({ tone: 'info', text: 'Interval session — the average blurs work and recovery together, so no pace verdict here.' });
   }
 
-  // Load vs plan (meaningless for an unplanned session — there is no plan dose).
-  if (!w.adhoc && a.trainingLoad != null) {
+  // Load vs plan (meaningless for an unplanned session — there is no plan
+  // dose; meaningless for a tune-up too, whose slot estimate a race is
+  // supposed to exceed — "a much bigger dose than intended" is exactly
+  // what racing is).
+  if (!w.adhoc && !w.bRace && a.trainingLoad != null) {
     const plannedTss = estimateTss(w, undefined, log && log.actualMin);
     if (plannedTss > 10 && a.trainingLoad / plannedTss > 1.4) {
       verdicts.push({ tone: 'warn', text: 'Training load came in well above the plan’s estimate for this session — a much bigger dose than intended.' });
