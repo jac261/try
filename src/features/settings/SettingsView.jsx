@@ -164,14 +164,17 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditTechnique, onEditPlan, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
+export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditTechnique, onEditPlan, onStartMaintenance, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
   return (
     <>
+      {/* Phase 4 (spec stage 6): Settings consolidated into stable sections.
+          Profile keeps the fitness surface; every plan-lifecycle action lives
+          in one "Your plan" card. Card ids are deep-link anchors. */}
       <div className="section-title">Profile</div>
-      <div className="card">
+      <div className="card" id="settings-profile">
         <h2>{p.name}</h2>
         <p className="lead">{tracker
           ? 'No plan active. Just tracking your sessions.'
@@ -206,11 +209,9 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
         <div style={{ height: 12 }} />
         {tracker
           ? <>
-            <button className="btn primary" onClick={onEditPlan}><Icon name="calendar" size={18} /> Start a plan</button>
-            <div style={{ height: 10 }} />
             {/* Tracker-safe: records a between-plans benchmark (a parkrun is a
                 5k test) into fitness history without generating a plan. */}
-            <button className="btn ghost" onClick={onEditFitness}><Icon name="trend" size={18} /> Update fitness</button>
+            <button className="btn primary" onClick={onEditFitness}><Icon name="trend" size={18} /> Update fitness</button>
             {onEditTechnique && <><div style={{ height: 10 }} /><button className="btn ghost" onClick={onEditTechnique}><Icon name="pace" size={18} /> Swim technique</button></>}
             {/* Gate on the profile's own fitness-update stamp, NOT plan.updatedAt:
                 merely entering tracker moves updatedAt, and this note must never
@@ -231,18 +232,38 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
                 ? ' · 5k ' + T.fmtPace(prev.fivekSec) + ' → ' + T.fmtPace(p.fivekSec) : '';
               return <p className="lead" style={{ margin: '10px 2px 0' }}>Paces re-targeted {T.fmtDate(T.iso(plan.updatedAt.slice(0, 10)), { month: 'short', day: 'numeric' })}{delta}</p>;
             })()}
-            <div style={{ height: 10 }} />
-            <button className="btn ghost" onClick={onEditPlan}><Icon name="calendar" size={18} /> Edit race &amp; schedule</button>
-            <div style={{ height: 10 }} />
-            <button className="btn ghost" onClick={onEnterTracker}><Icon name="watch" size={18} /> End plan and just track</button>
           </>}
       </div>
-      {!tracker && <div className="card">
-        <h2 style={{ marginBottom: 10 }}>Sync & export</h2>
-        <button className="btn primary" onClick={onExport}><Icon name="download" size={18} /> Export plan to calendar (.ics)</button>
-        <p className="lead" style={{ margin: '10px 2px 0' }}>Downloads every session as all-day events with the full workout in the notes — import into Apple Calendar, Google Calendar or Outlook.</p>
-      </div>}
-      <div className="card">
+      {/* Every action that changes WHAT PLAN EXISTS lives here, in one card:
+          it used to be scattered across the profile card, a sync card and the
+          bottom danger card, and the maintenance switch had no home at all
+          outside the Today plan-edge chips. Buttons that end or replace the
+          plan keep their exact wording (test-pinned and muscle-memory). */}
+      <div className="card" id="settings-plan">
+        <h2 style={{ marginBottom: 10 }}>Your plan</h2>
+        {tracker
+          ? <>
+            <button className="btn primary" onClick={onEditPlan}><Icon name="calendar" size={18} /> Start a plan</button>
+            <div style={{ height: 10 }} />
+            <button className="btn ghost" onClick={onRegenerate}>↺ Start over / new plan</button>
+          </>
+          : <>
+            <button className="btn primary" onClick={onEditPlan}><Icon name="calendar" size={18} /> Edit race &amp; schedule</button>
+            <div style={{ height: 10 }} />
+            <button className="btn ghost" onClick={onExport}><Icon name="download" size={18} /> Export plan to calendar (.ics)</button>
+            <p className="lead" style={{ margin: '10px 2px 0' }}>Downloads every session as all-day events with the full workout in the notes — import into Apple Calendar, Google Calendar or Outlook.</p>
+            {onStartMaintenance && <>
+              <div style={{ height: 10 }} />
+              <button className="btn ghost" onClick={onStartMaintenance}><Icon name="flame" size={18} /> Switch to a 12-week maintenance block</button>
+              <p className="lead" style={{ margin: '10px 2px 0' }}>Replaces the race build with steady all-round training. Pick a new race any time.</p>
+            </>}
+            <div style={{ height: 10 }} />
+            <button className="btn ghost" onClick={onEnterTracker}><Icon name="watch" size={18} /> End plan and just track</button>
+            <div style={{ height: 10 }} />
+            <button className="btn ghost" onClick={onRegenerate}>↺ Start over / new plan</button>
+          </>}
+      </div>
+      <div className="card" id="settings-connections">
         <h2 style={{ marginBottom: 10 }}>Connections</h2>
         <IntervalsIcuCard onWellnessSynced={onWellnessSynced} watchSync={watchSync} onWatchSync={onWatchSync} watchPush={watchPush} />
       </div>
@@ -258,8 +279,6 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
         <ApiConnectionCard />
       </div>
       <div className="card">
-        <button className="btn ghost" onClick={onRegenerate}>↺ Start over / new plan</button>
-        <div style={{ height: 10 }} />
         <button className="btn ghost" style={{ color: 'var(--danger)' }} onClick={onReset}>Clear all progress</button>
       </div>
       {/* Secret: quietly tap this footer 10× to release ze Würm. No label, no hint. */}

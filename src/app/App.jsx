@@ -1563,9 +1563,16 @@ export function App({ storage, getToken, user }) {
       {view === 'settings' && <SettingsView plan={plan}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}
-        openWaterCapable={!tracker && !(T.RACES[plan.race] || {}).solo && !(T.RACES[plan.race] || {}).noRace}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
+        onStartMaintenance={
+          // Mid-plan maintenance switch (phase 4). Hidden on maintenance
+          // plans (the roll offer already lives on Today's plan-edge chip)
+          // and on solo plans: a maintenance block trains all three sports,
+          // and run-only maintenance is a named deferred build.
+          !tracker && plan.race !== 'maintenance' && !(T.RACES[plan.race] || {}).solo
+            ? () => { if (confirm('Switch to a 12-week maintenance block? Your current race plan will be replaced.')) rollMaintenance(false); }
+            : null}
         onEnterTracker={endPlanToTracker} tracker={tracker}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) {
           // The component never unmounts (plan-null renders Onboarding from
