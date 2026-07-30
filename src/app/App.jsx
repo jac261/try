@@ -1425,9 +1425,11 @@ export function App({ storage, getToken, user }) {
   // Calendar days, not clock-rounded instants: daysBetween on a raw Date
   // rounds one short after noon — the chip read "0 days to go" on the eve's
   // afternoon and the post-race edge fired mid race day. iso() pins the start
-  // to local midnight, matching RaceWeekCard (review catch 2026-07-30).
+  // to local midnight, the same counting rule as PR #16's race-week card
+  // (race-chip catch 2026-07-30).
   const rawDaysToRace = T.daysBetween(T.iso(new Date()), plan.profile.raceDate);
   const daysToRace = Math.max(0, rawDaysToRace);
+  const maintWeeksLeft = Math.max(0, Math.ceil(rawDaysToRace / 7));
   // The plan's edges: race day passed → offer a maintenance block (with a
   // recovery week baked in); a maintenance block near its horizon → offer to
   // roll another. Both reshape the plan, pruning overlays to the new graph.
@@ -1481,8 +1483,8 @@ export function App({ storage, getToken, user }) {
         <div className="race-chip">{tracker
           ? <span>Ready for your next plan?</span>
           : race.noRace
-            ? <><span>Maintenance block</span><b>{Math.max(0, Math.ceil(rawDaysToRace / 7))}</b><span>weeks left</span></>
-            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span><b>{daysToRace}</b><span>days to go</span></>}</div>
+            ? <><span>Maintenance block</span><b>{maintWeeksLeft}</b><span>week{maintWeeksLeft === 1 ? '' : 's'} left</span></>
+            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span><b>{daysToRace}</b><span>day{daysToRace === 1 ? '' : 's'} to go</span></>}</div>
       </div>
 
       {planSyncFailed && !tracker && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptRes(plan.createdAt)))}>
