@@ -263,6 +263,42 @@ export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onRe
             <button className="btn ghost" onClick={onRegenerate}>↺ Start over / new plan</button>
           </>}
       </div>
+      {/* Phase 4: the Assumption Center. One row per trained discipline,
+          narrating the domain anchors through T.anchorAssumptions: real
+          numbers carry provenance and date, guesses carry the ~ and their
+          honest role (size and show targets, never judge), and an absent
+          bike anchor says what would unlock it. Never a zero. */}
+      <div className="card" id="settings-assumptions">
+        <h2 style={{ marginBottom: 4 }}>What Try knows</h2>
+        <p className="lead" style={{ marginBottom: 4 }}>Where each training number comes from, and how far Try will trust it.</p>
+        {T.anchorAssumptions(p).map(row => {
+          const name = (T.DISCIPLINES[row.discipline] || {}).name || row.discipline;
+          const when = row.measuredAt ? ' on ' + T.fmtDate(row.measuredAt.slice(0, 10), { month: 'short', day: 'numeric' }) : '';
+          const conf = row.confidence ? ' · ' + row.confidence + ' confidence' : '';
+          const value = row.discipline === 'run' ? '5k ' + T.fmtClock(row.timeSec)
+            : row.discipline === 'bike' ? (row.ftpWatts != null ? row.ftpWatts + ' W FTP' : null)
+              : (() => { const pool = T.poolFor(p); const u = pool.unit === 'yards' ? 'yd' : 'm'; return 'CSS ' + T.fmtPace(T.pacePer100ForDisplay(row.css100Sec, pool)) + ' /100' + u; })();
+          if (row.kind === 'none') return (
+            <div className="asm-row" key={row.discipline}>
+              <b className="asm-d">{name}</b>
+              <div>
+                <div>No FTP yet, and no weight to estimate one from.</div>
+                <div className="muted">Add your weight in Update fitness for a level estimate, or an FTP for real power targets.</div>
+              </div>
+            </div>
+          );
+          return (
+            <div className="asm-row" key={row.discipline}>
+              <b className="asm-d">{name}</b>
+              <div>
+                <div><b>{(row.kind === 'real' ? '' : '~') + value}</b> · {row.sourceLabel}{row.kind === 'real' ? when + conf : ''}</div>
+                {row.kind === 'estimated' && <div className="muted">Sizes your sessions and shows targets. It never judges one, and nothing is predicted from it.</div>}
+              </div>
+            </div>
+          );
+        })}
+        <p className="lead" style={{ margin: '10px 2px 0' }}>A guess can size a session; only a measurement can judge one. Record a test or update your fitness and these upgrade themselves.</p>
+      </div>
       <div className="card" id="settings-connections">
         <h2 style={{ marginBottom: 10 }}>Connections</h2>
         <IntervalsIcuCard onWellnessSynced={onWellnessSynced} watchSync={watchSync} onWatchSync={onWatchSync} watchPush={watchPush} />

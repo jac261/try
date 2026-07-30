@@ -83,6 +83,50 @@ describe('the Your plan card (phase 4)', () => {
   });
 });
 
+describe('the Assumption Center (What Try knows)', () => {
+  // the card's own slice of the page, so page-wide strings (the calibration
+  // count's "0 observations", statline tildes) cannot fake a pass or a fail
+  const card = html => html.split('id="settings-assumptions"')[1].split('id="settings-connections"')[0];
+
+  it('an all-real profile shows provenance and dates, and no level-estimate labels', async () => {
+    const plan = generatePlan(profile);
+    plan.profile.fivekMeta = { source: 'recorded-race', measuredAt: '2026-07-01' };
+    plan.profile.ftpMeta = { source: 'try-test', measuredAt: '2026-06-20' };
+    const c = card(await mount({ plan }));
+    expect(c).toContain('From a recorded race');
+    expect(c).toContain('on Jul 1');
+    expect(c).toContain('Measured in a Try test');
+    expect(c).toContain('Entered by hand');           // css with no meta = manual
+    expect(c).not.toContain('Estimated from your level');
+    expect(c).not.toContain('~');
+  });
+
+  it('an estimated profile wears the ~ and the never-judges line', async () => {
+    const plan = generatePlan({ ...profile, fivekSec: null, css100Sec: null, ftp: null });
+    const c = card(await mount({ plan }));
+    expect(c).toContain('Estimated from your level');
+    expect(c).toContain('~');
+    expect(c).toContain('It never judges one');
+  });
+
+  it('a weightless bike is missing, never a zero', async () => {
+    const plan = generatePlan({ ...profile, fivekSec: null, css100Sec: null, ftp: null, weightKg: null });
+    const c = card(await mount({ plan }));
+    expect(c).toContain('No FTP yet, and no weight to estimate one from');
+    expect(c).not.toContain('W FTP');
+    expect(c).not.toContain('NaN');
+    expect(c).not.toMatch(/>0 W|~0/);
+  });
+
+  it('a solo run plan shows the run row only', async () => {
+    const plan = generatePlan({ ...profile, raceType: 'runhalf' });
+    const c = card(await mount({ plan }));
+    expect(c).toContain('5k ');
+    expect(c).not.toContain('CSS ');
+    expect(c).not.toContain('FTP');
+  });
+});
+
 describe('section anchors', () => {
   it('the deep-link ids exist in both modes', async () => {
     const planHtml = await mount({ plan: generatePlan(profile) });
