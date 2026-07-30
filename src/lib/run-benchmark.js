@@ -40,6 +40,14 @@ export const RUN_5K_RULES = {
   // time, and scaling one up would invent the part they did not run.
   minMetres: 4900,
   maxMetres: 5150,
+  /* Heavy interruption (§3.2, live 2026-07-30): elapsed vs moving time is
+     ACTIVITY-level, and a test session legitimately includes standing about
+     between warm-up and effort — so both bounds are generous, catching only
+     recordings where the stopped time could plausibly have covered recovery
+     DURING the effort. Either bound alone rejects. A missing elapsedTimeSec
+     is a backend that predates the field, never an interruption. */
+  maxStoppedSec: 600,
+  maxStoppedFrac: 0.25,
   // The plausible range for a 5 km run. Outside this the recording is wrong
   // rather than the athlete remarkable: 11 minutes beats the world record and
   // 50 minutes is a walk, and either way the anchor must not move.
@@ -109,6 +117,18 @@ export function run5kTestActivityFor({ activities, date }) {
     .sort((x, y) => Math.abs(x.movingTimeSec - 2700) - Math.abs(y.movingTimeSec - 2700))[0] || null;
 }
 
+/* A recording too interrupted to yield a fair 5 km time. Applied at the
+   call site beside isIndoor (the shipped pattern for activity-level
+   rejections: the LAP functions stay pure on laps) and explained by
+   fivekTestIssues, which a test pins to agreeing with this guard. */
+export function run5kInterrupted(activity) {
+  if (!activity || activity.movingTimeSec == null || activity.elapsedTimeSec == null) return false;
+  const stopped = activity.elapsedTimeSec - activity.movingTimeSec;
+  if (!(stopped > 0)) return false;
+  return stopped > RUN_5K_RULES.maxStoppedSec
+    || stopped / activity.elapsedTimeSec > RUN_5K_RULES.maxStoppedFrac;
+}
+
 // Normalise a lap that is nearly 5 km to exactly 5 km, on the same power law
 // the projections use. Over the ±2% the rules allow this is a correction of a
 // few seconds; using Riegel rather than a linear scale keeps one model in the
@@ -149,6 +169,9 @@ export function fivekTestIssues(intervals, activity) {
   // nothing about how fast the athlete ran (§6). Never becomes an anchor.
   if (activity && isIndoor(activity)) {
     return 'That was recorded indoors, where the distance comes from the treadmill rather than GPS, so we cannot use it to set your 5 km time.';
+  }
+  if (activity && run5kInterrupted(activity)) {
+    return 'That run included long stops, so we cannot read a fair 5 km time from it. A test wants a clear, continuous effort.';
   }
   if (!Array.isArray(intervals) || !intervals.length) return 'We could not read any laps from that recording.';
   const work = intervals.filter(i => i && i.type === 'WORK' && i.movingTimeSec > 0 && i.distance > 0);
