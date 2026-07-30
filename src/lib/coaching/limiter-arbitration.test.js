@@ -50,14 +50,41 @@ describe('arbitrateLimiters (ordered rules)', () => {
     ]);
     expect(arb.allClear).toBe(true);
     expect(arb.reason).toContain('keep training the plan as written');
+    expect(arb.suppressed).toHaveLength(0);   // an all-clear is never a suppressed problem
   });
 
-  it('every suppressed candidate carries a reason; nothing is silently discarded', () => {
+  it('suppressed = outranked PROBLEMS: tier-3 candidates never render as them', () => {
+    /* Gauntlet catch: "Nothing is obviously holding your bike back" under an
+       outranked-by heading read as nonsense. All-clear disciplines are
+       simply absent from the suppressed list, whatever the winner. */
     const arb = arbitrateLimiters([
       cand('run', 'run:at-risk', 'a'), cand('bike', 'bike:threshold', 'b'), cand('swim', 'swim:too-early', 'c'),
     ]);
-    expect(arb.suppressed).toHaveLength(2);
+    expect(arb.suppressed).toHaveLength(1);   // the bike problem; the swim all-clear is not one
+    expect(arb.suppressed[0].id).toBe('bike:threshold');
     arb.suppressed.forEach(sup => expect(sup.reason.length).toBeGreaterThan(10));
+  });
+
+  it('the outranked-by wording is true of the winner (gauntlet catch)', () => {
+    /* A tier-2 winner is a missing-data ask, not a measurement — the card
+       must not say "a measured problem outranks it" one line below a winner
+       reason saying nothing is measured. */
+    const arb = arbitrateLimiters([
+      cand('swim', 'swim:threshold-unknown', 'No CSS on file'),
+      cand('run', 'run:building', 'Still building'),   // also tier 2, lower via consequence/order
+    ]);
+    expect(arb.winner.id).toBe('run:building');   // equal tier and consequence: run-first order
+    arb.suppressed.forEach(sup => expect(sup.reason).not.toContain('measured problem'));
+  });
+
+  it('tier-2 winners with visible gaps get honest copy, not "cannot yet see"', () => {
+    // a chosen technique focus is visible by definition; a building run
+    // component is built FROM recorded data
+    const tech = arbitrateLimiters([cand('swim', 'swim:technique', 'x'), cand('bike', 'bike:none', 'y')]);
+    expect(tech.reason).toContain('the focus you chose');
+    expect(tech.reason).not.toContain('cannot yet see');
+    const building = arbitrateLimiters([cand('run', 'run:building', 'x'), cand('bike', 'bike:none', 'y')]);
+    expect(building.reason).toContain('building the evidence');
   });
 
   it('the copy carries no engine tokens', () => {

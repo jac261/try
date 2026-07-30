@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import * as T from '@/lib';
 import { PowerCurveCard } from '@/components/PowerCurveCard.jsx';
 import { DecisionHistory } from '@/components/coaching/DecisionHistory.jsx';
@@ -15,6 +16,21 @@ const D = T.DISCIPLINES;
 export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog, decisionLog }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
+  /* The shadow arbitration, memoised: limiterCandidates runs the three
+     dashboard builders, and the child dashboards below run them again —
+     without the memo the whole set recomputed on every Progress render
+     (measured negligible today, but a known double-compute is a memo away
+     from not being one). */
+  const arbShadow = useMemo(() => {
+    if (!plan || plan.race === 'tracker') return { hide: true };
+    const candidates = T.limiterCandidates({
+      plan, log, moves, activities, todayISO, retest, ftpRetest,
+      durabilityReads: durability, fuelLog, positionLog,
+    });
+    const arb = T.arbitrateLimiters(candidates);
+    // one discipline needs no arbitration
+    return { hide: !arb || candidates.length < 2, arb };
+  }, [plan, log, moves, activities, todayISO, retest, ftpRetest, durability, fuelLog, positionLog]);
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
   const done = all.filter(w => log[w.id]);
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
@@ -337,20 +353,16 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           candidates listed with theirs. It reads the same dashboard
           builders the cards below render and actuates NOTHING. */}
       {(() => {
-        if (tracker) return null;
-        const candidates = T.limiterCandidates({
-          plan, log, moves, activities, todayISO, retest, ftpRetest,
-          durabilityReads: durability, fuelLog, positionLog,
-        });
-        const arb = T.arbitrateLimiters(candidates);
-        if (!arb || candidates.length < 2) return null;   // one discipline needs no arbitration
+        // (the !tracker fragment above already gates this; no second guard)
+        if (arbShadow.hide) return null;
+        const arb = arbShadow.arb;
         return <>
           <div className="section-title">Across your disciplines</div>
           <div className="card">
             <div className="testnote"><span><b>{arb.winner.label}</b> {arb.reason}</span></div>
-            {arb.suppressed.filter(sup => !arb.allClear).map(sup => (
+            {arb.suppressed.map(sup => (
               <div className="d" key={sup.id} style={{ marginTop: 6 }}>
-                {sup.label} — {sup.reason}.
+                {sup.label} · {sup.reason}.
               </div>
             ))}
             <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>

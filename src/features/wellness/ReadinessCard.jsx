@@ -153,7 +153,14 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
           : proposal.action === 'restoreToday' ? onRestore
           : () => onOpen && onOpen(proposal.workout);
         const accept = () => {
-          if (onDecision) onDecision(T.fromTodayProposal(proposal), 'accepted');
+          /* ease/restore actuate on the tap, so accepting IS the decision.
+             move-test only OPENS the sheet — the reschedule is a separate
+             manual act the athlete may never take (the documented actuator
+             gap) — so journalling 'accepted' there recorded a change that
+             never happened, and the still-visible card could then append a
+             rejection minutes later: accepted-then-dismissed for one
+             decision (gauntlet catch). It journals nothing. */
+          if (onDecision && proposal.kind !== 'move-test') onDecision(T.fromTodayProposal(proposal), 'accepted');
           acceptRaw();
         };
         return (

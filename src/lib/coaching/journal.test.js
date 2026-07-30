@@ -111,3 +111,27 @@ describe('the writers exist at the source', () => {
     expect(app).toContain("storage.load('adjustLog', [])");
   });
 });
+
+describe('repeat rejections with a different why are history too (gauntlet catch)', () => {
+  let storage;
+  beforeEach(() => { localStorage.clear(); storage = storageForUser('journal-test-2'); });
+
+  it('an escalated repeat (same id+status, different why) appends; a double-fire does not', () => {
+    /* The today-proposal id carries no band: an amber ease rejected and its
+       red escalation rejected the same day share (id, status). The why
+       differs, and the second rejection is a materially different decision. */
+    const amber = { id: 'adapt-today:ease:3-2', status: 'rejected', at: 't1', why: 'Readiness 62: worth easing.' };
+    storage.appendDecision(amber);
+    storage.appendDecision({ ...amber, at: 't1b' });                          // double-fire: deduped
+    expect(storage.loadDecisionLog()).toHaveLength(1);
+    storage.appendDecision({ ...amber, at: 't2', why: 'Readiness 41: a red morning.' });
+    expect(storage.loadDecisionLog()).toHaveLength(2);                        // escalation: journalled
+  });
+});
+
+describe('move-test accepts journal nothing (gauntlet catch)', () => {
+  it('the accept wrapper skips move-test: opening a sheet is not a decision', () => {
+    const src = readFileSync('src/features/wellness/ReadinessCard.jsx', 'utf8');
+    expect(src).toMatch(/proposal\.kind !== 'move-test'\) onDecision\(T\.fromTodayProposal\(proposal\), 'accepted'\)/);
+  });
+});

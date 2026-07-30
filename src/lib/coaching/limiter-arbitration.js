@@ -58,6 +58,13 @@ export const LIMITER_TABLE = {
   'run:building': { tier: 2, consequence: 'medium', actionability: 'medium', confidence: 'medium' },
 };
 
+// The run readiness components, in the athlete's words (run-readiness ids).
+const RUN_COMPONENT_WORDS = {
+  speed: 'Your run speed work', threshold: 'Your run threshold work',
+  endurance: 'Your run endurance', longRunDurability: 'Your long-run durability',
+  racePaceExecution: 'Your race-pace execution', fuelling: 'Your run fuelling',
+  consistency: 'Your run consistency', loadStability: 'Your run load',
+};
 const CONSEQ_RANK = { high: 2, medium: 1, low: 0 };
 const DISC_ORDER = { run: 0, bike: 1, swim: 2 };
 
@@ -86,7 +93,17 @@ export function limiterCandidates({ plan, log, moves, activities, todayISO, rete
     const runFuelLogs = Object.values(fuelLog || {}).filter(f => f && f.discipline === 'run');
     const d = runDashboard({ profile, plan, activities, log, reviews, fuelLogs: runFuelLogs, todayISO, raceKey: plan.race });
     const lim = d && d.nextAction && d.nextAction.limiter;
-    if (lim) out.push({ discipline: 'run', id: 'run:' + lim.state, label: lim.why, component: lim.component, evidence: [lim.why] });
+    /* The run limiter is a readiness component; its `why` is an evidence
+       fragment ("3 weeks of recorded running."), not a headline — using it
+       as the label put a bare fragment beside the swim's and bike's real
+       headlines (gauntlet catch). Compose a headline from the component's
+       athlete name; the fragment stays as evidence. */
+    if (lim) out.push({
+      discipline: 'run', id: 'run:' + lim.state,
+      label: (RUN_COMPONENT_WORDS[lim.component] || 'Your running')
+        + (lim.state === 'at-risk' ? ' needs attention first' : ' is still building'),
+      component: lim.component, evidence: [lim.why],
+    });
   }
   return out;
 }
@@ -98,15 +115,22 @@ const CONSEQ_WORDS = {
   medium: 'it shapes how the race goes',
   low: 'it is worth tidying when the bigger things are settled',
 };
-const winnerReason = (c, entry, hadMeasured) => {
+/* Tier-2 ids whose gap is NOT invisibility: the generic missing-data copy
+   ("what Try cannot yet see") would be untrue for them, which the gauntlet
+   caught — a chosen technique focus is visible by definition, and a
+   building run component is built FROM recorded data. */
+const TIER2_REASONS = {
+  'swim:technique': 'because it is the focus you chose, and nothing measured argues ahead of it.',
+  'run:building': 'because it is still building the evidence the bigger calls need.',
+};
+const winnerReason = (c, entry) => {
   if (entry.tier === 1) {
     return 'because it is actually measured in your recent sessions, ' + CONSEQ_WORDS[entry.consequence]
       + ', and it can be worked on without touching the other disciplines.';
   }
   if (entry.tier === 2) {
-    return hadMeasured
-      ? 'because nothing measured argues louder, and answering it would unlock the reads that are still dark.'
-      : 'because the biggest gap right now is what Try cannot yet see, and it is cheap to fix.';
+    return TIER2_REASONS[c.id]
+      || 'because the biggest gap right now is what Try cannot yet see, and it is cheap to fix.';
   }
   return 'because nothing measured argues for attention anywhere: keep training the plan as written.';
 };
@@ -120,18 +144,25 @@ export function arbitrateLimiters(candidates) {
     || CONSEQ_RANK[b.entry.consequence] - CONSEQ_RANK[a.entry.consequence]
     || DISC_ORDER[a.discipline] - DISC_ORDER[b.discipline]);
   const winner = sorted[0];
-  const hadMeasured = enriched.some(c => c.entry.tier === 1);
-  const suppressed = sorted.slice(1).map(c => ({
-    id: c.id, discipline: c.discipline, label: c.label,
-    reason: c.entry.tier > winner.entry.tier
-      ? 'a measured problem outranks it'
-      : CONSEQ_RANK[c.entry.consequence] < CONSEQ_RANK[winner.entry.consequence]
-        ? 'also real, but it costs less on race day'
-        : 'also real; the ' + winner.discipline + ' comes first because its cost lands latest in the race',
-  }));
+  /* Suppressed = outranked PROBLEMS. A tier-3 candidate (all clear or too
+     early) is not a suppressed problem, and rendering "nothing is holding
+     your bike back" under an outranked-by heading read as nonsense — the
+     gauntlet's exact catch. And the outranked-by wording must be true of
+     the WINNER: "a measured problem outranks it" was rendered under
+     missing-data winners that the same card said were not measured. */
+  const suppressed = sorted.slice(1)
+    .filter(c => c.entry.tier < 3)
+    .map(c => ({
+      id: c.id, discipline: c.discipline, label: c.label,
+      reason: c.entry.tier > winner.entry.tier
+        ? (winner.entry.tier === 1 ? 'a measured problem outranks it' : 'the missing answer comes first')
+        : CONSEQ_RANK[c.entry.consequence] < CONSEQ_RANK[winner.entry.consequence]
+          ? 'also real, but it costs less on race day'
+          : 'also real; the ' + winner.discipline + ' comes first because its cost lands latest in the race',
+    }));
   return {
     winner: { id: winner.id, discipline: winner.discipline, label: winner.label },
-    reason: winnerReason(winner, winner.entry, hadMeasured),
+    reason: winnerReason(winner, winner.entry),
     suppressed,
     allClear: winner.entry.tier === 3,
   };

@@ -107,7 +107,13 @@ export function storageForUser(userId) {
     appendDecision(entry) {
       const log = this.loadDecisionLog();
       const last = [...log].reverse().find(e => e.id === entry.id);
-      if (last && last.status === entry.status) return log;   // idempotent
+      /* Idempotent on (id, status, why) — the WHY matters (gauntlet catch):
+         a today-proposal id carries no band, so an amber ease rejected and
+         its RED escalation rejected the same day share (id, status), and
+         comparing only those silently dropped the materially different
+         second rejection. A re-fired effect still dedupes: its why is
+         byte-identical. */
+      if (last && last.status === entry.status && (last.why || null) === (entry.why || null)) return log;
       const next = log.concat([entry]).slice(-120);
       try { localStorage.setItem(ns + 'decisionLog', JSON.stringify(next)); } catch (e) {}
       return next;
