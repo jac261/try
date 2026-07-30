@@ -101,12 +101,47 @@ describe('the Assumption Center (What Try knows)', () => {
     expect(c).not.toContain('~');
   });
 
-  it('an estimated profile wears the ~ and the never-judges line', async () => {
+  it('an estimated profile wears the ~ and only engine-true role lines', async () => {
     const plan = generatePlan({ ...profile, fivekSec: null, css100Sec: null, ftp: null });
     const c = card(await mount({ plan }));
     expect(c).toContain('Estimated from your level');
     expect(c).toContain('~');
-    expect(c).toContain('It never judges one');
+    /* Engine-true per discipline (gauntlet 2026-07-31): only the bike has
+       the estimated-never-judges fence; estimated run and swim paces DO
+       grade reps. The card may not claim otherwise. */
+    expect(c).toContain('never judges a completed ride');
+    expect(c).toContain('Race projections stay off until a real 5k is recorded');
+    expect(c).not.toContain('It never judges one');
+  });
+
+  it('a feel-nudged number is labelled by its origin, and the statline agrees', async () => {
+    const plan = generatePlan(profile);
+    plan.profile.fivekMeta = { source: 'estimated' };
+    plan.profile.cssMeta = { source: 'estimated' };
+    const html = await mount({ plan });
+    const c = card(html);
+    expect(c).toContain('Estimated from how your training felt');
+    expect(c).not.toContain('Estimated from your level'); // a stored nudge is not a table guess
+    // the statline above the card must not dress the nudged CSS as measured
+    const statline = html.split('id="settings-profile"')[1].split('id="settings-plan"')[0];
+    expect(statline).toContain('swim · est');
+    expect(statline).not.toContain('swim /100m');
+  });
+
+  it('an excluded discipline gets no assumption row', async () => {
+    const plan = generatePlan({ ...profile, excludedDiscipline: 'swim' });
+    const c = card(await mount({ plan }));
+    expect(c).not.toContain('CSS ');
+    expect(c).toContain('W FTP');
+    expect(c).toContain('5k ');
+  });
+
+  it('a tracker keeping a solo raceType still shows all three rows', async () => {
+    const t = buildTrackerPlan(generatePlan({ ...profile, raceType: 'runhalf' }), '2026-07-13T10:00:00.000Z');
+    const c = card(await mount({ plan: t, tracker: true, onStartMaintenance: null }));
+    expect(c).toContain('CSS ');
+    expect(c).toContain('W FTP');
+    expect(c).toContain('5k ');
   });
 
   it('a weightless bike is missing, never a zero', async () => {
@@ -128,20 +163,37 @@ describe('the Assumption Center (What Try knows)', () => {
 });
 
 describe('section anchors', () => {
-  it('a focus prop scrolls its card into view on mount', async () => {
+  it('a focus prop scrolls its card into view on mount, and is consumed', async () => {
     // happy-dom has no layout, so pin the call rather than the pixels
     const seen = [];
+    const consumed = [];
     const orig = window.HTMLElement.prototype.scrollIntoView;
     window.HTMLElement.prototype.scrollIntoView = function () { seen.push(this.id); };
     try {
-      await mount({ plan: generatePlan(profile), focus: 'connections' });
+      await mount({ plan: generatePlan(profile), focus: 'connections', onFocusDone: () => consumed.push(1) });
       expect(seen).toContain('settings-connections');
+      // consumed exactly once: App clears the focus so a Support round-trip
+      // remount cannot re-scroll a position the athlete already left
+      // (gauntlet 2026-07-31)
+      expect(consumed.length).toBe(1);
       seen.length = 0;
-      await mount({ plan: generatePlan(profile) }); // no focus: no scroll
+      await mount({ plan: generatePlan(profile), onFocusDone: () => consumed.push(1) }); // no focus: no scroll, no consume
       expect(seen).toEqual([]);
+      expect(consumed.length).toBe(1);
     } finally {
       window.HTMLElement.prototype.scrollIntoView = orig;
     }
+  });
+
+  it('App wires the maintenance switch post-race aware and consumes the focus', async () => {
+    /* Source-text pins, the house pattern: the Settings maintenance switch
+       must bake in the post-race recovery week exactly as the Today chip
+       does, and the focus must be cleared once used. */
+    const { readFileSync } = await import('node:fs');
+    // happy-dom rewrites import.meta.url to http, so resolve from the repo root
+    const app = readFileSync(process.cwd() + '/src/app/App.jsx', 'utf8');
+    expect(app).toContain('rollMaintenance(rawDaysToRace < 0)');
+    expect(app).toContain('onFocusDone={() => setSettingsFocus(null)}');
   });
 
   it('the deep-link ids exist in both modes', async () => {

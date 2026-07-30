@@ -1568,7 +1568,7 @@ export function App({ storage, getToken, user }) {
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} decisionLog={decisionLog} onOpenSettings={openSettings} />}
-      {view === 'settings' && <SettingsView plan={plan} focus={settingsFocus}
+      {view === 'settings' && <SettingsView plan={plan} focus={settingsFocus} onFocusDone={() => setSettingsFocus(null)}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}
         onEditFitness={() => setEditFitness(true)}
@@ -1577,9 +1577,12 @@ export function App({ storage, getToken, user }) {
           // Mid-plan maintenance switch (phase 4). Hidden on maintenance
           // plans (the roll offer already lives on Today's plan-edge chip)
           // and on solo plans: a maintenance block trains all three sports,
-          // and run-only maintenance is a named deferred build.
+          // and run-only maintenance is a named deferred build. Post-race it
+          // must bake in the recovery week exactly as the Today chip does
+          // (postRace = the race is behind you), or the same athlete got a
+          // ~25% heavier first week from this button (gauntlet 2026-07-31).
           !tracker && plan.race !== 'maintenance' && !(T.RACES[plan.race] || {}).solo
-            ? () => { if (confirm('Switch to a 12-week maintenance block? Your current race plan will be replaced.')) rollMaintenance(false); }
+            ? () => { if (confirm('Switch to a 12-week maintenance block? Your current race plan will be replaced.')) rollMaintenance(rawDaysToRace < 0); }
             : null}
         onEnterTracker={endPlanToTracker} tracker={tracker}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) {

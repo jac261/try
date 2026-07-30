@@ -164,17 +164,20 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, tracker, focus, noAuth, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditTechnique, onEditPlan, onStartMaintenance, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
+export function SettingsView({ plan, tracker, focus, onFocusDone, noAuth, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditTechnique, onEditPlan, onStartMaintenance, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
   // Deep-link focus (phase 4): a caller that opened Settings FOR something
   // (openSettings('connections')) lands scrolled to that card. Mount-only on
-  // purpose; the avatar's plain open passes no focus and starts at the top.
+  // purpose, and CONSUMED once used: without onFocusDone clearing it in App,
+  // a Support round-trip remounted this view and re-scrolled a focus the
+  // athlete had already scrolled away from (gauntlet 2026-07-31).
   useEffect(() => {
     if (!focus) return;
     const el = document.getElementById('settings-' + focus);
     if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    onFocusDone && onFocusDone();
   }, []);
   return (
     <>
@@ -209,7 +212,18 @@ export function SettingsView({ plan, tracker, focus, noAuth, onEnterTracker, onR
               const real = a.kind === 'real';
               return <div className="s"><b>{(real ? '' : '~') + T.fmtPace(a.timeSec / 5)}</b><span>{real ? '5k pace/km' : '5k pace · est'}</span></div>;
             })()}
-            {!solo && (() => { const pool = T.poolFor(p); const u = pool.unit === 'yards' ? 'yd' : 'm'; return <div className="s"><b>{p.css100Sec ? T.fmtPace(T.pacePer100ForDisplay(p.css100Sec, pool)) : '~' + T.fmtPace(T.pacePer100ForDisplay((T.FITNESS[p.fitness] || T.FITNESS.intermediate).estCss, pool))}</b><span>{p.css100Sec ? 'swim /100' + u : 'swim · est'}</span></div>; })()}
+            {/* Read the ANCHOR, exactly as the run tile above does: a
+                feel-based tuning nudge stores a css100Sec with cssMeta source
+                'estimated', and keying on the raw field dressed that guess as
+                a measured pace one card above the Assumption Center calling
+                the same number an estimate (gauntlet 2026-07-31). */}
+            {!solo && (() => {
+              const pool = T.poolFor(p); const u = pool.unit === 'yards' ? 'yd' : 'm';
+              const st = T.swimThreshold(p);
+              const real = st.kind === 'real';
+              const sec = st.cssSecondsPer100m || (T.FITNESS[p.fitness] || T.FITNESS.intermediate).estCss;
+              return <div className="s"><b>{(real ? '' : '~') + T.fmtPace(T.pacePer100ForDisplay(sec, pool))}</b><span>{real ? 'swim /100' + u : 'swim · est'}</span></div>;
+            })()}
             {!solo && <div className="s"><b>{p.ftp || 'RPE'}</b><span>{p.ftp ? 'FTP watts' : 'bike by feel'}</span></div>}
             {solo && T.saneWeightKg(p.weightKg) ? <div className="s"><b>{T.saneWeightKg(p.weightKg)}</b><span>kg</span></div> : null}
           </div>;
@@ -279,7 +293,7 @@ export function SettingsView({ plan, tracker, focus, noAuth, onEnterTracker, onR
       <div className="card" id="settings-assumptions">
         <h2 style={{ marginBottom: 4 }}>What Try knows</h2>
         <p className="lead" style={{ marginBottom: 4 }}>Where each training number comes from, and how far Try will trust it.</p>
-        {T.anchorAssumptions(p).map(row => {
+        {T.anchorAssumptions(p, { tracker }).map(row => {
           const name = (T.DISCIPLINES[row.discipline] || {}).name || row.discipline;
           const when = row.measuredAt ? ' on ' + T.fmtDate(row.measuredAt.slice(0, 10), { month: 'short', day: 'numeric' }) : '';
           const conf = row.confidence ? ' · ' + row.confidence + ' confidence' : '';
@@ -300,12 +314,25 @@ export function SettingsView({ plan, tracker, focus, noAuth, onEnterTracker, onR
               <b className="asm-d">{name}</b>
               <div>
                 <div><b>{(row.kind === 'real' ? '' : '~') + value}</b> · {row.sourceLabel}{row.kind === 'real' ? when + conf : ''}</div>
-                {row.kind === 'estimated' && <div className="muted">Sizes your sessions and shows targets. It never judges one, and nothing is predicted from it.</div>}
+                {/* The role line must be ENGINE-TRUE per discipline (gauntlet
+                    2026-07-31): only the bike has the estimated-never-judges
+                    fence (review.js gates on ftpEstimated, pinned by
+                    bike-review tests). Estimated run and swim paces DO grade
+                    reps and reviews; what the run's estimate never does is
+                    drive a race projection. Claim only what each engine
+                    enforces. */}
+                {row.kind === 'estimated' && <div className="muted">{
+                  row.discipline === 'bike'
+                    ? 'Sizes your rides and shows power targets. It never judges a completed ride.'
+                    : row.discipline === 'run'
+                      ? 'Sizes your runs and shows pace targets. Race projections stay off until a real 5k is recorded.'
+                      : 'Sizes your swims and shows pace targets. A CSS test replaces it with a measured number.'
+                }</div>}
               </div>
             </div>
           );
         })}
-        <p className="lead" style={{ margin: '10px 2px 0' }}>A guess can size a session; only a measurement can judge one. Record a test or update your fitness and these upgrade themselves.</p>
+        <p className="lead" style={{ margin: '10px 2px 0' }}>Record a test or update your fitness and these numbers upgrade themselves.</p>
       </div>
       <div className="card" id="settings-connections">
         <h2 style={{ marginBottom: 10 }}>Connections</h2>

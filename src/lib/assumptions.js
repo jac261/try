@@ -11,15 +11,15 @@ import { runAnchor, bikePowerAnchor, swimThreshold, FITNESS, RACES, FTP_CONFIDEN
  *
  * kind semantics are the anchors' own:
  *   'real'       a number the athlete supplied or measured
- *   'estimated'  a level-table or feel-nudged guess: it may size sessions
- *                and display targets, it may never judge a session or drive
- *                a race projection (the engine already enforces both; this
- *                surface just says so out loud)
+ *   'estimated'  a guess — from the level table, or a feel-based tuning
+ *                nudge (the two carry different sourceLabels; conflating
+ *                them mislabelled a nudged number as a level estimate,
+ *                gauntlet 2026-07-31)
  *   'none'       nothing at all — only the bike can be here (no FTP and no
  *                usable weight fails closed rather than projecting a number)
  */
 
-// Athlete-facing provenance labels, one per closed-set source. The bike
+// Athlete-facing provenance labels for MEASURED sources. The bike
 // dashboard's own map stays local to it (its 'try-test' says "your bike
 // test"); these are the discipline-neutral phrasings for the Settings card.
 export const SOURCE_LABELS = {
@@ -28,22 +28,30 @@ export const SOURCE_LABELS = {
   'recorded-race': 'From a recorded race',
   'activity-model': 'From the rolling estimate of your rides',
   'intervals-icu': 'From intervals.icu',
-  estimated: 'Estimated from your level',
-  'runner-level': 'Estimated from your level',
-  'triathlete-level': 'Estimated from your level',
 };
+// Estimated provenance is not one thing: a level-table guess and a stored
+// number written by a feel-based tuning nudge (fivekMeta/cssMeta source
+// 'estimated') have different origins and must say so.
+export const EST_LEVEL_LABEL = 'Estimated from your level';
+export const EST_FELT_LABEL = 'Estimated from how your training felt';
+export const EST_LEVEL_WEIGHT_LABEL = 'Estimated from your level and weight';
 
-/* One row per discipline the profile trains, in the app's swim/bike/run
- * order. Solo plans collapse to their sport (the Settings statline rule);
- * tracker and triathlon profiles show all three. Each row carries the raw
- * value fields (the view formats them with the shared formatters) plus
- * kind/source/measuredAt/confidence straight from the anchor. */
-export function anchorAssumptions(profile) {
+/* One row per discipline the plan actually trains, in the app's
+ * swim/bike/run order. Solo plans collapse to their sport and an excluded
+ * (injured) discipline is skipped — the engine sizes nothing for it, so a
+ * row claiming otherwise would lie (both the Settings statline rule).
+ * opts.tracker shows all three regardless: the numbers outlive the plan,
+ * and a tracker profile KEEPS its old raceType (buildTrackerPlan only nulls
+ * the date), so the solo collapse must not follow it into tracker mode. */
+export function anchorAssumptions(profile, opts) {
   const p = profile || {};
-  const solo = (RACES[p.raceType] || {}).solo || null;
+  const tracker = !!(opts && opts.tracker);
+  const solo = tracker ? null : (RACES[p.raceType] || {}).solo || null;
+  const excluded = tracker ? null : p.excludedDiscipline || null;
+  const on = d => (!solo || solo === d) && excluded !== d;
   const rows = [];
 
-  if (!solo || solo === 'swim') {
+  if (on('swim')) {
     const s = swimThreshold(p);
     rows.push({
       discipline: 'swim',
@@ -53,13 +61,16 @@ export function anchorAssumptions(profile) {
       // honest number to show (the statline does the same).
       css100Sec: s.cssSecondsPer100m || (FITNESS[p.fitness] || FITNESS.intermediate).estCss,
       source: s.source,
-      sourceLabel: SOURCE_LABELS[s.source] || null,
+      // css present with source 'estimated' means a feel nudge WROTE that
+      // number; css absent means the level table is guessing.
+      sourceLabel: s.kind === 'real' ? (SOURCE_LABELS[s.source] || null)
+        : s.cssSecondsPer100m ? EST_FELT_LABEL : EST_LEVEL_LABEL,
       measuredAt: s.measuredAt,
       confidence: s.confidence,
     });
   }
 
-  if (!solo || solo === 'bike') {
+  if (on('bike')) {
     const b = bikePowerAnchor(p);
     rows.push({
       discipline: 'bike',
@@ -67,7 +78,7 @@ export function anchorAssumptions(profile) {
       ftpWatts: b.kind === 'none' ? null : b.ftpWatts,
       source: b.kind === 'real' ? b.source : b.kind === 'estimated' ? 'estimated' : null,
       sourceLabel: b.kind === 'real' ? (SOURCE_LABELS[b.source] || null)
-        : b.kind === 'estimated' ? SOURCE_LABELS.estimated : null,
+        : b.kind === 'estimated' ? EST_LEVEL_WEIGHT_LABEL : null,
       measuredAt: b.kind === 'real' ? b.measuredAt : null,
       // bikePowerAnchor does not surface confidence; read it the way
       // bikeThresholdHistory does, validated against the closed set.
@@ -76,14 +87,17 @@ export function anchorAssumptions(profile) {
     });
   }
 
-  if (!solo || solo === 'run') {
+  if (on('run')) {
     const r = runAnchor(p);
     rows.push({
       discipline: 'run',
       kind: r.kind,
       timeSec: r.timeSec,
       source: r.source,
-      sourceLabel: SOURCE_LABELS[r.source] || null,
+      // source 'estimated' is the stored feel-nudge number; the two level
+      // sources are the table guessing from scratch.
+      sourceLabel: r.kind === 'real' ? (SOURCE_LABELS[r.source] || null)
+        : r.source === 'estimated' ? EST_FELT_LABEL : EST_LEVEL_LABEL,
       measuredAt: r.measuredAt || null,
       confidence: r.confidence || null,
     });
