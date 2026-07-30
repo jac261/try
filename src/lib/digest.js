@@ -153,13 +153,16 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
 
   // Missed = strictly past sessions with no log entry. A session sitting on
   // today is not missed yet — the digest can be read before an evening swim.
+  // Races stay OUT of this list: the A race is unloggable by design — every
+  // toggle gates on !w.race, autolog too — so "no log entry" is the app's
+  // ignorance, not the athlete's absence; a "didn't happen" line here fired
+  // for every athlete post-race (gauntlet catch 2026-07-30). Tune-ups
+  // (bRace) stay IN because they are tickable — this line is a prompt the
+  // athlete can act on, not a verdict. A run tune-up's lone in-window
+  // recording also proposes itself, but brick tune-ups, ambiguous days and
+  // out-of-window recordings only ever close by the athlete's own tap.
   const missed = sessions.filter(w => eff(w) < todayISO && !(log || {})[w.id])
-    .map(w => ({ title: w.title || w.type, day: eff(w) }))
-    // a race that passed without a recording is the most important miss of
-    // all; it lives outside `sessions` (load math excludes races) so it is
-    // appended here explicitly
-    .concat(races.filter(w => eff(w) < todayISO && !(log || {})[w.id])
-      .map(w => ({ title: w.title || 'Race', day: eff(w) })));
+    .map(w => ({ title: w.title || w.type, day: eff(w) }));
 
   // Engine rows: the accepted weekly proposals quoted VERBATIM from the
   // accept-time log (one source of truth for "why" — never re-derived), plus
@@ -216,7 +219,9 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
     done: doneOnes.length, planned: sessions.length, totalMin,
     load: doneOnes.length ? load : null,
     loadEstimated: true,
-    raceDone: races.filter(w => (log || {})[w.id]).map(w => w.title || 'Race'),
+    // The race is a calendar fact, nothing more: with no log entry possible,
+    // the digest can say when it was, never whether or how it went.
+    raceDays: races.map(w => ({ title: w.title || 'Race', day: eff(w) })),
     fitness: fitnessLine(wellness, weekMonday, weekEnd),
     missed, engine, ahead,
   };

@@ -64,6 +64,96 @@ describe('matchActivities (spotted on your watch)', () => {
     expect(raceDay).toEqual([]); // race + strength are not candidates
   });
 
+  /* Run tune-ups match like sessions (gauntlet catch 2026-07-30). The bRace
+     exclusion shipped with the tune-up feature, filed under "behaves like a
+     race" — but the same commit made it tickable and load-counted, and the
+     exclusion meant a raced, uploaded tune-up could never self-close: the
+     digest then reported the athlete's most important day as "Didn't
+     happen". Run tune-ups only, and only on an unambiguous day; the
+     refusals below are each deliberate (the out-of-window one rides the
+     pre-existing MATCH_WINDOW guard — kept because it documents the known
+     limit for a slow 5k recorded warm-up-to-cool-down in one file). */
+  const tunedRun = { weeks: [{ index: 0, workouts: [
+    { ...wk('0-5', 'run', 'RACE', '2026-07-08', 30), bRace: true, title: 'TUNE-UP — 5k Run Race' },
+  ] }] };
+
+  it('a run tune-up matches the lone recording on its day', () => {
+    const m = matchActivities({ ...base, plan: tunedRun, activities: [act('a1', 'Run', '2026-07-08', 22, { rpe: 9 })] });
+    expect(m.map(x => [x.workout.id, x.activity.id])).toEqual([['0-5', 'a1']]);
+    expect(m[0].feel).toBe('hard');
+  });
+
+  it('two runs on a tune-up day refuse rather than guess which was the race', () => {
+    // nearest-to-planned would pick the 25-min warm-up jog over the 22-min
+    // race, and the log, feel and recap would all belong to the jog
+    const m = matchActivities({ ...base, plan: tunedRun, activities: [
+      act('a1', 'Run', '2026-07-08', 25), act('a2', 'Run', '2026-07-08', 22),
+    ] });
+    expect(m).toEqual([]);
+  });
+
+  it('an earlier claim cannot make a tune-up day look unambiguous', () => {
+    // an easy run moved onto the day claims the race file first; the
+    // tune-up must refuse the leftover jog, not inherit it. Pins the RAW
+    // day count (two files → refusal however many are claimed); the
+    // two-runs test above pins the same guard without the moved neighbour
+    const moved = { weeks: [{ index: 0, workouts: [
+      wk('0-1', 'run', 'Easy', '2026-07-06', 20),
+      { ...wk('0-5', 'run', 'RACE', '2026-07-08', 30), bRace: true, title: 'TUNE-UP — 5k Run Race' },
+    ] }] };
+    const m = matchActivities({ ...base, plan: moved, moves: { '0-1': '2026-07-08' }, activities: [
+      act('a1', 'Run', '2026-07-08', 25), act('a2', 'Run', '2026-07-08', 22),
+    ] });
+    expect(m.map(x => x.workout.id)).not.toContain('0-5');
+  });
+
+  it('the manual tick resolves no recording on an ambiguous tune-up day either', () => {
+    const tune = { ...wk('0-5', 'run', 'RACE', '2026-07-08', 30), bRace: true };
+    const two = [act('a1', 'Run', '2026-07-08', 25), act('a2', 'Run', '2026-07-08', 22)];
+    expect(activityFor({ workout: tune, activities: two, moves: {} })).toBe(null);
+    // a lone recording still resolves — the refusal is ambiguity, not bRace
+    expect(activityFor({ workout: tune, activities: [two[1]], moves: {} }).id).toBe('a2');
+  });
+
+  it('a lone recording outside the window stays unmatched: the tick remains the path', () => {
+    // a slow 5k with warm-up and cool-down in one file overruns 30 × 1.7
+    expect(matchActivities({ ...base, plan: tunedRun, activities: [act('a1', 'Run', '2026-07-08', 54)] })).toEqual([]);
+  });
+
+  it('a brick tune-up never matches: its recording shape is not pairable honestly', () => {
+    // a tri commonly uploads as one multisport file the type map cannot
+    // see — and pairing ride+run would log the race minus its swim leg
+    const tuned = { weeks: [{ index: 0, workouts: [
+      { ...wk('0-6', 'brick', 'RACE', '2026-07-08', 80), bRace: true, title: 'TUNE-UP — Sprint Triathlon' },
+    ] }] };
+    const m = matchActivities({ ...base, plan: tuned, activities: [
+      act('a1', 'Swim', '2026-07-08', 15),
+      act('a2', 'Ride', '2026-07-08', 38),
+      act('a3', 'Run', '2026-07-08', 26),
+    ] });
+    expect(m).toEqual([]);
+  });
+
+  it('the brick pair never resolves for a tune-up, from any caller', () => {
+    // the manual tick resolves its recording through brickPairFor too —
+    // without this gate a ticked sprint tune-up banks ride+run minus the
+    // swim leg as if measured
+    const tune = { ...wk('0-6', 'brick', 'RACE', '2026-07-08', 80), bRace: true };
+    const pair = brickPairFor({ workout: tune, activities: [
+      act('a2', 'Ride', '2026-07-08', 38), act('a3', 'Run', '2026-07-08', 26),
+    ], moves: {}, used: new Set() });
+    expect(pair).toBe(null);
+  });
+
+  it('the A race is still never a candidate, even with a plausible recording', () => {
+    const raced = { weeks: [{ index: 0, workouts: [
+      // a real A race carries durationMin 0; 30 here so the race gate is
+      // what refuses this, not the !planned guard
+      { ...wk('9-9', 'run', 'RACE', '2026-07-08', 30), race: true, title: 'RACE DAY — 5k Run' },
+    ] }] };
+    expect(matchActivities({ ...base, plan: raced, activities: [act('a1', 'Run', '2026-07-08', 22)] })).toEqual([]);
+  });
+
   it('is quiet with no activities or no plan', () => {
     expect(matchActivities({ ...base, activities: null })).toEqual([]);
     expect(matchActivities({ ...base, activities: [] })).toEqual([]);

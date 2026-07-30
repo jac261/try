@@ -1493,6 +1493,7 @@ export function App({ storage, getToken, user }) {
   const race = T.RACES[plan.race];
   const rawDaysToRace = T.daysBetween(new Date(), plan.profile.raceDate);
   const daysToRace = Math.max(0, rawDaysToRace);
+  const maintWeeksLeft = Math.max(0, Math.ceil(rawDaysToRace / 7));
   // The plan's edges: race day passed → offer a maintenance block (with a
   // recovery week baked in); a maintenance block near its horizon → offer to
   // roll another. Both reshape the plan, pruning overlays to the new graph.
@@ -1546,8 +1547,8 @@ export function App({ storage, getToken, user }) {
         <div className="race-chip">{tracker
           ? <span>Ready for your next plan?</span>
           : race.noRace
-            ? <><span>Maintenance block</span><b>{Math.max(0, Math.ceil(rawDaysToRace / 7))}</b><span>weeks left</span></>
-            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span><b>{daysToRace}</b><span>days to go</span></>}</div>
+            ? <><span>Maintenance block</span><b>{maintWeeksLeft}</b><span>{maintWeeksLeft === 1 ? 'week' : 'weeks'} left</span></>
+            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span><b>{daysToRace}</b><span>{daysToRace === 1 ? 'day' : 'days'} to go</span></>}</div>
       </div>
 
       {planSyncFailed && !tracker && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptRes(plan.createdAt)))}>

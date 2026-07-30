@@ -38,6 +38,12 @@ export const DISCIPLINE = {
 // keep the date-only behaviour, byte-identically.
 export function brickPairFor({ workout, activities, moves, used }) {
   if (!workout || workout.discipline !== 'brick' || !Array.isArray(activities)) return null;
+  /* Never for a brick tune-up — from ANY caller. The candidate gate below
+     keeps proposals away, but the manual tick resolves its recording
+     through here too (recordingFor), and pairing ride+run would bank the
+     race minus its swim leg as if measured. A ticked tune-up records its
+     planned slot instead (gauntlet catch 2026-07-30). */
+  if (workout.bRace) return null;
   const planned = workout.durationMin || 0;
   if (!planned) return null;
   const date = (moves && moves[workout.id]) || workout.date;
@@ -86,7 +92,18 @@ export function matchActivities({ activities, plan, log, moves, todayISO }) {
   const eff = w => (moves && moves[w.id]) || w.date;
 
   const candidates = plan.weeks.flatMap(w => w.workouts).filter(w => {
-    if ((log || {})[w.id] || w.race || w.bRace) return false;
+    /* The A race is excluded: it is unloggable by design, and a match would
+       write the log entry nothing else can (its durationMin is also 0, so
+       the !planned guard below refuses it independently). RUN tune-ups
+       (bRace) match like sessions — they are tickable and load-counted, and
+       excluding them left a raced, uploaded tune-up reading as "Didn't
+       happen" in the digest (gauntlet catch 2026-07-30). Brick tune-ups
+       stay manual-tick: pairing ride+run would bank the race minus its
+       swim leg as if measured, and a tri recorded as a single multisport
+       file is invisible to the type map anyway. Generated plans keep
+       tune-ups at least 10 days clear of race day (the B-race pass in
+       plan.js), so a race-day recording never sits in a tune-up's window. */
+    if ((log || {})[w.id] || w.race || (w.bRace && w.discipline !== 'run')) return false;
     if (w.discipline !== 'run' && w.discipline !== 'bike' && w.discipline !== 'swim'
       && w.discipline !== 'strength' && w.discipline !== 'brick') return false;
     const d = eff(w);
@@ -107,6 +124,19 @@ export function matchActivities({ activities, plan, log, moves, todayISO }) {
         matches.push({ workout: w, activity: pair.ride, activityRun: pair.run, feel: feelFromRpe(rpe), rpe });
       }
       return;
+    }
+    /* A tune-up day can hold both a warm-up jog and the race, and
+       nearest-to-planned would happily pick the jog — then the recap, the
+       feel and the logged minutes all belong to the wrong recording. One
+       recording that day or none, counted BEFORE any other session's claim:
+       an earlier candidate grabbing the race file must not make the day
+       look unambiguous (a lone file already claimed just leaves the pool
+       below empty — no clause needed). The same refusal the brick pair
+       applies to two rides (gauntlet catch 2026-07-30). */
+    if (w.bRace) {
+      const day = activities.filter(a => a
+        && DISCIPLINE[a.type] === w.discipline && a.date === eff(w) && a.movingTimeSec != null);
+      if (day.length !== 1) return;
     }
     const best = activities
       .filter(a => a && !used.has(a.id) && DISCIPLINE[a.type] === w.discipline
@@ -149,6 +179,13 @@ export function activityFor({ workout, activities, moves }) {
   const planned = workout.durationMin || 0;
   if (!planned) return null;
   const date = (moves && moves[workout.id]) || workout.date;
+  /* The manual tick resolves its recording through here, so a tune-up gets
+     the same one-recording-or-none refusal as the proposal path: on a
+     jog-plus-race day, nearest-to-planned returns the jog, and the ticked
+     tune-up would log and recap the wrong file (gauntlet catch 2026-07-30).
+     Refusing means the tick records the planned slot — honest fallback. */
+  if (workout.bRace && activities.filter(a => a && DISCIPLINE[a.type] === workout.discipline
+    && a.date === date && a.movingTimeSec != null).length !== 1) return null;
   const best = activities
     .filter(a => a && DISCIPLINE[a.type] === workout.discipline && a.date === date && a.movingTimeSec != null)
     .map(a => ({ a, min: a.movingTimeSec / 60 }))

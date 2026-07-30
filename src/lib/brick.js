@@ -158,9 +158,12 @@ export function brickHistory({ plan, activities, log, moves, paces, fuelLog, lim
      habit. Worse, brickExecution judges the run against fresh long/easy
      pace, so a race-effort run off a race-effort ride is all but guaranteed
      'ruined': two tune-ups inside the small window would fabricate the
-     accusation out of two sessions that went exactly to plan. Race-day
-     fuelling still counts toward the proven gut ceiling (bike-fuelling.js)
-     and race hours are real hours — this boundary is only about habit. */
+     accusation out of two sessions that went exactly to plan — and the
+     inverse holds too: one fast race leg entering the window pushes a
+     ruined brick out and silences a real pattern (gauntlet catch
+     2026-07-30). Race-day fuelling still counts toward the proven gut
+     ceiling (bike-fuelling.js) and race hours are real hours — this
+     boundary is only about habit. */
   const bricks = (plan.weeks || []).flatMap(w => w.workouts || [])
     .filter(w => w.discipline === 'brick' && !w.race && !w.bRace && log && log[w.id])
     .sort((a, b) => (((moves && moves[b.id]) || b.date) < ((moves && moves[a.id]) || a.date) ? -1 : 1));
