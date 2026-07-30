@@ -20,6 +20,15 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   const tracker = plan.race === 'tracker';
   const planStart = tracker ? addMonths(todayISO, -6) : plan.weeks[0].start;
   const planEnd = tracker ? addMonths(todayISO, 1) : T.iso(T.addDays(plan.weeks[plan.weeks.length - 1].start, 6));
+  /* Browsing reaches BEFORE the plan (field report 2026-07-30: "starting a
+     new plan deletes all my past recorded activities in the calendar" — it
+     deleted nothing, but the previous-month button stopped at the plan's
+     first week, so an athlete who came from a tracker lost sight of their
+     whole diary the moment a plan began). History is continuous across plan
+     boundaries: browse as far back as a tracker does, or to the plan start
+     if that is older. Moves and add-targets stay clamped to the PLAN window
+     below — you can look at last month, not schedule into it. */
+  const viewStart = tracker ? planStart : (d => (d < planStart ? d : planStart))(addMonths(todayISO, -6));
   const raceISO = tracker ? null : T.iso(plan.profile.raceDate);
   const clampDay = d => (d < planStart ? planStart : d > planEnd ? planEnd : d);
 
@@ -42,7 +51,12 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   // 2026-07-16: recorded workouts were invisible until a day was tapped).
   const actByDate = useMemo(() => {
     const m = {};
-    if (tracker) (activities || []).forEach(a => {
+    /* Both modes since 2026-07-30 — recorded dots were tracker-only, so in
+       plan mode a rest-day ride and the whole pre-plan history were
+       dot-less. The cell renders these only on days with NO planned
+       sessions, so a completed workout and its matched recording can never
+       wear two dots for one session (the reason the tracker gate existed). */
+    (activities || []).forEach(a => {
       // The exact guard RecordedActivities uses, drift check included: an
       // unmapped activity type (walk, yoga, ski) stays off the grid rather
       // than defaulting to a bike dot, and the grid, the day card and the
@@ -51,10 +65,10 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
       (m[a.date] = m[a.date] || []).push(a);
     });
     return m;
-  }, [tracker, activities]);
+  }, [activities]);
 
   const ym = s => s.slice(0, 7);
-  const canPrev = ym(anchor) > ym(planStart);
+  const canPrev = ym(anchor) > ym(viewStart);
   const canNext = ym(anchor) < ym(planEnd);
 
   // Pointer-based drag (touch and mouse): the grip captures the pointer, a
@@ -87,7 +101,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   // With no plan there are never day sessions, so the card exists only to say
   // "Nothing recorded." — which it must not while the Recorded list below has
   // rows for the day (field report 2026-07-16: it contradicted a recorded run).
-  const dayActs = selected ? (actByDate[selected] || []) : [];
+  const dayActs = selected ? (actByDate[selected] || []) : []; // both modes now
 
   return (
     <>
@@ -104,7 +118,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         <div className="cal-grid">
           {grid.cells.map((d, i) => {
             const ws = d ? (byDate[d] || []) : [];
-            const acts = d ? (actByDate[d] || []) : [];
+            const acts = d && !ws.length ? (actByDate[d] || []) : [];
             const inPlan = d && d >= planStart && d <= planEnd;
             return (
               <div key={i} data-caldate={d || undefined}
@@ -132,9 +146,11 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
 
       {selected && <>
         <div className="section-title">{T.fmtDate(selected, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
-        {!(tracker && dayActs.length > 0) && <div className="card">
+        {!((tracker || selected < planStart) && dayActs.length > 0) && <div className="card">
           {daySessions.length === 0
-            ? <div className="empty" style={{ padding: '18px 8px' }}>{tracker ? 'Nothing recorded.' : 'Nothing planned — drop a session here, or rest.'}</div>
+            ? <div className="empty" style={{ padding: '18px 8px' }}>{tracker ? 'Nothing recorded.'
+              : selected < planStart ? 'Before this plan began.'
+                : 'Nothing planned — drop a session here, or rest.'}</div>
             : daySessions.map(w => (
               <div className="cal-row" key={w.id}>
                 {/* pointer-only grip, aria-hidden: the accessible reschedule path
