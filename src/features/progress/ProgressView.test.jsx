@@ -79,6 +79,16 @@ describe('ProgressView renders in every mode', () => {
     expect(html).toContain('no heart rate data');    // hrMissing says so
   });
 
+  it('maintenance block: the countdown speaks in block weeks, never race day', async () => {
+    const plan = generatePlan({ ...profile, raceType: 'maintenance', horizonWeeks: 12 });
+    const html = await mount({ plan, activities: null });
+    expect(html).toContain('Left in the block');
+    expect(html).toContain('weeks');
+    // its raceDate is just the block's horizon (RACES.maintenance), so the
+    // race-countdown label must not appear
+    expect(html).not.toContain('Until race day');
+  });
+
   it('tracker mode renders', async () => {
     const t = buildTrackerPlan(generatePlan(profile), '2026-07-13T10:00:00.000Z');
     const html = await mount({ plan: t, activities: [run('2026-07-14', 8)] });
