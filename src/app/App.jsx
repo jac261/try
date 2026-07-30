@@ -645,7 +645,17 @@ export function App({ storage, getToken, user }) {
     const out = [];
     if (plan && plan.race !== 'tracker' && Array.isArray(plan.weeks) && plan.weeks.length) {
       plan.weeks.flatMap(w => w.workouts)
-        .filter(w => ((w.role === 'long' && (w.discipline === 'run' || w.discipline === 'bike')) || w.discipline === 'brick') && log[w.id])
+        /* Raced sessions are refused EXPLICITLY (design panel 2026-07-30):
+           the durability read measures drift under a steady intent, and a
+           raced split is pacing by choice, not fatigue resistance. The
+           planBodySteady gate below cannot make this call — race cards carry
+           no zones, so it would pass them vacuously rather than by
+           judgement. This is a PLAN-branch guarantee only: the tracker
+           branch below reads raw activities, which carry no race flag, so a
+           race ridden in tracker mode is indistinguishable there and its
+           read persists across plans (the store spans plans by design). */
+        .filter(w => !w.race && !w.bRace
+          && ((w.role === 'long' && (w.discipline === 'run' || w.discipline === 'bike')) || w.discipline === 'brick') && log[w.id])
         .forEach(w => {
           if (w.discipline === 'brick') {
             // the BIKE leg only, judged by ITS OWN segments: a brick's run
@@ -839,11 +849,21 @@ export function App({ storage, getToken, user }) {
   // Calibration capture: when a session is completed (and again when its feel is
   // rated), snapshot the readiness inputs for that day next to the outcome —
   // stored locally (append-only) and embedded in the synced log's notes field.
-  const observe = (id, feel, at, actualMin) => {
+  // feelSource stamps who authored the feel — 'athlete' (their own tap) or
+  // 'rpe' (derived from the recording) — with the raw rpe alongside;
+  // see buildObservation for why the corpus needs the split.
+  const observe = (id, feel, at, actualMin, feelSource, rpe) => {
     const w = plan.weeks.flatMap(wk => wk.workouts).find(x => x.id === id);
     if (!w || w.discipline === 'rest') return null;
+    const date = effDate(w, moves);
+    // A tap replaces the derived row for the same workout+date; the rpe that
+    // row banked is carried forward, so the corpus keeps whether the tap
+    // agreed with or overrode the band rather than erasing the evidence.
+    const carried = feel && feelSource && rpe == null
+      ? (storage.loadCalibration().find(o => o.workout && o.workout.id === id && o.date === date) || {}).rpe
+      : rpe;
     const obs = buildObservation({
-      workout: w, date: effDate(w, moves), feel, eased: !!adjust[id], wellnessRecs: recs, at, actualMin,
+      workout: w, date, feel, eased: !!adjust[id], wellnessRecs: recs, at, actualMin, feelSource, rpe: carried,
     });
     storage.upsertCalibration(obs);
     return toNote(obs);
@@ -855,19 +875,23 @@ export function App({ storage, getToken, user }) {
   // Bricks resolve to a ride+run PAIR, folded into one combined recording (no
   // distance — summing km across two sports would render a misleading pace);
   // the link opens the ride leg. Everything else resolves to its single match.
+  // `pair: true` marks the fold, so display copy can present the rpe as the
+  // harder leg's rating rather than quoting it as one rating of one session.
+  const brickRecording = (ride, run) => {
+    const rpes = [ride.rpe, run.rpe].filter(v => Number.isFinite(v));
+    const load = (ride.trainingLoad != null || run.trainingLoad != null)
+      ? (ride.trainingLoad || 0) + (run.trainingLoad || 0) : null;
+    return {
+      id: ride.id, date: ride.date, type: 'Ride', name: 'Brick — ride + run legs', pair: true,
+      movingTimeSec: ride.movingTimeSec + run.movingTimeSec,
+      trainingLoad: load, rpe: rpes.length ? Math.max(...rpes) : null,
+    };
+  };
   const recordingFor = w => {
     if (!w) return null;
     if (w.discipline === 'brick') {
       const pair = T.brickPairFor({ workout: w, activities, moves });
-      if (!pair) return null;
-      const rpes = [pair.ride.rpe, pair.run.rpe].filter(v => v != null);
-      const load = (pair.ride.trainingLoad != null || pair.run.trainingLoad != null)
-        ? (pair.ride.trainingLoad || 0) + (pair.run.trainingLoad || 0) : null;
-      return {
-        id: pair.ride.id, date: pair.ride.date, type: 'Ride', name: 'Brick — ride + run legs',
-        movingTimeSec: pair.ride.movingTimeSec + pair.run.movingTimeSec,
-        trainingLoad: load, rpe: rpes.length ? Math.max(...rpes) : null,
-      };
+      return pair ? brickRecording(pair.ride, pair.run) : null;
     }
     return T.activityFor({ workout: w, activities, moves });
   };
@@ -1118,7 +1142,12 @@ export function App({ storage, getToken, user }) {
     // Rebuilding the note must carry the entry's recorded duration forward —
     // omitting it once wrote actualMin:null into the synced note and silently
     // erased the measurement on every other device (2026-07-12 audit finding).
-    const entry = Object.assign({}, log[id], { done: true, at, feel, notes: observe(id, feel, at, (log[id] || {}).actualMin) });
+    // 'athlete': the tap is their own word, and the rebuilt observation
+    // replaces any earlier rpe-derived one for the same workout+date — the
+    // athlete's word always beats the derivation. (A session moved AFTER
+    // logging keeps its old row under the old date: the corpus key is
+    // workout+date, so that guarantee stops at a reschedule.)
+    const entry = Object.assign({}, log[id], { done: true, at, feel, notes: observe(id, feel, at, (log[id] || {}).actualMin, 'athlete') });
     setLog(l => ({ ...l, [id]: entry }));
     if (gid(id)) sync.saveLog(gid(id), entry);
   };
@@ -1309,14 +1338,23 @@ export function App({ storage, getToken, user }) {
     spotted.forEach(m => {
       const secs = (m.activity && m.activity.movingTimeSec || 0) + (m.activityRun && m.activityRun.movingTimeSec || 0);
       const actualMin = secs ? Math.round(secs / 60) : undefined;
-      const entry = { done: true, at, feel: m.feel, actualMin, notes: observe(m.workout.id, m.feel || null, at, actualMin) };
+      // m.rpe is the exact input the matcher derived m.feel from
+      const entry = { done: true, at, feel: m.feel, actualMin,
+        notes: observe(m.workout.id, m.feel || null, at, actualMin, m.feel ? 'rpe' : undefined, m.rpe) };
       entries[m.workout.id] = entry;
       if (gid(m.workout.id)) sync.saveLog(gid(m.workout.id), entry);
     });
     setLog(l => ({ ...l, ...entries }));
     if (spotted.length) {
-      markRecapSeen(recordingFor(spotted[0].workout));
-      setRecap({ workout: spotted[0].workout }); // recap the headline session
+      // The most significant session leads the deck — see headlineSpot. Its
+      // OWN recordings ride through: re-deriving via recordingFor has no
+      // claimed-set, so a second same-day recording could reopen brick
+      // ambiguity (no deck at all) or hand the deck — and the synced review —
+      // another session's recording (verified gauntlet catch 2026-07-30).
+      const head = T.headlineSpot(spotted);
+      const headAct = head.activityRun ? brickRecording(head.activity, head.activityRun) : head.activity;
+      markRecapSeen(headAct);
+      setRecap({ workout: head.workout, activity: headAct });
     }
   };
   // Every accepted proposal is journalled with the exact headline and why

@@ -132,8 +132,13 @@ export function reviewActivity({ workout, activity, paces, log, swimReview, bike
     verdicts.push({ tone: 'info', text: 'Interval session — the average blurs work and recovery together, so no pace verdict here.' });
   }
 
-  // Load vs plan (meaningless for an unplanned session — there is no plan dose).
-  if (!w.adhoc && a.trainingLoad != null) {
+  // Load vs plan (meaningless for an unplanned session — there is no plan
+  // dose). Raced and tested sessions are skipped too: their intensity factor
+  // in estimateTss is a planning placeholder, and a recorded dose well above
+  // it is the point of racing a race, not a deviation worth a warning
+  // (design panel 2026-07-30). Flags, as everywhere a raced card is refused
+  // (isTrainingRide's spelling); race + bRace cover goal race and tune-ups.
+  if (!w.adhoc && !w.race && !w.bRace && !w.test && a.trainingLoad != null) {
     const plannedTss = estimateTss(w, undefined, log && log.actualMin);
     if (plannedTss > 10 && a.trainingLoad / plannedTss > 1.4) {
       verdicts.push({ tone: 'warn', text: 'Training load came in well above the plan’s estimate for this session — a much bigger dose than intended.' });

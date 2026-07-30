@@ -461,10 +461,41 @@ describe('nothing here is a model without a caller', () => {
     expect(r.pattern).toBe(null);
     expect(brickHistory({ plan: null, activities: [] }).pattern).toBe(null);
   });
+
 });
 
 
 /* Gauntlet regressions for phase 6. */
+describe('gauntlet: raced sessions stay out of the habit and durability evidence (design panel 2026-07-30)', () => {
+  it('a raced tune-up brick never enters the habit evidence', () => {
+    // a logged bRace brick with a perfectly pairable recording pair: the
+    // habit read must refuse it — a raced bike leg is deliberate pacing,
+    // and the fresh-pace yardstick would all but guarantee 'ruined'
+    const p = { profile: { raceType: 'half' }, paces: { run: { long: 340, easy: 360 }, ftp: 250 }, weeks: [{ index: 0, workouts: [
+      { id: 'b1', discipline: 'brick', type: 'RACE', bRace: true, date: '2026-07-10', durationMin: 150 },
+    ] }] };
+    const acts = [
+      { id: 'r1', type: 'Ride', date: '2026-07-10', movingTimeSec: 90 * 60 },
+      { id: 'r2', type: 'Run', date: '2026-07-10', movingTimeSec: 40 * 60, distance: 8000 },
+    ];
+    const r = brickHistory({ plan: p, activities: acts, log: { b1: { done: true } }, moves: {}, paces: p.paces, fuelLog: {} });
+    expect(r.executions).toEqual([]);
+  });
+
+  it('the plan-branch candidate filter refuses raced sessions explicitly, not via the vacuous steady gate', () => {
+    /* A race card's segments carry no zones, so planBodySteady passes it
+       vacuously — the exclusion has to be written into the candidate filter
+       itself. Source-level because the filter lives inside the App
+       component. Plan branch only: the tracker branch reads raw activities,
+       which carry no race flag, and its own comment says so. */
+    const src = readFileSync(new URL('../app/App.jsx', import.meta.url), 'utf8');
+    const at = src.indexOf('const durabilityCandidates');
+    expect(at, 'App no longer declares durabilityCandidates where this test can find it').toBeGreaterThan(-1);
+    expect(src.slice(at, at + 3000).includes('!w.race && !w.bRace'),
+      'the plan-branch durability candidate filter no longer refuses raced sessions explicitly').toBe(true);
+  });
+});
+
 describe('gauntlet: every declared objective is actually reachable', () => {
   it('reaches four of five from generation, and the fifth from the ease path', () => {
     /* Three of the five were structurally unreachable on the first cut. The

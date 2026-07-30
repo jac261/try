@@ -62,18 +62,23 @@ export function brickPairFor({ workout, activities, moves, used }) {
 }
 
 // Log feel from the athlete's recorded RPE (0-10), when present. Conservative
-// bands; absent RPE leaves feel unset rather than guessing.
+// bands; an absent — or non-numeric — RPE leaves feel unset rather than
+// guessing (the passthrough is verbatim, so a junk value must not fall
+// through the comparisons into 'right').
 function feelFromRpe(rpe) {
-  if (rpe == null) return undefined;
+  if (!Number.isFinite(rpe)) return undefined;
   if (rpe <= 4) return 'easy';
   if (rpe >= 8) return 'hard';
   return 'right';
 }
 
 // activities: the compact backend passthrough shape ({ id, date, type,
-// movingTimeSec, rpe, ... }). Returns [{ workout, activity, feel }] — each
-// activity claims at most one workout, matched on discipline + effective date
-// with the duration within [50%, 170%] of plan (closest duration wins).
+// movingTimeSec, rpe, ... }). Returns [{ workout, activity, activityRun?,
+// feel, rpe }] — each activity claims at most one workout, matched on
+// discipline + effective date with the duration within [50%, 170%] of plan
+// (closest duration wins). `rpe` is the exact input feel was derived from
+// (a brick takes the harder leg's), emitted so callers stamping provenance
+// never re-derive it.
 export function matchActivities({ activities, plan, log, moves, todayISO }) {
   if (!Array.isArray(activities) || !activities.length || !plan || !Array.isArray(plan.weeks)) return [];
   const today = todayISO || iso(new Date());
@@ -97,8 +102,9 @@ export function matchActivities({ activities, plan, log, moves, todayISO }) {
       const pair = brickPairFor({ workout: w, activities, moves, used });
       if (pair) {
         used.add(pair.ride.id); used.add(pair.run.id);
-        const rpes = [pair.ride.rpe, pair.run.rpe].filter(v => v != null);
-        matches.push({ workout: w, activity: pair.ride, activityRun: pair.run, feel: rpes.length ? feelFromRpe(Math.max(...rpes)) : undefined });
+        const rpes = [pair.ride.rpe, pair.run.rpe].filter(v => Number.isFinite(v));
+        const rpe = rpes.length ? Math.max(...rpes) : undefined;
+        matches.push({ workout: w, activity: pair.ride, activityRun: pair.run, feel: feelFromRpe(rpe), rpe });
       }
       return;
     }
@@ -110,10 +116,28 @@ export function matchActivities({ activities, plan, log, moves, todayISO }) {
       .sort((x, y) => Math.abs(x.min - planned) - Math.abs(y.min - planned))[0];
     if (best) {
       used.add(best.a.id);
-      matches.push({ workout: w, activity: best.a, feel: feelFromRpe(best.a.rpe) });
+      const rpe = Number.isFinite(best.a.rpe) ? best.a.rpe : undefined;
+      matches.push({ workout: w, activity: best.a, feel: feelFromRpe(rpe), rpe });
     }
   });
   return matches;
+}
+
+// The one match that headlines the recap deck when several spotted sessions
+// log in one tap. Plan order is layout, not significance: the plan's own key
+// flag wins, then the longest recorded session (a brick counts both legs —
+// the same sum logSpotted banks as actualMin), then the longer planned card.
+// The sort is stable, so plan order stays the final tiebreak and the pick is
+// deterministic. Feel and RPE stay out of it on purpose: the outcome label
+// must never choose what gets celebrated.
+export function headlineSpot(matches) {
+  if (!Array.isArray(matches) || !matches.length) return null;
+  const recorded = m => ((m.activity && m.activity.movingTimeSec) || 0)
+    + ((m.activityRun && m.activityRun.movingTimeSec) || 0);
+  return [...matches].sort((a, b) =>
+    ((b.workout.key ? 1 : 0) - (a.workout.key ? 1 : 0))
+    || (recorded(b) - recorded(a))
+    || ((b.workout.durationMin || 0) - (a.workout.durationMin || 0)))[0];
 }
 
 // Link-out matching for a single (typically logged) session: the same

@@ -50,6 +50,21 @@ describe('reviewActivity (post-session analysis)', () => {
     expect(hardEasy.verdicts.some(v => /felt hard/i.test(v.text))).toBe(true);
   });
 
+  it('a raced or tested session is never scolded for out-running the plan estimate', () => {
+    // a raced tune-up: real dose far above the 0.95-IF planning placeholder
+    const tune = { discipline: 'brick', type: 'RACE', bRace: true, durationMin: 150 };
+    const rv = reviewActivity({ workout: tune, activity: act({ trainingLoad: 400, movingTimeSec: 9000, distance: null, rpe: null }), paces });
+    expect(rv.verdicts.some(v => /above the plan/i.test(v.text))).toBe(false);
+    // a benchmark test: maximal on purpose, same rule
+    const test5k = { discipline: 'run', type: 'Test', test: true, durationMin: 30 };
+    const rvT = reviewActivity({ workout: test5k, activity: act({ trainingLoad: 90, movingTimeSec: 1800, distance: 6000, rpe: null }), paces });
+    expect(rvT.verdicts.some(v => /above the plan/i.test(v.text))).toBe(false);
+    // an ordinary session still earns the honest warning
+    const easy = { discipline: 'run', type: 'Easy', durationMin: 50 };
+    const rvE = reviewActivity({ workout: easy, activity: act({ trainingLoad: 200 }), paces });
+    expect(rvE.verdicts.some(v => /above the plan/i.test(v.text))).toBe(true);
+  });
+
   it('stats render from available fields only, and no activity means no review', () => {
     const w = { discipline: 'run', type: 'Easy', durationMin: 50 };
     const rv = reviewActivity({ workout: w, activity: act(), paces });
