@@ -601,7 +601,7 @@ export function App({ storage, getToken, user }) {
       .map(w => ({ ...log[w.id].bikeReview, date: (log[w.id].at || '').slice(0, 10) || w.date }))
     : []), [plan, log]);
   const [focusLog, setFocusLog] = useState(() => storage.loadFocusLog());
-  const [blockReviewed, setBlockReviewed] = useState(() => storage.loadBlockReviewed());
+  const [blockReviewed, setBlockReviewed] = useState(() => storage.loadBlockReviewed(plan && plan.createdAt));
   // The one narrow write a focus change is allowed: patch the single field,
   // bump updatedAt, push the same plan. Never generatePlan, never a
   // fitness-history snapshot, no overlay touched (design panel 2026-07-21:
@@ -614,7 +614,7 @@ export function App({ storage, getToken, user }) {
     saveProfileBoth(np.profile);
     if (plan.race !== 'tracker') sync.replacePlan(np).then(adoptRes(np.createdAt));
   };
-  const markBlockReviewed = wm => setBlockReviewed(storage.saveBlockReviewed(wm));
+  const markBlockReviewed = wm => setBlockReviewed(storage.saveBlockReviewed(wm, plan && plan.createdAt));
   const answerFuel = (activityId, level, discipline) =>
     setFuelLog(storage.saveFuel(activityId, level, new Date().toISOString(), discipline));
   const answerPosition = (activityId, comfort, symptoms, minutes) =>
@@ -1032,6 +1032,13 @@ export function App({ storage, getToken, user }) {
     // The snapshot keeps the superseded values AND their provenance, so the
     // threshold history can say where each past number came from rather
     // than only what it was (phase 2 §3 auditability).
+    /* fitnessHistory is deliberately UNCAPPED (phase 2 decision): it rides
+       the plan blob to the backend, so a cap would change the synced blob,
+       and it is the only durable record of superseded thresholds — the
+       audit trail behind every history chart and the nearest thing a
+       retarget has to an undo record. One snapshot per retarget; years from
+       being a size problem. The real fix is the threshold-history retention
+       ask in BACKEND_HANDOFF. */
     const snapshot = { date: T.iso(new Date()), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness,
       ...(old.ftpMeta ? { ftpMeta: old.ftpMeta } : {}), ...(old.cssMeta ? { cssMeta: old.cssMeta } : {}),
       ...(old.fivekMeta ? { fivekMeta: old.fivekMeta } : {}) };

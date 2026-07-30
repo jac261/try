@@ -39,6 +39,16 @@ Tracker mode is honestly narrower: readiness-band recovery, the run diary's
 own ramp read, and the limiter-named progression. No completion
 classification and no per-discipline claims without a plan.
 
+## Phase 2 note (30 July 2026): the shared decision layer
+
+The rules below now have a shared enforcement point: src/lib/coaching/
+(evidence, decision, journal, review-authority, limiter-arbitration).
+Adapters consume this module's RETURNS and never its thresholds — the same
+contract rule 1 states for the adaptive engine, applied one level up. The
+decision journal (decisionLog) records terminal athlete actions including
+rejections; it is device-local per rule 3, and the synced version is now a
+filed ask in BACKEND_HANDOFF.
+
 ## Design rules that must survive future passes
 
 1. coach.js consumes the adaptive engine's RETURNS (proposeWeek and

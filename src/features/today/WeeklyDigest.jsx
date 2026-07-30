@@ -21,11 +21,17 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
      field signature was a transient glitch nobody could reproduce. */
   const [reviewOpen, setReviewOpen] = useState(false);
   const weekMonday = T.reviewedWeekMonday(todayISO, new Date().getHours());
-  const seen = storage.load('digestSeenWeek', null);
+  /* Phase 2 stray fix: plan-stamped like blockReviewed (a bare week string
+     let a dismissal from a replaced plan suppress the new plan's digest);
+     legacy bare strings are honoured once. */
+  const seenRaw = storage.load('digestSeenWeek', null);
+  const seen = seenRaw && typeof seenRaw === 'object'
+    ? (seenRaw.planCreatedAt === (plan.createdAt || null) ? seenRaw.weekMonday : null)
+    : seenRaw;
   if (gone || seen === weekMonday || !T.digestWindowOpen(weekMonday, todayISO)) return null;
   const d = T.buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday });
   if (!d) return null;
-  const dismiss = () => { storage.save('digestSeenWeek', weekMonday); setGone(true); };
+  const dismiss = () => { storage.save('digestSeenWeek', { weekMonday, planCreatedAt: plan.createdAt || null }); setGone(true); };
   const fmtD = s => T.fmtDate(s, { month: 'short', day: 'numeric' });
   // The coach's call for the reviewed week: quoted from the frozen store or
   // absent. Never recomputed here; a recompute presented as the original

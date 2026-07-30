@@ -455,6 +455,6 @@ export const DECISION_LABELS = {
   progress: 'Progress',
   hold: 'Hold steady',
   'reduce-volume': 'Pull back',
-  'ease-intensity': 'Ease the intensity',
+  'ease-intensity': 'Ease the intensity',   // reserved: no rule emits it yet (phase 2 keeps the label so a stored decision could render)
   recover: 'Recovery',
 };

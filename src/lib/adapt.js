@@ -16,6 +16,9 @@ export { RUN_RAMP_RULES, LONG_RUN_RULES, runLoadSignal, longRunJumpSignal, runLo
 // A proposal: { kind, workout, headline, why, action }
 //   kind: 'ease' | 'restore' | 'move-test'
 //   action: what accepting it should invoke ('easeToday' | 'restoreToday' | 'moveTest')
+//   moveTest's actuator is ReadinessCard's open-and-reschedule path (the
+//   sheet's move control) — mapped to 'reschedule' in the shared decision
+//   layer (phase 2), not a dedicated handler.
 export function proposeToday({ band, score, todays }) {
   if (!band || !Array.isArray(todays) || !todays.length) return null;
 

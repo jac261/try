@@ -278,7 +278,8 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
           it leads; in plan mode readiness keeps the top spot (Jon, 2026-07-16). */}
       {tracker && coachCard}
       <ReadinessCard wellness={wellness} today={today.map(w => ({ ...easedOf(w), done: !!log[w.id] }))} noPlan={tracker}
-        onEdit={onEditWellness} onFeel={onFeel} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} onSupport={onSupport} recovery={recovery} />
+        onEdit={onEditWellness} onFeel={onFeel} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} onSupport={onSupport} recovery={recovery}
+        storage={storage} onDecision={onDecision} />
       {!tracker && coachCard}
       <div className="card">
         {allDone && !reviewToday

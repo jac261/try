@@ -186,8 +186,29 @@ export function storageForUser(userId) {
     },
     // the last week a block review was shown, so the cadence fallback
     // cannot re-fire weekly once it starts
-    loadBlockReviewed() { try { return localStorage.getItem(ns + 'blockReviewed') || null; } catch (e) { return null; } },
-    saveBlockReviewed(weekMonday) { try { localStorage.setItem(ns + 'blockReviewed', weekMonday); } catch (e) {} return weekMonday; },
+    /* Phase 2 stray fix: stamped with planCreatedAt like every sibling
+       journal (adjustLog/coachLog/focusLog all carry it) — a bare week
+       string survived storage.clear() and a plan replace, so a block review
+       answered on a PREVIOUS plan suppressed the next plan's first review.
+       A legacy bare string is honoured as current-plan once and restamped
+       on the next write. */
+    loadBlockReviewed(planCreatedAt) {
+      try {
+        const raw = localStorage.getItem(ns + 'blockReviewed');
+        if (!raw) return null;
+        try {
+          const v = JSON.parse(raw);
+          if (v && typeof v === 'object') {
+            return planCreatedAt == null || v.planCreatedAt === planCreatedAt ? v.weekMonday : null;
+          }
+        } catch (e2) { /* legacy bare week string */ }
+        return raw;
+      } catch (e) { return null; }
+    },
+    saveBlockReviewed(weekMonday, planCreatedAt) {
+      try { localStorage.setItem(ns + 'blockReviewed', JSON.stringify({ weekMonday, planCreatedAt: planCreatedAt ?? null })); } catch (e) {}
+      return weekMonday;
+    },
     loadFeels,
     saveFeel(date, value) {
       const m = loadFeels();
