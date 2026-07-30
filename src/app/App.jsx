@@ -7,7 +7,7 @@ import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
 import { downloadICS } from '@/lib/ics.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
-import { Splash } from '@/components/Splash.jsx';
+import { Splash, splashShownForMs } from '@/components/Splash.jsx';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
 import { WhatIfSheet } from '@/features/wellness/WhatIfSheet.jsx';
 import { RecapSlides } from '@/features/recap/RecapSlides.jsx';
@@ -60,8 +60,14 @@ export function App({ storage, getToken, user }) {
   // after the early returns (the default-to-no-plan hooks lesson).
   const [splashHeld, setSplashHeld] = useState(true);
   useEffect(() => {
-    // long enough for the mark to tumble through all three faces (4.2s, Jon)
-    const t = setTimeout(() => setSplashHeld(false), 4400);
+    // Long enough for the mark to tumble through all three faces (4.2s, Jon),
+    // measured from the splash's FIRST appearance, not from App's mount. The
+    // tumble continues across the AuthGate->App handoff instead of restarting,
+    // so time already spent tumbling at the Clerk gate counts; a slow sign-in
+    // no longer buys a second full hold on top. Line comments on purpose: the
+    // TDZ guard strips // but not /* */, and "all three faces" in a block
+    // comment reads as a reference to the `all` declared below the returns.
+    const t = setTimeout(() => setSplashHeld(false), Math.max(0, 4400 - splashShownForMs()));
     return () => clearTimeout(t);
   }, []);
   const didHydrate = useRef(false);
