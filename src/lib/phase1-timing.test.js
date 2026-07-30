@@ -50,6 +50,7 @@ describe('brick transition (§3.3)', () => {
 describe('brick pairing order (autolog)', () => {
   const workout = { id: '3-5', discipline: 'brick', durationMin: 75, date: '2026-07-05' };
   const base = { date: '2026-07-05', movingTimeSec: 2250 };
+  const dev = { deviceName: 'Garmin Forerunner' };
   const pair = (rideExtra, runExtra) => brickPairFor({
     workout,
     activities: [
@@ -60,13 +61,25 @@ describe('brick pairing order (autolog)', () => {
   });
 
   it('rejects a run recorded BEFORE the ride: that is not a brick', () => {
-    expect(pair({ startedAt: '2026-07-05T18:00:00Z' }, { startedAt: '2026-07-05T07:00:00Z' })).toBe(null);
+    expect(pair({ startedAt: '2026-07-05T18:00:00Z', ...dev }, { startedAt: '2026-07-05T07:00:00Z', ...dev })).toBe(null);
   });
 
   it('accepts ride-then-run, and keeps date-only pairing when timestamps are absent', () => {
-    expect(pair({ startedAt: '2026-07-05T07:00:00Z' }, { startedAt: '2026-07-05T08:10:00Z' })).toBeTruthy();
+    expect(pair({ startedAt: '2026-07-05T07:00:00Z', ...dev }, { startedAt: '2026-07-05T08:10:00Z', ...dev })).toBeTruthy();
     expect(pair({}, {})).toBeTruthy();                       // the pre-field behaviour, byte-identical
-    expect(pair({ startedAt: '2026-07-05T07:00:00Z' }, {})).toBeTruthy(); // one timestamp proves nothing
+    expect(pair({ startedAt: '2026-07-05T07:00:00Z', ...dev }, {})).toBeTruthy(); // one timestamp proves nothing
+  });
+
+  it('a hand-logged half never un-matches a brick: ordering needs devices on BOTH sides', () => {
+    /* Gauntlet catch: an intervals.icu manual entry carries a defaulted
+       start time (commonly the start of the day). An evening brick whose
+       run half was hand-logged would parse run-before-ride and silently
+       lose its match. deviceName marks a real recording; a timestamp
+       without one is not evidence of order. */
+    expect(pair(
+      { startedAt: '2026-07-05T18:00:00Z', ...dev },
+      { startedAt: '2026-07-05T00:00:00Z' },              // manual: no device
+    )).toBeTruthy();
   });
 });
 

@@ -433,6 +433,24 @@ export function logToApi(entry) {
    wrapped in the versioned envelope; techniqueCue passes through bare
    (enum column). An explicit null clears (deselecting a cue). */
 export function reviewBodyToApi(entry, fields, engineVersions) {
+  return reviewBodyToApiInner(entry, fields, engineVersions);
+}
+
+/* The WHOLE entry, reviews and cue included — for the re-push paths only
+   (hydrate's local-only merge, adoptMap's sweep). Those push entries the
+   server has never seen, and pushing them through logToApi silently
+   stripped any offline-earned review and cue: the server row was then
+   created bare, and the next server-wins hydrate erased the local copy too
+   (gauntlet catch 2026-07-30). Fields absent on the entry stay omitted —
+   never an explicit null — so a re-push can only add, never clear. */
+export function fullLogToApi(entry, engineVersions) {
+  const fields = {};
+  ['swimReview', 'bikeReview', 'runReview'].forEach(f => { if (entry && entry[f]) fields[f] = entry[f]; });
+  if (entry && entry.techniqueCue) fields.techniqueCue = entry.techniqueCue;
+  return reviewBodyToApiInner(entry, fields, engineVersions);
+}
+
+function reviewBodyToApiInner(entry, fields, engineVersions) {
   const body = logToApi(entry);
   ['swimReview', 'bikeReview', 'runReview'].forEach(f => {
     if (!(f in fields)) return;                       // omitted = preserved

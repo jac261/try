@@ -45,7 +45,13 @@ export function brickPairFor({ workout, activities, moves, used }) {
     && DISCIPLINE[a.type] === disc && a.date === date && a.movingTimeSec != null);
   const rides = on('bike'), runs = on('run');
   if (rides.length !== 1 || runs.length !== 1) return null;
-  if (rides[0].startedAt && runs[0].startedAt) {
+  /* Ordering is only enforced when BOTH timestamps came off a device. A
+     manually logged half (intervals.icu hand entry) carries a defaulted or
+     carelessly picked start time — commonly the start of the day — and
+     trusting it un-matched genuine bricks whose run half was hand-logged
+     (gauntlet catch 2026-07-30). deviceName is the delivered marker of a
+     real recording; without it on both sides, pairing stays date-only. */
+  if (rides[0].startedAt && runs[0].startedAt && rides[0].deviceName && runs[0].deviceName) {
     const rideStart = Date.parse(rides[0].startedAt);
     const runStart = Date.parse(runs[0].startedAt);
     if (Number.isFinite(rideStart) && Number.isFinite(runStart) && runStart < rideStart) return null;
