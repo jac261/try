@@ -11,6 +11,7 @@ import {
   putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
   putWorkoutAdjustment, deleteWorkoutAdjustment,
   getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents, getIntervalsThresholds, getIntervalsActivityIntervals, getIntervalsActivityRoute,
+  getIntervalsPowerCurve,
   toClientState, logToApi,
 } from '@/lib/api.js';
 
@@ -197,6 +198,15 @@ export function makeSync(getToken) {
     // connected, offline, or the backend predates the passthrough.
     loadActivities: async (days = 10) => {
       const res = await getIntervalsActivities(getToken, days);
+      return res.ok && Array.isArray(res.body) ? res.body : null;
+    },
+
+    /* Best power by duration. null when not connected, offline, or on a
+       backend that predates the endpoint — the rider profile and the bike
+       spider then render their own "needs power data" copy rather than an
+       empty chart. */
+    loadPowerCurve: async (days = 90) => {
+      const res = await getIntervalsPowerCurve(getToken, days);
       return res.ok && Array.isArray(res.body) ? res.body : null;
     },
 

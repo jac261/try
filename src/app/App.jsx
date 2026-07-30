@@ -424,6 +424,7 @@ export function App({ storage, getToken, user }) {
     // window (the spotting matcher narrows itself internally, so a deeper
     // raw feed is safe for every other consumer).
     const activitiesP = fetchActivities(plan && plan.race === 'tracker' ? TRACKER_FEED_DAYS : 80);
+
     sync.loadThresholds().then(t => { if (!cancelled && t) setThresholds(t); });
     // The coach freeze and the durability backfill wait for both round-trips
     // to settle either way: a failure settles too, only an in-flight fetch
@@ -517,13 +518,29 @@ export function App({ storage, getToken, user }) {
      curve surface renders nothing — §7's first acceptance criterion. It is
      wired rather than omitted so the day the endpoint lands is a fetch
      change and not a feature build. */
-  const [powerCurveRaw] = useState(null);
+  const [powerCurveRaw, setPowerCurveRaw] = useState(null);
   /* The previously stored curve, so §6's historical comparison and §5's
      device-change detection have something to compare against. Without a
      stored previous there is no comparison at all, and the whole
      hardware-versus-fitness protection is unreachable however good the data
      gets. Kept in the same local store the fuel and position answers use. */
   const [prevPowerCurve] = useState(() => storage.loadPowerCurve());
+  /* Fetch the curve once the athlete is hydrated. Its own effect, placed
+     BELOW the state it writes: folding it into the activities round trip put
+     a closure over setPowerCurveRaw ninety lines above the declaration, which
+     the TDZ order guard rightly rejected.
+
+     Deliberately outside fetchesSettled — the coach freeze waits on
+     activities and wellness because a half-loaded verdict would be wrong,
+     whereas a missing curve just means the rider profile and the bike spider
+     say they need power data, which is what they already say on a backend
+     that never had the endpoint. */
+  useEffect(() => {
+    if (!hydrated) return;
+    let cancelled = false;
+    sync.loadPowerCurve().then(c => { if (!cancelled && c && c.length) setPowerCurveRaw(c); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [hydrated, sync]);
   /* The store's WRITER. savePowerCurve had zero callers, so the previous
      curve was permanently null on every device and the whole
      hardware-versus-fitness comparison was unreachable — even on the day the
