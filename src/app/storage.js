@@ -96,6 +96,23 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'coachLog', JSON.stringify(m)); } catch (e) {}
       return m;
     },
+    /* The unified decision journal (phase 2 §9): every terminal athlete
+       action on a coaching decision — accepted, rejected (a dismissal IS a
+       rejection), superseded — appended in the shared decision shape.
+       Device-local by design (COACH_BRAIN rule: a synced journal is a
+       backend ask, filed); rejections are never deleted, because history
+       is the point. Idempotent: re-appending the latest (id, status) pair
+       is a no-op, so an effect that fires twice writes once. */
+    loadDecisionLog() { try { return JSON.parse(localStorage.getItem(ns + 'decisionLog') || '[]'); } catch (e) { return []; } },
+    appendDecision(entry) {
+      const log = this.loadDecisionLog();
+      const last = [...log].reverse().find(e => e.id === entry.id);
+      if (last && last.status === entry.status) return log;   // idempotent
+      const next = log.concat([entry]).slice(-120);
+      try { localStorage.setItem(ns + 'decisionLog', JSON.stringify(next)); } catch (e) {}
+      return next;
+    },
+
     // Durability reads, keyed by activity id. Like calibration and the
     // manual diary this is an append-only record of facts about PAST
     // recordings, spanning plans by design: it must NOT join clear()'s

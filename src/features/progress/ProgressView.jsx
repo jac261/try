@@ -1,5 +1,6 @@
 import * as T from '@/lib';
 import { PowerCurveCard } from '@/components/PowerCurveCard.jsx';
+import { DecisionHistory } from '@/components/coaching/DecisionHistory.jsx';
 import { Icon } from '@/components/Icon.jsx';
 import { BarChart, Donut, Sparkline, TrendChart } from '@/components/charts.jsx';
 import { fitnessSeries } from '@/features/progress/fitnessSeries.js';
@@ -11,7 +12,7 @@ import { BikeDashboard } from '@/features/progress/BikeDashboard.jsx';
 import { RunDashboard } from '@/features/progress/RunDashboard.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog }) {
+export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog, decisionLog }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
@@ -279,6 +280,11 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           </div>
         </>;
       })()}
+
+      {/* Phase 2 §9: what Try offered and what you did about it. Folded by
+          default; rejections and supersessions stay visible, because a
+          coaching relationship you cannot audit is not one. */}
+      <DecisionHistory log={decisionLog} planCreatedAt={plan.createdAt || null} />
 
       {(() => {
         // Body mass: shown only when a weigh-in exists or a goal was set.

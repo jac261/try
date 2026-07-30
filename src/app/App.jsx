@@ -50,6 +50,9 @@ export function App({ storage, getToken, user }) {
   // restore deletes its entries), so the week's story has to be written down
   // the moment it happens or it is gone.
   const [adjustLog, setAdjustLog] = useState(() => storage.load('adjustLog', []));
+  // Phase 2 §9: the unified decision journal — every terminal athlete action
+  // on a coaching decision (accepted, rejected, superseded), device-local.
+  const [decisionLog, setDecisionLog] = useState(() => storage.loadDecisionLog());
   const sync = useMemo(() => makeSync(getToken), [getToken]);
   const [hydrated, setHydrated] = useState(false);
   // Hold the splash for one full pulse even when hydration is instant (a
@@ -1192,7 +1195,11 @@ export function App({ storage, getToken, user }) {
     prevWeeks: Object.keys(coachLog).sort().reverse().map(k => coachLog[k]),
     durabilityByDiscipline: durabilityFor(T.iso(T.startOfWeekMonday(new Date()))),
   });
-  const applyEftp = () => { if (eftp) retarget(eftp.retarget); };
+  const applyEftp = () => {
+    if (!eftp) return;
+    journalDecision(T.fromThresholdProposal(eftp), 'accepted');
+    retarget(eftp.retarget);
+  };
   // Phase 3b (§6): a swim CSS proposal opens the evidence sheet instead of
   // retargeting on the tap; bike and run keep the one-tap flow for now.
   // A swim or bike threshold proposal opens its evidence sheet rather than
@@ -1313,12 +1320,27 @@ export function App({ storage, getToken, user }) {
   // factor and targets ride along for the coach brain's week verdicts (a
   // recovery-depth trim reads differently from a 20% consolidation trim);
   // older entries without them degrade to the generic reduction.
+  /* Phase 2 §9: journal a decision's terminal state. The rows come from the
+     pure helper (supersession included); storage.appendDecision is
+     idempotent on (id, status), so a re-fired effect writes once. adjustLog
+     stays untouched beside this — coach.weekProposal reads it. */
+  const journalDecision = (decision, status) => {
+    if (!decision) return;
+    const at = new Date().toISOString();
+    // named jlog: a bare `log` here would shadow the log STATE in the TDZ
+    // guard's below-the-returns declaration sweep
+    let jlog = storage.loadDecisionLog();
+    T.journalRows(jlog, decision, status, { at, planCreatedAt: (plan && plan.createdAt) || null })
+      .forEach(row => { jlog = storage.appendDecision(row); });
+    setDecisionLog(jlog);
+  };
   const journalProposal = (p, at) => setAdjustLog(l =>
     [...l, { at, kind: p.kind, headline: p.headline, why: p.why, factor: p.factor ?? null, targets: p.targets || [], week: p.week ?? null, planCreatedAt: (plan && plan.createdAt) || null }].slice(-40));
   const applyWeekly = p => {
     if (!p) return;
     const at = new Date().toISOString();
     journalProposal(p, at);
+    journalDecision(T.fromWeeklyProposal(p, { at }), 'accepted');
     if (p.action === 'restoreWeek') {
       setAdjust(a => { const n = { ...a }; p.targets.forEach(id => delete n[id]); return n; });
       p.targets.forEach(id => { if (adjust[id] && gid(id)) sync.removeAdjustment(gid(id)); });
@@ -1486,10 +1508,10 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} runFail={runFail} onFixRun={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} runFail={runFail} onFixRun={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} onDecision={journalDecision} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} decisionLog={decisionLog} />}
       {view === 'settings' && <SettingsView plan={plan}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}
@@ -1532,9 +1554,9 @@ export function App({ storage, getToken, user }) {
       {whatIf && <WhatIfSheet plan={plan} log={log} moves={moves} adjust={adjust} wellness={recs}
         todayISO={T.iso(new Date())} initial={whatIf.initial} onClose={() => setWhatIf(null)} />}
       {cssSheet && <CssProposalSheet proposal={cssSheet} plan={plan}
-        onAccept={() => retarget(cssSheet.retarget)} onClose={() => setCssSheet(null)} />}
+        onAccept={() => { journalDecision(T.fromThresholdProposal(cssSheet), 'accepted'); retarget(cssSheet.retarget); }} onClose={() => setCssSheet(null)} />}
       {ftpSheet && <FtpProposalSheet proposal={ftpSheet} plan={plan}
-        onAccept={() => retarget(ftpSheet.retarget)} onClose={() => setFtpSheet(null)} />}
+        onAccept={() => { journalDecision(T.fromThresholdProposal(ftpSheet), 'accepted'); retarget(ftpSheet.retarget); }} onClose={() => setFtpSheet(null)} />}
       {retestOpen && <CssRetestSheet recommendation={retest || { headline: 'The CSS test', why: 'A fresh measurement keeps your swim paces honest.' }}
         plan={plan} onAddTest={addCssTestToWeek} onEditFitness={() => setEditFitness(true)} onClose={() => setRetestOpen(false)} />}
 
