@@ -98,12 +98,16 @@ account in [../RUN_MODULE.md](../RUN_MODULE.md); the short version:
 ## Still deferred
 
 Duathlon and aquathlon; swim-only and bike-only races; run-only maintenance
-blocks. All three need race-type strings the backend catalog does not yet
-carry, so nothing is built client-side: a plan that generates correctly and
-then fails to save is worse than no plan. `runpass9.test.js` pins their
-absence with the reason. Duathlon and aquathlon additionally need product
-design, a second run on bike-fatigued legs is not an ordinary run, and the
-load guardrails model one run per session.
+blocks. All three need race-type strings the backend catalog does not carry,
+so nothing is built client-side: a plan that generates correctly and then
+fails to save is worse than no plan. `runpass9.test.js` pins their absence
+with the reason.
+
+**`runmaintenance` is in flight** as of 2026-07-30: JackGilham/try-backend#24
+adds the catalog entry, so the client plan shape becomes buildable the moment
+it merges. Duathlon and aquathlon are deliberately NOT in that PR — they need
+product design first, because a second run on bike-fatigued legs is not an
+ordinary run and the load guardrails model one run per session.
 
 ## Key files
 
