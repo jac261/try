@@ -8,7 +8,7 @@
    a `refToId` map the caller keeps and uses to resolve a ref → GUID before pushing. */
 import {
   getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan, deletePlan, putProfile, getMe,
-  putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
+  putWorkoutLog, deleteWorkoutLog, reviewBodyToApi, putWorkoutMove, deleteWorkoutMove,
   putWorkoutAdjustment, deleteWorkoutAdjustment,
   getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents, getIntervalsThresholds, getIntervalsActivityIntervals, getIntervalsActivityRoute,
   getIntervalsPowerCurve,
@@ -173,6 +173,14 @@ export function makeSync(getToken) {
   return {
     hydrate, savePlan, replacePlan, saveProfile, loadProfile, endPlan,
     saveLog: (workoutId, entry) => fire(putWorkoutLog(getToken, workoutId, logToApi(entry)), 'log ' + workoutId),
+    /* A review or cue write. Same endpoint as saveLog; the body carries the
+       current entry's base four (the server rewrites them on every PUT, so
+       they must be fresh) plus ONLY the named review/cue fields — the
+       backend's Optional semantics preserve everything unnamed. entry is
+       the client's current log entry for the workout, fields is e.g.
+       { bikeReview } or { techniqueCue: null }. */
+    saveReview: (workoutId, entry, fields, engineVersions) =>
+      fire(putWorkoutLog(getToken, workoutId, reviewBodyToApi(entry, fields, engineVersions)), 'review ' + workoutId),
     removeLog: workoutId => fire(deleteWorkoutLog(getToken, workoutId), 'unlog ' + workoutId),
     saveMove: (workoutId, date) => fire(putWorkoutMove(getToken, workoutId, { movedDate: date, reason: null }), 'move ' + workoutId),
     removeMove: workoutId => fire(deleteWorkoutMove(getToken, workoutId), 'unmove ' + workoutId),

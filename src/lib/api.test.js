@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { toClientState, logToApi, getMe, getCurrentPlan, createPlan, getWellness, putWellness } from './api.js';
+import { toClientState, logToApi, reviewToApi, reviewBodyToApi, REVIEW_SCHEMA_VERSION, getMe, getCurrentPlan, createPlan, getWellness, putWellness } from './api.js';
 
 describe('toClientState', () => {
   const resp = {
@@ -222,5 +222,95 @@ describe('integrations (intervals.icu)', () => {
     expect(url).toContain('/api/integrations/intervals-icu/planned-events');
     expect(opts.method).toBe('PUT');
     expect(JSON.parse(opts.body)).toEqual(body);
+  });
+});
+
+describe('review persistence seam (phase 1)', () => {
+  const bikeReview = {
+    outcome: 'progress', confidence: 'high', completion: 0.97,
+    adherencePct: 2.1, efforts: [{ plannedSec: 300, actualSec: 305, watts: 312 }],
+  };
+  const logRow = (fields) => ({ completed: true, completedAtUtc: '2026-07-06T10:00:00Z', feel: 'right', ...fields });
+
+  it('round-trips a review through the envelope without field loss', () => {
+    const wire = reviewToApi(bikeReview, 3);
+    expect(wire.schemaVersion).toBe(REVIEW_SCHEMA_VERSION);
+    expect(wire.engineVersion).toBe(3);
+    expect(typeof wire.createdAt).toBe('string');
+    // the server echoes jsonb verbatim; hydrate must yield the FLAT review
+    const resp = {
+      race: 'olympic', totalWeeks: 2, profile: {}, paces: {},
+      weeks: [{ index: 0, workouts: [{ id: 'g1', clientWorkoutRef: '0-0', log: logRow({ bikeReview: wire }), week: 0, date: '2026-07-06', discipline: 'bike', type: 'Endurance', title: 'Ride', durationMin: 60, segments: [] }] }],
+    };
+    const { log } = toClientState(resp);
+    expect(log['0-0'].bikeReview).toEqual(bikeReview);          // flat, no envelope keys
+    expect(log['0-0'].bikeReviewMeta).toEqual({ schemaVersion: 1, createdAt: wire.createdAt, engineVersion: 3 });
+    expect(log['0-0'].bikeReview.schemaVersion).toBeUndefined(); // meta never leaks into the spread shape
+  });
+
+  it('hydrates all three disciplines, including runReview (PR #24 read-side ready)', () => {
+    const l = logRow({
+      swimReview: reviewToApi({ outcome: 'hold' }, 1),
+      bikeReview: reviewToApi({ outcome: 'progress' }, 1),
+      runReview: reviewToApi({ outcome: 'repeat' }, 1),
+    });
+    const resp = { race: 'olympic', totalWeeks: 1, profile: {}, paces: {}, weeks: [], logs: [{ ...l, clientWorkoutRef: '1-1' }] };
+    const { log } = toClientState(resp);
+    expect(log['1-1'].swimReview).toEqual({ outcome: 'hold' });
+    expect(log['1-1'].bikeReview).toEqual({ outcome: 'progress' });
+    expect(log['1-1'].runReview).toEqual({ outcome: 'repeat' });
+  });
+
+  it('tolerates a legacy FLAT stored review: whole object is the review, no meta', () => {
+    const resp = { race: 'olympic', totalWeeks: 1, profile: {}, paces: {}, weeks: [], logs: [{ ...logRow({ swimReview: { outcome: 'hold', completion: 1 } }), clientWorkoutRef: '2-0' }] };
+    const { log } = toClientState(resp);
+    expect(log['2-0'].swimReview).toEqual({ outcome: 'hold', completion: 1 });
+    expect(log['2-0'].swimReviewMeta).toBeUndefined();
+  });
+
+  it('logToApi NEVER emits review keys, even from an entry that carries them', () => {
+    /* The trap this seam exists to avoid. The backend's review fields are
+       Optional: omitted preserves, explicit null CLEARS. logToApi runs on
+       every feel tap, so one defensive `swimReview: null` here would erase
+       the stored review history on the athlete's next tap. */
+    const body = logToApi({ done: true, at: '2026-07-06T10:00:00Z', feel: 'hard', swimReview: { outcome: 'hold' }, bikeReview: {}, runReview: {}, techniqueCue: 'catch' });
+    expect('swimReview' in body).toBe(false);
+    expect('bikeReview' in body).toBe(false);
+    expect('runReview' in body).toBe(false);
+    expect('techniqueCue' in body).toBe(false);
+  });
+
+  it('reviewBodyToApi carries the fresh base four plus ONLY the named fields', () => {
+    // The base four are NOT Optional server-side (rewritten on every PUT),
+    // so a review write with stale ones would revert a feel tap.
+    const entry = { done: true, at: '2026-07-06T10:00:00Z', feel: 'right', notes: 'cal:{"actualMin":61}' };
+    const body = reviewBodyToApi(entry, { bikeReview }, { bikeReview: 3 });
+    expect(body.completed).toBe(true);
+    expect(body.feel).toBe('right');
+    expect(body.notes).toBe('cal:{"actualMin":61}');
+    expect(body.bikeReview.review).toEqual(bikeReview);
+    expect(body.bikeReview.engineVersion).toBe(3);
+    expect('swimReview' in body).toBe(false);   // unnamed fields stay omitted
+    expect('runReview' in body).toBe(false);
+    expect('techniqueCue' in body).toBe(false);
+  });
+
+  it('an explicit null clears; a cue passes bare, not enveloped', () => {
+    const entry = { done: true, at: '2026-07-06T10:00:00Z' };
+    const cleared = reviewBodyToApi(entry, { swimReview: null });
+    expect(cleared.swimReview).toBe(null);
+    const cue = reviewBodyToApi(entry, { techniqueCue: 'catch' });
+    expect(cue.techniqueCue).toBe('catch');
+    const cueCleared = reviewBodyToApi(entry, { techniqueCue: null });
+    expect(cueCleared.techniqueCue).toBe(null);
+  });
+
+  it('a maximal review envelope stays far under the server 16 KiB cap', () => {
+    const maximal = reviewToApi({
+      outcome: 'insufficient-data', confidence: 'low', completion: 0.5,
+      explanation: 'x'.repeat(500),
+      efforts: Array.from({ length: 40 }, (_, i) => ({ plannedSec: 300, actualSec: 300 + i, watts: 300, paceSec: 95.5, status: 'on-target' })),
+    }, 1);
+    expect(JSON.stringify(maximal).length).toBeLessThan(16384 / 2);
   });
 });
