@@ -767,3 +767,18 @@ answering before a catalog entry is useful:
 
 None of that is blocked on you. Flagging it so the catalog entry is not added
 in the expectation that plans appear shortly afterwards.
+
+---
+
+## Ask - 30 July 2026: anonymised population percentiles (spider charts)
+
+The dashboards now carry spider charts placing an athlete's paces against
+Try's own level ladder. Jon wants the reference to become other Try athletes
+over time. That needs an aggregate the client cannot compute: percentile
+tables per metric (run seconds at 5k/10k/half/marathon, swim CSS, FTP W/kg),
+built server-side from consenting users' stored profiles, k-anonymous (no
+bucket smaller than ~20 athletes), returned as static breakpoints per metric.
+The client seam already exists (`SPIDER_SOURCES.population` in spider.js);
+until the endpoint lands the charts deliberately claim level positions, never
+percentiles, because a percentage against an invented population is a
+fabricated statistic with an axis label.

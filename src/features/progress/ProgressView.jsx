@@ -341,7 +341,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           && plan.profile.excludedDiscipline !== 'bike'
           && <BikeDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO}
             retest={ftpRetest} durabilityReads={durability}
-            fuelLog={fuelLog} positionLog={positionLog} />}
+            fuelLog={fuelLog} positionLog={positionLog} powerCurve={powerCurve} />}
 
         {/* Phase 9: the run's dashboard, guarded exactly as the two above.
             (Audit catch 2026-07-30: it was built with no component.) */}

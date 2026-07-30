@@ -210,7 +210,20 @@ export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest, 
         // A directly swum test is the highest-trust source, dated to the swim
         // itself; accepting it records that provenance on the profile so the
         // threshold model (domain.swimThreshold) can reason about staleness.
-        retarget: { css100Sec: meas, cssMeta: { source: 'try-test', measuredAt: cssTest.date || todayISO, confidence: 'high' } },
+        /* The test's own splits ride on cssMeta (spider, 2026-07-30): two
+           points give the critical-speed model its CS and D', which is what
+           lets the swim spider project pace across distances from swum
+           evidence. They live HERE because every other CSS write replaces
+           cssMeta wholesale, so the splits die the moment the CSS stops
+           being the tested number — the model cannot outlive its evidence. */
+        retarget: {
+          css100Sec: meas,
+          cssMeta: {
+            source: 'try-test', measuredAt: cssTest.date || todayISO, confidence: 'high',
+            t400Sec: cssTest.test.t400Sec, t200Sec: cssTest.test.t200Sec,
+            d400: cssTest.test.d400, d200: cssTest.test.d200,
+          },
+        },
       };
     }
   }
