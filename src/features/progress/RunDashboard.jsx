@@ -1,4 +1,5 @@
 import * as T from '@/lib';
+import { SpiderChart } from '@/components/SpiderChart.jsx';
 
 /* Phase 9's run dashboard, wired (audit catch 2026-07-30: run-dashboard.js
  * and the run-readiness.js it consumes were built with no component, so the
@@ -96,6 +97,14 @@ export function RunDashboard({ plan, log, moves, activities, todayISO, fuelLog }
             No race projections yet: they need a real 5 km, not a level estimate.
           </div>
         )}
+
+        {/* Pace across distances, against the level rings (spider,
+            2026-07-30). The projection from the 5 km anchor is only the
+            floor: a recorded race at an axis distance overrides it as a
+            measured point, which is where distance-specific strengths
+            honestly appear. */}
+        <SpiderChart spider={T.runSpider(profile, activities)} color="var(--run)"
+          fmtValue={ax => fmtLong(ax.value)} />
 
         {/* Readiness, as components — never a score (§5). */}
         <div className="rd-trend-head" style={{ marginTop: 12 }}><span>Race readiness</span><span>{gaps.length ? gaps.length + ' to work on' : ''}</span></div>

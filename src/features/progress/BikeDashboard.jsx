@@ -1,4 +1,5 @@
 import * as T from '@/lib';
+import { SpiderChart } from '@/components/SpiderChart.jsx';
 
 /* Phase 8: the bike dashboard.
  *
@@ -52,7 +53,7 @@ function NoteOnly({ m }) {
   return <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{m.note}</div>;
 }
 
-export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog }) {
+export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog, powerCurve }) {
   const d = T.bikeDashboard({
     plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog,
   });
@@ -153,6 +154,16 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
 
       {/* §3, kept separate from §4 — acceptance criterion "quality and
           durability are separate". */}
+      {/* The capability spider (2026-07-30): five power-profile axes on the
+          rider's own shape rings, dormant until the power-curve endpoint
+          lands — the SpiderChart renders the reason instead of improvising
+          axes from FTP alone (Jon's call). */}
+      <div className="section-title" style={{ marginTop: 16 }}>Power shape</div>
+      <div className="card">
+        <SpiderChart spider={T.bikeSpider(plan.profile, powerCurve)} color="var(--bike)"
+          fmtValue={ax => (ax.value > 0 ? '+' : '') + ax.value + '%'} />
+      </div>
+
       <div className="section-title" style={{ marginTop: 16 }}>Can you do the work?</div>
       <div className="card">
         <div className="rd-pmc" style={{ marginTop: 0, flexWrap: 'wrap' }}>

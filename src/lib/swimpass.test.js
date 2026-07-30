@@ -276,9 +276,17 @@ describe('auto-CSS proposal precedence', () => {
       cssTest: { actId: 'a1', date: today, test: { css100Sec: 112, t400Sec: 420, t200Sec: 196, d400: 400, d200: 200 } },
     });
     expect(prop.kind).toBe('csstest');
-    // the retarget now also carries provenance: a swum test is the highest
-    // trust source, dated to the test day, so the threshold model can age it
-    expect(prop.retarget).toEqual({ css100Sec: 112, cssMeta: { source: 'try-test', measuredAt: today, confidence: 'high' } });
+    // The retarget carries provenance, and since the spider (2026-07-30) the
+    // test's own splits ride along too: two points are what the critical
+    // speed model needs, and cssMeta is where they die the moment any other
+    // write replaces the tested CSS.
+    expect(prop.retarget).toEqual({
+      css100Sec: 112,
+      cssMeta: {
+        source: 'try-test', measuredAt: today, confidence: 'high',
+        t400Sec: 420, t200Sec: 196, d400: 400, d200: 200,
+      },
+    });
     expect(prop.why).toContain('/100m');
     expect(prop.why).toContain('the plan trains to');
     // recorded distances, never nominal labels: a yard-pool 366 m must not

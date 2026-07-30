@@ -24,6 +24,7 @@ export * from './run-review.js';
 export * from './run-fuelling.js';
 export * from './run-readiness.js';
 export * from './run-dashboard.js';
+export * from './spider.js';
 export * from './bikeschema.js';
 export * from './bike-zones.js';
 export * from './bike-distance.js';

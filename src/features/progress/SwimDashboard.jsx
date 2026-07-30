@@ -1,5 +1,6 @@
 import * as T from '@/lib';
 import { Sparkline } from '@/components/charts.jsx';
+import { SpiderChart } from '@/components/SpiderChart.jsx';
 
 /* Phase 7: the swim dashboard. It answers one question — what is limiting
    my swim, and what is the plan doing about it — and every number says
@@ -51,6 +52,16 @@ export function SwimDashboard({ plan, log, moves, activities, todayISO, retest, 
             <span>{r}</span>
           </div>
         ))}
+      </div>
+
+      {/* Pace across distances, against the level rings (spider, 2026-07-30).
+          Solid points come from the athlete's own 400/200 test via the
+          critical-speed model; without stored splits the polygon sits flat
+          at CSS and every point is hollow. */}
+      <div className="section-title">Pace across distances</div>
+      <div className="card">
+        <SpiderChart spider={T.swimSpider(plan.profile)} color="var(--swim)"
+          fmtValue={ax => T.swimPaceLabel(ax.value, pool)} />
       </div>
 
       {/* §6 current swim status */}
