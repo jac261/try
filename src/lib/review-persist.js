@@ -62,11 +62,24 @@ export function reviewEqual(a, b) {
   return false;
 }
 
-/* The fields worth writing: computed, non-null, and different from what the
-   entry already stores. Null and undefined computations are SKIPPED, never
-   written — a review that cannot be computed right now (reps still loading,
-   activity briefly unmatched) must not clear a stored one. Returns null
-   when there is nothing to do, so reopening a sheet is free. */
+/* The fields worth writing: computed, non-null, different from what the
+   entry already stores, and never WEAKER than it. Null and undefined
+   computations are SKIPPED, never written — a review that cannot be
+   computed right now (reps still loading, activity briefly unmatched) must
+   not clear a stored one. Returns null when there is nothing to do, so
+   reopening a sheet is free.
+
+   The no-downgrade guard (gauntlet catch 2026-07-30): bike and run compute
+   a review from the activity alone when the lap fetch has not resolved or
+   the recording has aged out of the intervals endpoint, and that repless
+   review is non-null — so the null-skip alone let a low-confidence
+   whole-ride read overwrite a stored per-effort one. A recomputation may
+   REPLACE a stored review only at equal or better confidence; the write
+   surfaces additionally hold their report until the lap fetch settles, so
+   this guard is the backstop for the fetch that never resolves. The cost is
+   accepted and named: a legitimately corrected review that drops confidence
+   will not overwrite until the stored one ages out with its plan. */
+const CONFIDENCE_RANK = { low: 0, medium: 1, high: 2 };
 export function reviewChanges(entry, fields) {
   if (!entry) return null;
   const out = {};
@@ -74,6 +87,9 @@ export function reviewChanges(entry, fields) {
     const next = fields && fields[f];
     if (!next) return;
     if (reviewEqual(entry[f], next)) return;
+    const prev = entry[f];
+    if (prev && CONFIDENCE_RANK[next.confidence] != null && CONFIDENCE_RANK[prev.confidence] != null
+      && CONFIDENCE_RANK[next.confidence] < CONFIDENCE_RANK[prev.confidence]) return;
     out[f] = next;
   });
   return Object.keys(out).length ? out : null;

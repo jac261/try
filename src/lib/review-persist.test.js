@@ -103,10 +103,13 @@ describe('the wiring exists at the source', () => {
     expect(body).toContain('REVIEW_ENGINE_VERSIONS');
   });
 
-  it('the sheet and the deck report from an effect, not from render', () => {
+  it('the sheet and the deck report from an effect, gated on the reps fetch settling', () => {
     [sheet, deck].forEach(src => {
       expect(src).toContain('T.computeReviews(');
-      expect(src).toMatch(/useEffect\(\(\) => \{\s*\n\s*if \(!onReview\) return;/);
+      // the report waits for the lap answer, and the handler rides a ref so
+      // App re-renders cannot re-fire the effect
+      expect(src).toMatch(/if \(!onReviewRef\.current \|\| !repsSettled\) return;/);
+      expect(src).toMatch(/setRepsSettled\(true\)/);
     });
   });
 
@@ -154,5 +157,72 @@ describe('bikeLoad inside bikeReview honours the estimated-FTP gate (phase 1 def
     expect(rv.intensityFactor).toBeCloseTo(0.76, 2);
     expect(rv.variabilityIndex).toBeCloseTo(1.06, 2);
     expect(rv.powerTss).toBeGreaterThan(0);
+  });
+});
+
+describe('the no-downgrade guard (gauntlet 2026-07-30)', () => {
+  const rich = { outcome: 'progress', confidence: 'medium', timeInTarget: 92, efforts: 6 };
+  const repless = { outcome: 'insufficient-data', confidence: 'low', timeInTarget: null, efforts: 0 };
+  const entry = { done: true, bikeReview: rich };
+
+  it('a lower-confidence recomputation never replaces a stored review', () => {
+    // The exact failing scenario: reps fetch failed or the recording aged
+    // out of the intervals endpoint, so the recompute is repless and weaker.
+    expect(reviewChanges(entry, { bikeReview: repless })).toBe(null);
+  });
+
+  it('equal or better confidence still writes: reviews may legitimately change', () => {
+    const changed = { ...rich, outcome: 'repeat', timeInTarget: 60 };
+    expect(reviewChanges(entry, { bikeReview: changed })).toEqual({ bikeReview: changed });
+    const upgraded = { ...rich, confidence: 'high' };
+    expect(reviewChanges(entry, { bikeReview: upgraded })).toEqual({ bikeReview: upgraded });
+  });
+
+  it('a first review is never blocked, whatever its confidence', () => {
+    expect(reviewChanges({ done: true }, { bikeReview: repless })).toEqual({ bikeReview: repless });
+  });
+});
+
+describe('the sync layer: ordering, re-push, and the runReview latch', () => {
+  const sync = readFileSync('src/app/sync.js', 'utf8');
+  const app = readFileSync('src/app/App.jsx', 'utf8');
+  const api = readFileSync('src/lib/api.js', 'utf8');
+
+  it('every log-endpoint write is serialised per workout', () => {
+    // saveLog, saveReview, saveLogFull and removeLog all hit the same row
+    // and the server rewrites the base four on every PUT: unserialised, a
+    // stale review body could revert a feel tap, and a PUT landing after an
+    // un-complete DELETE resurrected the workout on the next hydrate.
+    ['saveLog:', 'saveReview:', 'saveLogFull:', 'removeLog:'].forEach(fn => {
+      const at = sync.indexOf(fn);
+      expect(at, fn).toBeGreaterThan(0);
+      expect(sync.slice(at, at + 400)).toContain('serialLog(');
+    });
+  });
+
+  it('the re-push paths carry reviews; the tap paths still never do', () => {
+    // Hydrate's local-only merge and adoptMap's sweep push entries the
+    // server has never seen — through logToApi they arrived bare and the
+    // next server-wins hydrate erased the local reviews too.
+    expect(app).toMatch(/sweepStale\(cur\.log[^\n]*saveLogFull/);
+    expect(app).toMatch(/mergeOverlay\(result\.log[^\n]*saveLogFull/);
+    // fullLogToApi only ever ADDS: absent fields stay omitted, never null
+    expect(api).toMatch(/function fullLogToApi/);
+  });
+
+  it('fullLogToApi wraps present reviews and omits absent ones', async () => {
+    const { fullLogToApi } = await import('./api.js');
+    const b = fullLogToApi({ done: true, at: '2026-07-06T10:00:00Z', feel: 'hard', swimReview: { outcome: 'hold' }, techniqueCue: 'catch' }, { swimReview: 2 });
+    expect(b.swimReview.review).toEqual({ outcome: 'hold' });
+    expect(b.swimReview.engineVersion).toBe(2);
+    expect(b.techniqueCue).toBe('catch');
+    expect('bikeReview' in b).toBe(false);   // omitted = preserved, never cleared
+    expect('runReview' in b).toBe(false);
+    expect(b.feel).toBe('hard');
+  });
+
+  it('a runReview 400 latches the field off for the session', () => {
+    expect(sync).toMatch(/runReviewUnsupported = true/);
+    expect(sync).toMatch(/if \(runReviewUnsupported && f && 'runReview' in f\)/);
   });
 });

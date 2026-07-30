@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { useSheetFocus } from '@/utils/useSheetFocus.js';
@@ -119,6 +119,7 @@ function RouteMap({ route, discipline }) {
 export function RecapSlides({ workout, activity, plan, log, moves, onLoadIntervals, onLoadRoute, onClose, onDetails, onReview }) {
   const [curKind, setCurKind] = useState(null); // track the slide by kind, not
   const [reps, setReps] = useState(null);       // position — the deck grows when reps load
+  const [repsSettled, setRepsSettled] = useState(false); // the report waits for the answer
   // Same modal conventions as every sheet: focus moves in, Tab is trapped,
   // Escape closes, focus returns on exit (2026-07-12 audit finding).
   const focusRef = useSheetFocus(onClose);
@@ -127,9 +128,11 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
   // fetch may fire for it — there are no reps or GPS track to find.
   const actId = activity && !activity.manual ? activity.id : null;
   useEffect(() => {
-    if (!actId || !onLoadIntervals) return;
+    if (!actId || !onLoadIntervals) { setRepsSettled(true); return undefined; }
+    setRepsSettled(false);
     let gone = false;
-    onLoadIntervals(actId).then(list => { if (!gone) setReps(list); });
+    onLoadIntervals(actId).then(list => { if (!gone) { setReps(list); setRepsSettled(true); } })
+      .catch(() => { if (!gone) setRepsSettled(true); });
     return () => { gone = true; };
   }, [actId, onLoadIntervals]);
   // The GPS track arrives lazily exactly like the reps: the deck re-resolves
@@ -147,14 +150,23 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
      sheet — so the same computeReviews the sheet persists from runs here and
      reports upward. The app's handler diffs, so the deck and the sheet can
      both report the same session and only one write happens. */
-  const feel = (log && log[workout.id] && log[workout.id].feel) || activity.feel;
+  /* The APP's feel only, never activity.feel: the passthrough's feel is
+     intervals.icu's 1-to-5 NUMBER, and persisting it would put a number in
+     perceivedEffort where the sheet writes the easy/right/hard word — the
+     two surfaces would then rewrite the same unchanged review at each other
+     forever (gauntlet catch 2026-07-30). buildRecap may still use the
+     numeric fallback for DISPLAY; the persisted record takes the athlete's
+     own tap or nothing. */
+  const feel = (log && log[workout.id] && log[workout.id].feel) || undefined;
   const reviews = useMemo(() => T.computeReviews({
     workout, activity, intervals: reps, paces: plan.paces, profile: plan.profile, feel,
   }), [workout, activity, reps, plan, feel]);
+  const onReviewRef = useRef(onReview);
+  useEffect(() => { onReviewRef.current = onReview; });
   useEffect(() => {
-    if (!onReview) return;
-    if (reviews.swimReview || reviews.bikeReview || reviews.runReview) onReview(workout.id, reviews);
-  }, [onReview, reviews, workout.id]);
+    if (!onReviewRef.current || !repsSettled) return;
+    if (reviews.swimReview || reviews.bikeReview || reviews.runReview) onReviewRef.current(workout.id, reviews);
+  }, [repsSettled, reviews, workout.id]);
 
   const slides = T.buildRecap({
     workout, activity, intervals: reps, route, paces: plan.paces,

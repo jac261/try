@@ -53,7 +53,9 @@ describe('openRecording honours the seen flag on every path', () => {
 
   it('the recap deck offers its details exit for ad-hoc sessions too', () => {
     expect(APP).not.toMatch(/onDetails=\{w\.adhoc \? null/);
-    expect(APP).toMatch(/onDetails=\{\(\) => \{ setRecap\(null\); setDetail\(w\); \}\}/);
+    // detail takes the RAW plan workout (the sheet applies the adjustment
+    // overlay itself; handing it the eased object would transform twice)
+    expect(APP).toMatch(/onDetails=\{\(\) => \{ setRecap\(null\); setDetail\(recap\.workout\); \}\}/);
   });
 
   it('an ad-hoc overview resolves its recording and counts as done', () => {

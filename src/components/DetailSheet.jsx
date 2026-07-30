@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { useSheetFocus } from '@/utils/useSheetFocus.js';
@@ -44,11 +44,18 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
   // The rep table: lazily fetch the recording's interval analysis once the
   // session is done and matched. null → loading/none; [] handled by the lib.
   const [reps, setReps] = useState(null);
+  // Settled = the lap question has an ANSWER (rows, or a definitive none).
+  // The report effect below waits for it: reporting a repless bike or run
+  // review while the fetch is in flight PUT a downgrade over stored
+  // per-effort evidence on every reopen (gauntlet catch 2026-07-30).
+  const [repsSettled, setRepsSettled] = useState(false);
   const actId = done && activity ? activity.id : null;
   useEffect(() => {
-    if (!actId || !onLoadIntervals) return;
+    if (!actId || !onLoadIntervals) { setRepsSettled(true); return undefined; }
+    setRepsSettled(false);
     let gone = false;
-    onLoadIntervals(actId).then(list => { if (!gone) setReps(list); });
+    onLoadIntervals(actId).then(list => { if (!gone) { setReps(list); setRepsSettled(true); } })
+      .catch(() => { if (!gone) setRepsSettled(true); });
     return () => { gone = true; };
   }, [actId, onLoadIntervals]);
   /* Phase 1 (2026-07-30): the reviews, computed once per input change rather
@@ -58,14 +65,19 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
   const reviews = useMemo(() => (done && activity
     ? T.computeReviews({ workout: w, activity, intervals: reps, paces: plan.paces, profile: plan.profile, feel })
     : {}), [done, activity, w, reps, plan, feel]);
-  /* Report the computed reviews upward for persistence. The sheet only ever
-     REPORTS — the app's handler diffs against the stored copy and decides
-     whether anything is worth a write, so reopening a sheet is free and a
-     still-loading reps fetch (no swim review yet) can never clear one. */
+  /* Report the computed reviews upward for persistence, once the lap fetch
+     has settled — a mid-flight report would be a repless review racing its
+     own upgrade. The sheet only ever REPORTS — the app's handler diffs
+     against the stored copy and refuses downgrades, so reopening is free.
+     onReview rides a ref, not the effect deps: the handler is recreated on
+     every App render and a deps entry would re-fire this (and re-diff)
+     per render for as long as the sheet is open. */
+  const onReviewRef = useRef(onReview);
+  useEffect(() => { onReviewRef.current = onReview; });
   useEffect(() => {
-    if (!onReview) return;
-    if (reviews.swimReview || reviews.bikeReview || reviews.runReview) onReview(w.id, reviews);
-  }, [onReview, reviews, w.id]);
+    if (!onReviewRef.current || !repsSettled) return;
+    if (reviews.swimReview || reviews.bikeReview || reviews.runReview) onReviewRef.current(w.id, reviews);
+  }, [repsSettled, reviews, w.id]);
   const disc = D[w.discipline];
   /* §1/§3: does a run follow this ride? A brick session is one by definition,
      and that is the only way it happens — the generator never schedules a
