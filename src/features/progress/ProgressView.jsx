@@ -202,7 +202,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
 
     {!tracker && <>
       <div className="kpis">
-        <div className="kpi"><div className="v">{daysToRace}<small> days</small></div><div className="k">Until race day</div></div>
+        <div className="kpi"><div className="v">{daysToRace}<small> {daysToRace === 1 ? 'day' : 'days'}</small></div><div className="k">Until race day</div></div>
         <div className="kpi"><div className="v">{pct}<small>%</small></div><div className="k">Sessions completed</div></div>
         <div className="kpi"><div className="v">{done.length}<small>/{all.length}</small></div><div className="k">Workouts done</div></div>
         <div className="kpi"><div className="v" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>{streak}<Icon name="flame" size={22} /></div><div className="k">Current streak</div></div>

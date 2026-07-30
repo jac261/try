@@ -115,15 +115,28 @@ describe('buildWeeklyDigest (plan mode)', () => {
     expect(buildWeeklyDigest({ ...base, log: done, wellness: [wellness[0]] }).fitness).toBe(null);
   });
 
-  it('a race that passed without a recording lands in missed; a logged one in raceDone', () => {
+  it('the race is calendar-only: reported as a race day, never as missed', () => {
+    // The A race is unloggable by design (every toggle gates on !w.race and
+    // autolog excludes both race kinds), so an absent log entry proves
+    // nothing about race day — the digest reports the calendar fact and
+    // stops there. The title matches what the generator actually stamps
+    // ('RACE DAY — ' + race.name): the render shows it bare, and a fixture
+    // title that never occurs in the field hid a doubled prefix once.
     const raced = plan();
-    raced.weeks[0].workouts.push(w('0-9', '2026-07-12', { race: true, title: 'Olympic Tri', type: 'RACE' }));
-    const skipped = buildWeeklyDigest({ ...base, plan: raced, log: done });
-    expect(skipped.missed.map(m => m.title)).toContain('Olympic Tri');
-    expect(skipped.raceDone).toEqual([]);
-    const logged = buildWeeklyDigest({ ...base, plan: raced, log: { ...done, '0-9': { done: true, at: '2026-07-12T10:00:00Z' } } });
-    expect(logged.raceDone).toEqual(['Olympic Tri']);
-    expect(logged.missed.map(m => m.title)).not.toContain('Olympic Tri');
+    raced.weeks[0].workouts.push(w('0-9', '2026-07-12', { race: true, title: 'RACE DAY — Olympic', type: 'RACE' }));
+    const d = buildWeeklyDigest({ ...base, plan: raced, log: done });
+    expect(d.raceDays).toEqual([{ title: 'RACE DAY — Olympic', day: '2026-07-12' }]);
+    expect(d.missed.map(m => m.title)).not.toContain('RACE DAY — Olympic');
+  });
+
+  it('a moved race reports the day it landed on', () => {
+    // No UI path moves a race, but `moves` is synced state (merged from the
+    // server against positional, reused ids) — this pins the eff() contract
+    // for the race row, same as the moved-week test below.
+    const raced = plan();
+    raced.weeks[0].workouts.push(w('0-9', '2026-07-12', { race: true, title: 'RACE DAY — Olympic', type: 'RACE' }));
+    const d = buildWeeklyDigest({ ...base, plan: raced, log: done, moves: { '0-9': '2026-07-11' } });
+    expect(d.raceDays).toEqual([{ title: 'RACE DAY — Olympic', day: '2026-07-11' }]);
   });
 
   it('week identity survives every session moving out: phase comes from native dates', () => {
