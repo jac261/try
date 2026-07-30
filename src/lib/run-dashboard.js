@@ -129,8 +129,12 @@ export function durability({ plan, longs, fuelLogs, todayISO }) {
    by the dashboard component and by the cross-discipline arbitration, so
    the two can never disagree about what the evidence is. */
 export function runStoredReviews(plan, log, moves) {
+  // !w.bRace: reviews persisted for tune-up races before run-review gated
+  // them still live in stored entries — the persistence layer never deletes
+  // (a null computation must not clear a stored review), so the stale ones
+  // are filtered at this shared derivation and age out with their plan.
   return (plan.weeks || []).flatMap(w => w.workouts || [])
-    .filter(w => w.discipline === 'run' && log[w.id] && log[w.id].runReview)
+    .filter(w => w.discipline === 'run' && !w.bRace && log[w.id] && log[w.id].runReview)
     .map(w => ({ ...log[w.id].runReview, date: (log[w.id].at || '').slice(0, 10) || (moves && moves[w.id]) || w.date }))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }

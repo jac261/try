@@ -23,6 +23,10 @@
  * - HOLD is the default. Insufficient evidence is never progression.
  * - A missed session is 'missed-unknown' until the athlete's own one-tap
  *   answer says otherwise. Wellness context never infers the reason.
+ * - A tune-up race is judged as a race, not a workout: done is done, and an
+ *   unticked one is neutral, never a missed key session. The matcher cannot
+ *   close a bRace (multisport recordings never match), so silence there is
+ *   the app being blind, not the athlete missing work.
  * - Discipline-scoped reductions exist only for the run: it is the one
  *   discipline with its own mechanical strain signal (runload.js). Aggregate
  *   ramp and form signals speak only through the overall decision.
@@ -41,7 +45,7 @@ import { iso, addDays } from './date.js';
 
 // Bump when decision logic changes: stored decisions carry the version they
 // were made under, so an old stored call is never judged by new rules.
-export const COACH_RULE_VERSION = 2; // v2: the corroborated-fade progression veto
+export const COACH_RULE_VERSION = 3; // v3: tune-up races judged as races, not workouts
 
 // The one-tap answers for a missed session, in the athlete's own words.
 export const MISSED_REASONS = {
@@ -114,6 +118,18 @@ export function resolveFocus(profile, wl, solo) {
 // comes from the athlete's stored one-tap answer, never from wellness.
 export function classifyCompletion({ workout, entry, adjustEntry, missedReason, day, todayISO }) {
   if (!workout || workout.race || workout.discipline === 'rest') return null;
+  // A tune-up race (v3). Done is done: finishing a 5k well inside its
+  // calendar slot is a fast race, not a partial workout, and no engine
+  // adjustment ever targets a race day. An unticked one past its date is
+  // 'race-unlogged', a neutral category the weekly decision ignores. The
+  // athlete's own one-tap answer still stands: they know it did not happen;
+  // the app, which cannot match a multisport recording, does not.
+  if (workout.bRace) {
+    if (entry && entry.done) return 'completed';
+    const effective = day || workout.date;
+    if (effective >= todayISO) return 'upcoming';
+    return missedReason && MISSED_REASONS[missedReason] ? 'missed-' + missedReason : 'race-unlogged';
+  }
   if (entry && entry.done) {
     if (adjustEntry && (adjustEntry.kind === 'ease' || adjustEntry.kind === 'trim')) return 'modified';
     if (entry.actualMin != null && workout.durationMin
@@ -144,7 +160,10 @@ function weekSessions({ plan, log, moves, adjust, missedReasons, weekMonday, tod
       workout: w, entry: (log || {})[w.id], adjustEntry: (adjust || {})[w.id],
       missedReason: (missedReasons || {})[w.id] && missedReasons[w.id].reason, day, todayISO,
     });
-    if (status) out[w.discipline].push({ id: w.id, key: !!w.key, status, title: w.title || w.type, day });
+    // 'race-unlogged' carries no evidence either way: it must not count as a
+    // missed key session (the pre-v3 defect froze one into every week with an
+    // unticked tune-up) and there is nothing done to count either.
+    if (status && status !== 'race-unlogged') out[w.discipline].push({ id: w.id, key: !!w.key, status, title: w.title || w.type, day });
   });
   return out;
 }

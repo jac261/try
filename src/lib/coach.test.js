@@ -142,6 +142,73 @@ describe('the weekly decision: spec scenarios', () => {
   });
 });
 
+describe('tune-up races are judged as races, not workouts', () => {
+  // A synthetic bRace slot, shaped like the plan builder's tune-up output.
+  const tuneup = { id: 'bx', date: weekMonday, discipline: 'run', type: 'RACE', bRace: true, key: true, durationMin: 30 };
+
+  it('done is done: no partial or modified judgment on a race', () => {
+    expect(classifyCompletion({ workout: tuneup, entry: { done: true }, day: tuneup.date, todayISO: today })).toBe('completed');
+    // a 20-minute 5k against a 30-minute slot is a fast race, not a partial workout
+    expect(classifyCompletion({ workout: tuneup, entry: { done: true, actualMin: 20 }, day: tuneup.date, todayISO: today })).toBe('completed');
+    expect(classifyCompletion({ workout: tuneup, entry: { done: true }, adjustEntry: { kind: 'ease' }, day: tuneup.date, todayISO: today })).toBe('completed');
+  });
+
+  it('silence stays neutral; the athlete\'s own answer still stands', () => {
+    // the matcher never auto-closes a bRace, so an unticked tune-up is not a miss
+    expect(classifyCompletion({ workout: tuneup, day: tuneup.date, todayISO: today })).toBe('race-unlogged');
+    expect(classifyCompletion({ workout: tuneup, missedReason: 'life', day: tuneup.date, todayISO: today })).toBe('missed-life');
+    expect(classifyCompletion({ workout: tuneup, day: today, todayISO: today })).toBe('upcoming');
+  });
+
+  // The same profile with a run tune-up dropped into the reviewed week.
+  const bDate = sessionsOf(wk)[1].date;
+  const planB = generatePlan({ ...profile, bRaces: [{ date: bDate, kind: 'run5k' }] });
+  const wkB = planB.weeks.find(w => w.start === weekMonday);
+  const tuneB = wkB.workouts.find(x => x.bRace);
+  const logB = () => Object.fromEntries(wkB.workouts
+    .filter(x => x.discipline !== 'rest' && !x.race && !x.bRace)
+    .map(x => [x.id, { done: true, at: x.date + 'T10:00:00Z' }]));
+  const baseB = { ...base, plan: planB };
+
+  it('an unticked tune-up never counts as a missed key session', () => {
+    expect(tuneB).toBeTruthy();
+    const d = decideWeek({ ...baseB, log: logB() });
+    expect(JSON.stringify(d)).not.toMatch(/missed/i);
+    Object.values(d.disciplines).forEach(row => expect(row.clean).toBe(true));
+    const keys = d.overall.evidence.find(e => e.signal === 'key sessions');
+    if (keys) expect(keys.reading).toMatch(/^(\d+) of \1 completed$/);
+  });
+
+  it('a ticked tune-up counts as key work done, however fast the finish', () => {
+    const log = { ...logB(), [tuneB.id]: { done: true, at: tuneB.date + 'T10:00:00Z', actualMin: 20 } };
+    const d = decideWeek({ ...baseB, log });
+    expect(d.disciplines.run.clean).toBe(true);
+    const keys = d.overall.evidence.find(e => e.signal === 'key sessions');
+    expect(keys.reading).toMatch(/^(\d+) of \1 completed$/);
+  });
+
+  it('a tune-up the athlete SAID was missed still counts, and still resets clean', () => {
+    const d = decideWeek({ ...baseB, log: logB(), missedReasons: { [tuneB.id]: { reason: 'niggle', at: today } } });
+    expect(d.disciplines.run.clean).toBe(false);
+    expect(d.overall.evidence.some(e => /injury niggle came up/.test(e.reading))).toBe(true);
+  });
+
+  it('an unticked BRICK tune-up leaves both the run and the bike rows clean', () => {
+    // multisport recordings never match, so autolog can never close this one:
+    // permanent 'missed' here was the original defect
+    const planC = generatePlan({ ...profile, bRaces: [{ date: bDate, kind: 'sprint' }] });
+    const wkC = planC.weeks.find(w => w.start === weekMonday);
+    const tuneC = wkC.workouts.find(x => x.bRace);
+    expect(tuneC.discipline).toBe('brick');
+    const log = Object.fromEntries(wkC.workouts
+      .filter(x => x.discipline !== 'rest' && !x.race && !x.bRace)
+      .map(x => [x.id, { done: true, at: x.date + 'T10:00:00Z' }]));
+    const d = decideWeek({ ...base, plan: planC, log });
+    expect(JSON.stringify(d)).not.toMatch(/missed/i);
+    ['run', 'bike'].forEach(k => { if (d.disciplines[k]) expect(d.disciplines[k].clean).toBe(true); });
+  });
+});
+
 describe('tracker mode is honestly narrower', () => {
   const t = buildTrackerPlan(plan, '2026-07-01T10:00:00.000Z');
   const tBase = { ...base, plan: t, log: {}, weekMonday: iso(startOfWeekMonday(today)) };

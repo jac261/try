@@ -96,7 +96,10 @@ export function repFade(rows) {
  * disagreeing with the table printed directly above it.
  */
 export function runReview({ workout, activity, rows, profile, feel }) {
-  if (!workout || workout.discipline !== 'run' || workout.race) return null;
+  // bRace joins the race gate (2026-07-30): a raced tune-up is not workout
+  // execution, and grading one against its nominal calendar slot called
+  // every fast 5k finish "too little of it happened".
+  if (!workout || workout.discipline !== 'run' || workout.race || workout.bRace) return null;
   const planned = workout.durationMin || 0;
   const actualMin = activity && activity.movingTimeSec ? activity.movingTimeSec / 60 : null;
   const completion = planned && actualMin != null
