@@ -250,6 +250,10 @@ body {
 .statline .s { flex: 1; background: var(--chip); border-radius: 15px; padding: 13px; text-align: center; }
 .statline .s b { display: block; font-size: 19px; font-weight: 800; letter-spacing: -.4px; }
 .statline .s span { font-size: 11px; color: var(--muted); }
+/* Assumption Center rows (Settings, phase 4): sport label + provenance line. */
+.asm-row { display: flex; gap: 10px; margin: 12px 0; font-size: 13px; line-height: 1.45; }
+.asm-row .asm-d { flex: 0 0 44px; padding-top: 1px; }
+.asm-row .muted { font-size: 12px; margin-top: 2px; }
 
 /* ---------- buttons / forms ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer; font-weight: 800; font-size: 15px; padding: 15px 18px; border-radius: 40px; width: 100%; font-family: inherit; letter-spacing: -.2px; transition: transform .08s, filter .15s; }

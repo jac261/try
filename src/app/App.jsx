@@ -78,6 +78,10 @@ export function App({ storage, getToken, user }) {
   // the GUID. Populated from every plan response (hydrate / create / replace).
   const [refToId, setRefToId] = useState({});
   const [view, setView] = useState('today');
+  // Deep-link focus for Settings (phase 4): which section card to scroll to
+  // on open. Set by openSettings(section) below; the avatar's plain open
+  // clears it so a stale focus never re-scrolls a later visit.
+  const [settingsFocus, setSettingsFocus] = useState(null);
   const [detail, setDetail] = useState(null);
   // The what-if simulator sheet: null, {} (generic, from Progress), or
   // { initial: { tab, skipIds, skipLabel } } from a workout's own sheet.
@@ -1488,6 +1492,10 @@ export function App({ storage, getToken, user }) {
     setSupportTopic(topic || null);
     setView('support');
   };
+  // Open Settings scrolled to a section card (phase 4 deep links). Sections
+  // are the ids SettingsView stamps on its cards: 'profile', 'plan',
+  // 'assumptions', 'connections'.
+  const openSettings = section => { setSettingsFocus(section || null); setView('settings'); };
 
   const tracker = plan.race === 'tracker';
   const race = T.RACES[plan.race];
@@ -1536,7 +1544,7 @@ export function App({ storage, getToken, user }) {
       <div className="topbar">
         <div className="topbar-top">
           <button className="avatar-btn" type="button" title="Profile &amp; settings"
-            aria-label="Profile and settings" onClick={() => setView('settings')}>
+            aria-label="Profile and settings" onClick={() => { setSettingsFocus(null); setView('settings'); }}>
             {avatarUrl ? <img className="avatar" src={avatarUrl} alt="" /> : <span className="avatar avatar-fallback">{initial}</span>}
           </button>
           <h1><Icon name="logo" size={26} /> Try</h1>
@@ -1559,13 +1567,23 @@ export function App({ storage, getToken, user }) {
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} runFail={runFail} onFixRun={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} onDecision={journalDecision} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} decisionLog={decisionLog} />}
-      {view === 'settings' && <SettingsView plan={plan}
+      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} decisionLog={decisionLog} onOpenSettings={openSettings} />}
+      {view === 'settings' && <SettingsView plan={plan} focus={settingsFocus} onFocusDone={() => setSettingsFocus(null)}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}
-        openWaterCapable={!tracker && !(T.RACES[plan.race] || {}).solo && !(T.RACES[plan.race] || {}).noRace}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
+        onStartMaintenance={
+          // Mid-plan maintenance switch (phase 4). Hidden on maintenance
+          // plans (the roll offer already lives on Today's plan-edge chip)
+          // and on solo plans: a maintenance block trains all three sports,
+          // and run-only maintenance is a named deferred build. Post-race it
+          // must bake in the recovery week exactly as the Today chip does
+          // (postRace = the race is behind you), or the same athlete got a
+          // ~25% heavier first week from this button (gauntlet 2026-07-31).
+          !tracker && plan.race !== 'maintenance' && !(T.RACES[plan.race] || {}).solo
+            ? () => { if (confirm('Switch to a 12-week maintenance block? Your current race plan will be replaced.')) rollMaintenance(rawDaysToRace < 0); }
+            : null}
         onEnterTracker={endPlanToTracker} tracker={tracker}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) {
           // The component never unmounts (plan-null renders Onboarding from
@@ -1617,7 +1635,7 @@ export function App({ storage, getToken, user }) {
         fromTest={(editFitness && editFitness.fromTest) || null}
         onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
-      {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}
+      {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} onOpenSettings={openSettings} />}
 
       {detail && <DetailSheet w={detailShown} plan={plan} done={detail.adhoc || !!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel} positionLog={positionLog} onPosition={answerPosition} brick={brickRead}
         /* An ad-hoc workout is synthesised from a recording and has no log

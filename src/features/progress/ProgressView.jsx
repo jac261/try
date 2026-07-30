@@ -13,7 +13,7 @@ import { BikeDashboard } from '@/features/progress/BikeDashboard.jsx';
 import { RunDashboard } from '@/features/progress/RunDashboard.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog, decisionLog }) {
+export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog, decisionLog, onOpenSettings }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
   // A solo plan trains one sport (hoisted here: the tab default reads it).
@@ -420,7 +420,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
       </div>
     </>}
 
-    <WellnessTrends onSupport={onSupport} wellness={wellness} onWhatIf={onWhatIf} />
+    <WellnessTrends onSupport={onSupport} wellness={wellness} onWhatIf={onWhatIf} onOpenSettings={onOpenSettings} />
   </>;
 
   return (

@@ -5,6 +5,7 @@
 export * from './date.js';
 export * from './units.js';
 export * from './domain.js';
+export * from './assumptions.js';
 export * from './swim-units.js';
 export * from './swim-zones.js';
 export * from './css-retest.js';
