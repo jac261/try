@@ -24,7 +24,7 @@ import * as T from '@/lib';
  * Stale points render hollow, matching the spider's convention for a figure
  * that is real but no longer describes now.
  */
-export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, height = 190 }) {
+export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, showDeltas, height = 190 }) {
   const pts = (curve && curve.points) || [];
   if (pts.length < 2) return null;                 // one point is not a curve
 
@@ -131,22 +131,38 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
           line: on a log axis the long durations crowd together (40 and 60 min
           sit ~18px apart at this width), and a single band would collide
           exactly as the threshold label did before it moved. Alternating means
-          neighbours never share a horizontal band. */}
+          neighbours never share a horizontal band.
+
+          With showDeltas on, the same slots carry the change against the
+          previous curve instead — the SAME slots, deliberately, so the
+          collision-safety measured for watts holds for deltas by
+          construction rather than needing a second measurement. Incomparable
+          and new points show no delta at all: the line is already withheld
+          for them, and a number would be the claim the withheld line refuses
+          to make. */}
       {pts.map((p, i) => {
         const x = X(p.durationSec), y = Y(p.watts);
         const above = i % 2 === 0;
         const first = i === 0, last = i === pts.length - 1;
+        const row = showDeltas && comparison
+          ? comparison.rows.find(r => r.durationSec === p.durationSec) : null;
+        const delta = row && row.deltaPct != null
+          ? (row.deltaPct > 0 ? '+' : '') + row.deltaPct + '%' : null;
         return (
           <g key={p.durationSec}>
             <circle cx={x} cy={y} r="3"
               fill={staleSet.has(p.durationSec) ? 'var(--card)' : 'var(--bike, var(--run))'}
               stroke="var(--bike, var(--run))" strokeWidth="1.5">
               <title>{tick(p.durationSec) + ': ' + p.watts + ' W'
-                + (ftpWatts ? ' (' + Math.round(p.watts / ftpWatts * 100) + '% of threshold)' : '')}</title>
+                + (ftpWatts ? ' (' + Math.round(p.watts / ftpWatts * 100) + '% of threshold)' : '')
+                + (delta ? ', ' + delta + ' vs previous' : '')}</title>
             </circle>
-            <text x={x} y={above ? y - 7 : y + 11} fontSize="8"
-              fill={staleSet.has(p.durationSec) ? 'var(--muted)' : 'var(--ink)'}
-              textAnchor={first ? 'start' : last ? 'end' : 'middle'}>{p.watts}</text>
+            {(!showDeltas || delta) && (
+              <text x={x} y={above ? y - 7 : y + 11} fontSize="8"
+                fill={showDeltas || staleSet.has(p.durationSec) ? 'var(--muted)' : 'var(--ink)'}
+                fontStyle={showDeltas ? 'italic' : undefined}
+                textAnchor={first ? 'start' : last ? 'end' : 'middle'}>{showDeltas ? delta : p.watts}</text>
+            )}
           </g>
         );
       })}

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import * as T from '@/lib';
+import { tap } from '@/utils/a11y.js';
 import { PowerCurveChart } from '@/components/PowerCurveChart.jsx';
 
 /* Phase 7 §6: the curve, shown with everything needed to judge it.
@@ -15,11 +17,19 @@ import { PowerCurveChart } from '@/components/PowerCurveChart.jsx';
  * bike-profile.js and is rendered underneath, because an implication with no
  * curve above it is an assertion the athlete cannot check. */
 export function PowerCurveCard({ curve, previous, ftpWatts, todayISO }) {
+  /* The deltas toggle (Jon, 2026-07-30). Hook before the early return, the
+     TDZ/hook-order lesson this codebase keeps re-learning: a conditional
+     return above a hook changes the hook count the day the condition flips. */
+  const [showDeltas, setShowDeltas] = useState(false);
   if (!curve || !curve.points || !curve.points.length) return null;
   const stale = T.staleDurations(curve, todayISO);
   const comparison = previous ? T.curveComparison({ current: curve, previous }) : null;
   const profile = T.riderProfile({ curve, ftpWatts });
   const implications = T.trainingImplications(profile);
+  // The toggle exists only when there is at least one comparable delta to
+  // show. On an all-incomparable comparison (a meter change) it would toggle
+  // between the curve and an emptier curve, which reads as a bug.
+  const hasDeltas = !!comparison && comparison.rows.some(r => r.deltaPct != null);
 
   /* Jon, 2026-07-30: the per-duration rows are gone and the watts live on the
      chart's axis instead. The rows carried five things a line cannot, and
@@ -73,11 +83,24 @@ export function PowerCurveCard({ curve, previous, ftpWatts, todayISO }) {
           </div>
         )}
 
-        {/* The shape, then the facts. The rows below carry date, meter,
-            environment, confidence and the per-duration delta — none of which
-            a line can show — so the chart is added rather than swapped in. */}
+        {/* The chart carries the per-duration data; the lines below carry the
+            facts that do not vary per duration. */}
+        {hasDeltas && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+            {[false, true].map(v => (
+              <a key={String(v)} className="reset" role="button" aria-pressed={showDeltas === v}
+                {...tap(() => setShowDeltas(v))}
+                style={{
+                  padding: '4px 10px', borderRadius: 999, fontSize: 12,
+                  background: showDeltas === v ? 'var(--chip)' : 'transparent',
+                  border: '1px solid var(--chip)',
+                  opacity: showDeltas === v ? 1 : 0.6,
+                }}>{v ? 'change vs previous' : 'watts'}</a>
+            ))}
+          </div>
+        )}
         <PowerCurveChart curve={curve} previous={previous} comparison={comparison}
-          stale={stale} ftpWatts={ftpWatts} />
+          stale={stale} ftpWatts={ftpWatts} showDeltas={hasDeltas && showDeltas} />
 
         {ends && (
           <div className="lead" style={{ margin: '8px 0 0', fontSize: 13 }}>

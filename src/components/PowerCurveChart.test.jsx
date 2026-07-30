@@ -89,6 +89,30 @@ describe('PowerCurveChart', () => {
     expect(label[0]).not.toContain('text-anchor="end"');
   });
 
+  it('shows per-duration deltas in the label slots when asked', () => {
+    /* Jon, 2026-07-30: the deltas the removed rows carried, back on the
+       chart behind a toggle. The SAME label slots as the watts, so the
+       collision-safety measured for watts holds by construction. */
+    const prev = powerCurve(CURVE_DURATIONS.map((d, i) => pt(d, 880 - i * 70)));
+    const comparison = curveComparison({ current: FULL, previous: prev });
+    const on = render({ curve: FULL, previous: prev, comparison, stale: [], showDeltas: true });
+    const off = render({ curve: FULL, previous: prev, comparison, stale: [] });
+    expect(on).toMatch(/>\+\d+(\.\d+)?%</);      // signed percentages...
+    expect(on).not.toContain('>' + FULL.points[0].watts + '<');  // ...instead of watts
+    expect(off).toContain('>' + FULL.points[0].watts + '<');     // untouched when off
+  });
+
+  it('shows no delta for incomparable points: silence, like the withheld line', () => {
+    // A number here would be the exact claim the withheld line refuses to
+    // make. Meter changed on every previous point, so no label may appear.
+    const prevMeter = powerCurve(CURVE_DURATIONS.map((d, i) => pt(d, 880 - i * 70, { source: 'Assioma' })));
+    const comparison = curveComparison({ current: FULL, previous: prevMeter });
+    const html = render({ curve: FULL, previous: prevMeter, comparison, stale: [], showDeltas: true });
+    expect(html).not.toMatch(/>[+-]\d+(\.\d+)?%</);
+    // and the watts labels are gone too — deltas mode shows deltas or nothing
+    FULL.points.forEach(p => expect(html).not.toContain('>' + p.watts + '<'));
+  });
+
   it('renders nothing for fewer than two points: one best is not a curve', () => {
     expect(render({ curve: powerCurve([pt(300, 330)]), stale: [] })).toBe('');
     expect(render({ curve: null, stale: [] })).toBe('');
@@ -133,6 +157,23 @@ describe('the card puts the data on the chart, not in rows', () => {
     expect(h).toContain('% of threshold');   // the ratio the axis cannot give
     expect(h).toContain('Quarq');            // which meter recorded them
     expect(h).toContain('outdoors');         // the environment
+  });
+
+  it('offers the deltas toggle only when a comparable delta exists', () => {
+    // Without a previous curve there is nothing to toggle to; on an
+    // all-incomparable comparison (meter change) the toggle would flip
+    // between the curve and an emptier curve, which reads as a bug.
+    expect(html()).not.toContain('change vs previous');
+    const prev = powerCurve(CURVE_DURATIONS.map((d, i) => pt(d, 880 - i * 70)));
+    const withPrev = renderToString(
+      <PowerCurveCard curve={FULL} previous={prev} ftpWatts={260} todayISO={TODAY} />);
+    expect(withPrev).toContain('change vs previous');
+    // watts is the default: the curve is the fact, the delta is the reading
+    expect(withPrev).toMatch(/aria-pressed="true"[^>]*>watts/);
+    const prevMeter = powerCurve(CURVE_DURATIONS.map((d, i) => pt(d, 880 - i * 70, { source: 'Assioma' })));
+    const meterChange = renderToString(
+      <PowerCurveCard curve={FULL} previous={prevMeter} ftpWatts={260} todayISO={TODAY} />);
+    expect(meterChange).not.toContain('change vs previous');
   });
 
   it('names which durations are stale rather than only counting them', () => {
