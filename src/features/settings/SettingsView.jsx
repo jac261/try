@@ -164,7 +164,7 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, tracker, focus, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditTechnique, onEditPlan, onStartMaintenance, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
+export function SettingsView({ plan, tracker, focus, noAuth, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditTechnique, onEditPlan, onStartMaintenance, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
@@ -309,7 +309,11 @@ export function SettingsView({ plan, tracker, focus, onEnterTracker, onRegenerat
       </div>
       <div className="card" id="settings-connections">
         <h2 style={{ marginBottom: 10 }}>Connections</h2>
-        <IntervalsIcuCard onWellnessSynced={onWellnessSynced} watchSync={watchSync} onWatchSync={onWatchSync} watchPush={watchPush} />
+        {/* noAuth (dev harness only): the inner cards call Clerk hooks and
+            need a provider; the Clerk-free harness swaps in a placeholder
+            so the section keeps its place and its deep-link id. */}
+        {noAuth ? <div className="authmeta">Connections need a signed-in session (hidden in the dev harness).</div>
+          : <IntervalsIcuCard onWellnessSynced={onWellnessSynced} watchSync={watchSync} onWatchSync={onWatchSync} watchPush={watchPush} />}
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Support</h2>
@@ -320,7 +324,8 @@ export function SettingsView({ plan, tracker, focus, onEnterTracker, onRegenerat
       </div>
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Account</h2>
-        <ApiConnectionCard />
+        {noAuth ? <div className="authmeta">Account needs a signed-in session (hidden in the dev harness).</div>
+          : <ApiConnectionCard />}
       </div>
       <div className="card">
         <button className="btn ghost" style={{ color: 'var(--danger)' }} onClick={onReset}>Clear all progress</button>

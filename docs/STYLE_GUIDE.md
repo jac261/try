@@ -268,6 +268,16 @@ white icon, inset hairline. Sizes in-app: 46px (rows), 54px (sheet hero), 60px (
 (white), inactive = `--muted`; 11px/700 labels. Profile & settings live behind the
 **avatar**, not the nav.
 
+**Settings sections (phase 4)** — stable cards in a fixed order, each with a deep-link
+id (`settings-profile`, `settings-plan`, `settings-assumptions`, `settings-connections`):
+Profile (fitness surface only), Your plan (every plan-lifecycle action in one card:
+edit race, .ics export, maintenance switch, end-to-tracker, start over), What Try knows
+(the Assumption Center: per-discipline anchor rows, real with provenance and date,
+estimated with the `~` and its never-judges role, missing named as missing and never a
+zero), Connections, Support, Account, then the lone destructive reset. `openSettings(section)`
+in App opens Settings scrolled to a card; in-copy mentions of Settings should become
+links via a nullable `onOpenSettings` callback where cheap.
+
 **Avatar (profile entry)** — 34px circle, top-left of the topbar; the Clerk photo with a
 `1.5px rgba(255,255,255,.18)` hairline, or a gradient fallback
 (`135° #4a74dc → #6d54c8`) with the athlete's initial in white 800.
