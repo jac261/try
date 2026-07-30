@@ -22,6 +22,7 @@ export * from './run-race-pace.js';
 export * from './run-units.js';
 export * from './run-review.js';
 export * from './review-persist.js';
+export * from './coaching/review-authority.js';
 export * from './run-fuelling.js';
 export * from './run-readiness.js';
 export * from './run-dashboard.js';
