@@ -47,11 +47,11 @@ const ICON_PATHS = {
 // New triathlon set is drawn for a uniform stroke-width of 2 (the app default);
 // no per-icon weight overrides needed.
 const ICON_BOLD = {};
-export function Icon({ name, size }) {
+export function Icon({ name, size, style }) {
   const s = size || 22;
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth={ICON_BOLD[name] || 2} strokeLinecap="round" strokeLinejoin="round"
-    style={{ display: 'block', flex: 'none' }}
+    style={{ display: 'block', flex: 'none', ...style }}
     dangerouslySetInnerHTML={{ __html: ICON_PATHS[name] || '' }} />;
 }
 
