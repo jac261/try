@@ -8,19 +8,37 @@ hypothesis, propose-never-impose, honest numbers, one thing by default) see
 
 Snapshot: React 18 + Vite 6 PWA, plain JS, Clerk-gated, per-user localStorage
 with a backend sync (Jack's ASP.NET Core service). intervals.icu is the
-activity source. 1,392 tests across 73 files at the time of writing.
+activity source. 1,440 tests across 77 files at the time of writing.
 
 ## The disciplines
 
 Each leg is meant to stand up against a dedicated single-sport app, not just be
 "present". Build order was swim → bike → run, weakest first. Swim and bike have
-each had a full eight-phase build-out; the run is the next one.
+each had a full eight-phase build-out, and the run a nine-phase one (plus an
+audit round). All three are built out.
 
 | Module | What it covers | Doc |
 |---|---|---|
 | Swim | The swim library, the pool profile, CSS with provenance and testing, per-session review, technique focus, open water, the swim dashboard | [swim.md](swim.md), deeper in [../SWIM_MODULE.md](../SWIM_MODULE.md) |
-| Bike | The bike library and its sizing, FTP with provenance, honest distance, indoor handling, interval-level review, durability and fuelling, bricks, the power curve (gated), the bike dashboard | [bike.md](bike.md), deeper in [../BIKE_MODULE.md](../BIKE_MODULE.md) |
+| Bike | The bike library and its sizing, FTP with provenance, honest distance, indoor handling, interval-level review, durability and fuelling, bricks, the power curve, the bike dashboard | [bike.md](bike.md), deeper in [../BIKE_MODULE.md](../BIKE_MODULE.md) |
 | Run | The run library and its sizing, the 5 km benchmark with provenance, hill work, the race-pace calendar, distance in km or miles, load and durability, review and fuelling, race readiness, the run dashboard | [run.md](run.md), deeper in [../RUN_MODULE.md](../RUN_MODULE.md) |
+
+### Across all three: the performance spider
+
+`spider.js` places an athlete's paces on a radar chart against **Try's own
+named level rings** (Beginner to Elite), not a population percentile — we hold
+no population, and a percentage against an invented one is a fabricated
+statistic with an axis label. `SPIDER_SOURCES.population` is the seam for the
+day the backend can aggregate consenting users.
+
+Each discipline projects across its axes only from evidence the athlete
+produced: the swim from the two points its 400/200 test yields (the
+critical-speed model), the run from its 5 km anchor with any recorded race
+overriding the projection as a measured point, the bike from its power curve
+on its own shape rings rather than level rings, because those scores are
+deviations from the rider's own mean. An estimated anchor draws no polygon at
+all: it would sit on a ring by construction, so the app would be grading its
+own guess. Rendered by `SpiderChart.jsx` on all three dashboards.
 
 ## The systems that turn disciplines into a plan and a coach
 

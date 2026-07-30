@@ -715,9 +715,10 @@ only start now that the data flows.
 
 | Ask | Where | Why |
 |---|---|---|
-| `runReview` | workout log entry | `swimReview` and `bikeReview` are both normalized in `WorkoutStateService`; the run has no column, so the run's rolling review evidence cannot fire. It is the same shape as the two beside it, plus the migration pair. |
-| `runmaintenance`, `duathlon`, `aquathlon` | `PlanCatalog.RaceTypes` | See the 29 July section. `runmaintenance` is the cheap one and the only one with a client design behind it. |
-| Anonymised percentile breakpoints | new endpoint | See the 30 July section. Turns the spider charts' rings from Try's own levels into a real population comparison. |
+| `runReview` | workout log entry | **In PR: JackGilham/try-backend#24.** `swimReview` and `bikeReview` are both normalized in `WorkoutStateService`; the run has no column, so its rolling review evidence cannot fire. Mirrored site-for-site in that PR, with the migration pair. Unbuilt on our side (no dotnet/Postgres here) — CI and Jack's review are the first real check. |
+| `runmaintenance` | `PlanCatalog.RaceTypes` | **In the same PR.** The client plan shape is designed and gated on this string. |
+| `duathlon`, `aquathlon` | `PlanCatalog.RaceTypes` | Deliberately NOT in that PR. They need product design first: a duathlon's second run happens on bike-fatigued legs and our load guardrails model one run per session, so a catalog entry would imply plans were imminent. |
+| Anonymised percentile breakpoints | new endpoint | See the 30 July section. The only ask with no code behind it — it needs a design conversation about consent and k-anonymity more than it needs a speculative endpoint. Turns the spider rings from Try's own levels into a real population comparison. |
 
 A power **stream** would subsume 3, 4 and 5 together, if that is ever easier
 to expose than three separate computed fields. Ask 6 is the only one that is
