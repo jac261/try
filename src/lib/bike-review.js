@@ -316,8 +316,15 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
     && completion >= BIKE_REVIEW_RULES.completionFull
     && (type === 'Endurance' || type === 'Long')) confidence = 'high';
 
-  // §6: null on every ride until normalized power arrives, by bikeLoad's gate
-  const load = bikeLoad({ activity, profile: { ftp: pc.ftp, ftpMeta: pc.ftpMeta } });
+  /* §6: IF/TSS/VI, now live — normalizedWatts arrives since 2026-07-30.
+     Gated on realFtp, NOT on a reconstructed profile: paces carries no
+     ftpMeta and pc.ftp may be a level-table estimate, and bikePowerAnchor
+     treats any truthy ftp as real — so passing pc.ftp through unconditionally
+     computed intensity factors from a guess (live defect, phase 1 audit).
+     An estimated threshold makes every derived number an estimate wearing a
+     measured name; realFtp is the same distinction the rest of this
+     function already judges with. */
+  const load = bikeLoad({ activity, profile: realFtp ? { ftp: pc.ftp } : {} });
   const outcome = decideOutcome({
     type, confidence, completion, timeInTarget, powerAdherence,
     intervalFadePercent, control, feel, realFtp, variability, recoveryCompliance, workCompletion,

@@ -121,3 +121,38 @@ describe('the wiring exists at the source', () => {
     expect(Object.keys(REVIEW_ENGINE_VERSIONS).sort()).toEqual(['bikeReview', 'runReview', 'swimReview']);
   });
 });
+
+describe('bikeLoad inside bikeReview honours the estimated-FTP gate (phase 1 defect)', () => {
+  /* paces carries ftp even when it is a level-table estimate (ftpEstimated
+     true), and bikePowerAnchor calls any truthy ftp 'real'. The review's
+     bikeLoad call passed pc.ftp through unconditionally, so the moment
+     normalizedWatts arrived, IF/TSS/VI computed from a guess. The module
+     gate (delivered-fields.test.js) passed throughout — it tested the
+     function, not the call site. */
+  const workout = {
+    id: '0-0', discipline: 'bike', type: 'Endurance', durationMin: 60,
+    date: '2026-07-06', segments: [{ label: 'Main', min: 60, zone: 'Z2' }],
+  };
+  const activity = {
+    id: 'b1', type: 'Ride', date: '2026-07-06', movingTimeSec: 3600,
+    distance: 30000, averageWatts: 180, normalizedWatts: 190,
+  };
+
+  it('an estimated FTP yields a review with null load fields', async () => {
+    const { bikeReview } = await import('./bike-review.js');
+    const rv = bikeReview({ workout, activity, intervals: null, paces: { ftp: 250, ftpEstimated: true }, feel: 'right' });
+    expect(rv).toBeTruthy();
+    expect(rv.intensityFactor).toBe(null);
+    expect(rv.powerTss).toBe(null);
+    expect(rv.normalizedPowerWatts).toBe(null);
+    expect(rv.variabilityIndex).toBe(null);
+  });
+
+  it('a real FTP yields the known values from the same ride', async () => {
+    const { bikeReview } = await import('./bike-review.js');
+    const rv = bikeReview({ workout, activity, intervals: null, paces: { ftp: 250 }, feel: 'right' });
+    expect(rv.intensityFactor).toBeCloseTo(0.76, 2);
+    expect(rv.variabilityIndex).toBeCloseTo(1.06, 2);
+    expect(rv.powerTss).toBeGreaterThan(0);
+  });
+});
