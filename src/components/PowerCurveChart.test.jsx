@@ -70,6 +70,19 @@ describe('PowerCurveChart', () => {
     expect(paths(withMeterChange)).toBe(1);   // the current curve only
   });
 
+  it('anchors the threshold label left, clear of the crossing region', () => {
+    /* Found by rendering it in a browser, not by a test: right-anchored, the
+       label sat directly over the 20, 40 and 60 minute markers, which is the
+       region the threshold line exists to let you read. The curve is at its
+       maximum on the left, so that band is empty there. Asserted on the
+       anchor because happy-dom has no text metrics to measure overlap with. */
+    const html = render({ curve: FULL, stale: [], ftpWatts: 260 });
+    const label = html.match(/<text[^>]*>threshold/);
+    expect(label).not.toBeNull();
+    expect(label[0]).toContain('text-anchor="start"');
+    expect(label[0]).not.toContain('text-anchor="end"');
+  });
+
   it('renders nothing for fewer than two points: one best is not a curve', () => {
     expect(render({ curve: powerCurve([pt(300, 330)]), stale: [] })).toBe('');
     expect(render({ curve: null, stale: [] })).toBe('');

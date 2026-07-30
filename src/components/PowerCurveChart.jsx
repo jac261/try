@@ -77,7 +77,12 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
         <>
           <line x1={padL} y1={Y(ftpWatts)} x2={W - padR} y2={Y(ftpWatts)}
             stroke="var(--line)" strokeWidth="1" strokeDasharray="3 3" />
-          <text x={W - padR} y={Y(ftpWatts) - 3} fontSize="8" fill="var(--muted)" textAnchor="end">
+          {/* Labelled at the LEFT, not the right. Rendered in a browser, a
+              right-anchored label sat directly over the 20, 40 and 60 minute
+              markers — the threshold-crossing region, which is the whole
+              reason the reference line is drawn. At the left edge the curve is
+              at its maximum, so the band beside the threshold is empty. */}
+          <text x={padL} y={Y(ftpWatts) - 4} fontSize="8" fill="var(--muted)" textAnchor="start">
             threshold {ftpWatts} W
           </text>
         </>
