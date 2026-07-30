@@ -175,3 +175,39 @@ describe('the body mass card is safety-gated', () => {
     expect(html).not.toContain('g a week');
   });
 });
+
+describe('the Progress tabs (phase 3)', () => {
+  it('a tri plan shows four tabs, Overview selected, run content off Overview', async () => {
+    const html = await mount({ plan: generatePlan(profile), activities: null });
+    expect(html).toContain('role="tablist"');
+    expect((html.match(/role="tab"/g) || []).length).toBe(4);
+    expect(html).toMatch(/aria-selected="true"[^>]*>Overview/);
+    expect(html).toContain('Weekly load');               // orchestration stays
+    expect(html).not.toContain('Race projections');      // run artifact moved off
+  });
+
+  it('the Bike tab mounts the power curve card beside the dashboard', async () => {
+    // the curve self-gates on data; with none, the dashboard renders and
+    // nothing crashes — the sibling placement is what this pins
+    const html = await mount({ plan: generatePlan(profile), activities: null }, 'Bike');
+    expect(html).toContain('id="prog-panel-bike"');
+    expect(html).toContain('Where you are');             // the bike dashboard's FTP card
+    expect(html).not.toContain('Weekly load');           // overview content unmounts
+  });
+
+  it('an excluded discipline has no tab at all', async () => {
+    const html = await mount({ plan: generatePlan({ ...profile, excludedDiscipline: 'bike' }), activities: null });
+    expect(html).toContain('role="tablist"');
+    expect(html).not.toMatch(/role="tab"[^>]*>Bike|>Bike<\/button>/);
+    expect((html.match(/role="tab"/g) || []).length).toBe(3);
+  });
+
+  it('a solo plan opens on its discipline and offers no swim or bike tab', async () => {
+    const html = await mount({ plan: generatePlan({ ...profile, raceType: 'runhalf' }), activities: null });
+    expect(html).toMatch(/aria-selected="true"[^>]*>Run/);
+    expect(html).not.toMatch(/>Swim<\/button>/);
+    expect(html).not.toMatch(/>Bike<\/button>/);
+    // and the run dashboard is already on screen without a tap
+    expect(html).toContain('id="prog-panel-run"');
+  });
+});
