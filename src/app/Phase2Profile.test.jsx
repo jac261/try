@@ -26,11 +26,21 @@ const profile = {
   trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5,
   startDate: '2026-06-01', raceDate: '2026-08-30',
 };
-// the server's plan-independent SUBSET: no raceType/raceDate/startDate
+/* The server's plan-independent profile, as the widened typed subset the
+   backend serves since 2026-07-30: pool, technique, cssMeta, massGoal and
+   the four start anchors are now first-class columns, so a fresh device
+   recovers them without a plan snapshot. Still deliberately absent, because
+   they belong to a plan: raceType, raceDate, startDate. And still blob-only
+   on the backend (the open ask): ftpMeta, fivekMeta. */
 const serverProfile = {
   name: 'T', fitness: 'intermediate', fivekSec: 1620, css100Sec: 120,
   ftp: 200, weightKg: 70, trainingDays: [0, 1, 3, 5, 6], longDay: 5,
   fitnessHistory: [],
+  massGoal: 'hold', massGoalSetAt: '2026-07-22',
+  pool: { length: 33.3, unit: 'metres' },
+  technique: { focus: ['catch'], kit: ['pull-buoy'], bias: [], updatedAt: '2026-07-20' },
+  cssMeta: { source: 'try-test', measuredAt: '2026-07-15', confidence: 'high' },
+  weeklyHours: 8, longestSwimM: 2000, longestRideMin: 150, longestRunMin: 80,
 };
 
 // Record every request so assertions can inspect method, url AND body — a
@@ -206,6 +216,18 @@ describe('fresh device with only a server profile', () => {
     expect(cached.race).toBe('tracker');
     expect(cached.profile.raceType).toBeUndefined(); // never invented
     expect(cached.profile.daysPerWeek).toBe(5);      // derived from trainingDays
+    /* Phase 1 (2026-07-30): the widened typed profile round-trips. These are
+       the settings a fresh device used to lose — a 33.3 m pool reverting to
+       the default, technique kit vanishing, CSS provenance degrading to
+       'manual', the start anchors silently reverting week 1 to race-sized.
+       loadProfile passes res.body.profile through verbatim, so this asserts
+       the whole client half of the device-sync contract. */
+    expect(cached.profile.pool).toEqual({ length: 33.3, unit: 'metres' });
+    expect(cached.profile.technique.kit).toEqual(['pull-buoy']);
+    expect(cached.profile.cssMeta.source).toBe('try-test');
+    expect(cached.profile.massGoal).toBe('hold');
+    expect(cached.profile.weeklyHours).toBe(8);
+    expect(cached.profile.longestSwimM).toBe(2000);
     root.unmount(); el.remove();
   }, 20000);
 
