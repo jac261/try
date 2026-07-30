@@ -128,6 +128,22 @@ describe('the Assumption Center (What Try knows)', () => {
 });
 
 describe('section anchors', () => {
+  it('a focus prop scrolls its card into view on mount', async () => {
+    // happy-dom has no layout, so pin the call rather than the pixels
+    const seen = [];
+    const orig = window.HTMLElement.prototype.scrollIntoView;
+    window.HTMLElement.prototype.scrollIntoView = function () { seen.push(this.id); };
+    try {
+      await mount({ plan: generatePlan(profile), focus: 'connections' });
+      expect(seen).toContain('settings-connections');
+      seen.length = 0;
+      await mount({ plan: generatePlan(profile) }); // no focus: no scroll
+      expect(seen).toEqual([]);
+    } finally {
+      window.HTMLElement.prototype.scrollIntoView = orig;
+    }
+  });
+
   it('the deep-link ids exist in both modes', async () => {
     const planHtml = await mount({ plan: generatePlan(profile) });
     const t = buildTrackerPlan(generatePlan(profile), '2026-07-13T10:00:00.000Z');

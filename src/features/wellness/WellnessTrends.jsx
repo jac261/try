@@ -5,7 +5,7 @@ import { Signed } from '@/components/Signed.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
 import { TrendChart } from '@/components/charts.jsx';
 
-export function WellnessTrends({ wellness , onSupport, onWhatIf }) {
+export function WellnessTrends({ wellness , onSupport, onWhatIf, onOpenSettings }) {
   // After a history backfill the store can hold a year+; the charts stay
   // readable on the trailing 120 days (the "last N days" labels follow).
   const w = wellness.filter(r => r.ctl != null || r.hrv != null).slice(-120);
@@ -14,7 +14,11 @@ export function WellnessTrends({ wellness , onSupport, onWhatIf }) {
       <div className="section-title">Fitness &amp; recovery</div>
       <div className="card"><div className="empty" style={{ padding: '22px 16px' }}>
         <div className="big"><Icon name="heartrate" size={32} /></div>
-        Log a few days of readiness (or connect your watch data in Settings) and your Fitness, Form &amp; HRV trends will appear here.
+        {/* Deep link (phase 4): where a handler is wired, the words that
+            name Settings become the way there. Nullable per house idiom. */}
+        {onOpenSettings
+          ? <>Log a few days of readiness (or connect your <span {...tap(() => onOpenSettings('connections'))} style={{ textDecoration: 'underline', cursor: 'pointer' }}>watch data in Settings</span>) and your Fitness, Form &amp; HRV trends will appear here.</>
+          : <>Log a few days of readiness (or connect your watch data in Settings) and your Fitness, Form &amp; HRV trends will appear here.</>}
       </div></div>
     </>
   );

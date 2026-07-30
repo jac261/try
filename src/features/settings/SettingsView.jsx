@@ -164,10 +164,18 @@ function ApiConnectionCard() {
   );
 }
 
-export function SettingsView({ plan, tracker, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditTechnique, onEditPlan, onStartMaintenance, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
+export function SettingsView({ plan, tracker, focus, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditTechnique, onEditPlan, onStartMaintenance, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
   const p = plan.profile;
+  // Deep-link focus (phase 4): a caller that opened Settings FOR something
+  // (openSettings('connections')) lands scrolled to that card. Mount-only on
+  // purpose; the avatar's plain open passes no focus and starts at the top.
+  useEffect(() => {
+    if (!focus) return;
+    const el = document.getElementById('settings-' + focus);
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, []);
   return (
     <>
       {/* Phase 4 (spec stage 6): Settings consolidated into stable sections.
