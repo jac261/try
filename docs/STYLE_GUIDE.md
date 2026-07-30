@@ -245,6 +245,16 @@ A custom **monoline** SVG set, drawn on a **24×24 viewBox**, `fill: none`,
 
 **Cards** — `--card` bg, `1px --line` border, `--radius`, `--shadow`, 18px padding.
 
+**Tablist (segmented view switcher)** — a row of small buttons, exactly one
+`primary` (the selected tab), the rest `ghost`; proper `role="tablist"` /
+`role="tab"` / `role="tabpanel"` wiring, inactive panels unmounted. Two
+instances share the idiom: the what-if sheet's mode tabs (`.wi-tabs`) and the
+Progress view's Overview · Swim · Bike · Run tabs (`.prog-tabs`, phase 3).
+Progress rules: a discipline whose plan gate fails (solo race, excluded
+discipline) gets no tab rather than a disabled one; a solo plan opens
+directly on its discipline's tab; tracker mode renders everything in one
+column with no tab bar at all.
+
 **Discipline tile (the signature element)** — rounded square, discipline **gradient**,
 white icon, inset hairline. Sizes in-app: 46px (rows), 54px (sheet hero), 60px (building screen).
 
