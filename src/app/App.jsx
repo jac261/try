@@ -1422,7 +1422,11 @@ export function App({ storage, getToken, user }) {
 
   const tracker = plan.race === 'tracker';
   const race = T.RACES[plan.race];
-  const rawDaysToRace = T.daysBetween(new Date(), plan.profile.raceDate);
+  // Calendar days, not clock-rounded instants: daysBetween on a raw Date
+  // rounds one short after noon — the chip read "0 days to go" on the eve's
+  // afternoon and the post-race edge fired mid race day. iso() pins the start
+  // to local midnight, matching RaceWeekCard (review catch 2026-07-30).
+  const rawDaysToRace = T.daysBetween(T.iso(new Date()), plan.profile.raceDate);
   const daysToRace = Math.max(0, rawDaysToRace);
   // The plan's edges: race day passed → offer a maintenance block (with a
   // recovery week baked in); a maintenance block near its horizon → offer to
