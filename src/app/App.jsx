@@ -958,15 +958,27 @@ export function App({ storage, getToken, user }) {
       });
       return;
     }
-    markRecapSeen(a);
-    setRecap({
-      workout: {
-        id: 'adhoc-' + a.id, adhoc: true,
-        title: a.name || (T.DISCIPLINES[disc] && T.DISCIPLINES[disc].name) || 'Session',
-        discipline: disc, durationMin: Math.round(a.movingTimeSec / 60),
-      },
-      activity: a,
-    });
+    /* The ad-hoc workout is built ONCE and used by both the recap and the
+       overview, so the deck and the sheet can never describe the session
+       differently. */
+    const adhoc = {
+      id: 'adhoc-' + a.id, adhoc: true,
+      title: a.name || (T.DISCIPLINES[disc] && T.DISCIPLINES[disc].name) || 'Session',
+      discipline: disc, durationMin: Math.round(a.movingTimeSec / 60),
+      /* segments and date are what the OVERVIEW needs, and the recap never
+         did — so they were absent while this object only ever reached the
+         deck. Routing it to the detail sheet made them load-bearing. There is
+         no prescription to show for a session nobody planned, hence []. */
+      segments: [], date: a.date,
+    };
+    /* Second tap opens the overview, exactly as the matched and manual paths
+       above already do. This branch was missing: it called markRecapSeen and
+       then never read the flag, so an unplanned recording replayed its recap
+       on every tap with no route to the detail (reported 2026-07-30). */
+    const seenAdhoc = storage.load('recapSeen', {});
+    if (seenAdhoc[a.id]) { setDetail(adhoc); return; }
+    markRecapSeen(a, seenAdhoc);
+    setRecap({ workout: adhoc, activity: a });
   };
   const moveWorkout = (id, date) => {
     setMoves(m => { const n = { ...m }; if (date === null) delete n[id]; else n[id] = date; return n; });
@@ -1447,7 +1459,7 @@ export function App({ storage, getToken, user }) {
         const a = recap.activity || recordingFor(w);
         return a ? <RecapSlides workout={w} activity={a} plan={plan} log={log} moves={moves}
           onLoadIntervals={sync.loadActivityIntervals} onLoadRoute={sync.loadActivityRoute} onClose={() => setRecap(null)}
-          onDetails={w.adhoc ? null : () => { setRecap(null); setDetail(w); }} /> : null;
+          onDetails={() => { setRecap(null); setDetail(w); }} /> : null;
       })()}
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
       {whatIf && <WhatIfSheet plan={plan} log={log} moves={moves} adjust={adjust} wellness={recs}
@@ -1468,8 +1480,13 @@ export function App({ storage, getToken, user }) {
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}
 
-      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={!!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel} positionLog={positionLog} onPosition={answerPosition} brick={brickRead}
-        activity={log[detail.id] ? recordingFor(detail) : null}
+      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={detail.adhoc || !!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel} positionLog={positionLog} onPosition={answerPosition} brick={brickRead}
+        /* An ad-hoc workout is synthesised from a recording and has no log
+           entry, so log[id] cannot supply its activity. Its id encodes the
+           recording ('adhoc-' + activity.id), which is the one link back. */
+        activity={detail.adhoc
+          ? (displayActivities || []).find(x => 'adhoc-' + x.id === detail.id) || null
+          : (log[detail.id] ? recordingFor(detail) : null)}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}
@@ -1484,7 +1501,15 @@ export function App({ storage, getToken, user }) {
         }}
         onRemove={detail.custom ? () => removeWorkout(detail.id) : null} onLoadIntervals={sync.loadActivityIntervals} onSupport={t => { setDetail(null); openSupport(t); }}
         onWhatIf={tracker ? null : w => { setDetail(null); setWhatIf({ initial: { tab: 'miss', skipIds: [w.id], skipLabel: w.title || w.type } }); }}
-        onReplayRecap={log[detail.id] && recordingFor(detail) ? () => { const w2 = detail; setDetail(null); setRecap({ workout: w2, activity: recordingFor(w2) }); } : null} />}
+        onReplayRecap={(() => {
+          // Replay works from an ad-hoc overview too: its recording comes from
+          // the feed rather than from a log entry.
+          const rec = detail.adhoc
+            ? (displayActivities || []).find(x => 'adhoc-' + x.id === detail.id) || null
+            : (log[detail.id] ? recordingFor(detail) : null);
+          if (!rec) return null;
+          return () => { const w2 = detail; setDetail(null); setRecap({ workout: w2, activity: rec }); };
+        })()} />}
 
       {addOpen && <AddWorkoutSheet mode={tracker ? 'log' : 'plan'} initialDisc={addOpen.disc} dateISO={addOpen.dateISO}
         onAdd={tracker ? logManualActivity : addWorkout} onClose={() => setAddOpen(null)} />}

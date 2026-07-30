@@ -175,7 +175,9 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         {why && <div className="why" style={{ borderColor: disc.color }}><span className="why-label">Why this session</span>{why}</div>}
         <div className="section-title" style={{ margin: '8px 0 2px' }}>{!w.race && !w.bRace && <InfoLink onOpen={onSupport} topic="workout-library" />}{w.race || w.bRace ? 'Race plan' : 'Workout'}</div>
         <WorkoutProfile w={w} />
-        {w.segments.map((s, i) => (
+        {/* Defensive: an ad-hoc session has no prescription to render, and a
+            plan stored before a field existed can arrive thin. */}
+        {(w.segments || []).map((s, i) => (
           <div className="seg" key={i}>
             <div className="bar" style={{ background: disc.color }} />
             <div><div className="l">{s.label}</div><div className="d">{s.detail}</div></div>
@@ -237,7 +239,11 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           );
         })()}
         {w.test && onLogResult && <><button className="btn primary" onClick={onLogResult}><Icon name="trend" size={18} /> Log result &amp; re-target</button><div style={{ height: 10 }} /></>}
-        {!w.race && <button className={'btn ' + (done ? 'done' : (w.test ? 'ghost' : 'primary'))} onClick={onToggle}>
+        {/* An ad-hoc session is synthesised FROM a recording: it already
+            happened, and it occupies no plan slot to complete. Offering the
+            toggle would write a log entry against a workout id that no plan
+            contains. */}
+        {!w.race && !w.adhoc && <button className={'btn ' + (done ? 'done' : (w.test ? 'ghost' : 'primary'))} onClick={onToggle}>
           {done ? '✓ Completed — tap to undo' : 'Mark as complete'}</button>}
         {/* the what-if doorway every design judge asked for: meet the athlete
             at the moment of doubt, pre-filled with this exact session */}
