@@ -1,4 +1,5 @@
 import * as T from '@/lib';
+import { PowerCurveChart } from '@/components/PowerCurveChart.jsx';
 
 /* Phase 7 §6: the curve, shown with everything needed to judge it.
  *
@@ -43,6 +44,12 @@ export function PowerCurveCard({ curve, previous, ftpWatts, todayISO }) {
             </span>
           </div>
         )}
+
+        {/* The shape, then the facts. The rows below carry date, meter,
+            environment, confidence and the per-duration delta — none of which
+            a line can show — so the chart is added rather than swapped in. */}
+        <PowerCurveChart curve={curve} previous={previous} comparison={comparison}
+          stale={stale} ftpWatts={ftpWatts} />
 
         {curve.points.map(p => {
           const d = T.durationSummary({ point: p, ftpWatts, stale: stale.includes(p.durationSec) });
