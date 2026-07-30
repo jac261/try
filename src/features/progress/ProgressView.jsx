@@ -33,7 +33,15 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
   }, [plan, log, moves, activities, todayISO, retest, ftpRetest, durability, fuelLog, positionLog]);
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
   const done = all.filter(w => log[w.id]);
-  const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
+  const rawDaysToRace = T.daysBetween(todayISO, plan.profile.raceDate);
+  const daysToRace = Math.max(0, rawDaysToRace);
+  // Same phase read as the topbar chip: strictly after a real race day the
+  // countdown would freeze at 0, so the tile counts up instead — a calendar
+  // fact, not an outcome claim (the app never learns whether the race was
+  // started, so "done" language stays off this tile). Maintenance (noRace)
+  // counts down to a horizon, not a race, and its label says so.
+  const noRace = !!(T.RACES[plan.race] || {}).noRace;
+  const postRace = rawDaysToRace < 0 && !noRace;
   const pct = all.length ? Math.round(done.length / all.length * 100) : 0;
 
   // weekly bars — training load, not raw minutes. A benchmark test or a sharp
@@ -114,7 +122,9 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
       <div className="section-title">Progress</div>
       {!tracker && <>
         <div className="kpis">
-          <div className="kpi"><div className="v">{daysToRace}<small> days</small></div><div className="k">Until race day</div></div>
+          {postRace
+            ? <div className="kpi"><div className="v">{-rawDaysToRace}<small> days</small></div><div className="k">Since race day</div></div>
+            : <div className="kpi"><div className="v">{daysToRace}<small> days</small></div><div className="k">{noRace ? 'Until block end' : 'Until race day'}</div></div>}
           <div className="kpi"><div className="v">{pct}<small>%</small></div><div className="k">Sessions completed</div></div>
           <div className="kpi"><div className="v">{done.length}<small>/{all.length}</small></div><div className="k">Workouts done</div></div>
           <div className="kpi"><div className="v" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>{streak}<Icon name="flame" size={22} /></div><div className="k">Current streak</div></div>

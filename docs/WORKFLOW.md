@@ -65,7 +65,11 @@ one pass):
   unclear, check the JackGilham/try-backend repo or ask Jack rather than
   infer from a nearby file.
 - **Honest-data:** does anything estimated masquerade as measured, guess when
-  data is missing, or claim precision the inputs cannot support.
+  data is missing, or claim precision the inputs cannot support. Outcome
+  words ("completed", "done") belong only to log-derived facts; a calendar
+  fact gets calendar language (the post-race chip catch, 2026-07-30: "race
+  completed" derived from the date alone, for a race the app structurally
+  cannot log — a DNS athlete would have been congratulated on finishing).
 
 **4. Adversarial verification.** Every finding from stage 3 gets an
 independent skeptic trying to refute it before it reaches Jon or becomes a

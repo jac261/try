@@ -31,6 +31,18 @@ describe('date helpers', () => {
     expect(daysBetween('2026-09-20', '2026-09-20')).toBe(0);
   });
 
+  it('daysBetween rounds a raw clock time, so callers wanting calendar days must iso() first (race-chip catch)', () => {
+    // A bare Date carries the time of day: from 15:00 the same calendar day
+    // already rounds to -1, which is how "0 days to go" slipped a day early
+    // and "race day has passed" fired on race-day afternoon.
+    expect(daysBetween(new Date(2026, 0, 1, 15, 0), '2026-01-01')).toBe(-1);
+    // mornings round to -0 (Object.is-distinct from 0, still not < 0)
+    expect(daysBetween(new Date(2026, 0, 1, 9, 0), '2026-01-01') === 0).toBe(true);
+    // iso() collapses the time of day: exact calendar days at any hour.
+    expect(daysBetween(iso(new Date(2026, 0, 1, 15, 0)), '2026-01-01')).toBe(0);
+    expect(daysBetween(iso(new Date(2026, 0, 2, 9, 0)), '2026-01-01')).toBe(-1);
+  });
+
   it('weeksBetween returns fractional weeks', () => {
     expect(weeksBetween('2026-09-20', '2026-10-18')).toBeCloseTo(4, 5);
   });

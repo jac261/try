@@ -1453,20 +1453,33 @@ export function App({ storage, getToken, user }) {
 
   const tracker = plan.race === 'tracker';
   const race = T.RACES[plan.race];
-  const rawDaysToRace = T.daysBetween(new Date(), plan.profile.raceDate);
+  // iso() first: daysBetween rounds raw clock time, so a bare new Date() puts
+  // afternoons half a day past midnight and the count slips a day early
+  // ("0 days to go" the evening before; "passed" on race-day afternoon).
+  // Midnight-to-midnight makes it exact calendar days all day long — which
+  // also moves the planEdge offers below to the calendar boundary (they used
+  // to first fire mid-afternoon).
+  const rawDaysToRace = T.daysBetween(T.iso(new Date()), plan.profile.raceDate);
   const daysToRace = Math.max(0, rawDaysToRace);
+  // Strictly after a real race day (0 IS race day; noRace plans have horizons,
+  // not races). The chip must state this phase rather than freeze at "0 days
+  // to go": the post-race banner below only renders on Today, and this window
+  // lasts up to a week before planEnded rolls the plan into tracker mode.
+  // Calendar language only — the app can never log the A race, so it cannot
+  // claim the race was run, only that its day is behind us.
+  const postRace = !race.noRace && rawDaysToRace < 0;
   // The plan's edges: race day passed → offer a maintenance block (with a
   // recovery week baked in); a maintenance block near its horizon → offer to
   // roll another. Both reshape the plan, pruning overlays to the new graph.
-  const rollMaintenance = postRace => {
+  const rollMaintenance = afterRace => {
     const mon = T.startOfWeekMonday(new Date());
     reshapePlan({
-      raceType: 'maintenance', postRace,
+      raceType: 'maintenance', postRace: afterRace,
       startDate: T.iso(mon), raceDate: T.iso(T.addDays(mon, 12 * 7 - 1)), horizonWeeks: 12,
     });
   };
   let planEdge = null;
-  if (!tracker && plan.race !== 'maintenance' && rawDaysToRace < 0) planEdge = {
+  if (postRace) planEdge = {
     key: 'post-race', icon: 'trophy',
     title: 'Race day is behind you — congratulations!',
     // Run-only maintenance is a deferred build; the prompt must not silently
@@ -1509,7 +1522,9 @@ export function App({ storage, getToken, user }) {
           ? <span>Ready for your next plan?</span>
           : race.noRace
             ? <><span>Maintenance block</span><b>{Math.max(0, Math.ceil(rawDaysToRace / 7))}</b><span>weeks left</span></>
-            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span><b>{daysToRace}</b><span>days to go</span></>}</div>
+            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span>{postRace
+              ? <span>race day has passed</span>
+              : <><b>{daysToRace}</b><span>days to go</span></>}</>}</div>
       </div>
 
       {planSyncFailed && !tracker && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptRes(plan.createdAt)))}>
