@@ -78,7 +78,7 @@ describe('daysBetween under an afternoon clock (race-chip catch 2026-07-30)', ()
     expect(daysBetween(new Date(), '2026-09-20')).toBe(1);
   });
 
-  it('raw clock instants at BOTH ends still count calendar days', () => {
+  it('raw clock instants at BOTH ends now count calendar days (23:45 vs 00:10 is one day)', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 8, 19, 23, 45));
     expect(daysBetween(new Date(), new Date(2026, 8, 20, 0, 10))).toBe(1);
