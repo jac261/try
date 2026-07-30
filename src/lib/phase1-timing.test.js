@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { transitionSecFor, brickExecution, TRANSITION_RULES } from './brick.js';
 import { brickPairFor } from './autolog.js';
-import { run5kInterrupted, fivekTestIssues, RUN_5K_RULES } from './run-benchmark.js';
+import { run5kInterrupted, run5kDownhillAssisted, fivekTestIssues, RUN_5K_RULES } from './run-benchmark.js';
 import { rideInterruption, bikeReview, INTERRUPTION_RULES } from './bike-review.js';
 
 /* Phase 1: startedAt and elapsedTimeSec activated. Every consumer here has a
@@ -99,7 +99,7 @@ describe('interrupted 5 km test (§3.2)', () => {
        call site — the shipped isIndoor pattern. Asserted at the source
        because a value test cannot see which guard produced a null. */
     const app = readFileSync('src/app/App.jsx', 'utf8');
-    expect(app).toMatch(/T\.isIndoor\(a\) \|\| T\.run5kInterrupted\(a\) \? null : T\.fivekFromTestIntervals\(rows\)/);
+    expect(app).toMatch(/T\.isIndoor\(a\) \|\| T\.run5kInterrupted\(a\) \|\| T\.run5kDownhillAssisted\(a\) \? null : T\.fivekFromTestIntervals\(rows\)/);
   });
 });
 
@@ -135,5 +135,35 @@ describe('ride interruption (bike review §4, explanation only)', () => {
     expect(INTERRUPTION_RULES.minSpokenSec).toBeGreaterThanOrEqual(120);
     const src = readFileSync('src/lib/bike-review.js', 'utf8');
     expect(src).toMatch(/stoppedSec >= INTERRUPTION_RULES\.minSpokenSec/);
+  });
+});
+
+describe('downhill-assisted 5 km guard (dormant until elevation LOSS ships)', () => {
+  it('fires only on a present PAIR showing a material net drop', () => {
+    expect(run5kDownhillAssisted({ totalElevationGain: 5, totalElevationLoss: 40 })).toBe(true);
+    expect(run5kDownhillAssisted({ totalElevationGain: 30, totalElevationLoss: 38 })).toBe(false); // rolling, not a descent
+    expect(run5kDownhillAssisted({ totalElevationGain: 60, totalElevationLoss: 60 })).toBe(false); // hilly loop, fair
+  });
+
+  it('absence of either field is absence of a claim', () => {
+    // The delivered DTO carries neither field today (pinned in
+    // delivered-fields.test.js), and gain alone cannot tell a descent from
+    // rolling terrain. Missing elevation is not a flat course, and it is
+    // not a downhill one either.
+    expect(run5kDownhillAssisted({ totalElevationGain: 5 })).toBe(false);
+    expect(run5kDownhillAssisted({ totalElevationLoss: 400 })).toBe(false);
+    expect(run5kDownhillAssisted({})).toBe(false);
+    expect(run5kDownhillAssisted(null)).toBe(false);
+  });
+
+  it('fivekTestIssues explains it without numbers', () => {
+    const msg = fivekTestIssues(null, { totalElevationGain: 0, totalElevationLoss: 60 });
+    expect(msg).toMatch(/gravity/);
+    expect(msg).not.toMatch(/\d/);
+  });
+
+  it('the App call site carries the same gate', () => {
+    const app = readFileSync('src/app/App.jsx', 'utf8');
+    expect(app).toMatch(/T\.run5kDownhillAssisted\(a\)/);
   });
 });

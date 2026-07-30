@@ -510,7 +510,7 @@ export function App({ storage, getToken, user }) {
       // treadmill rejection is a property of the recording, not its laps.
       .then(rows => {
         if (cancelled) return;
-        const test = T.isIndoor(a) || T.run5kInterrupted(a) ? null : T.fivekFromTestIntervals(rows);
+        const test = T.isIndoor(a) || T.run5kInterrupted(a) || T.run5kDownhillAssisted(a) ? null : T.fivekFromTestIntervals(rows);
         setRunTest({ actId: a.id, date: tests[0].date, test, issue: test ? null : T.fivekTestIssues(rows, a) });
       })
       .catch(() => { if (!cancelled) setRunTest({ actId: a.id, date: tests[0].date, test: null, issue: 'The laps for that recording could not be loaded.' }); });

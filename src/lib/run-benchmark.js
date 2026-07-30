@@ -48,6 +48,17 @@ export const RUN_5K_RULES = {
      is a backend that predates the field, never an interruption. */
   maxStoppedSec: 600,
   maxStoppedFrac: 0.25,
+  /* Downhill assistance (§4.3). DORMANT: the activity DTO carries no
+     elevation today (the interval DTO has gain only, and a point-to-point
+     descent needs LOSS — the missing half is the named backend ask). Shipped
+     write-and-tested anyway, the bike-load pattern: the day the fields land
+     is a data change, not a feature build. Net drop beyond this many metres
+     per km of a 5 km means gravity ran part of the test. World Athletics
+     uses 1 m/km for record eligibility; ours is looser because a training
+     benchmark is not a record, but a 3 m/km point-to-point descent is a
+     different event. Absence of EITHER field is absence of a claim — a
+     missing pair lowers nothing and flags nothing. */
+  maxNetDropPerKm: 3,
   // The plausible range for a 5 km run. Outside this the recording is wrong
   // rather than the athlete remarkable: 11 minutes beats the world record and
   // 50 minutes is a walk, and either way the anchor must not move.
@@ -117,6 +128,16 @@ export function run5kTestActivityFor({ activities, date }) {
     .sort((x, y) => Math.abs(x.movingTimeSec - 2700) - Math.abs(y.movingTimeSec - 2700))[0] || null;
 }
 
+/* A materially downhill-assisted recording (§4.3). True only when BOTH
+   elevation fields are present and the net drop exceeds the rule — gain
+   alone cannot distinguish a descent from rolling terrain, so a gain-only
+   DTO stays silent. Same call-site pattern as run5kInterrupted below. */
+export function run5kDownhillAssisted(activity) {
+  if (!activity || activity.totalElevationGain == null || activity.totalElevationLoss == null) return false;
+  const netDrop = activity.totalElevationLoss - activity.totalElevationGain;
+  return netDrop > RUN_5K_RULES.maxNetDropPerKm * 5;
+}
+
 /* A recording too interrupted to yield a fair 5 km time. Applied at the
    call site beside isIndoor (the shipped pattern for activity-level
    rejections: the LAP functions stay pure on laps) and explained by
@@ -172,6 +193,9 @@ export function fivekTestIssues(intervals, activity) {
   }
   if (activity && run5kInterrupted(activity)) {
     return 'That run included long stops, so we cannot read a fair 5 km time from it. A test wants a clear, continuous effort.';
+  }
+  if (activity && run5kDownhillAssisted(activity)) {
+    return 'That route dropped a fair way overall, so gravity ran part of it. A benchmark wants level ground.';
   }
   if (!Array.isArray(intervals) || !intervals.length) return 'We could not read any laps from that recording.';
   const work = intervals.filter(i => i && i.type === 'WORK' && i.movingTimeSec > 0 && i.distance > 0);
