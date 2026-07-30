@@ -183,6 +183,26 @@ describe('open-water exposure is tracked from recordings, not intentions (§6)',
     expect(e.lastDate).toBe(null);
     expect(e.daysSince).toBe(null);
   });
+
+  /* The feed's contract is a date-only `date` (delivered-fields.test.js pins
+     it), but the counting must not hinge on it: the old private helper turned
+     a datetime into NaN, which dropped the session from `recent` while still
+     rendering a literal "NaN d ago" off the unfiltered `latest`. The shared
+     daysBetween counts the instant's calendar day instead; genuinely
+     unparseable dates still drop out quietly. */
+  it('a datetime-carrying date counts on its calendar day; an unparseable one stays quiet', () => {
+    const dt = openWaterExposure({
+      activities: [{ id: 'a', type: 'OpenWaterSwim', date: '2026-07-15T07:02:11', movingTimeSec: 2700, distance: 2400 }],
+      todayISO: '2026-07-25',
+    });
+    expect(dt.sessions).toBe(1); // a real recording, counted — not NaN-dropped
+    expect(dt.daysSince).toBe(10); // a number, not "NaN d ago"
+    const bad = openWaterExposure({
+      activities: [{ id: 'b', type: 'OpenWaterSwim', date: 'not a date', movingTimeSec: 600, distance: 400 }],
+      todayISO: '2026-07-25',
+    });
+    expect(bad.sessions).toBe(0); // garbage still drops out of the count quietly
+  });
 });
 
 
