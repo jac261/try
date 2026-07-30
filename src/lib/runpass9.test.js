@@ -3,7 +3,7 @@ import { generatePlan } from './plan.js';
 import { RACES } from './domain.js';
 import {
   runDashboard, currentPerformance, trainingVolume,
-  qualityProgression, durability, nextAction,
+  qualityProgression, durability, nextAction, runStoredReviews,
 } from './run-dashboard.js';
 
 /* Run phase 9 — the dashboard.
@@ -201,6 +201,24 @@ describe('the whole dashboard', () => {
     const keys = JSON.stringify(d);
     ['heartRateZones', 'powerCurve', 'trainingLoad', 'ctl', 'atl', 'tsb']
       .forEach(k => expect(keys.includes(k), 'dashboard redraws ' + k).toBe(false));
+  });
+});
+
+describe('stored reviews feeding the dashboard', () => {
+  it('a tune-up race review persisted before the runReview gate is never consumed', () => {
+    // runReview stopped computing for bRace, but reviewChanges skips nulls,
+    // so a pre-gate "73% completed" snapshot survives in the log forever —
+    // this filter is what stops it dragging the consistency read
+    // (gauntlet catch 2026-07-30)
+    const plan = { weeks: [{ index: 0, workouts: [
+      { id: 't', discipline: 'run', type: 'RACE', bRace: true, date: '2026-07-08', durationMin: 30 },
+      { id: 'e', discipline: 'run', type: 'Easy', date: '2026-07-09', durationMin: 50 },
+    ] }] };
+    const log = {
+      t: { done: true, at: '2026-07-08T10:00:00Z', runReview: { discipline: 'run', type: 'RACE', completion: 0.73 } },
+      e: { done: true, at: '2026-07-09T10:00:00Z', runReview: { discipline: 'run', type: 'Easy', completion: 1 } },
+    };
+    expect(runStoredReviews(plan, log, {}).map(r => r.type)).toEqual(['Easy']);
   });
 });
 

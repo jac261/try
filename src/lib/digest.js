@@ -154,10 +154,13 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
   // Missed = strictly past sessions with no log entry. A session sitting on
   // today is not missed yet — the digest can be read before an evening swim.
   // Races stay OUT of this list: the A race is unloggable by design — every
-  // toggle gates on !w.race (autolog excludes both race kinds) — so "no log
-  // entry" is the app's ignorance, not the athlete's absence; a "didn't
-  // happen" line here fired for every athlete post-race (gauntlet catch
-  // 2026-07-30).
+  // toggle gates on !w.race, autolog too — so "no log entry" is the app's
+  // ignorance, not the athlete's absence; a "didn't happen" line here fired
+  // for every athlete post-race (gauntlet catch 2026-07-30). Tune-ups
+  // (bRace) stay IN because they are tickable — this line is a prompt the
+  // athlete can act on, not a verdict. A run tune-up's lone in-window
+  // recording also proposes itself, but brick tune-ups, ambiguous days and
+  // out-of-window recordings only ever close by the athlete's own tap.
   const missed = sessions.filter(w => eff(w) < todayISO && !(log || {})[w.id])
     .map(w => ({ title: w.title || w.type, day: eff(w) }));
 
