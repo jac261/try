@@ -461,6 +461,24 @@ describe('nothing here is a model without a caller', () => {
     expect(r.pattern).toBe(null);
     expect(brickHistory({ plan: null, activities: [] }).pattern).toBe(null);
   });
+
+  it('a raced tune-up never enters the brick window', () => {
+    // the run off the bike in a RACED brick is at race effort — it says
+    // nothing about habitual training pacing, and one fast race leg in the
+    // 3-brick window can push a ruined brick out and silence a real
+    // pattern (gauntlet catch 2026-07-30)
+    const brick = { id: 'b1', discipline: 'brick', type: 'RACE', date: '2026-07-08', durationMin: 80 };
+    const mk = extra => ({ weeks: [{ index: 0, workouts: [{ ...brick, ...extra }] }] });
+    const acts = [
+      { id: 'r1', type: 'Ride', date: '2026-07-08', movingTimeSec: 38 * 60, averageWatts: 180 },
+      { id: 'r2', type: 'Run', date: '2026-07-08', movingTimeSec: 26 * 60, distance: 5000 },
+    ];
+    const args = { activities: acts, log: { b1: { done: true } }, moves: {}, paces: { run: { easy: 360, long: 340 } }, fuelLog: {} };
+    // the same setup WITHOUT the flag builds an execution, so the empty
+    // result below is the bRace filter, not a failed pair
+    expect(brickHistory({ plan: mk({}), ...args }).executions.length).toBe(1);
+    expect(brickHistory({ plan: mk({ bRace: true, title: 'TUNE-UP — Sprint Triathlon' }), ...args }).executions).toEqual([]);
+  });
 });
 
 

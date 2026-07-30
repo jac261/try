@@ -153,7 +153,11 @@ export function brickHistory({ plan, activities, log, moves, paces, fuelLog, lim
   if (!plan || !Array.isArray(activities)) return { executions: [], pattern: null };
   const used = new Set();
   const bricks = (plan.weeks || []).flatMap(w => w.workouts || [])
-    .filter(w => w.discipline === 'brick' && log && log[w.id])
+    // bRace excluded: the run off the bike in a RACED brick is run at race
+    // effort, which says nothing about habitual training pacing — and one
+    // fast race leg entering the window pushes a ruined brick out and
+    // silences a real pattern (gauntlet catch 2026-07-30).
+    .filter(w => w.discipline === 'brick' && !w.bRace && log && log[w.id])
     .sort((a, b) => (((moves && moves[b.id]) || b.date) < ((moves && moves[a.id]) || a.date) ? -1 : 1));
   const executions = [];
   for (const w of bricks) {
