@@ -36,11 +36,17 @@ export function weeksBetween(a, b) {
 }
 
 export function daysBetween(a, b) {
-  // Both ends must already be calendar days — ISO strings or midnight-pinned
-  // Dates. A bare clock instant (`new Date()`) rounds one day short from
-  // ~noon onward (race-chip catch 2026-07-30); call sites normalise with
-  // iso() first, pinned by the guard in date-call-sites.test.js.
-  return Math.round((toDate(b) - toDate(a)) / (24 * 3600 * 1000));
+  // Both ends are pinned to local midnight here, so a bare clock instant
+  // (`new Date()`) counts as its calendar day instead of rounding one day
+  // short from ~noon onward (race-chip catch 2026-07-30). Call sites still
+  // pass ISO strings by convention — the guard in date-call-sites.test.js
+  // keeps them uniform — but the arithmetic no longer depends on it.
+  // Math.round absorbs the 23/25-hour DST days (never more than ±1h off).
+  const x = toDate(a);
+  x.setHours(0, 0, 0, 0);
+  const y = toDate(b);
+  y.setHours(0, 0, 0, 0);
+  return Math.round((y - x) / (24 * 3600 * 1000));
 }
 
 export function fmtDate(isoStr, opts) {
