@@ -247,6 +247,16 @@ export function getIntervalsActivityRoute(getToken, activityId) {
   return request('/api/integrations/intervals-icu/activities/' + encodeURIComponent(activityId) + '/route', { getToken });
 }
 
+/* The athlete's best power by duration, built server-side from their rides
+   (rows: durationSec, watts, date, source, bike, indoor, quality). `days`
+   bounds which rides the endpoint considers — the freshness window belongs
+   to the QUERY, because nothing client-side can apply it after the fact.
+   404 → not connected, or a backend that predates the endpoint. */
+export function getIntervalsPowerCurve(getToken, days) {
+  const query = days ? '?days=' + encodeURIComponent(days) : '';
+  return request('/api/integrations/intervals-icu/power-curve' + query, { getToken });
+}
+
 // The athlete's per-sport thresholds as configured on intervals.icu
 // (bikeFtp watts; run/swim threshold paces in metres per second).
 export function getIntervalsThresholds(getToken) {

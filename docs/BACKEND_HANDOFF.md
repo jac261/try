@@ -692,6 +692,33 @@ subset is safe and shipping none breaks nothing.
 | 6 | `weeklyHours`, `longestSwimM`, `longestRideMin`, `longestRunMin` | athlete profile | Start anchors surviving a fresh-device recovery; without them a reinstalled athlete silently reverts to race-sized first weeks |
 | 7 | `totalElevationGain`, `totalElevationLoss` (metres) | activity | Rejecting a downhill-assisted 5 km before it becomes the benchmark race projections extrapolate from |
 
+**STATUS, 30 July 2026: asks 1-7 are all LANDED on `try-backend` main.** Jack
+shipped them directly rather than through PRs — `startedAt`, `elapsedTimeSec`,
+`normalizedWatts`, `totalElevationGain`/`Loss`, the four start-anchor profile
+columns, the `swimReview` and `bikeReview` log columns, the power-curve
+endpoint, and the swim stroke fields on both activities and intervals. The
+table above is kept as the record of what was asked and why; nothing in it is
+outstanding.
+
+The client had a gap of its own: the power-curve endpoint existed with no
+caller at all (`powerCurveRaw` was a hardcoded `useState(null)`), so the rider
+profile stayed empty on a backend that could already answer it. Now wired.
+
+Stroke metrics stay gated (`STROKE_METRICS_FLAG = false`) even though the
+fields arrive, and that is deliberate: the module's own validation found
+`distance / stride` and `cadence x time` disagreeing by exactly 2x on a real
+lap, because one counts arm strokes and the other full cycles. Which is which
+is a device convention. Turning it on needs per-device validation, which can
+only start now that the data flows.
+
+### Still outstanding
+
+| Ask | Where | Why |
+|---|---|---|
+| `runReview` | workout log entry | `swimReview` and `bikeReview` are both normalized in `WorkoutStateService`; the run has no column, so the run's rolling review evidence cannot fire. It is the same shape as the two beside it, plus the migration pair. |
+| `runmaintenance`, `duathlon`, `aquathlon` | `PlanCatalog.RaceTypes` | See the 29 July section. `runmaintenance` is the cheap one and the only one with a client design behind it. |
+| Anonymised percentile breakpoints | new endpoint | See the 30 July section. Turns the spider charts' rings from Try's own levels into a real population comparison. |
+
 A power **stream** would subsume 3, 4 and 5 together, if that is ever easier
 to expose than three separate computed fields. Ask 6 is the only one that is
 not about activities: it is four nullable columns on the athlete profile.
