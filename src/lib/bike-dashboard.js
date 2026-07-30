@@ -185,10 +185,12 @@ function quality({ plan, log, moves, todayISO, retest }) {
     t + plannedBikeEfforts(x.w).filter(e => e.zone === zone).reduce((s, e) => s + e.min, 0), 0);
 
   /* STORED reviews are the only honest source, exactly as the swim dashboard
-     decided. They ride on the log entry, the way swimReview does, and that
-     column is still an open backend ask — so today this is empty and the
-     dashboard SAYS SO rather than guessing adherence from whole-ride
-     averages, which is the very thing the phase 5 engine exists to avoid.
+     decided. They ride on the log entry, the way swimReview does; the column
+     landed 2026-07-30 and the client persists from both write surfaces
+     (review-persist.js), so history accrues from here. An athlete's history
+     before that date is honestly absent, and the dashboard SAYS SO rather
+     than guessing adherence from whole-ride averages, which is the very
+     thing the phase 5 engine exists to avoid.
      A caller-supplied array was the first cut and it was worse than nothing:
      App had no reviews to give, so it passed an empty one, and every metric
      here read "missing" while the plumbing looked complete. */

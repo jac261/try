@@ -574,9 +574,9 @@ export function App({ storage, getToken, user }) {
   const startShortfall = useMemo(() => (plan && plan.profile && plan.race !== 'tracker'
     ? T.startVolumeShortfall(plan.profile) : null), [plan]);
   /* The phase 5 bike reviews, read off the log exactly as the swim evidence
-     above is. They arrive on the log entry from the backend and that column
-     is still an open ask, so this is empty today — but it is empty because
-     there is nothing stored, not because nothing asked. */
+     above is. Persisted since 2026-07-30 (review-persist.js writes them from
+     the sheet and the recap), so this fills as sessions are reviewed; empty
+     means nothing reviewed yet, not nothing asked. */
   const bikeReviews = useMemo(() => (plan && plan.weeks
     ? plan.weeks.flatMap(w => w.workouts)
       .filter(w => w.discipline === 'bike' && log[w.id] && log[w.id].bikeReview)

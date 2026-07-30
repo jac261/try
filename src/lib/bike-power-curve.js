@@ -4,16 +4,15 @@
  * sprint, whether they can go again after a minute at full gas, or whether
  * the number holds up in the fifth hour. The curve is the rest of the answer.
  *
- * THE WHOLE MODULE IS GATED, AND THE GATE IS REAL. Try has no power-curve
- * endpoint — the backend exposes thresholds and activities and nothing that
- * carries best power by duration — and a curve cannot be assembled from
- * activity averages: a ride average is not a best effort, and the best
- * twenty-minute power inside a four-hour ride is not recoverable from its
- * mean. So every function here returns null until the data arrives, the maths
- * is written and tested against known values so the day it lands is a wiring
- * day, and the ask is in the backend handoff. §7's first acceptance criterion
- * is that this stays disabled until then, which is the one criterion a phase
- * can meet by NOT doing something.
+ * THE GATE OPENED 2026-07-30: the backend serves best power by duration at
+ * /api/integrations/intervals-icu/power-curve, wired through sync
+ * .loadPowerCurve into every consumer here. The refusal that outlived the
+ * gate: a curve is still never assembled from activity averages — a ride
+ * average is not a best effort, and the best twenty-minute power inside a
+ * four-hour ride is not recoverable from its mean — so an athlete on a
+ * backend without the endpoint gets null everywhere, exactly as before.
+ * Note the served `quality` is null on every point today (a filed ask);
+ * curvePoint reads null as usable-medium, never low.
  *
  * §5 IS THE SUBTLE ONE AND IT SHAPES THE DATA MODEL. A new power meter can
  * read several per cent different from the old one, and a rider who changes

@@ -225,9 +225,13 @@ export function disconnectIntervalsIntegration(getToken) {
   return request('/api/integrations/intervals-icu', { getToken, method: 'DELETE' });
 }
 
-// Recent activities through the server-side passthrough (compact shape:
-// { id, date, type, name, movingTimeSec, distance, trainingLoad, rpe, feel }).
-// 404 → not connected, or a backend that predates the endpoint.
+// Recent activities through the server-side passthrough, body verbatim (no
+// mapper): id/date/startedAt/type/name/movingTimeSec/elapsedTimeSec/distance/
+// trainingLoad/rpe/feel plus power (averageWatts/normalizedWatts), swim
+// (poolLengthM/lengths/averageCadence/averageStride) and device
+// (deviceName/deviceSource) fields — the delivered set is pinned in
+// delivered-fields.test.js. 404 → not connected, or a backend that predates
+// the endpoint.
 export function getIntervalsActivities(getToken, days) {
   const query = days ? '?days=' + encodeURIComponent(days) : '';
   return request('/api/integrations/intervals-icu/activities' + query, { getToken });

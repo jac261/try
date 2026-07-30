@@ -121,7 +121,7 @@ function quality({ plan, log, moves, todayISO }) {
       adherence: metric(null, 'missing'),
       fade: metric(null, 'missing'),
       consistency: metric(null, 'missing'),
-      note: 'Per-session reviews are computed when a swim sheet is opened with its laps, but they are not stored yet, so this rolling view cannot see them. Nothing here is guessed from averages in the meantime.',
+      note: 'Reviews are kept from each swim you open with its laps, and this rolling view builds as they accrue. Nothing here is guessed from averages in the meantime.',
     };
   }
   const usable = reviews.filter(r => r.confidence !== 'low');

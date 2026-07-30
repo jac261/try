@@ -40,8 +40,8 @@ export const POWER_LOAD_RULES = {
   maxIf: 1.5,            // above this the power data is wrong, not the rider
 };
 
-/* Normalized power, read and never computed. Returns null when the field is
-   absent, which is every ride today. */
+/* Normalized power, read and never computed. Delivered on the feed since
+   2026-07-30; null on a backend that predates the field. */
 export function normalizedWatts(activity) {
   const v = activity && activity[NP_FIELD];
   return typeof v === 'number' && v > 0 ? v : null;

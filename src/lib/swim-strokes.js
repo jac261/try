@@ -1,10 +1,11 @@
 /* Try — phase 8: stroke metrics.
  *
- * This phase is gated by its own spec: no stroke analysis until the activity
- * pipeline actually carries the fields, and nothing here may change training.
- * What ships is the computation and data-quality layer, fully tested, wired
- * to nothing. It reads defensively, so on today's backend every entry point
- * returns "no data" rather than a number.
+ * The activity pipeline has carried the stroke fields since 2026-07-30;
+ * the analysis stays behind STROKE_METRICS_FLAG because the fields arriving
+ * is not the same as the fields being UNDERSTOOD — see the 2x note below.
+ * Nothing here may change training. It reads defensively, so on a backend
+ * without the fields every entry point returns "no data" rather than a
+ * number.
  *
  * WHAT THE DATA ACTUALLY LOOKS LIKE (validated against real Garmin swims in
  * the athlete's own intervals.icu account, 2026-07-27, which is the
