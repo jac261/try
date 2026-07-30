@@ -3,7 +3,7 @@ import { generatePlan } from './plan.js';
 import { RACES } from './domain.js';
 import {
   runDashboard, currentPerformance, trainingVolume,
-  qualityProgression, durability, nextAction,
+  qualityProgression, durability, nextAction, runStoredReviews,
 } from './run-dashboard.js';
 
 /* Run phase 9 — the dashboard.
@@ -162,6 +162,22 @@ describe('the next action is explicit and evidenced', () => {
   it('recommends a benchmark only when there is not a real one', () => {
     expect(nextAction({ profile: { ...base, ...REAL }, raceKey: 'runmarathon' }).nextBenchmark).toBe(null);
     expect(nextAction({ profile: { ...base, fitness: 'intermediate' }, raceKey: 'runmarathon' }).nextBenchmark).toMatch(/5 km test/);
+  });
+});
+
+describe('stored reviews reaching the dashboard', () => {
+  it('stale tune-up reviews persisted before the run-review gate never surface', () => {
+    // the persistence layer never deletes (a null must not clear a stored
+    // review), so the shared derivation filters them out instead
+    const plan = { weeks: [{ workouts: [
+      { id: 'a', date: '2026-07-01', discipline: 'run', type: 'Threshold' },
+      { id: 'b', date: '2026-07-03', discipline: 'run', type: 'RACE', bRace: true },
+    ] }] };
+    const log = {
+      a: { done: true, runReview: { discipline: 'run', type: 'Threshold', confidence: 'high' } },
+      b: { done: true, runReview: { discipline: 'run', type: 'RACE', confidence: 'low' } },
+    };
+    expect(runStoredReviews(plan, log, {}).map(r => r.type)).toEqual(['Threshold']);
   });
 });
 

@@ -10,7 +10,6 @@ import {
   runCarbTarget, provenTolerance, runFuellingPlan, runFuellingOutcome,
 } from './run-fuelling.js';
 import { RUN_READINESS_COMPONENTS, RUN_READINESS_STATES, runReadiness, runReadinessGaps } from './run-readiness.js';
-import { runStoredReviews } from './run-dashboard.js';
 
 /* Run phase 8 — review, fuelling and race readiness.
  *
@@ -96,20 +95,6 @@ describe('a tune-up race is never graded as a workout', () => {
     // a 20-minute 5k against the 30-minute calendar slot must not become
     // low confidence "too little of it happened"
     expect(runReview({ workout: tune, activity: act(20), rows: null, profile: base })).toBe(null);
-  });
-
-  it('stale tune-up reviews persisted before the gate never reach the dashboard', () => {
-    // the persistence layer never deletes (a null must not clear a stored
-    // review), so the shared derivation filters them out instead
-    const plan = { weeks: [{ workouts: [
-      { id: 'a', date: '2026-07-01', discipline: 'run', type: 'Threshold' },
-      { id: 'b', date: '2026-07-03', discipline: 'run', type: 'RACE', bRace: true },
-    ] }] };
-    const log = {
-      a: { done: true, runReview: { discipline: 'run', type: 'Threshold', confidence: 'high' } },
-      b: { done: true, runReview: { discipline: 'run', type: 'RACE', confidence: 'low' } },
-    };
-    expect(runStoredReviews(plan, log, {}).map(r => r.type)).toEqual(['Threshold']);
   });
 });
 

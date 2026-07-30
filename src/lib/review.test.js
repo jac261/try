@@ -23,6 +23,14 @@ describe('reviewActivity (post-session analysis)', () => {
     expect(rv.verdicts.some(v => /in the band|quicker than/i.test(v.text))).toBe(false);
   });
 
+  it('a race day is never graded: no review at all for race or tune-up slots', () => {
+    // a raced 5k tune-up, 20 minutes against its 30-minute calendar slot,
+    // used to read "Cut short" plus the interval no-average note
+    const tune = { discipline: 'run', type: 'RACE', bRace: true, durationMin: 30 };
+    expect(reviewActivity({ workout: tune, activity: act({ movingTimeSec: 1200 }), paces })).toBe(null);
+    expect(reviewActivity({ workout: { discipline: 'run', type: 'RACE', race: true, durationMin: 30 }, activity: act(), paces })).toBe(null);
+  });
+
   it('an ad-hoc (unplanned) recording gets stats but no plan-relative verdicts', () => {
     // Synthesised from the activity itself: durationMin == actual, no real type.
     const w = { discipline: 'bike', adhoc: true, title: 'Morning Ride', durationMin: 50 };

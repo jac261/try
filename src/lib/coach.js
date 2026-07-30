@@ -24,9 +24,12 @@
  * - A missed session is 'missed-unknown' until the athlete's own one-tap
  *   answer says otherwise. Wellness context never infers the reason.
  * - A tune-up race is judged as a race, not a workout: done is done, and an
- *   unticked one is neutral, never a missed key session. The matcher cannot
- *   close a bRace (multisport recordings never match), so silence there is
- *   the app being blind, not the athlete missing work.
+ *   unmarked one never reads as missed. The matcher deliberately never
+ *   auto-closes a bRace (autolog excludes race days from matching outright),
+ *   so silence there is the app being blind, not the athlete missing work;
+ *   the athlete's tick or one-tap answer is the only evidence. An unmarked
+ *   tune-up keeps the week clean but holds the progression call until it has
+ *   an answer, the same shape as the corroborated-fade veto.
  * - Discipline-scoped reductions exist only for the run: it is the one
  *   discipline with its own mechanical strain signal (runload.js). Aggregate
  *   ramp and form signals speak only through the overall decision.
@@ -45,7 +48,7 @@ import { iso, addDays } from './date.js';
 
 // Bump when decision logic changes: stored decisions carry the version they
 // were made under, so an old stored call is never judged by new rules.
-export const COACH_RULE_VERSION = 3; // v3: tune-up races judged as races, not workouts
+export const COACH_RULE_VERSION = 3; // v3: the race-aware tune-up classification
 
 // The one-tap answers for a missed session, in the athlete's own words.
 export const MISSED_REASONS = {
@@ -118,17 +121,18 @@ export function resolveFocus(profile, wl, solo) {
 // comes from the athlete's stored one-tap answer, never from wellness.
 export function classifyCompletion({ workout, entry, adjustEntry, missedReason, day, todayISO }) {
   if (!workout || workout.race || workout.discipline === 'rest') return null;
-  // A tune-up race (v3). Done is done: finishing a 5k well inside its
-  // calendar slot is a fast race, not a partial workout, and no engine
-  // adjustment ever targets a race day. An unticked one past its date is
-  // 'race-unlogged', a neutral category the weekly decision ignores. The
-  // athlete's own one-tap answer still stands: they know it did not happen;
-  // the app, which cannot match a multisport recording, does not.
+  // A tune-up race (v3, 2026-07-30). Done is done: finishing a 5k well
+  // inside its calendar slot is a fast race, not a partial workout, and no
+  // engine adjustment ever targets a race day. An unmarked one past its date
+  // is 'unlogged-race', never 'missed-unknown': autolog excludes race days
+  // from matching outright, so silence is the app being blind. The athlete's
+  // own one-tap answer still stands: they know it did not happen; the app
+  // does not.
   if (workout.bRace) {
     if (entry && entry.done) return 'completed';
     const effective = day || workout.date;
     if (effective >= todayISO) return 'upcoming';
-    return missedReason && MISSED_REASONS[missedReason] ? 'missed-' + missedReason : 'race-unlogged';
+    return missedReason && MISSED_REASONS[missedReason] ? 'missed-' + missedReason : 'unlogged-race';
   }
   if (entry && entry.done) {
     if (adjustEntry && (adjustEntry.kind === 'ease' || adjustEntry.kind === 'trim')) return 'modified';
@@ -160,10 +164,7 @@ function weekSessions({ plan, log, moves, adjust, missedReasons, weekMonday, tod
       workout: w, entry: (log || {})[w.id], adjustEntry: (adjust || {})[w.id],
       missedReason: (missedReasons || {})[w.id] && missedReasons[w.id].reason, day, todayISO,
     });
-    // 'race-unlogged' carries no evidence either way: it must not count as a
-    // missed key session (the pre-v3 defect froze one into every week with an
-    // unticked tune-up) and there is nothing done to count either.
-    if (status && status !== 'race-unlogged') out[w.discipline].push({ id: w.id, key: !!w.key, status, title: w.title || w.type, day });
+    if (status) out[w.discipline].push({ id: w.id, key: !!w.key, status, title: w.title || w.type, day });
   });
   return out;
 }
@@ -250,6 +251,13 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
     signal: 'key sessions',
     reading: keyDone.length + ' of ' + keyPlanned.length + ' completed',
   });
+  // An unmarked tune-up stays in every planned count (a shrunken denominator
+  // presented as a complete tally was a gauntlet catch, 2026-07-30), so the
+  // gap it leaves is named here rather than hidden.
+  if (allSessions.some(s => s.status === 'unlogged-race')) evidence.push({
+    signal: 'tune-up race',
+    reading: 'a tune-up race has no result marked; it does not read as missed, and marking it done completes the picture',
+  });
   if (reds) evidence.push({ signal: 'readiness', reading: reds + (reds === 1 ? ' day' : ' days') + ' in the red this week' });
   if (missedTired) evidence.push({ signal: 'your answers', reading: missedTired + ' session' + (missedTired === 1 ? '' : 's') + ' missed feeling run down' });
   if (missedNiggle) evidence.push({ signal: 'your answers', reading: 'an injury niggle came up ' + missedNiggle + (missedNiggle === 1 ? ' time' : ' times') });
@@ -306,7 +314,15 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
     // progression for anyone who ever missed one easy session).
     const keys = ss.filter(x => x.key);
     const strained = ss.some(x => x.status === 'missed-tired' || x.status === 'missed-niggle');
-    const clean = !strained && (keys.length ? keys.every(doneish) : done === ss.length);
+    // An unmarked tune-up race is evidence-free, not failed: it never breaks
+    // clean (re-verify catch 2026-07-30: dropping the row instead either
+    // flipped the week clean with its only key session unseen, or emptied
+    // `keys` and silently switched clean to the strict all-sessions rule).
+    // It gates only the progression call below, the fade veto's shape.
+    const unloggedRace = ss.filter(x => x.status === 'unlogged-race');
+    const clean = !strained && (keys.length
+      ? keys.every(x => doneish(x) || x.status === 'unlogged-race')
+      : done === ss.length - unloggedRace.length);
     const ev = [{ signal: 'sessions', reading: done + ' of ' + ss.length + ' completed' + (keys.length ? ', key work ' + keys.filter(doneish).length + ' of ' + keys.length : '') }];
     let decision = 'hold', headline = 'Doing its job';
     // Durability, pass 5: the read stays evidence, plus exactly ONE licensed
@@ -339,7 +355,12 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
         // week (already adjacency- and identity-checked above) spent the
         // veto, this week progresses whatever the laps say.
         const capSpent = !!prev.disciplines[d].durabilityVeto;
-        if (fadeBlock && !capSpent && LONG_SESSION[d]) {
+        if (unloggedRace.length) {
+          // No cap here, unlike the fade veto: the athlete can end this wait
+          // with one tap, so it holds until the race day has an answer.
+          headline = 'Landing well. Mark the tune-up done and progression opens';
+          ev.push({ signal: 'repeatability', reading: 'your clean weeks all count and nothing here resets them; the progression call waits until that race day has an answer' });
+        } else if (fadeBlock && !capSpent && LONG_SESSION[d]) {
           vetoed = true; anyVeto = true;
           headline = 'Landing well. A steadier ' + LONG_SESSION[d] + ' finish opens progression';
           ev.push({ signal: 'repeatability', reading: 'your clean weeks all count and nothing here resets them; only the progression call waits' });
@@ -387,6 +408,12 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
     }
     if (progressVar === d && !clean && strained) {
       ev.push({ signal: 'repeatability', reading: 'a session missed under strain resets the clean-week count' });
+    }
+    // The row's own counts include the unmarked race, so the gap is named on
+    // the row too, wherever it appears (a brick tune-up rides on both the
+    // run and the bike row).
+    if (unloggedRace.length) {
+      ev.push({ signal: 'tune-up race', reading: 'your tune-up race has no result marked; it does not read as missed, and marking it done completes the picture' });
     }
     if (read) {
       ev.push({ signal: 'late-session durability', reading: forewarn

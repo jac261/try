@@ -75,6 +75,18 @@ describe('buildWeeklyDigest (plan mode)', () => {
     expect(d.missed.map(m => m.title)).toEqual(['Threshold Run']);
   });
 
+  it('an unmarked tune-up race never lands in missed: the app cannot see race day for itself', () => {
+    // autolog never auto-closes a bRace, so "no log entry" is the app's
+    // blindness; a ticked one still counts as a done session as before
+    const p = plan();
+    p.weeks[0].workouts.push(w('0-4', '2026-07-09', { bRace: true, type: 'RACE', title: 'TUNE-UP — 5k Run Race', key: true }));
+    const silent = buildWeeklyDigest({ ...base, plan: p, log: done });
+    expect(silent.missed.map(m => m.title)).not.toContain('TUNE-UP — 5k Run Race');
+    expect(silent.planned).toBe(4); // it stays a planned session
+    const ticked = buildWeeklyDigest({ ...base, plan: p, log: { ...done, '0-4': { done: true } } });
+    expect(ticked.done).toBe(Object.keys(done).length + 1);
+  });
+
   it('quotes accepted proposals verbatim from the journal and never re-derives', () => {
     const adjustLog = [
       { at: '2026-07-09T08:00:00Z', kind: 'trim-week', headline: 'Pull back next week', why: 'Form said so.' },

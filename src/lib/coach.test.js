@@ -154,8 +154,9 @@ describe('tune-up races are judged as races, not workouts', () => {
   });
 
   it('silence stays neutral; the athlete\'s own answer still stands', () => {
-    // the matcher never auto-closes a bRace, so an unticked tune-up is not a miss
-    expect(classifyCompletion({ workout: tuneup, day: tuneup.date, todayISO: today })).toBe('race-unlogged');
+    // autolog excludes race days from matching outright, so silence is the
+    // app being blind, never a miss
+    expect(classifyCompletion({ workout: tuneup, day: tuneup.date, todayISO: today })).toBe('unlogged-race');
     expect(classifyCompletion({ workout: tuneup, missedReason: 'life', day: tuneup.date, todayISO: today })).toBe('missed-life');
     expect(classifyCompletion({ workout: tuneup, day: today, todayISO: today })).toBe('upcoming');
   });
@@ -170,13 +171,20 @@ describe('tune-up races are judged as races, not workouts', () => {
     .map(x => [x.id, { done: true, at: x.date + 'T10:00:00Z' }]));
   const baseB = { ...base, plan: planB };
 
-  it('an unticked tune-up never counts as a missed key session', () => {
+  it('an unmarked tune-up keeps the week clean, stays in the planned counts, and is named', () => {
     expect(tuneB).toBeTruthy();
     const d = decideWeek({ ...baseB, log: logB() });
-    expect(JSON.stringify(d)).not.toMatch(/missed/i);
     Object.values(d.disciplines).forEach(row => expect(row.clean).toBe(true));
+    // no strain evidence and no athlete-answer evidence appear for it
+    expect(d.overall.evidence.some(e => e.signal === 'your answers')).toBe(false);
+    // the denominator keeps the race (a shrunken tally presented as complete
+    // was a re-verify catch), and the gap is disclosed next to it
     const keys = d.overall.evidence.find(e => e.signal === 'key sessions');
-    if (keys) expect(keys.reading).toMatch(/^(\d+) of \1 completed$/);
+    expect(keys).toBeTruthy();
+    const [, kd, kp] = keys.reading.match(/^(\d+) of (\d+) completed$/);
+    expect(Number(kp)).toBe(Number(kd) + 1);
+    expect(d.overall.evidence.some(e => e.signal === 'tune-up race')).toBe(true);
+    expect(d.disciplines.run.evidence.some(e => e.signal === 'tune-up race')).toBe(true);
   });
 
   it('a ticked tune-up counts as key work done, however fast the finish', () => {
@@ -184,7 +192,9 @@ describe('tune-up races are judged as races, not workouts', () => {
     const d = decideWeek({ ...baseB, log });
     expect(d.disciplines.run.clean).toBe(true);
     const keys = d.overall.evidence.find(e => e.signal === 'key sessions');
+    expect(keys).toBeTruthy();
     expect(keys.reading).toMatch(/^(\d+) of \1 completed$/);
+    expect(d.overall.evidence.some(e => e.signal === 'tune-up race')).toBe(false);
   });
 
   it('a tune-up the athlete SAID was missed still counts, and still resets clean', () => {
@@ -193,9 +203,9 @@ describe('tune-up races are judged as races, not workouts', () => {
     expect(d.overall.evidence.some(e => /injury niggle came up/.test(e.reading))).toBe(true);
   });
 
-  it('an unticked BRICK tune-up leaves both the run and the bike rows clean', () => {
-    // multisport recordings never match, so autolog can never close this one:
-    // permanent 'missed' here was the original defect
+  it('an unmarked BRICK tune-up leaves both the run and the bike rows clean, and both are told', () => {
+    // autolog excludes bRace slots from matching, so this one can only ever
+    // be closed by the athlete: permanent 'missed' here was the original defect
     const planC = generatePlan({ ...profile, bRaces: [{ date: bDate, kind: 'sprint' }] });
     const wkC = planC.weeks.find(w => w.start === weekMonday);
     const tuneC = wkC.workouts.find(x => x.bRace);
@@ -204,8 +214,45 @@ describe('tune-up races are judged as races, not workouts', () => {
       .filter(x => x.discipline !== 'rest' && !x.race && !x.bRace)
       .map(x => [x.id, { done: true, at: x.date + 'T10:00:00Z' }]));
     const d = decideWeek({ ...base, plan: planC, log });
-    expect(JSON.stringify(d)).not.toMatch(/missed/i);
-    ['run', 'bike'].forEach(k => { if (d.disciplines[k]) expect(d.disciplines[k].clean).toBe(true); });
+    ['run', 'bike'].forEach(k => {
+      expect(d.disciplines[k], k + ' row must exist').toBeTruthy();
+      expect(d.disciplines[k].clean).toBe(true);
+      expect(d.disciplines[k].evidence.some(e => e.signal === 'tune-up race')).toBe(true);
+    });
+  });
+
+  // The progression gate: the fade veto's shape, but the athlete can end the
+  // wait with one tap, so there is no one-week cap.
+  const soloProfile = { ...profile, raceType: 'runhalf' };
+  const planS0 = generatePlan(soloProfile);
+  const wkS0 = planS0.weeks.find(w => (w.phase === 'Base' || w.phase === 'Build') && !w.isRecovery && w.index >= 2);
+  const keyRun = wkS0.workouts.find(x => x.discipline === 'run' && x.key && !x.test);
+  const planS = generatePlan({ ...soloProfile, bRaces: [{ date: keyRun.date, kind: 'run5k' }] });
+  const wkS = planS.weeks.find(w => w.start === wkS0.start);
+  const tuneS = wkS.workouts.find(x => x.bRace);
+  const todayS = iso(new Date(new Date(wkS.start + 'T00:00:00Z').getTime() + 8 * 864e5));
+  const prevS = iso(new Date(new Date(wkS.start + 'T00:00:00Z').getTime() - 7 * 864e5));
+  const logS = () => Object.fromEntries(wkS.workouts
+    .filter(x => x.discipline !== 'rest' && !x.race && !x.bRace)
+    .map(x => [x.id, { done: true, at: x.date + 'T10:00:00Z' }]));
+  const baseS = {
+    ...base, plan: planS, weekMonday: wkS.start, todayISO: todayS,
+    prevWeeks: [{ weekMonday: prevS, tracker: false, planCreatedAt: planS.createdAt, disciplines: { run: { clean: true } } }],
+  };
+
+  it('an unmarked tune-up holds the progression call without resetting the streak', () => {
+    expect(tuneS).toBeTruthy();
+    const d = decideWeek({ ...baseS, log: logS() });
+    expect(d.disciplines.run.clean).toBe(true); // the streak survives
+    expect(d.disciplines.run.decision).toBe('hold');
+    expect(d.disciplines.run.headline).toMatch(/Mark the tune-up done/);
+    expect(d.progression).toBe(null);
+  });
+
+  it('the same week with the tune-up marked done progresses', () => {
+    const d = decideWeek({ ...baseS, log: { ...logS(), [tuneS.id]: { done: true, at: tuneS.date + 'T10:00:00Z' } } });
+    expect(d.disciplines.run.decision).toBe('progress');
+    expect(d.progression).toEqual({ discipline: 'run', what: 'extending the long run' });
   });
 });
 

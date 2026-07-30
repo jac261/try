@@ -35,6 +35,13 @@ const secPer100 = a => a.movingTimeSec / (a.distance / 100);
 // tone: 'good' | 'warn' | 'info'.
 export function reviewActivity({ workout, activity, paces, log, swimReview, bikeReview, runReview }) {
   if (!workout || !activity || !activity.movingTimeSec) return null;
+  // Race days are not workouts to grade (2026-07-30 gauntlet): every verdict
+  // below judges the recording against the PLAN (planned duration, easy-day
+  // bands, interval structure), and a race has no plan target in that sense.
+  // A ticked tune-up with a fast finish read "Cut short: 20:00 of a planned
+  // 30 min". The A race never gets here (its slot has no duration and no
+  // toggle); the bRace did.
+  if (workout.race || workout.bRace) return null;
   /* One voice per session (phase 2 §6): the authority question — which
      review source may speak — now lives in coaching/review-authority.js,
      shared with the recap so the two surfaces cannot disagree about who is

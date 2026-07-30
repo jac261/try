@@ -109,7 +109,10 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             attributed (wellness never infers it), it feeds the weekly
             decision, and answering is always optional. */}
         {!done && !w.race && !w.test && onMissed && shown < T.iso(new Date()) && <div className="feel" style={{ marginTop: 4, marginBottom: 14 }}>
-          <div className="feel-q">This one didn't happen. What got in the way?</div>
+          {/* A tune-up gets the conditional form: the app cannot see whether
+              a race happened (autolog never matches race days), so it must
+              not assert the miss it is asking about (gauntlet 2026-07-30). */}
+          <div className="feel-q">{w.bRace ? 'If this race didn\'t happen, what got in the way?' : 'This one didn\'t happen. What got in the way?'}</div>
           <div className="feel-row missed">
             {Object.entries(T.MISSED_REASONS).map(([k, lab]) =>
               <button key={k} className={'feelbtn' + (missedReason === k ? ' on right' : '')}
