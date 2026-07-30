@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { ProgressView } from './ProgressView.jsx';
 import { generatePlan, buildTrackerPlan } from '@/lib/plan.js';
+import { powerCurve, CURVE_DURATIONS } from '@/lib/bike-power-curve.js';
 import { iso } from '@/lib/date.js';
 
 /* A render smoke test for the Progress tab. It exists because the run pass
@@ -29,7 +30,12 @@ const mount = async (props, tabLabel) => {
   await act(async () => { root.render(<ProgressView log={{}} wellness={[]} runLoad={null} recovery={null} onSupport={() => {}} {...props} />); });
   if (tabLabel) {
     const btn = [...el.querySelectorAll('[role="tab"]')].find(b => b.textContent === tabLabel);
-    if (btn) await act(async () => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    // A missing tab THROWS rather than silently capturing the default tab:
+    // with a silent no-op, every absence assertion below would hold
+    // vacuously against the wrong panel the day a tab breaks or renames
+    // (gauntlet 2026-07-30).
+    if (!btn) { root.unmount(); el.remove(); throw new Error('no tab labelled "' + tabLabel + '" rendered'); }
+    await act(async () => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   }
   const html = el.innerHTML;
   root.unmount(); el.remove();
@@ -39,22 +45,23 @@ const mount = async (props, tabLabel) => {
 const run = (date, km) => ({ id: 'r' + date, type: 'Run', date, movingTimeSec: 3000, distance: km * 1000 });
 
 describe('ProgressView renders in every mode', () => {
-  it('plan mode with activities: projections and the volume chart appear', async () => {
-    const html = await mount({ plan: generatePlan(profile), activities: [run('2026-07-14', 8), run('2026-07-07', 12)] }, 'Run');
-    expect(html).toContain('Race projections');
-    expect(html).toContain('Half marathon');
-    expect(html).toContain('Run volume');
+  it('plan mode with activities: projections on Overview, the volume chart on Run', async () => {
+    const acts = [run('2026-07-14', 8), run('2026-07-07', 12)];
+    const overview = await mount({ plan: generatePlan(profile), activities: acts });
+    expect(overview).toContain('Race projections'); // nested in the fitness card, every mode
+    expect(overview).toContain('Half marathon');
+    const runTab = await mount({ plan: generatePlan(profile), activities: acts }, 'Run');
+    expect(runTab).toContain('Run volume');
   });
 
   it('plan mode with no activities: no volume chart, no crash', async () => {
     const html = await mount({ plan: generatePlan(profile), activities: null }, 'Run');
-    expect(html).toContain('Race projections');
     expect(html).not.toContain('Run volume');
   });
 
   it('no real 5k time: no projections block at all', async () => {
     // asserted on the tab where it WOULD render, so the absence is honest
-    const html = await mount({ plan: generatePlan({ ...profile, fivekSec: null }), activities: null }, 'Run');
+    const html = await mount({ plan: generatePlan({ ...profile, fivekSec: null }), activities: null });
     expect(html).not.toContain('Race projections');
   });
 
@@ -108,12 +115,18 @@ describe('ProgressView renders in every mode', () => {
     expect(html).toContain('no heart rate data');    // hrMissing says so
   });
 
-  it('tracker mode renders', async () => {
+  it('tracker mode renders the pre-tab page: no tabs, no panels, old order', async () => {
     const t = buildTrackerPlan(generatePlan(profile), '2026-07-13T10:00:00.000Z');
     const html = await mount({ plan: t, activities: [run('2026-07-14', 8)] });
     expect(html).toContain('Run volume');
-    // tracker has no tabs: everything renders in one column, per-block gates deciding
+    // tracker has no tabs: the Overview flow renders bare, per-block gates deciding
     expect(html).not.toContain('role="tablist"');
+    expect(html).not.toContain('tabpanel'); // no wrapper divs, empty or otherwise
+    // and the discipline-linked blocks sit in their pre-tab positions:
+    // projections nested in the fitness card, run volume after it
+    // (gauntlet 2026-07-30: the tab split reordered them to the bottom)
+    expect(html.indexOf('Race projections')).toBeGreaterThan(-1);
+    expect(html.indexOf('Race projections')).toBeLessThan(html.indexOf('Run volume'));
   });
 });
 
@@ -177,13 +190,21 @@ describe('the body mass card is safety-gated', () => {
 });
 
 describe('the Progress tabs (phase 3)', () => {
-  it('a tri plan shows four tabs, Overview selected, run content off Overview', async () => {
+  // a populated curve, the balanced-rider fixture from bike-power-curve.test.js
+  const RATIO = { 5: 4.0, 15: 3.0, 30: 2.4, 60: 1.8, 180: 1.38, 300: 1.25, 720: 1.10, 1200: 1 / 0.95, 2400: 1.0, 3600: 0.97 };
+  const curveFix = () => powerCurve(CURVE_DURATIONS.map(d => ({
+    durationSec: d, watts: Math.round(250 * RATIO[d]),
+    date: '2026-07-01', source: 'Assioma', bike: 'road', indoor: false, quality: 'high',
+  })));
+
+  it('a tri plan shows four tabs, Overview selected, dashboards off Overview', async () => {
     const html = await mount({ plan: generatePlan(profile), activities: null });
     expect(html).toContain('role="tablist"');
     expect((html.match(/role="tab"/g) || []).length).toBe(4);
     expect(html).toMatch(/aria-selected="true"[^>]*>Overview/);
     expect(html).toContain('Weekly load');               // orchestration stays
-    expect(html).not.toContain('Race projections');      // run artifact moved off
+    expect(html).toContain('Race projections');          // nested in the fitness card, still here
+    expect(html).not.toContain('id="prog-panel-run"');   // discipline panels unmounted
   });
 
   it('the Bike tab mounts the power curve card beside the dashboard', async () => {
@@ -209,5 +230,35 @@ describe('the Progress tabs (phase 3)', () => {
     expect(html).not.toMatch(/>Bike<\/button>/);
     // and the run dashboard is already on screen without a tap
     expect(html).toContain('id="prog-panel-run"');
+  });
+
+  it('a hidden tab never hides its content: run blocks fall back to Overview', async () => {
+    /* Gauntlet 2026-07-30: with run excluded there is no Run tab, and the
+       tab-only placement made the run-km history and the projections
+       unreachable on every tab — for exactly the athlete mid-injury who
+       most needs to watch them. They fall back to their pre-tab Overview
+       positions instead. */
+    const plan = generatePlan({ ...profile, excludedDiscipline: 'run' });
+    plan.profile.fivekSec = 1500; // onboarding nulls it on exclusion; FitnessEditor can restore it
+    const html = await mount({ plan, activities: [run('2026-07-14', 8), run('2026-07-07', 12)] });
+    expect(html).not.toMatch(/>Run<\/button>/);
+    expect(html).toContain('Run volume');
+    expect(html).toContain('Race projections');
+  });
+
+  it('a hidden Bike tab never hides the power curve: it falls back to Overview', async () => {
+    const html = await mount({
+      plan: generatePlan({ ...profile, raceType: 'runhalf' }),
+      activities: null, powerCurve: curveFix(),
+    }, 'Overview');
+    expect(html).toContain('Power curve'); // a solo runner who rides still sees their curve
+  });
+
+  it('with a Bike tab the curve renders there, not on Overview', async () => {
+    const props = { plan: generatePlan(profile), activities: null, powerCurve: curveFix() };
+    const overview = await mount(props);
+    expect(overview).not.toContain('Power curve');
+    const bike = await mount(props, 'Bike');
+    expect(bike).toContain('Power curve');
   });
 });

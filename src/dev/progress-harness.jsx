@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ProgressView } from '@/features/progress/ProgressView.jsx';
 import { generatePlan, buildTrackerPlan } from '@/lib/plan.js';
+import { powerCurve, CURVE_DURATIONS } from '@/lib/bike-power-curve.js';
 
 const profile = {
   name: 'T', raceType: 'olympic', fitness: 'intermediate',
@@ -16,6 +17,12 @@ const runs = [
   { id: 'r1', type: 'Run', date: '2026-07-21', movingTimeSec: 3000, distance: 9000 },
   { id: 'r2', type: 'Run', date: '2026-07-14', movingTimeSec: 3200, distance: 10000 },
 ];
+// a populated curve so the Bike tab and its no-tab Overview fallback both show
+const RATIO = { 5: 4.0, 15: 3.0, 30: 2.4, 60: 1.8, 180: 1.38, 300: 1.25, 720: 1.10, 1200: 1 / 0.95, 2400: 1.0, 3600: 0.97 };
+const curve = powerCurve(CURVE_DURATIONS.map(d => ({
+  durationSec: d, watts: Math.round(250 * RATIO[d]),
+  date: '2026-07-01', source: 'Assioma', bike: 'road', indoor: false, quality: 'high',
+})));
 const coach = {
   weekMonday: '2026-07-27', ruleVersion: 2, tracker: false,
   overall: { decision: 'hold', headline: 'Hold steady. This workload is doing its job', evidence: [{ signal: 'the week', reading: 'Two of five sessions in so far.' }], conflicting: [] },
@@ -42,7 +49,7 @@ function Harness() {
       <ProgressView key={mode} plan={m.plan} log={{}} moves={{}} activities={runs} coach={m.coach}
         durability={null} fuelLog={{}} wellness={[]} runLoad={null} recovery={null}
         onSupport={() => {}} onWhatIf={null} retest={null} ftpRetest={null}
-        powerCurve={null} previousPowerCurve={null} positionLog={{}} decisionLog={[]} />
+        powerCurve={curve} previousPowerCurve={null} positionLog={{}} decisionLog={[]} />
     </div>
   );
 }
