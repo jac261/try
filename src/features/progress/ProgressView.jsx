@@ -274,28 +274,33 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
                 : 'Balanced across sports' + (wl.missing.length ? ' (no reading yet for your ' + wl.missing.map(d => NAME[d].toLowerCase()).join(' or ') + ')' : '')
                   + (tracker ? '. A solid base to start your next plan from.' : ' — the plan stays even.')}
             </p>
-            {/* The coach brain's per-discipline lines for the OPEN week,
-                computed live and labelled so: only closed weeks freeze (the
-                digest quotes those). Folded into this card because it is the
-                one place that already speaks per discipline. */}
-            {coach && (Object.keys(coach.disciplines).length > 0 || coach.overall) && <div className="coach-week">
-              <div className="coach-week-head">This week so far <span className="muted">{T.DECISION_LABELS[coach.overall.decision]}</span></div>
-              {Object.entries(coach.disciplines).map(([d, v]) => (
-                <div className="coach-row-wrap" key={d}>
-                  <div className="coach-row">
-                    <span className="coach-d">{NAME[d] || d}</span>
-                    <span className={'coach-pill ' + v.decision}>{T.DECISION_LABELS[v.decision]}</span>
-                    <span className="coach-why">{v.headline}</span>
-                  </div>
-                  {(v.evidence || []).map((e, n) => (
-                    <div className="coach-ev" key={n}><span className="coach-sig">{e.signal}</span>{e.reading}</div>
-                  ))}
-                </div>
-              ))}
-            </div>}
           </div>
         </>;
       })()}
+
+      {/* The coach brain's per-discipline lines for the OPEN week, computed
+          live and labelled so: only closed weeks freeze (the digest quotes
+          those). Its OWN card since phase 3: it used to nest inside the
+          weakest-link card above, whose solo early-return silently hid the
+          coach's whole weekly verdict on every solo run plan — orchestration
+          must not die with a bar chart that has nothing to compare. */}
+      {coach && (Object.keys(coach.disciplines).length > 0 || coach.overall) && <div className="card">
+        <div className="coach-week">
+          <div className="coach-week-head">This week so far <span className="muted">{T.DECISION_LABELS[coach.overall.decision]}</span></div>
+          {Object.entries(coach.disciplines).map(([d, v]) => (
+            <div className="coach-row-wrap" key={d}>
+              <div className="coach-row">
+                <span className="coach-d">{(D[d] && D[d].name) || d}</span>
+                <span className={'coach-pill ' + v.decision}>{T.DECISION_LABELS[v.decision]}</span>
+                <span className="coach-why">{v.headline}</span>
+              </div>
+              {(v.evidence || []).map((e, n) => (
+                <div className="coach-ev" key={n}><span className="coach-sig">{e.signal}</span>{e.reading}</div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>}
 
       {/* Phase 2 §9: what Try offered and what you did about it. Folded by
           default; rejections and supersessions stay visible, because a

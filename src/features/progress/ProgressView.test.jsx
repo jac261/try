@@ -66,6 +66,25 @@ describe('ProgressView renders in every mode', () => {
     expect(html).toContain('late-session durability');
   });
 
+  it('the coach week survives a SOLO plan (fails on main: it nested inside the weakest-link card)', async () => {
+    /* The weakest-link card early-returns on solo plans — three bars need
+       three sports — and the coach's whole weekly verdict was nested inside
+       it, so a solo runner never saw "This week so far" at all. The verdict
+       is orchestration; it must not die with a bar chart that has nothing
+       to compare. */
+    const solo = generatePlan({ ...profile, raceType: 'runhalf' });
+    const coach = {
+      weekMonday: '2026-07-13', ruleVersion: 1, tracker: false,
+      overall: { decision: 'hold', headline: 'Hold steady', evidence: [], conflicting: [] },
+      disciplines: { run: { decision: 'progress', headline: 'Earned it', evidence: [{ signal: 'key sessions', reading: 'both quality runs landed on target' }], clean: true } },
+      progression: null,
+    };
+    const html = await mount({ plan: solo, activities: null, coach });
+    expect(html).not.toContain('Weakest link');          // the bars stay solo-suppressed
+    expect(html).toContain('This week so far');          // the verdict does not
+    expect(html).toContain('both quality runs landed on target');
+  });
+
   it('renders durability rows with honest per-discipline wording', async () => {
     const plan = generatePlan(profile);
     const durability = [
