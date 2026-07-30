@@ -19,7 +19,11 @@ const prepItems = race => [
 // `now` is injectable for the dev harness and tests; the app never passes it.
 export function RaceWeekCard({ plan, storage, now }) {
   const race = T.RACES[plan.race];
-  const days = T.daysBetween(now || new Date(), plan.profile.raceDate);
+  // Calendar days, not clock-rounded instants: daysBetween on a raw Date
+  // rounds one short after noon, which would flip this card to "Race day" on
+  // the eve's afternoon and unmount it mid race day (review catch 2026-07-30).
+  // iso() pins both ends to local midnight so the count holds all day.
+  const days = T.daysBetween(T.iso(now || new Date()), plan.profile.raceDate);
   const sig = plan.race + ':' + plan.profile.raceDate;
   const [ticks, setTicks] = useState(() => {
     const v = storage && storage.load('racePrep', null);
@@ -37,7 +41,9 @@ export function RaceWeekCard({ plan, storage, now }) {
   const raceDay = days === 0;
 
   return (
-    <div className="card" aria-label={raceDay ? 'Race day' : days + ' days to race day'}>
+    // No aria-label on the card: naming is a no-op on a generic div, and the
+    // visible hero already reads "N days to go" in order.
+    <div className="card">
       <div className="rw-head">
         <span className="tag key">{raceDay ? 'Race day' : 'Race week'}</span>
         {race.taperWeeks > 0 && !raceDay && <span className="rw-phase">Taper</span>}
@@ -58,8 +64,11 @@ export function RaceWeekCard({ plan, storage, now }) {
           : 'Short and sharp from here. Feeling a little flat is normal, the freshness arrives on race day.'}</div>
       <div className="rw-prep-head"><span>Race prep</span><span className="rw-count">{nDone} of {items.length} done</span></div>
       {items.map(i => (
-        <div key={i.k} className={'wk' + (ticks[i.k] ? ' done' : '')} {...tap(() => toggle(i.k))}
-          aria-label={i.t + (ticks[i.k] ? ', done' : ', not done')}>
+        // Toggles expose state via aria-pressed, matching the app's other
+        // toggle buttons (BikeExecution, PowerCurveCard) — a state suffix baked
+        // into the name is not re-announced on change and breaks voice control.
+        <div key={i.k} className={'wk rw-item' + (ticks[i.k] ? ' done' : '')} {...tap(() => toggle(i.k))}
+          aria-label={i.t} aria-pressed={!!ticks[i.k]}>
           <div className="meta"><div className="t">{i.t}</div><div className="s">{i.s}</div></div>
           <div className="check" aria-hidden="true">✓</div>
         </div>
