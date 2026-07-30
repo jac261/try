@@ -1,4 +1,4 @@
-import { runAnchor, bikePowerAnchor, swimThreshold, FITNESS, RACES } from './domain.js';
+import { runAnchor, bikePowerAnchor, swimThreshold, FITNESS, RACES, FTP_CONFIDENCE } from './domain.js';
 
 /* The Assumption Center's one selector (phase 4, spec stage 6 "Consolidated
  * More"): what does Try currently BELIEVE about this athlete, per anchor,
@@ -69,7 +69,10 @@ export function anchorAssumptions(profile) {
       sourceLabel: b.kind === 'real' ? (SOURCE_LABELS[b.source] || null)
         : b.kind === 'estimated' ? SOURCE_LABELS.estimated : null,
       measuredAt: b.kind === 'real' ? b.measuredAt : null,
-      confidence: null,
+      // bikePowerAnchor does not surface confidence; read it the way
+      // bikeThresholdHistory does, validated against the closed set.
+      confidence: b.kind === 'real' && FTP_CONFIDENCE.includes(((p.ftpMeta || {}).confidence))
+        ? p.ftpMeta.confidence : null,
     });
   }
 

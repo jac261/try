@@ -14,7 +14,9 @@ const base = {
   startDate: '2026-06-01', raceDate: '2026-10-03',
 };
 const withMeta = p => {
-  const plan = generatePlan(p);
+  // clone: generatePlan keeps the profile reference, and stamping meta on a
+  // shared base would leak recorded-race provenance into every other mode
+  const plan = generatePlan({ ...p });
   plan.profile.fivekMeta = { source: 'recorded-race', measuredAt: '2026-07-01' };
   plan.profile.ftpMeta = { source: 'try-test', measuredAt: '2026-06-20', confidence: 'high' };
   return plan;
