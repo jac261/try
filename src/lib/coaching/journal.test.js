@@ -90,9 +90,11 @@ describe('the writers exist at the source', () => {
   const app = readFileSync('src/app/App.jsx', 'utf8');
   const today = readFileSync('src/features/today/TodayView.jsx', 'utf8');
 
-  it('every accept path journals: weekly, the two sheets, the run one-tap', () => {
+  it('every accept path journals: weekly and all THREE proposal sheets', () => {
+    // the run's one-tap retarget became a sheet in the same phase, so all
+    // three threshold accepts flow through sheet onAccept handlers
     expect(app).toMatch(/journalDecision\(T\.fromWeeklyProposal\(p, \{ at \}\), 'accepted'\)/);
-    expect((app.match(/journalDecision\(T\.fromThresholdProposal\((cssSheet|ftpSheet|eftp)\), 'accepted'\)/g) || []).length).toBe(3);
+    expect((app.match(/journalDecision\(T\.fromThresholdProposal\((cssSheet|ftpSheet|runSheet)\), 'accepted'\)/g) || []).length).toBe(3);
   });
 
   it('every decision dismiss journals a rejection, including the NEW eftp dismiss', () => {

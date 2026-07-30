@@ -15,6 +15,7 @@ import { AddWorkoutSheet } from '@/components/AddWorkoutSheet.jsx';
 import { CssProposalSheet } from '@/components/CssProposalSheet.jsx';
 import { CssRetestSheet } from '@/components/CssRetestSheet.jsx';
 import { FtpProposalSheet } from '@/components/FtpProposalSheet.jsx';
+import { RunProposalSheet } from '@/components/RunProposalSheet.jsx';
 import { TechniqueEditor } from '@/features/settings/TechniqueEditor.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
 import { FitnessEditor } from '@/features/settings/FitnessEditor.jsx';
@@ -166,6 +167,7 @@ export function App({ storage, getToken, user }) {
   // same scrim pattern as every other sheet.
   const [cssSheet, setCssSheet] = useState(null);
   const [ftpSheet, setFtpSheet] = useState(null);
+  const [runSheet, setRunSheet] = useState(null);
   const [retestOpen, setRetestOpen] = useState(false);
   // A failed plan write means this device and the account have diverged — the
   // catalog-drift incident proved that must never be silent again.
@@ -1195,19 +1197,19 @@ export function App({ storage, getToken, user }) {
     prevWeeks: Object.keys(coachLog).sort().reverse().map(k => coachLog[k]),
     durabilityByDiscipline: durabilityFor(T.iso(T.startOfWeekMonday(new Date()))),
   });
-  const applyEftp = () => {
-    if (!eftp) return;
-    journalDecision(T.fromThresholdProposal(eftp), 'accepted');
-    retarget(eftp.retarget);
-  };
-  // Phase 3b (§6): a swim CSS proposal opens the evidence sheet instead of
-  // retargeting on the tap; bike and run keep the one-tap flow for now.
+
+  // Phase 3b (§6), completed by phase 2 §4: every threshold proposal opens
+  // its evidence sheet — swim, bike, and now run. No one-tap retarget
+  // remains anywhere.
   // A swim or bike threshold proposal opens its evidence sheet rather than
   // retargeting on the tap; run keeps the one-tap flow for now.
   const onEftp = () => {
+    // Phase 2 §4: all three disciplines review the evidence before a
+    // retarget. The run was the last one-tap — deliberate at the time, now
+    // overridden by the spec: threshold changes remain proposals.
     if (eftp && eftp.sport === 'swim') setCssSheet(eftp);
     else if (eftp && eftp.sport === 'bike') setFtpSheet(eftp);
-    else applyEftp();
+    else if (eftp && eftp.sport === 'run') setRunSheet(eftp);
   };
   // §7's remaining branch (gauntlet catch 2026-07-27): the athlete logged
   // the CSS test but no recording ever matched it (wrong sport type on the
@@ -1557,6 +1559,8 @@ export function App({ storage, getToken, user }) {
         onAccept={() => { journalDecision(T.fromThresholdProposal(cssSheet), 'accepted'); retarget(cssSheet.retarget); }} onClose={() => setCssSheet(null)} />}
       {ftpSheet && <FtpProposalSheet proposal={ftpSheet} plan={plan}
         onAccept={() => { journalDecision(T.fromThresholdProposal(ftpSheet), 'accepted'); retarget(ftpSheet.retarget); }} onClose={() => setFtpSheet(null)} />}
+      {runSheet && <RunProposalSheet proposal={runSheet} plan={plan}
+        onAccept={() => { journalDecision(T.fromThresholdProposal(runSheet), 'accepted'); retarget(runSheet.retarget); }} onClose={() => setRunSheet(null)} />}
       {retestOpen && <CssRetestSheet recommendation={retest || { headline: 'The CSS test', why: 'A fresh measurement keeps your swim paces honest.' }}
         plan={plan} onAddTest={addCssTestToWeek} onEditFitness={() => setEditFitness(true)} onClose={() => setRetestOpen(false)} />}
 

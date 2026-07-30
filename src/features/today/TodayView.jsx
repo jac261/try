@@ -188,7 +188,9 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
     key: 'eftp', cls: eftp.up ? 'banner tune' : 'banner ramp', icon: 'trend', title: eftp.headline,
     // swim proposals open the evidence sheet instead of retargeting on the
     // spot (spec §6); the wording must not promise a one-tap change
-    sub: eftp.why + (eftp.sport === 'run' ? ' Tap to retarget →' : ' Tap to review →'), act: onEftp,
+    // one verb for all three sports since the run gained its sheet (phase 2):
+    // every threshold change is reviewed, none is a single tap
+    sub: eftp.why + ' Tap to review →', act: onEftp,
     dismiss: () => {
       saveEftpDismiss(eftp.sig); setEftpDismissed(eftp.sig);
       if (onDecision) onDecision(T.fromThresholdProposal(eftp), 'rejected');
