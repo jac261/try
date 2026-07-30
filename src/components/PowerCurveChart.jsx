@@ -24,11 +24,13 @@ import * as T from '@/lib';
  * Stale points render hollow, matching the spider's convention for a figure
  * that is real but no longer describes now.
  */
-export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, height = 150 }) {
+export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, height = 190 }) {
   const pts = (curve && curve.points) || [];
   if (pts.length < 2) return null;                 // one point is not a curve
 
-  const W = 320, H = height, padL = 4, padR = 4, padT = 10, padB = 22;
+  // padL carries the watts axis now that the per-duration rows are gone and
+  // the chart is the only place those numbers live.
+  const W = 320, H = height, padL = 26, padR = 6, padT = 14, padB = 22;
   const staleSet = new Set(stale || []);
   const byDur = new Map(pts.map(p => [p.durationSec, p]));
 
@@ -44,6 +46,19 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
   const wattVals = pts.map(p => p.watts).concat(ftpWatts ? [ftpWatts] : []);
   const top = Math.max(...wattVals) * 1.08;
   const Y = w => H - padB - (w / top) * (H - padT - padB);
+
+  /* The watts axis. Rounded to a readable step rather than to the data, so the
+     gridlines land on numbers a rider can actually hold in their head. Five
+     intervals, so a ~950 W ceiling gives 0/200/400/600/800 rather than the
+     0/250/500/750 a four-interval split would produce. */
+  const niceStep = raw => {
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / p;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+  };
+  const step = niceStep(top / 5);
+  const yTicks = [];
+  for (let w = 0; w <= top; w += step) yTicks.push(w);
 
   const path = ps => ps.map((p, i) => (i ? 'L' : 'M') + X(p.durationSec).toFixed(1) + ' ' + Y(p.watts).toFixed(1)).join(' ');
 
@@ -72,6 +87,20 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
   return (
     <svg viewBox={'0 0 ' + W + ' ' + H} style={{ width: '100%', height, display: 'block' }}
       role="img" aria-label={'Power curve: ' + pts.map(p => tick(p.durationSec) + ' ' + p.watts + ' watts').join(', ')}>
+      {/* The watts axis: gridline and value per step, zero included so the
+          zero-based claim is visible rather than asserted. The unit sits on
+          its own above the top tick: suffixing the tick ("800 W") pushed it
+          past the left edge of the viewBox, measured, not guessed. */}
+      {yTicks.map(w => (
+        <g key={'y' + w}>
+          <line x1={padL} y1={Y(w)} x2={W - padR} y2={Y(w)}
+            stroke="var(--line)" strokeWidth="1" opacity={w === 0 ? 0.55 : 0.22} />
+          <text x={padL - 5} y={Y(w) + 3} fontSize="8" fill="var(--muted)" textAnchor="end">{w}</text>
+        </g>
+      ))}
+      <text x={padL - 5} y={Y(yTicks[yTicks.length - 1]) - 7} fontSize="8"
+        fill="var(--muted)" textAnchor="end">W</text>
+
       {/* threshold reference: where the curve crosses it is the reading */}
       {ftpWatts && (
         <>
@@ -97,11 +126,30 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
       {/* the current curve */}
       <path d={path(pts)} fill="none" stroke="var(--bike, var(--run))" strokeWidth="2" strokeLinejoin="round" />
 
-      {pts.map(p => (
-        <circle key={p.durationSec} cx={X(p.durationSec)} cy={Y(p.watts)} r="3"
-          fill={staleSet.has(p.durationSec) ? 'var(--card)' : 'var(--bike, var(--run))'}
-          stroke="var(--bike, var(--run))" strokeWidth="1.5" />
-      ))}
+      {/* Every duration's watts, on the chart. The rows that used to carry
+          these numbers are gone, so the labels ALTERNATE above and below the
+          line: on a log axis the long durations crowd together (40 and 60 min
+          sit ~18px apart at this width), and a single band would collide
+          exactly as the threshold label did before it moved. Alternating means
+          neighbours never share a horizontal band. */}
+      {pts.map((p, i) => {
+        const x = X(p.durationSec), y = Y(p.watts);
+        const above = i % 2 === 0;
+        const first = i === 0, last = i === pts.length - 1;
+        return (
+          <g key={p.durationSec}>
+            <circle cx={x} cy={y} r="3"
+              fill={staleSet.has(p.durationSec) ? 'var(--card)' : 'var(--bike, var(--run))'}
+              stroke="var(--bike, var(--run))" strokeWidth="1.5">
+              <title>{tick(p.durationSec) + ': ' + p.watts + ' W'
+                + (ftpWatts ? ' (' + Math.round(p.watts / ftpWatts * 100) + '% of threshold)' : '')}</title>
+            </circle>
+            <text x={x} y={above ? y - 7 : y + 11} fontSize="8"
+              fill={staleSet.has(p.durationSec) ? 'var(--muted)' : 'var(--ink)'}
+              textAnchor={first ? 'start' : last ? 'end' : 'middle'}>{p.watts}</text>
+          </g>
+        );
+      })}
 
       {TICKS.map(d => (
         <text key={d} x={X(d)} y={H - 6} fontSize="8" fill="var(--muted)"

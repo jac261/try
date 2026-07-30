@@ -21,6 +21,34 @@ export function PowerCurveCard({ curve, previous, ftpWatts, todayISO }) {
   const profile = T.riderProfile({ curve, ftpWatts });
   const implications = T.trainingImplications(profile);
 
+  /* Jon, 2026-07-30: the per-duration rows are gone and the watts live on the
+     chart's axis instead. The rows carried five things a line cannot, and
+     they repeated four of them ten times over: the same date, the same meter,
+     the same environment, the same confidence. So the facts that VARY are
+     named here and the ones that do not are said once. Nothing that would
+     change how the curve is read has been dropped.
+
+     Still built on durationSummary, which keeps the wording and the caveats
+     in the model rather than in this component. */
+  const summaries = curve.points.map(p =>
+    T.durationSummary({ point: p, ftpWatts, stale: stale.includes(p.durationSec) }));
+  const uniq = xs => [...new Set(xs.filter(x => x != null && x !== ''))];
+  const dates = uniq(summaries.map(s => s.date)).sort();
+  const sources = uniq(summaries.map(s => s.source));
+  const indoors = uniq(summaries.map(s => s.indoor));
+  const lowConfidence = summaries.filter(s => s.quality === 'low');
+  const provenance = [
+    dates.length === 0 ? null
+      : dates.length === 1 ? T.fmtDate(dates[0])
+        : T.fmtDate(dates[0]) + ' to ' + T.fmtDate(dates[dates.length - 1]),
+    sources.length ? sources.join(' and ') : null,
+    indoors.length !== 1 ? null : (indoors[0] ? 'indoors' : 'outdoors'),
+  ].filter(Boolean).join(' · ');
+  // §7 asks that the shape be readable, and the axis gives watts but not the
+  // ratio. The two extremes are the ratio that matters.
+  const ends = ftpWatts && summaries.length > 1
+    ? { short: summaries[0], long: summaries[summaries.length - 1] } : null;
+
   return (
     <>
       <div className="section-title">
@@ -51,40 +79,37 @@ export function PowerCurveCard({ curve, previous, ftpWatts, todayISO }) {
         <PowerCurveChart curve={curve} previous={previous} comparison={comparison}
           stale={stale} ftpWatts={ftpWatts} />
 
-        {curve.points.map(p => {
-          const d = T.durationSummary({ point: p, ftpWatts, stale: stale.includes(p.durationSec) });
-          const row = comparison && comparison.rows.find(r => r.durationSec === p.durationSec);
-          return (
-            <div className="seg" key={p.durationSec} style={{ padding: '5px 0' }}>
-              <div className="bar" style={{ background: d.stale ? 'var(--chip)' : 'var(--bike, var(--run))' }} />
-              <div>
-                <div className="l">{d.label} · {d.watts} W{d.pctOfFtp ? ' · ' + d.pctOfFtp + '% of threshold' : ''}</div>
-                <div className="d">
-                  {[
-                    d.date ? T.fmtDate(d.date) : 'undated',
-                    d.source || null,
-                    d.indoor == null ? null : (d.indoor ? 'indoors' : 'outdoors'),
-                    d.quality === 'high' ? null : d.quality + ' confidence',
-                  ].filter(Boolean).join(' · ')}
-                  {d.note ? ' · ' + d.note : ''}
-                </div>
-              </div>
-              {row && row.status !== 'new' && (
-                <div className="m">
-                  {row.status === 'incomparable' ? 'not compared'
-                    : row.status === 'unchanged' ? 'level'
-                      : (row.deltaPct > 0 ? '+' : '') + row.deltaPct + '%'}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {ends && (
+          <div className="lead" style={{ margin: '8px 0 0', fontSize: 13 }}>
+            Your {ends.short.label} best is {ends.short.pctOfFtp}% of threshold and
+            your {ends.long.label} best is {ends.long.pctOfFtp}% of threshold.
+          </div>
+        )}
+
+        {provenance && (
+          <div className="d" style={{ marginTop: 6 }}>{provenance}</div>
+        )}
+
+        {/* Confidence was a per-row field. Only the exceptions are worth
+            saying, because "high confidence" ten times told nobody anything. */}
+        {lowConfidence.length > 0 && (
+          <div className="d" style={{ marginTop: 4 }}>
+            {lowConfidence.map(s => s.label).join(', ')}
+            {lowConfidence.length === 1 ? ' was' : ' were'} recorded, but not trusted
+            well enough to read anything into.
+          </div>
+        )}
 
         {stale.length > 0 && (
+          /* Names them now. The hollow markers say which on the chart, but a
+             hollow dot is only legible if you already know to look for it, and
+             the row that used to spell it out is gone. */
           <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
-            {stale.length === 1 ? 'One duration has' : stale.length + ' durations have'} not been
-            tested in a while, so {stale.length === 1 ? 'it describes' : 'they describe'} an
-            older version of you. Going and setting a fresh best is the only way to know.
+            {summaries.filter(s => s.stale).map(s => s.label).join(', ')}
+            {stale.length === 1 ? ' has' : ' have'} not been tested in a while, so
+            {stale.length === 1 ? ' it describes' : ' they describe'} an older version
+            of you. Going and setting a fresh best is the only way to know. They are the
+            hollow points above.
           </div>
         )}
       </div>

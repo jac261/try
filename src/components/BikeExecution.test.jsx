@@ -166,9 +166,13 @@ describe('PowerCurveCard: gated now, correct when it opens', () => {
     expect(html).toMatch(/different power meter/);
     expect(html).toMatch(/calibration difference/);
     expect(html).toContain('not compared');
-    // every duration reads "not compared": no per-duration gain is claimed
-    // (the banner says it once too, hence at least rather than exactly)
-    expect((html.match(/not compared/g) || []).length).toBeGreaterThanOrEqual(CURVE_DURATIONS.length);
+    /* The per-duration rows carried a "not compared" each; they are gone
+       (Jon, 2026-07-30) and the watts live on the chart's axis. The intent
+       they protected — that no per-duration gain is claimed off a device
+       change — now holds by a stronger mechanism: the previous curve's line
+       is WITHHELD, so the chart draws one path rather than two. Counting
+       paths asserts that directly instead of counting a phrase. */
+    expect((html.match(/<path/g) || []).length).toBe(1);
     // and the same caveat is repeated for the profile, which is measured
     // against a threshold set on the old meter
     expect(html).toMatch(/previous power meter/);

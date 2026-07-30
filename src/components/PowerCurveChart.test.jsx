@@ -47,7 +47,13 @@ describe('PowerCurveChart', () => {
     const short = powerCurve([pt(5, 900), pt(60, 420), pt(300, 330)]);
     const html = render({ curve: short, stale: [] });
     const xs = [...html.matchAll(/<circle[^>]*cx="([\d.]+)"/g)].map(m => parseFloat(m[1]));
-    expect(Math.max(...xs)).toBeLessThan(200);   // well short of the 320 width
+    /* Relative to the plot, not an absolute pixel: the first version of this
+       hardcoded 200, which was really a fact about the old left padding, and
+       it broke the moment the watts axis needed room. A 5 min longest best is
+       ~62% of the way along a 5 s to 60 min log axis, so anything comfortably
+       short of the right edge is the property worth pinning. */
+    const rightEdge = 320 - 6;
+    expect(Math.max(...xs)).toBeLessThan(rightEdge - 60);
   });
 
   it('draws stale points hollow and fresh points filled', () => {
@@ -95,13 +101,49 @@ describe('PowerCurveChart', () => {
   });
 });
 
-describe('the card shows the graph above its rows', () => {
-  it('renders the chart and keeps the per-duration detail', () => {
-    const html = renderToString(
-      <PowerCurveCard curve={FULL} previous={null} ftpWatts={260} todayISO={TODAY} />);
-    expect(html).toContain('<svg');                 // the shape
-    expect(html).toContain('% of threshold');       // the facts a line cannot carry
-    expect(html).toContain('Power curve');
+describe('the card puts the data on the chart, not in rows', () => {
+  /* Jon, 2026-07-30: drop the per-duration rows and read the watts off the
+     y axis instead. These pin both halves of that: the rows are actually
+     gone, and every fact they carried that would change how the curve is
+     read still has a home. */
+  const html = () => renderToString(
+    <PowerCurveCard curve={FULL} previous={null} ftpWatts={260} todayISO={TODAY} />);
+
+  it('renders the chart with a watts axis', () => {
+    const h = html();
+    expect(h).toContain('<svg');
+    expect(h).toContain('Power curve');
+    // the axis carries a standalone unit label, so the scale is unambiguous
+    // (a "800 W" suffix on the top tick overflowed the viewBox's left edge)
+    expect(h).toMatch(/<text[^>]*>W<\/text>/);
+    // and every duration's watts appear on the chart itself
+    FULL.points.forEach(p => expect(h).toContain('>' + p.watts + '<'));
+  });
+
+  it('no longer renders a row per duration', () => {
+    const h = html();
+    // The row markup was one .seg with a .bar per duration. The rider-profile
+    // card below still uses .seg, so this counts BARS inside the curve card.
+    const curveCard = h.slice(0, h.indexOf('The shape of your riding'));
+    expect(curveCard).not.toContain('class="seg"');
+  });
+
+  it('keeps the facts the rows carried: ratio, provenance, staleness', () => {
+    const h = html();
+    expect(h).toContain('% of threshold');   // the ratio the axis cannot give
+    expect(h).toContain('Quarq');            // which meter recorded them
+    expect(h).toContain('outdoors');         // the environment
+  });
+
+  it('names which durations are stale rather than only counting them', () => {
+    const stalePts = powerCurve(CURVE_DURATIONS.map((d, i) =>
+      pt(d, 900 - i * 70, d === 3600 ? { date: '2026-01-01' } : {})));
+    // SSR splits interpolated text with <!-- --> markers; strip them so the
+    // assertion reads the sentence the athlete actually sees.
+    const h = renderToString(
+      <PowerCurveCard curve={stalePts} previous={null} ftpWatts={260} todayISO={TODAY} />)
+      .replace(/<!--[^>]*-->/g, '');
+    expect(h).toMatch(/60 min has not been tested/);
   });
 
   it('still renders nothing at all without a curve', () => {
