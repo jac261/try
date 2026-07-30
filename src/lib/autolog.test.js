@@ -28,6 +28,17 @@ describe('matchActivities (spotted on your watch)', () => {
     expect(m[0].feel).toBe('easy');       // rpe 3
     expect(m[1].feel).toBe(undefined);    // no rpe → no guess
     expect(m[2].feel).toBe('hard');       // rpe 9
+    // the exact input feel was derived from rides along for provenance
+    expect(m.map(x => x.rpe)).toEqual([3, undefined, 9]);
+  });
+
+  it('a junk (non-numeric) rpe from the passthrough yields no feel and no rpe', () => {
+    // the feed is verbatim: a schema change upstream must not band to
+    // 'right' through failed comparisons or bank NaN into the corpus
+    const m = matchActivities({ ...base, activities: [act('a1', 'Run', '2026-07-08', 48, { rpe: 'n/a' })] });
+    expect(m.length).toBe(1);
+    expect(m[0].feel).toBe(undefined);
+    expect(m[0].rpe).toBe(undefined);
   });
 
   it('each activity claims at most one workout, nearest duration first', () => {
@@ -175,7 +186,47 @@ describe('activityFor (link-out to the recording)', () => {
   });
 });
 
-import { brickPairFor } from './autolog.js';
+import { brickPairFor, headlineSpot } from './autolog.js';
+
+describe('headlineSpot (which spotted session leads the recap)', () => {
+  const spot = (id, { key, durationMin = 60, actMin = 0, runMin = 0 } = {}) => ({
+    workout: { id, key: !!key, durationMin },
+    activity: { id: id + '-a', movingTimeSec: actMin * 60 },
+    ...(runMin ? { activityRun: { id: id + '-r', movingTimeSec: runMin * 60 } } : {}),
+  });
+
+  it('the key session beats an earlier easy one, whichever comes first in the plan', () => {
+    const easy = spot('easy', { actMin: 35 });
+    const long = spot('long', { key: true, actMin: 180 });
+    expect(headlineSpot([easy, long]).workout.id).toBe('long');
+    expect(headlineSpot([long, easy]).workout.id).toBe('long');
+  });
+
+  it('without a key flag the longest recorded session leads, a brick counting both legs', () => {
+    const run = spot('run', { actMin: 50 });
+    const rideOnly = spot('rideOnly', { actMin: 40 });      // single recording, no run leg
+    const pair = spot('pair', { actMin: 40, runMin: 20 });  // brick: ride 40 + run 20
+    expect(headlineSpot([run, rideOnly]).workout.id).toBe('run');
+    expect(headlineSpot([run, pair]).workout.id).toBe('pair'); // 60 recorded min vs 50
+  });
+
+  it('falls back to planned duration, then plan order — fully deterministic', () => {
+    const a = spot('a', { durationMin: 45 });
+    const b = spot('b', { durationMin: 90 });
+    expect(headlineSpot([a, b]).workout.id).toBe('b'); // nothing recorded → planned wins
+    const t1 = spot('t1', { durationMin: 60, actMin: 50 });
+    const t2 = spot('t2', { durationMin: 60, actMin: 50 });
+    expect(headlineSpot([t1, t2]).workout.id).toBe('t1'); // exact tie → plan order
+    expect(headlineSpot([])).toBe(null);
+    expect(headlineSpot(null)).toBe(null);
+  });
+
+  it('never reads feel or rpe: the outcome label does not choose the celebration', () => {
+    const rated = { ...spot('rated', { actMin: 40 }), feel: 'hard' };
+    const longer = spot('longer', { actMin: 60 });
+    expect(headlineSpot([rated, longer]).workout.id).toBe('longer');
+  });
+});
 
 describe('strength and brick matching (2026-07-11 field decisions)', () => {
   const brickPlan = { weeks: [{ index: 0, workouts: [

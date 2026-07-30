@@ -139,10 +139,12 @@ export function reviewActivity({ workout, activity, paces, log, swimReview, bike
   }
 
   // Load vs plan (meaningless for an unplanned session — there is no plan
-  // dose; meaningless for a tune-up too, whose slot estimate a race is
-  // supposed to exceed — "a much bigger dose than intended" is exactly
-  // what racing is).
-  if (!w.adhoc && !w.bRace && a.trainingLoad != null) {
+  // dose). Raced and tested sessions are skipped too: their intensity factor
+  // in estimateTss is a planning placeholder, and a recorded dose well above
+  // it is the point of racing a race, not a deviation worth a warning
+  // (design panel 2026-07-30). Flags, as everywhere a raced card is refused
+  // (isTrainingRide's spelling); race + bRace cover goal race and tune-ups.
+  if (!w.adhoc && !w.race && !w.bRace && !w.test && a.trainingLoad != null) {
     const plannedTss = estimateTss(w, undefined, log && log.actualMin);
     if (plannedTss > 10 && a.trainingLoad / plannedTss > 1.4) {
       verdicts.push({ tone: 'warn', text: 'Training load came in well above the plan’s estimate for this session — a much bigger dose than intended.' });

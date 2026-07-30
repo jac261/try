@@ -26,6 +26,28 @@ describe('buildRecap (session recap slides)', () => {
     expect(s[s.length - 1].big).toBe('Rest day');
   });
 
+  it('the effort slide quotes only words the athlete actually said', () => {
+    // intervals.icu's numeric 1-5 feel is not a thing anyone "called"
+    const numeric = buildRecap({ ...base, activity: act({ rpe: null, feel: 3 }) });
+    expect(numeric.some(s => s.kind === 'effort' && s.lines.some(l => /You called it/.test(l)))).toBe(false);
+    // a manual diary entry's string feel is the athlete's own tap
+    const manual = buildRecap({ ...base, activity: act({ rpe: null, feel: 'hard' }) });
+    const eff = manual.find(s => s.kind === 'effort');
+    expect(eff, 'no effort slide rendered for a loaded session').toBeTruthy();
+    expect(eff.lines).toContain('You called it hard.');
+  });
+
+  it('a folded brick pair presents its rpe as the harder leg, never as one rating', () => {
+    // recordingFor folds ride+run into one recording with rpe = max of the
+    // pair and pair: true — "You rated it 9/10" would quote a rating the
+    // athlete never gave for the whole session
+    const folded = buildRecap({ ...base, activity: act({ rpe: 9, pair: true }) });
+    const eff = folded.find(s => s.kind === 'effort');
+    expect(eff, 'no effort slide rendered for a loaded session').toBeTruthy();
+    expect(eff.lines).toContain('Your harder leg came in at 9/10.');
+    expect(eff.lines.some(l => /You rated it/.test(l))).toBe(false);
+  });
+
   it('slides only exist when their data does: no HR slide without averageHeartrate, no dose without load', () => {
     const bare = buildRecap({ ...base, activity: act({ trainingLoad: null, rpe: null }) });
     expect(bare.some(x => x.kind === 'hr')).toBe(false);

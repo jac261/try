@@ -483,6 +483,25 @@ describe('nothing here is a model without a caller', () => {
 
 
 /* Gauntlet regressions for phase 6. */
+describe('gauntlet: raced sessions stay out of the durability evidence (design panel 2026-07-30)', () => {
+  // the brickHistory exclusion is pinned above ('a raced tune-up never
+  // enters the brick window'), with a control proving the empty result is
+  // the flag and not a failed pair
+
+  it('the plan-branch candidate filter refuses raced sessions explicitly, not via the vacuous steady gate', () => {
+    /* A race card's segments carry no zones, so planBodySteady passes it
+       vacuously — the exclusion has to be written into the candidate filter
+       itself. Source-level because the filter lives inside the App
+       component. Plan branch only: the tracker branch reads raw activities,
+       which carry no race flag, and its own comment says so. */
+    const src = readFileSync(new URL('../app/App.jsx', import.meta.url), 'utf8');
+    const at = src.indexOf('const durabilityCandidates');
+    expect(at, 'App no longer declares durabilityCandidates where this test can find it').toBeGreaterThan(-1);
+    expect(src.slice(at, at + 3000).includes('!w.race && !w.bRace'),
+      'the plan-branch durability candidate filter no longer refuses raced sessions explicitly').toBe(true);
+  });
+});
+
 describe('gauntlet: every declared objective is actually reachable', () => {
   it('reaches four of five from generation, and the fifth from the ease path', () => {
     /* Three of the five were structurally unreachable on the first cut. The

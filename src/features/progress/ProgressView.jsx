@@ -55,6 +55,12 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
   // weekly bars — training load, not raw minutes. A benchmark test or a sharp
   // interval session is short but taxing; counting minutes made those weeks look
   // like a step back, load shows them for the hard weeks they are.
+  // BOTH bars are estimateTss, and the recorded trainingLoad on matched
+  // activities is deliberately unused here: a series mixing measured load
+  // (sessions with a recording) and modelled load (the rest) is comparable
+  // neither bar-to-bar nor week-to-week as sync coverage shifts. The estimate
+  // is the axis's single currency, and the section label says so (design
+  // panel 2026-07-30).
   const bars = plan.weeks.map(w => {
     const sess = w.workouts.filter(x => x.discipline !== 'rest' && !x.race);
     const planned = sess.reduce((a, b) => a + T.estimateTss(b), 0);
@@ -208,7 +214,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
         <div className="kpi"><div className="v" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>{streak}<Icon name="flame" size={22} /></div><div className="k">Current streak</div></div>
       </div>
 
-      <div className="section-title"><InfoLink onOpen={onSupport} topic="plan-structure" />Weekly load <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(planned vs completed)</span></div>
+      <div className="section-title"><InfoLink onOpen={onSupport} topic="plan-structure" />Weekly load <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(planned vs completed, estimated)</span></div>
       <div className="card"><BarChart data={bars} height={160} /></div>
     </>}
 
