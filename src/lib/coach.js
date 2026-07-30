@@ -256,7 +256,7 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
   // gap it leaves is named here rather than hidden.
   if (allSessions.some(s => s.status === 'unlogged-race')) evidence.push({
     signal: 'tune-up race',
-    reading: 'a tune-up race has no result marked; it does not read as missed, and marking it done completes the picture',
+    reading: 'a tune-up race has no result marked; it does not read as missed, and marking it complete fills the gap',
   });
   if (reds) evidence.push({ signal: 'readiness', reading: reds + (reds === 1 ? ' day' : ' days') + ' in the red this week' });
   if (missedTired) evidence.push({ signal: 'your answers', reading: missedTired + ' session' + (missedTired === 1 ? '' : 's') + ' missed feeling run down' });
@@ -294,7 +294,13 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
       overall = { decision: 'hold', headline: 'The load is landing well' };
     } else {
       overall = { decision: 'hold', headline: 'Room to build soon, not yet' };
-      conflicting.push('form shows room to absorb more, but the week was not clean enough to progress on');
+      // When the ONLY key shortfall is an unmarked tune-up, 'not clean
+      // enough' would contradict the row saying the race counts neither way
+      // (re-verify catch 2026-07-30); the wait is named for what it is.
+      const shortfall = keyPlanned.filter(s => !doneish(s));
+      conflicting.push(shortfall.length && !reds && shortfall.every(s => s.status === 'unlogged-race')
+        ? 'form shows room to absorb more, but a tune-up race has no result marked yet'
+        : 'form shows room to absorb more, but the week was not clean enough to progress on');
     }
   } else {
     overall = { decision: 'hold', headline: 'This workload is doing its job' };
@@ -315,13 +321,16 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
     const keys = ss.filter(x => x.key);
     const strained = ss.some(x => x.status === 'missed-tired' || x.status === 'missed-niggle');
     // An unmarked tune-up race is evidence-free, not failed: it never breaks
-    // clean (re-verify catch 2026-07-30: dropping the row instead either
-    // flipped the week clean with its only key session unseen, or emptied
-    // `keys` and silently switched clean to the strict all-sessions rule).
-    // It gates only the progression call below, the fade veto's shape.
+    // a clean week whose other key work landed (re-verify catch 2026-07-30:
+    // dropping the row instead either flipped the week clean with its only
+    // key session unseen, or emptied `keys` and silently switched clean to
+    // the strict all-sessions rule). But clean certifies the streak, so a
+    // week with NO observed key work cannot earn it on the race's absence
+    // alone (second re-verify catch: that week froze clean and unlocked
+    // progression a week later with zero key evidence behind it).
     const unloggedRace = ss.filter(x => x.status === 'unlogged-race');
     const clean = !strained && (keys.length
-      ? keys.every(x => doneish(x) || x.status === 'unlogged-race')
+      ? keys.some(doneish) && keys.every(x => doneish(x) || x.status === 'unlogged-race')
       : done === ss.length - unloggedRace.length);
     const ev = [{ signal: 'sessions', reading: done + ' of ' + ss.length + ' completed' + (keys.length ? ', key work ' + keys.filter(doneish).length + ' of ' + keys.length : '') }];
     let decision = 'hold', headline = 'Doing its job';
@@ -356,10 +365,13 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
         // veto, this week progresses whatever the laps say.
         const capSpent = !!prev.disciplines[d].durabilityVeto;
         if (unloggedRace.length) {
-          // No cap here, unlike the fade veto: the athlete can end this wait
-          // with one tap, so it holds until the race day has an answer.
-          headline = 'Landing well. Mark the tune-up done and progression opens';
-          ev.push({ signal: 'repeatability', reading: 'your clean weeks all count and nothing here resets them; the progression call waits until that race day has an answer' });
+          // An in-week gate only, and deliberately so: a stored clean week
+          // is certified by its OBSERVED key work (the some-doneish clause
+          // above), so the app's blindness to one race never gates a LATER
+          // week — the permanent gate was the defect this change removes.
+          // The athlete can end this wait with one tap before the freeze.
+          headline = 'Landing well. Mark the tune-up complete and progression opens';
+          ev.push({ signal: 'repeatability', reading: 'your clean weeks all count and nothing here resets them; only the progression call waits' });
         } else if (fadeBlock && !capSpent && LONG_SESSION[d]) {
           vetoed = true; anyVeto = true;
           headline = 'Landing well. A steadier ' + LONG_SESSION[d] + ' finish opens progression';
@@ -413,7 +425,7 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
     // the row too, wherever it appears (a brick tune-up rides on both the
     // run and the bike row).
     if (unloggedRace.length) {
-      ev.push({ signal: 'tune-up race', reading: 'your tune-up race has no result marked; it does not read as missed, and marking it done completes the picture' });
+      ev.push({ signal: 'tune-up race', reading: 'your tune-up race has no result marked; it does not read as missed, and marking it complete fills the gap' });
     }
     if (read) {
       ev.push({ signal: 'late-session durability', reading: forewarn

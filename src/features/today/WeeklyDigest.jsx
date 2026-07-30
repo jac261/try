@@ -156,6 +156,15 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
           </div>
         )}
 
+        {/* the unmarked tune-up is named, never asserted missed: the app
+            cannot see a race day for itself (autolog skips bRace), so this
+            line explains the planned/done gap without claiming an absence */}
+        {(d.raceUnlogged || []).length > 0 && (
+          <div className="muted" style={{ fontSize: 12.5, margin: '8px 2px 0' }}>
+            No result marked: {d.raceUnlogged.map(m => m.title + ' (' + T.fmtDate(m.day, { weekday: 'short' }) + ')').join(', ')}
+          </div>
+        )}
+
         {d.ahead && (
           <div className="tmrw" style={{ marginTop: 12, cursor: "default", userSelect: "auto" }}>
             <Icon name="calendar" size={15} />

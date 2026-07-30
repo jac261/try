@@ -131,7 +131,7 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
       load: loads.length ? Math.round(loads.reduce((s, v) => s + v, 0)) : null,
       loadEstimated: acts.some(a => a.estimated),
       fitness: fitnessLine(wellness, weekMonday, weekEnd),
-      missed: [], engine: [], ahead: null,
+      missed: [], raceUnlogged: [], engine: [], ahead: null,
     };
   }
 
@@ -164,6 +164,12 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
     // appended here explicitly
     .concat(races.filter(w => eff(w) < todayISO && !(log || {})[w.id])
       .map(w => ({ title: w.title || 'Race', day: eff(w) })));
+  // The unmarked tune-up gets its own named line instead: it stays in the
+  // planned count, so an unexplained shortfall under "trained the week as
+  // written" would be the same contradiction from the other side
+  // (re-verify catch 2026-07-30).
+  const raceUnlogged = sessions.filter(w => w.bRace && eff(w) < todayISO && !(log || {})[w.id])
+    .map(w => ({ title: w.title || w.type, day: eff(w) }));
 
   // Engine rows: the accepted weekly proposals quoted VERBATIM from the
   // accept-time log (one source of truth for "why" — never re-derived), plus
@@ -222,7 +228,7 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
     loadEstimated: true,
     raceDone: races.filter(w => (log || {})[w.id]).map(w => w.title || 'Race'),
     fitness: fitnessLine(wellness, weekMonday, weekEnd),
-    missed, engine, ahead,
+    missed, raceUnlogged, engine, ahead,
   };
 }
 

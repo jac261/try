@@ -83,8 +83,11 @@ describe('buildWeeklyDigest (plan mode)', () => {
     const silent = buildWeeklyDigest({ ...base, plan: p, log: done });
     expect(silent.missed.map(m => m.title)).not.toContain('TUNE-UP — 5k Run Race');
     expect(silent.planned).toBe(4); // it stays a planned session
+    // ...and the planned/done gap it leaves is named on its own line
+    expect(silent.raceUnlogged.map(m => m.title)).toEqual(['TUNE-UP — 5k Run Race']);
     const ticked = buildWeeklyDigest({ ...base, plan: p, log: { ...done, '0-4': { done: true } } });
     expect(ticked.done).toBe(Object.keys(done).length + 1);
+    expect(ticked.raceUnlogged).toEqual([]);
   });
 
   it('quotes accepted proposals verbatim from the journal and never re-derives', () => {
