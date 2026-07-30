@@ -33,6 +33,23 @@ export const BRICK_RULES = {
   hardRideFrac: 0.85,   // ride average this far above threshold sets up badly
 };
 
+/* §3.3: the transition, derived from the delivered timestamps and only when
+   they can be trusted: both starts present and parseable, the ride's
+   elapsed known (moving time cannot say when a ride ENDED), the run after
+   the ride, and the gap inside a plausibility window. Outside any of that
+   the answer is null — unknown, never a guess. The window is generous
+   because training bricks include faff a race T2 does not. */
+export const TRANSITION_RULES = { maxSec: 30 * 60 };
+export function transitionSecFor(ride, run) {
+  if (!ride || !run || !ride.startedAt || !run.startedAt || ride.elapsedTimeSec == null) return null;
+  const rideStart = Date.parse(ride.startedAt);
+  const runStart = Date.parse(run.startedAt);
+  if (!Number.isFinite(rideStart) || !Number.isFinite(runStart)) return null;
+  const t = Math.round((runStart - (rideStart + ride.elapsedTimeSec * 1000)) / 1000);
+  if (t < 0 || t > TRANSITION_RULES.maxSec) return null;
+  return t;
+}
+
 /* One brick, described. Never a verdict on the athlete's pacing: that needs
    several, and brickPattern is where it lives. */
 export function brickExecution({ ride, run, paces, fuelLevel, raceType, fuellingPlan }) {
@@ -78,9 +95,9 @@ export function brickExecution({ ride, run, paces, fuelLevel, raceType, fuelling
     runRpe: run.rpe != null ? run.rpe : null,
     causes: causes.map(c => c.key),
     date: run.date || ride.date || null,
-    // §4 lists it; the data does not exist. Named so it reads as blocked
-    // rather than forgotten.
-    transitionSec: null,
+    // §4: live since 2026-07-30 — startedAt and elapsedTimeSec arrive on
+    // the feed. Null whenever either timestamp is missing or implausible.
+    transitionSec: transitionSecFor(ride, run),
     /* Three bands, not two. The non-ruined branch used to be an unconditional
        else, so a run twenty-seven per cent down on fresh pace was told it came
        in "close to the pace you hold fresh" — praise for a session that went

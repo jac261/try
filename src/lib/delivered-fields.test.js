@@ -74,6 +74,55 @@ describe('the power-curve seam matches what the backend sends', () => {
   });
 });
 
+describe('the delivered activity DTO, pinned at the seam (phase 1)', () => {
+  /* Verbatim IntervalsIcuActivityResponse as try-backend main serialises it
+     (camelCase, 2026-07-30). sync.loadActivities returns res.body verbatim,
+     so this fixture IS the client contract: a rename on either side fails
+     here rather than silently disarming a guard. */
+  const DELIVERED = {
+    id: 'a1', date: '2026-07-05', startedAt: '2026-07-05T07:02:11Z',
+    type: 'Ride', name: 'Morning ride', movingTimeSec: 3600,
+    elapsedTimeSec: 3720, distance: 30000, trainingLoad: 60, rpe: 6,
+    feel: 3, ftp: 250, eftp: 255, averageHeartrate: 140, maxHeartrate: 165,
+    averageWatts: 240, normalizedWatts: 255, averageSpeed: 8.3,
+    poolLengthM: null, lengths: null, averageCadence: 88, averageStride: null,
+    deviceName: 'Wahoo ELEMNT', deviceSource: 'GARMIN',
+  };
+
+  it('carries the timing pair this phase activates', () => {
+    expect(typeof DELIVERED.startedAt).toBe('string');
+    expect(DELIVERED.elapsedTimeSec).toBeGreaterThanOrEqual(DELIVERED.movingTimeSec);
+  });
+
+  it('does NOT carry activity-level elevation — the absence is pinned', () => {
+    /* The handoff's status table once claimed ask 7 landed; it landed on the
+       INTERVAL DTO as gain-only. Until an activity-level gain AND loss pair
+       exists, the downhill-assist guard must stay dormant, and this is the
+       test that says so out loud. */
+    expect('totalElevationGain' in DELIVERED).toBe(false);
+    expect('totalElevationLoss' in DELIVERED).toBe(false);
+  });
+
+  it('power-curve quality is null today, and null is usable rather than low', () => {
+    // The backend serves quality: null on every point for now. Defaulting it
+    // to 'low' would be a silent kill switch for the whole rider profile
+    // (the exact defect class phase 7 fixed), so null reads as medium with
+    // qualityKnown false.
+    const p = curvePoint({ ...BACKEND_POINT, quality: null });
+    expect(p.quality).toBe('medium');
+    expect(p.qualityKnown).toBe(false);
+  });
+
+  it('an equal timing pair means uninterrupted; an absent one means unknown', () => {
+    // Zero stopped time is a measurement. A missing elapsedTimeSec is not
+    // zero stopped time — it is a backend that predates the field.
+    const uninterrupted = { ...DELIVERED, elapsedTimeSec: DELIVERED.movingTimeSec };
+    expect(uninterrupted.elapsedTimeSec - uninterrupted.movingTimeSec).toBe(0);
+    const unknown = { ...DELIVERED, elapsedTimeSec: undefined };
+    expect(Number.isFinite(unknown.elapsedTimeSec - unknown.movingTimeSec)).toBe(false);
+  });
+});
+
 describe('normalized power arrives on the activity, unmapped', () => {
   // sync.loadActivities returns res.body verbatim, so a backend field is a
   // client field: no mapper to keep in step, and nothing to drop.

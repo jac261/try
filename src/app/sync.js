@@ -8,12 +8,13 @@
    a `refToId` map the caller keeps and uses to resolve a ref → GUID before pushing. */
 import {
   getCurrentPlan, createPlan as apiCreatePlan, replaceCurrentPlan, deletePlan, putProfile, getMe,
-  putWorkoutLog, deleteWorkoutLog, putWorkoutMove, deleteWorkoutMove,
+  putWorkoutLog, deleteWorkoutLog, reviewBodyToApi, fullLogToApi, putWorkoutMove, deleteWorkoutMove,
   putWorkoutAdjustment, deleteWorkoutAdjustment,
   getWellness, putWellness, syncWellness, getIntervalsActivities, putPlannedEvents, getIntervalsThresholds, getIntervalsActivityIntervals, getIntervalsActivityRoute,
   getIntervalsPowerCurve,
   toClientState, logToApi,
 } from '@/lib/api.js';
+import { REVIEW_ENGINE_VERSIONS } from '@/lib/review-persist.js';
 
 function fire(promise, what) {
   return promise
@@ -169,11 +170,62 @@ export function makeSync(getToken) {
     return false;
   });
 
+  /* Per-workout serialisation of every write to the log endpoint (gauntlet
+     2026-07-30). saveLog, saveReview and removeLog all hit the same row, the
+     server rewrites the non-Optional base four on every PUT, and there is no
+     server-side ordering token — so two in-flight writes could commit in
+     either order: a review PUT carrying feel captured before a feel tap
+     could land after it and revert the tap server-side, and a review PUT
+     landing after an un-complete DELETE re-created the row and resurrected
+     the workout as done on the next hydrate. Bodies are built at CALL time
+     and dispatched strictly in call order per workout, so the last thing
+     the athlete did is the last thing the server hears. */
+  const logChains = new Map();
+  let runReviewUnsupported = false;
+  const serialLog = (workoutId, body, run) => {
+    const prev = logChains.get(workoutId) || Promise.resolve();
+    const next = prev.then(() => run(body), () => run(body));
+    logChains.set(workoutId, next.then(() => undefined, () => undefined));
+    return next;
+  };
+
   // workoutId is the server GUID (resolve from refToId before calling).
   return {
     hydrate, savePlan, replacePlan, saveProfile, loadProfile, endPlan,
-    saveLog: (workoutId, entry) => fire(putWorkoutLog(getToken, workoutId, logToApi(entry)), 'log ' + workoutId),
-    removeLog: workoutId => fire(deleteWorkoutLog(getToken, workoutId), 'unlog ' + workoutId),
+    saveLog: (workoutId, entry) => serialLog(workoutId, logToApi(entry), body =>
+      fire(putWorkoutLog(getToken, workoutId, body), 'log ' + workoutId)),
+    /* A review or cue write. Same endpoint as saveLog; the body carries the
+       current entry's base four (the server rewrites them on every PUT, so
+       they must be fresh) plus ONLY the named review/cue fields — the
+       backend's Optional semantics preserve everything unnamed. entry is
+       the client's current log entry for the workout, fields is e.g.
+       { bikeReview } or { techniqueCue: null }.
+
+       runReview latch (gauntlet 2026-07-30): until Jack merges PR #24 a
+       runReview PUT is a guaranteed 400. The first one per session is the
+       probe; a 400 on a body that carried runReview latches the field off
+       for the rest of the session, so the console gets one warn per load
+       rather than one per run workout. On a backend with #24 merged the
+       probe succeeds and the latch never engages. */
+    saveReview: (workoutId, entry, fields, engineVersions) => {
+      let f = fields;
+      if (runReviewUnsupported && f && 'runReview' in f) {
+        f = { ...f }; delete f.runReview;
+        if (!Object.keys(f).length) return Promise.resolve({ ok: true, skippedRunReview: true });
+      }
+      const carried = f;
+      return serialLog(workoutId, reviewBodyToApi(entry, f, engineVersions), body =>
+        fire(putWorkoutLog(getToken, workoutId, body), 'review ' + workoutId)
+          .then(r => { if (r && !r.ok && r.status === 400 && carried && 'runReview' in carried) runReviewUnsupported = true; return r; }));
+    },
+    /* The re-push body: the whole entry, reviews and cue included. Used by
+       hydrate's local-only merge and adoptMap's sweep — entries the server
+       has never seen, where logToApi's deliberate stripping would silently
+       discard offline-earned reviews. */
+    saveLogFull: (workoutId, entry) => serialLog(workoutId, fullLogToApi(entry, REVIEW_ENGINE_VERSIONS), body =>
+      fire(putWorkoutLog(getToken, workoutId, body), 'log+reviews ' + workoutId)),
+    removeLog: workoutId => serialLog(workoutId, null, () =>
+      fire(deleteWorkoutLog(getToken, workoutId), 'unlog ' + workoutId)),
     saveMove: (workoutId, date) => fire(putWorkoutMove(getToken, workoutId, { movedDate: date, reason: null }), 'move ' + workoutId),
     removeMove: workoutId => fire(deleteWorkoutMove(getToken, workoutId), 'unmove ' + workoutId),
     saveAdjustment: (workoutId, adj) => fire(putWorkoutAdjustment(getToken, workoutId, adj), 'adjust ' + workoutId),

@@ -236,7 +236,7 @@ export function App({ storage, getToken, user }) {
     if (!map) { setPlanSyncFailed(true); return; }
     setPlanSyncFailed(false);
     const cur = live.current;
-    sweepStale(cur.log, cur.refToId, map, (g, e) => sync.saveLog(g, e));
+    sweepStale(cur.log, cur.refToId, map, (g, e) => sync.saveLogFull(g, e)); // reviews ride the re-push
     // Moves: only this device's pending writes are swept — the moves cache is
     // never authoritative (see mergeMoves). Entries are { date, base }; a null
     // date routes to the delete endpoint. The same base-date guard mergeMoves
@@ -277,6 +277,19 @@ export function App({ storage, getToken, user }) {
     if (a.kind === 'boost') return T.boostWorkout(w, plan, a.factor || 1.1);
     return T.easeWorkout(w, plan);
   };
+  /* The ADJUSTED workout each overlay surface renders and reviews against —
+     memoised, and shared (gauntlet catch 2026-07-30, two defects at once):
+     inline easedOf(detail) minted a new object every App render, so the
+     sheet's review memo recomputed the whole engine per render for any
+     adjusted session; and the recap received the RAW plan workout while the
+     sheet received the eased one, so the two surfaces persisted
+     contradictory verdicts for the same adjusted session — the recap judged
+     an eased ride against the original harder card. One identity, both
+     surfaces, judged against what was actually asked. */
+  const detailShown = useMemo(() => (detail ? easedOf(detail) : null),
+    [detail, adjust, plan]); // eslint-disable-line react-hooks/exhaustive-deps
+  const recapShown = useMemo(() => (recap && recap.workout ? easedOf(recap.workout) : null),
+    [recap, adjust, plan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Workouts-to-watch: while enabled, keep the intervals.icu calendar equal to
   // the upcoming plan (moves and engine adjustments included). The pushed-hash
@@ -396,7 +409,7 @@ export function App({ storage, getToken, user }) {
         // the overlay would treat them as unsynced local logs and push them back.
         const localLog = {};
         Object.keys(log).forEach(k => { const e = log[k]; if (e && (e.done || e.feel || e.notes)) localLog[k] = e; });
-        setLog(mergeOverlay(result.log, localLog, ids, (g, e) => sync.saveLog(g, e)));
+        setLog(mergeOverlay(result.log, localLog, ids, (g, e) => sync.saveLogFull(g, e))); // reviews ride the re-push
         // Moves: server wins outright; only this device's pending writes are
         // applied and re-pushed. The old mergeOverlay path pushed ANY cached
         // local-only move back up, and because workout ids are reused across
@@ -510,7 +523,7 @@ export function App({ storage, getToken, user }) {
       // treadmill rejection is a property of the recording, not its laps.
       .then(rows => {
         if (cancelled) return;
-        const test = T.isIndoor(a) ? null : T.fivekFromTestIntervals(rows);
+        const test = T.isIndoor(a) || T.run5kInterrupted(a) || T.run5kDownhillAssisted(a) ? null : T.fivekFromTestIntervals(rows);
         setRunTest({ actId: a.id, date: tests[0].date, test, issue: test ? null : T.fivekTestIssues(rows, a) });
       })
       .catch(() => { if (!cancelled) setRunTest({ actId: a.id, date: tests[0].date, test: null, issue: 'The laps for that recording could not be loaded.' }); });
@@ -574,9 +587,9 @@ export function App({ storage, getToken, user }) {
   const startShortfall = useMemo(() => (plan && plan.profile && plan.race !== 'tracker'
     ? T.startVolumeShortfall(plan.profile) : null), [plan]);
   /* The phase 5 bike reviews, read off the log exactly as the swim evidence
-     above is. They arrive on the log entry from the backend and that column
-     is still an open ask, so this is empty today — but it is empty because
-     there is nothing stored, not because nothing asked. */
+     above is. Persisted since 2026-07-30 (review-persist.js writes them from
+     the sheet and the recap), so this fills as sessions are reviewed; empty
+     means nothing reviewed yet, not nothing asked. */
   const bikeReviews = useMemo(() => (plan && plan.weeks
     ? plan.weeks.flatMap(w => w.workouts)
       .filter(w => w.discipline === 'bike' && log[w.id] && log[w.id].bikeReview)
@@ -1097,6 +1110,33 @@ export function App({ storage, getToken, user }) {
     setLog(l => ({ ...l, [id]: entry }));
     if (gid(id)) sync.saveLog(gid(id), entry);
   };
+  /* Phase 1 (2026-07-30): persist a computed review. The sheet and the recap
+     REPORT what they computed; this decides whether it is worth a write.
+     reviewChanges skips nulls (a still-loading reps fetch must not clear a
+     stored review) and deep-diffs against the stored copy (reopening is
+     free). Entry-less ids — ad-hoc sessions, races — never persist: a review
+     rides a done log entry or not at all. The local merge means the
+     dashboards and retest evidence see the review THIS session, not only
+     after a rehydrate. */
+  const persistReview = (id, fields) => {
+    const entry = log[id];
+    const changes = T.reviewChanges(entry, fields);
+    if (!changes) return;
+    const merged = { ...entry, ...changes };
+    setLog(l => ({ ...l, [id]: merged }));
+    if (gid(id)) sync.saveReview(gid(id), merged, changes, T.REVIEW_ENGINE_VERSIONS);
+  };
+  /* The technique-cue answer. Same endpoint, bare enum rather than an
+     envelope; deselecting clears with an explicit null (the backend's
+     omitted-preserves semantics mean only a named null deletes). */
+  const answerCue = (id, cue) => {
+    const entry = log[id];
+    if (!entry) return;
+    const merged = { ...entry };
+    if (cue) merged.techniqueCue = cue; else delete merged.techniqueCue;
+    setLog(l => ({ ...l, [id]: merged }));
+    if (gid(id)) sync.saveReview(gid(id), merged, { techniqueCue: cue || null });
+  };
   const todaysHard = () => { const t = T.iso(new Date()); return plan.weeks.flatMap(wk => wk.workouts).filter(w => effDate(w, moves) === t && INTENSITY_TYPES[w.type] && !w.race); };
   const easeToday = () => {
     const hard = todaysHard(); if (!hard.length) return;
@@ -1478,11 +1518,15 @@ export function App({ storage, getToken, user }) {
         // open recap, and a null activity must degrade to nothing, not a
         // focusless invisible dialog. A matched/planned recap re-derives its
         // activity (surviving refetch); an ad-hoc one carries it explicitly.
-        const w = recap.workout;
-        const a = recap.activity || recordingFor(w);
+        const w = recapShown;
+        const a = recap.activity || recordingFor(recap.workout);
         return a ? <RecapSlides workout={w} activity={a} plan={plan} log={log} moves={moves}
           onLoadIntervals={sync.loadActivityIntervals} onLoadRoute={sync.loadActivityRoute} onClose={() => setRecap(null)}
-          onDetails={() => { setRecap(null); setDetail(w); }} /> : null;
+          onReview={persistReview}
+          /* detail must hold the RAW plan workout — the sheet applies the
+             adjustment overlay itself (detailShown), and handing it the
+             already-eased object would transform twice. */
+          onDetails={() => { setRecap(null); setDetail(recap.workout); }} /> : null;
       })()}
       {wurm && <WurmReveal onClose={() => setWurm(false)} />}
       {whatIf && <WhatIfSheet plan={plan} log={log} moves={moves} adjust={adjust} wellness={recs}
@@ -1503,7 +1547,7 @@ export function App({ storage, getToken, user }) {
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
       {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}
 
-      {detail && <DetailSheet w={easedOf(detail)} plan={plan} done={detail.adhoc || !!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel} positionLog={positionLog} onPosition={answerPosition} brick={brickRead}
+      {detail && <DetailSheet w={detailShown} plan={plan} done={detail.adhoc || !!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel} positionLog={positionLog} onPosition={answerPosition} brick={brickRead}
         /* An ad-hoc workout is synthesised from a recording and has no log
            entry, so log[id] cannot supply its activity. Its id encodes the
            recording ('adhoc-' + activity.id), which is the one link back. */
@@ -1511,6 +1555,8 @@ export function App({ storage, getToken, user }) {
           ? (displayActivities || []).find(x => 'adhoc-' + x.id === detail.id) || null
           : (log[detail.id] ? recordingFor(detail) : null)}
         feel={(log[detail.id] || {}).feel} onFeel={setFeel}
+        onCue={answerCue} cueAnswer={(log[detail.id] || {}).techniqueCue}
+        onReview={persistReview}
         onClose={() => setDetail(null)} onToggle={() => toggle(detail.id)}
         onMove={moveWorkout} onResetMove={id => moveWorkout(id, null)} onRestore={() => unEase(detail.id)}
         onLogResult={() => {

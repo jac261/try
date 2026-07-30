@@ -225,9 +225,13 @@ export function disconnectIntervalsIntegration(getToken) {
   return request('/api/integrations/intervals-icu', { getToken, method: 'DELETE' });
 }
 
-// Recent activities through the server-side passthrough (compact shape:
-// { id, date, type, name, movingTimeSec, distance, trainingLoad, rpe, feel }).
-// 404 → not connected, or a backend that predates the endpoint.
+// Recent activities through the server-side passthrough, body verbatim (no
+// mapper): id/date/startedAt/type/name/movingTimeSec/elapsedTimeSec/distance/
+// trainingLoad/rpe/feel plus power (averageWatts/normalizedWatts), swim
+// (poolLengthM/lengths/averageCadence/averageStride) and device
+// (deviceName/deviceSource) fields — the delivered set is pinned in
+// delivered-fields.test.js. 404 → not connected, or a backend that predates
+// the endpoint.
 export function getIntervalsActivities(getToken, days) {
   const query = days ? '?days=' + encodeURIComponent(days) : '';
   return request('/api/integrations/intervals-icu/activities' + query, { getToken });
@@ -285,16 +289,51 @@ const actualFromNote = note => {
   if (typeof note !== 'string' || !note.startsWith('cal:')) return undefined;
   try { const v = JSON.parse(note.slice(4)).actualMin; return v == null ? undefined : v; } catch (e) { return undefined; }
 };
+/* Review persistence (phase 1, 2026-07-30). The backend stores each review
+   as opaque jsonb; the CLIENT owns the shape, so the client versions it: on
+   the wire a review is an envelope { schemaVersion, createdAt, engineVersion,
+   review } and in client state it is the flat object every consumer already
+   spreads, with the envelope's metadata on a sibling <x>ReviewMeta field.
+   Unwrapping at this seam keeps all five existing readers byte-unchanged.
+   A stored object WITHOUT a review key is treated as a legacy flat review
+   (nothing shipped that shape, but jsonb cannot promise what is in it). */
+export const REVIEW_SCHEMA_VERSION = 1;
+export const reviewToApi = (review, engineVersion) => ({
+  schemaVersion: REVIEW_SCHEMA_VERSION,
+  createdAt: new Date().toISOString(),
+  engineVersion: engineVersion ?? undefined,
+  review,
+});
+const unwrapReview = stored => {
+  if (!stored || typeof stored !== 'object') return { review: undefined, meta: undefined };
+  if (!('review' in stored)) return { review: stored, meta: undefined };
+  return {
+    review: stored.review || undefined,
+    meta: {
+      schemaVersion: stored.schemaVersion ?? undefined,
+      createdAt: stored.createdAt ?? undefined,
+      engineVersion: stored.engineVersion ?? undefined,
+    },
+  };
+};
+const reviewFields = l => {
+  const out = {};
+  [['swimReview', 'swimReviewMeta'], ['bikeReview', 'bikeReviewMeta'], ['runReview', 'runReviewMeta']]
+    .forEach(([field, metaField]) => {
+      const { review, meta } = unwrapReview(l[field]);
+      out[field] = review;
+      out[metaField] = meta;
+    });
+  return out;
+};
 const toLogEntry = l => ({
   done: !!l.completed, at: l.completedAtUtc || null, feel: l.feel || undefined,
   notes: l.notes || undefined, actualMin: actualFromNote(l.notes),
-  // Phase 4 (defensive read, like poolLengthM): a typed swim-review field on
-  // the log DTO is a filed backend ask. Absent today, so this maps nothing;
-  // once Jack adds it, stored reviews hydrate and the multi-session evidence
-  // (swimReviewEvidence) starts speaking. Nothing is ever SENT until then.
-  swimReview: l.swimReview || undefined,
-  // Phase 5: the technique cue answer rides the same filed ask. Read-only
-  // today for the same reason.
+  // The three typed review columns, all live on the backend as of
+  // 2026-07-30 (runReview pending Jack's PR #24 merge; reading it early is
+  // harmless because absent maps to undefined). Envelope-unwrapped above.
+  ...reviewFields(l),
+  // The technique cue answer: a bare enum column, not an envelope.
   techniqueCue: l.techniqueCue || undefined,
 });
 // The server can return a log row for workouts that were never completed
@@ -370,7 +409,15 @@ export function toClientState(resp) {
   return { plan, log, moves, adjust, refToId, planId: resp.id != null ? resp.id : null };
 }
 
-// Our log entry { done, at, feel } → the API's log body.
+/* Our log entry { done, at, feel } → the API's log body.
+
+   MUST NEVER emit review keys. The backend's review fields are
+   Optional<T>: omitted means "preserve what is stored", an explicit null
+   means "clear it". logToApi runs on every feel tap and completion toggle,
+   so a defensive `swimReview: null` here would erase the athlete's stored
+   review history on their next tap. The base four (completed/completedAtUtc/
+   feel/notes) are NOT Optional — the server writes them on every PUT — so
+   any review write must carry them too (see reviewBodyToApi). */
 export function logToApi(entry) {
   return {
     completed: !!(entry && entry.done),
@@ -378,4 +425,38 @@ export function logToApi(entry) {
     feel: (entry && entry.feel) || null,
     notes: (entry && entry.notes) || null,
   };
+}
+
+/* A review (or cue) write: the base four from the CURRENT entry — because
+   the server overwrites them unconditionally, sending stale ones would
+   revert a feel tap — plus only the named review/cue fields. Reviews are
+   wrapped in the versioned envelope; techniqueCue passes through bare
+   (enum column). An explicit null clears (deselecting a cue). */
+export function reviewBodyToApi(entry, fields, engineVersions) {
+  return reviewBodyToApiInner(entry, fields, engineVersions);
+}
+
+/* The WHOLE entry, reviews and cue included — for the re-push paths only
+   (hydrate's local-only merge, adoptMap's sweep). Those push entries the
+   server has never seen, and pushing them through logToApi silently
+   stripped any offline-earned review and cue: the server row was then
+   created bare, and the next server-wins hydrate erased the local copy too
+   (gauntlet catch 2026-07-30). Fields absent on the entry stay omitted —
+   never an explicit null — so a re-push can only add, never clear. */
+export function fullLogToApi(entry, engineVersions) {
+  const fields = {};
+  ['swimReview', 'bikeReview', 'runReview'].forEach(f => { if (entry && entry[f]) fields[f] = entry[f]; });
+  if (entry && entry.techniqueCue) fields.techniqueCue = entry.techniqueCue;
+  return reviewBodyToApiInner(entry, fields, engineVersions);
+}
+
+function reviewBodyToApiInner(entry, fields, engineVersions) {
+  const body = logToApi(entry);
+  ['swimReview', 'bikeReview', 'runReview'].forEach(f => {
+    if (!(f in fields)) return;                       // omitted = preserved
+    body[f] = fields[f] == null ? null
+      : reviewToApi(fields[f], engineVersions && engineVersions[f]);
+  });
+  if ('techniqueCue' in fields) body.techniqueCue = fields.techniqueCue ?? null;
+  return body;
 }

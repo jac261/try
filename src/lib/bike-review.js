@@ -24,19 +24,30 @@ import { OUTDOOR_REP_TOLERANCE, REP_TOLERANCE } from './review.js';
 import { isIndoor } from './autolog.js';
 import { bikeLoad } from './bike-load.js';
 
-/* §4 asks that PAUSES AND COASTING be compared, and nothing here does.
+/* §4's pauses-and-coasting read, live since elapsedTimeSec arrived
+ * (2026-07-30). EXPLANATION ONLY this phase: the verdict thresholds and the
+ * outdoor rep tolerance are unchanged — the handoff promised activation
+ * would not move judgments, so the stopped time is measured, stored on the
+ * review, and spoken where it explains a lenient read, and that is all.
+ * Distinguishing per-rep coasting still needs a power stream.
  *
- * Stated rather than left as an absence, because an unmentioned omission
- * reads as done. It needs elapsed time or a power stream, and the activity
- * feed carries neither: a seventy-five minute ride and a ride with the same
- * seventy-five minutes of moving time spread over a hundred and fifty are
- * identical to this module. Both fields are named asks in the backend
- * handoff. Until one arrives, the outdoor tolerance in the rep judging is the
- * blunt stand-in — it forgives the road without being able to see it.
- *
- * The four load fields (§6) are gated the same way and for the same kind of
- * reason, in bike-load.js. */
-export const PAUSES_AND_COASTING = 'blocked: needs elapsedTimeSec or a power stream';
+ * Null means UNKNOWN (a backend that predates the field), never zero:
+ * missing elapsed time is not an uninterrupted ride. */
+export const INTERRUPTION_RULES = {
+  // below this the stopped time is junctions, and every outdoor ride has
+  // junctions — saying it aloud would be noise on every review
+  minSpokenSec: 120,
+};
+export function rideInterruption(activity) {
+  if (!activity || activity.movingTimeSec == null || activity.elapsedTimeSec == null) return null;
+  const stoppedSec = Math.round(activity.elapsedTimeSec - activity.movingTimeSec);
+  if (!(stoppedSec >= 0)) return null;      // a provider glitch is not a measurement
+  return {
+    stoppedSec,
+    stoppedFrac: activity.elapsedTimeSec > 0
+      ? Math.round(stoppedSec / activity.elapsedTimeSec * 1000) / 1000 : null,
+  };
+}
 
 export const BIKE_REVIEW_RULES = {
   repDurTol: 0.2,        // a lap within 20% of the planned rep length pairs with it
@@ -207,6 +218,7 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
      something the module cannot see. The allowance still applies (it errs
      towards not accusing), but nothing claims to know where it happened. */
   const environment = isIndoor(activity) ? 'indoor' : (activity.type ? 'outdoor' : 'unknown');
+  const interruption = rideInterruption(activity);
   const indoor = environment === 'indoor';
   const m = matchBikeIntervals({ workout, intervals });
 
@@ -316,8 +328,15 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
     && completion >= BIKE_REVIEW_RULES.completionFull
     && (type === 'Endurance' || type === 'Long')) confidence = 'high';
 
-  // §6: null on every ride until normalized power arrives, by bikeLoad's gate
-  const load = bikeLoad({ activity, profile: { ftp: pc.ftp, ftpMeta: pc.ftpMeta } });
+  /* §6: IF/TSS/VI, now live — normalizedWatts arrives since 2026-07-30.
+     Gated on realFtp, NOT on a reconstructed profile: paces carries no
+     ftpMeta and pc.ftp may be a level-table estimate, and bikePowerAnchor
+     treats any truthy ftp as real — so passing pc.ftp through unconditionally
+     computed intensity factors from a guess (live defect, phase 1 audit).
+     An estimated threshold makes every derived number an estimate wearing a
+     measured name; realFtp is the same distinction the rest of this
+     function already judges with. */
+  const load = bikeLoad({ activity, profile: realFtp ? { ftp: pc.ftp } : {} });
   const outcome = decideOutcome({
     type, confidence, completion, timeInTarget, powerAdherence,
     intervalFadePercent, control, feel, realFtp, variability, recoveryCompliance, workCompletion,
@@ -337,6 +356,7 @@ export function bikeReview({ workout, activity, intervals, paces, feel }) {
     powerTss: load ? load.powerTss : null,
     variabilityIndex: load ? load.variabilityIndex : null,
     intervalFadePercent,
+    stoppedSec: interruption ? interruption.stoppedSec : null,
     variability, control, indoor, environment, recoveryCompliance, workCompletion,
     efforts: efforts.length, plannedEfforts: m ? m.planned.length : 0,
     confidence, outcome, type, decline,
@@ -478,7 +498,10 @@ function reviewText(r, { m, realFtp }) {
   // §7 phrasing: only claim the outdoor allowance where we KNOW it was
   // outdoors. An unknown environment gets the allowance and no claim.
   if (r.environment === 'outdoor' && r.timeInTarget != null && r.timeInTarget < 100) {
-    bits.push('Judged with the outdoor allowance, since junctions and descents sit inside a recorded average.');
+    bits.push(r.stoppedSec != null && r.stoppedSec >= INTERRUPTION_RULES.minSpokenSec
+      ? 'You were stopped for about ' + Math.round(r.stoppedSec / 60)
+        + ' minutes of this ride; those pauses sit inside the recorded averages, so shortfalls are read leniently.'
+      : 'Judged with the outdoor allowance, since junctions and descents sit inside a recorded average.');
   }
   if (r.confidence === 'medium') {
     bits.push(m && m.splits

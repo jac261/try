@@ -206,11 +206,11 @@ const REP_BANDS = {
  * IT IS DELIBERATELY ONE-SIDED. Interruptions can only ever remove work from
  * an average, never add it, so the low side widens and the high side does
  * not: a rider who went too hard outdoors went too hard, and the road is no
- * defence. Anything more than this needs data the app does not have — the
- * activity feed carries movingTimeSec and averages, with no elapsed time and
- * no streams, so a stop cannot be distinguished from a bad day. That is
- * recorded as a backend ask rather than guessed at, because a wrong reason
- * attached to a real verdict is worse than no reason. */
+ * defence. elapsedTimeSec arrives since 2026-07-30 and bike-review's
+ * rideInterruption now measures the stopped time — but it EXPLAINS the
+ * lenient read rather than moving these thresholds, because per-rep
+ * coasting still needs a power stream and a wrong reason attached to a
+ * real verdict is worse than no reason. */
 export const REP_TOLERANCE = 0.03;
 export const OUTDOOR_REP_TOLERANCE = 0.08;
 

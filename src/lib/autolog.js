@@ -31,9 +31,11 @@ export const DISCIPLINE = {
 
 // A brick session's recording pair: same date, exactly ONE unclaimed ride and
 // ONE unclaimed run (two of either is ambiguous — never guess), combined
-// moving time inside the usual window of the planned duration. The feed
-// carries no start times, so ride-then-run order cannot be verified; the
-// one-of-each rule keeps this honest.
+// moving time inside the usual window of the planned duration. Since
+// 2026-07-30 the feed carries startedAt, so where BOTH recordings have one,
+// ride-before-run is verified — a morning run and an evening ride is not a
+// brick, however neatly the durations sum. Recordings without timestamps
+// keep the date-only behaviour, byte-identically.
 export function brickPairFor({ workout, activities, moves, used }) {
   if (!workout || workout.discipline !== 'brick' || !Array.isArray(activities)) return null;
   const planned = workout.durationMin || 0;
@@ -43,6 +45,17 @@ export function brickPairFor({ workout, activities, moves, used }) {
     && DISCIPLINE[a.type] === disc && a.date === date && a.movingTimeSec != null);
   const rides = on('bike'), runs = on('run');
   if (rides.length !== 1 || runs.length !== 1) return null;
+  /* Ordering is only enforced when BOTH timestamps came off a device. A
+     manually logged half (intervals.icu hand entry) carries a defaulted or
+     carelessly picked start time — commonly the start of the day — and
+     trusting it un-matched genuine bricks whose run half was hand-logged
+     (gauntlet catch 2026-07-30). deviceName is the delivered marker of a
+     real recording; without it on both sides, pairing stays date-only. */
+  if (rides[0].startedAt && runs[0].startedAt && rides[0].deviceName && runs[0].deviceName) {
+    const rideStart = Date.parse(rides[0].startedAt);
+    const runStart = Date.parse(runs[0].startedAt);
+    if (Number.isFinite(rideStart) && Number.isFinite(runStart) && runStart < rideStart) return null;
+  }
   const min = (rides[0].movingTimeSec + runs[0].movingTimeSec) / 60;
   if (min < planned * MATCH_WINDOW.lo || min > planned * MATCH_WINDOW.hi) return null;
   return { ride: rides[0], run: runs[0] };

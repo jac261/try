@@ -692,13 +692,17 @@ subset is safe and shipping none breaks nothing.
 | 6 | `weeklyHours`, `longestSwimM`, `longestRideMin`, `longestRunMin` | athlete profile | Start anchors surviving a fresh-device recovery; without them a reinstalled athlete silently reverts to race-sized first weeks |
 | 7 | `totalElevationGain`, `totalElevationLoss` (metres) | activity | Rejecting a downhill-assisted 5 km before it becomes the benchmark race projections extrapolate from |
 
-**STATUS, 30 July 2026: asks 1-7 are all LANDED on `try-backend` main.** Jack
-shipped them directly rather than through PRs — `startedAt`, `elapsedTimeSec`,
-`normalizedWatts`, `totalElevationGain`/`Loss`, the four start-anchor profile
-columns, the `swimReview` and `bikeReview` log columns, the power-curve
-endpoint, and the swim stroke fields on both activities and intervals. The
-table above is kept as the record of what was asked and why; nothing in it is
-outstanding.
+**STATUS, 30 July 2026: asks 1-6 are LANDED on `try-backend` main; ask 7 is
+NOT.** Jack shipped them directly rather than through PRs — `startedAt`,
+`elapsedTimeSec`, `normalizedWatts`, the four start-anchor profile columns,
+the `swimReview` and `bikeReview` log columns, the power-curve endpoint, and
+the swim stroke fields on both activities and intervals.
+
+**Correction (30 July, verified against `origin/main`):** an earlier version
+of this section counted ask 7 as landed. The activity DTO carries NO
+elevation fields; `total_elevation_gain` landed on the INTERVAL DTO only, and
+gain alone cannot tell a point-to-point descent from rolling terrain — the
+downhill guard needs LOSS. Ask 7 is re-filed below.
 
 The client had a gap of its own: the power-curve endpoint existed with no
 caller at all (`powerCurveRaw` was a hardcoded `useState(null)`), so the rider
@@ -740,15 +744,13 @@ kinds of effort we currently cannot detect:
 |---|---|---|
 | A partial 5 km | nothing | done — the lap must be a real 5 km, never scaled up from short |
 | A treadmill result | nothing | done — `VirtualRun` is rejected outright |
-| A heavily interrupted effort | ask 3 (`elapsedTimeSec`) | not possible today |
-| A downhill-assisted effort | ask 7 (elevation) | not possible today |
+| A heavily interrupted effort | ask 3 (`elapsedTimeSec`) | **done (30 July)** — `run5kInterrupted` rejects it and the issues copy explains it |
+| A downhill-assisted effort | ask 7 (elevation) | **written and tested, dormant** — `run5kDownhillAssisted` fires only when gain AND loss are both present, which today is never |
 
-Until 3 and 7 land, a point-to-point downhill 5 km or a run with three long
-stops at traffic lights can set the benchmark that every race projection is
-extrapolated from. The anchor is athlete-controlled, so nothing is applied
-without a tap, but the proposal we show them is more confident than the
-evidence deserves. Neither field is urgent on its own; both are cheap if you
-are already touching the activity DTO.
+Until ask 7 lands, a point-to-point downhill 5 km can still set the benchmark
+that every race projection is extrapolated from. The anchor is
+athlete-controlled, so nothing is applied without a tap, but the proposal we
+show them is more confident than the evidence deserves.
 
 
 ---
@@ -810,3 +812,37 @@ The client seam already exists (`SPIDER_SOURCES.population` in spider.js);
 until the endpoint lands the charts deliberately claim level positions, never
 percentiles, because a percentage against an invented population is a
 fabricated statistic with an axis label.
+
+---
+
+## 30 July 2026, evening: Phase 1 closed client-side — what the client now does with what you shipped
+
+The shared-backend-handoff phase activated the delivered contract. For your
+awareness (none of this needs backend work):
+
+- **Reviews persist.** The client writes `swimReview`/`bikeReview` (and
+  `runReview`, ready for #24) to the log endpoint from both review surfaces,
+  wrapped in a client-owned versioned envelope `{ schemaVersion, createdAt,
+  engineVersion, review }`. The jsonb stays opaque to you — the envelope is
+  the client's own concern, noted here only so a future inspection of stored
+  blobs is not a surprise. Writes ride the full base four (your service
+  rewrites `completed`/`completedAtUtc`/`feel`/`notes` on every PUT, so the
+  client always sends fresh ones) and name only the review fields they mean
+  to change, leaning on your `Optional<T>` omit-preserves semantics.
+- **`techniqueCue` is live** end to end (your enum, unchanged).
+- **`startedAt` and `elapsedTimeSec` have real consumers**: brick pairs are
+  ordered ride-before-run, transition duration is derived inside a
+  plausibility window, heavily interrupted 5 km tests are refused with an
+  explanation, and bike reviews measure stopped time (explanation only).
+- **The widened typed profile round-trips**: a fresh device now recovers
+  pool, technique, cssMeta, massGoal and the four start anchors. Verified
+  client-side against your partial-merge PUT.
+
+### New asks (30 July, evening)
+
+| Ask | Where | Why |
+|---|---|---|
+| `ftpMeta`, `fivekMeta` | typed athlete profile | Same `{source, measuredAt, confidence}` envelope as the `cssMeta` you shipped. Today they are blob-only, so a fresh device loses FTP and 5 km provenance: the anchors degrade to "manual" and the review engines lose the real-vs-estimated distinction they gate on. |
+| `totalElevationGain` + `totalElevationLoss` | activity DTO (the re-filed ask 7) | The downhill-assist 5 km guard is written, tested and dormant. It needs BOTH fields — the interval-level gain you shipped cannot see a point-to-point descent. Activity-level pair preferred; metres. |
+| `quality` population | power-curve endpoint | Every point serves `quality: null` today. The client deliberately reads null as usable (defaulting low would kill the rider profile), so until real values arrive, only an explicit `low` can ever protect an athlete from a bad point. Whatever heuristic you have — spike detection, sensor dropout — is more than the client can know. |
+| #24 merge | `runReview` + `runmaintenance` | The client's read AND write paths are already live; a runReview PUT 400s harmlessly until the column exists. Nothing else is waiting on it. |
