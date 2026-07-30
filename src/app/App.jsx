@@ -7,7 +7,7 @@ import { INTENSITY_TYPES, paceSuggestions, tuneFields } from '@/lib/tuning.js';
 import { downloadICS } from '@/lib/ics.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
-import { Splash, splashShownForMs } from '@/components/Splash.jsx';
+import { Splash, splashShownForMs, PLAN_WORK_MESSAGES } from '@/components/Splash.jsx';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
 import { WhatIfSheet } from '@/features/wellness/WhatIfSheet.jsx';
 import { RecapSlides } from '@/features/recap/RecapSlides.jsx';
@@ -17,7 +17,6 @@ import { CssRetestSheet } from '@/components/CssRetestSheet.jsx';
 import { FtpProposalSheet } from '@/components/FtpProposalSheet.jsx';
 import { TechniqueEditor } from '@/features/settings/TechniqueEditor.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
-import { BuildingPlan } from '@/features/onboarding/BuildingPlan.jsx';
 import { FitnessEditor } from '@/features/settings/FitnessEditor.jsx';
 import { PlanSettingsEditor } from '@/features/settings/PlanSettingsEditor.jsx';
 import { SettingsView } from '@/features/settings/SettingsView.jsx';
@@ -82,7 +81,17 @@ export function App({ storage, getToken, user }) {
   const [editFitness, setEditFitness] = useState(false);
   const [editTechnique, setEditTechnique] = useState(false);
   const [editPlan, setEditPlan] = useState(false);
-  const [building, setBuilding] = useState(false);
+  // Plan-work theatre (Jon, 2026-07-30): whenever the plan is generated,
+  // changed or updated, the brand splash takes over and cycles one-liners.
+  // The value is the hold in ms (0 = none); the change itself is synchronous
+  // and instant, the splash is feedback that something was rebuilt. Wired at
+  // the athlete-initiated mutation sites only, never on hydration or sync.
+  const [planWork, setPlanWork] = useState(0);
+  useEffect(() => {
+    if (!planWork) return undefined;
+    const t = setTimeout(() => setPlanWork(0), planWork);
+    return () => clearTimeout(t);
+  }, [planWork]);
   const [wurm, setWurm] = useState(false);
   const [wellness, setWellness] = useState(() => storage.loadWellness());
   const [editWellness, setEditWellness] = useState(false);
@@ -580,6 +589,7 @@ export function App({ storage, getToken, user }) {
   // fitness-history snapshot, no overlay touched (design panel 2026-07-21:
   // reshape and retarget both do far too much for a label change).
   const setBlockFocus = focus => {
+    setPlanWork(2600);
     const np = { ...plan, profile: { ...plan.profile, blockFocus: focus || null }, updatedAt: new Date().toISOString() };
     setPlan(np);
     setFocusLog(storage.saveFocusChange({ at: new Date().toISOString(), from: plan.profile.blockFocus || null, to: focus || null, planCreatedAt: plan.createdAt || null }));
@@ -802,8 +812,8 @@ export function App({ storage, getToken, user }) {
   // Splash while hydrating: the same shared screen the auth gate shows while
   // the session loads, so startup is ONE screen. Held for at least one pulse.
   if (!hydrated || splashHeld) return <Splash />;
-  if (!plan) return <Onboarding onCreate={p => { const w = [...recs].reverse().find(r => r.weightKg); const np = T.generatePlan(w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p); setPlan(np); setView('today'); setBuilding(true); saveProfileBoth(np.profile); sync.savePlan(np).then(adoptRes(np.createdAt)); }} />;
-  if (building) return <BuildingPlan plan={plan} onDone={() => setBuilding(false)} />;
+  if (!plan) return <Onboarding onCreate={p => { const w = [...recs].reverse().find(r => r.weightKg); const np = T.generatePlan(w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p); setPlan(np); setView('today'); setPlanWork(3800); saveProfileBoth(np.profile); sync.savePlan(np).then(adoptRes(np.createdAt)); }} />;
+  if (planWork) return <Splash messages={PLAN_WORK_MESSAGES} />;
 
   // Resolve our client ref → server workout GUID for the log/move endpoints; skip
   // the push (local-only) if the plan hasn't synced a GUID for it yet.
@@ -999,6 +1009,7 @@ export function App({ storage, getToken, user }) {
     return w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p;
   };
   const retarget = fields => {
+    setPlanWork(2600);
     const old = plan.profile;
     // The snapshot keeps the superseded values AND their provenance, so the
     // threshold history can say where each past number came from rather
@@ -1033,6 +1044,7 @@ export function App({ storage, getToken, user }) {
       fields = { ...fields, massGoalSetAt: T.iso(new Date()) };
     }
     if (plan.race === 'tracker') {
+      setPlanWork(2600);
       const np = T.applyTrackerFitness(plan, fields, new Date().toISOString());
       np.profile = withWeight(np.profile);
       setPlan(np);
@@ -1052,6 +1064,7 @@ export function App({ storage, getToken, user }) {
   // the record of what the athlete actually did, and re-dealing it would
   // change the card they swam from.
   const saveTechnique = fields => {
+    setPlanWork(2600);
     const profile = Object.assign({}, plan.profile, fields);
     if (plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) {
       const np = Object.assign({}, plan, { profile: profile });
@@ -1229,6 +1242,7 @@ export function App({ storage, getToken, user }) {
     ? T.ftpRetestRecommendation({ plan, activities, thresholds, log, moves, todayISO: T.iso(new Date()) , powerCurve: T.powerCurve(powerCurveRaw), reviews: bikeReviews })
     : null;
   const addCssTestToWeek = () => {
+    setPlanWork(2600);
     const r = T.addCssTest(plan, T.iso(new Date()));
     setPlan(r.plan);
     sync.replacePlan(r.plan).then(adoptRes(r.plan.createdAt));
@@ -1289,6 +1303,7 @@ export function App({ storage, getToken, user }) {
   // engine adjustments — annotations on the OLD structure — clear wholesale
   // (fitness/history carry over on the profile).
   const reshapePlan = fields => {
+    setPlanWork(2600);
     const fromTracker = plan.race === 'tracker';
     const profile = withWeight(Object.assign({}, plan.profile, fields));
     const np = T.generatePlan(profile);
@@ -1335,10 +1350,11 @@ export function App({ storage, getToken, user }) {
     (fromTracker ? sync.savePlan(np) : sync.replacePlan(np)).then(adoptRes(np.createdAt));
     saveProfileBoth(np.profile);
   };
-  const endPlanToTracker = () => { if (confirm('End your plan and just track? Your fitness history is kept.')) enterTracker(); };
+  const endPlanToTracker = () => { if (confirm('End your plan and just track? Your fitness history is kept.')) { setPlanWork(2600); enterTracker(); } };
   // User-added sessions: first-class plan workouts (flagged custom), persisted
   // through the same plan replace as retargets — server preserves logs by ref.
   const addWorkout = spec => {
+    setPlanWork(2600);
     const r = T.addCustomWorkout(plan, Object.assign({ dateISO: T.iso(new Date()) }, spec));
     setPlan(r.plan);
     setAddOpen(null);
@@ -1347,6 +1363,7 @@ export function App({ storage, getToken, user }) {
     sync.replacePlan(r.plan).then(adoptRes(r.plan.createdAt));
   };
   const removeWorkout = id => {
+    setPlanWork(2600);
     const np = T.removeCustomWorkout(plan, id);
     setPlan(np);
     setDetail(null);
