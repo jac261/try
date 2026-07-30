@@ -17,14 +17,20 @@ const DISC = T.DISCIPLINE; // activity type → discipline (autolog's map)
 // rather than presenting a fabricated one. The map lives in autolog beside
 // DISCIPLINE so review.js judges the same recordings the same way.
 const INDOOR = T.INDOOR_TYPES;
-function statBits(a, disc) {
+/* `pool` is threaded in from the component rather than read from a `plan` in
+   scope: this function is module-level and never had one. Referencing it here
+   was a live ReferenceError ("plan is not defined") that took out the whole
+   calendar day view for any athlete with a recorded OUTDOOR swim carrying a
+   distance — the only branch that touched it (shipped in the pool-profile
+   phase, found 2026-07-30 from a production error report). */
+function statBits(a, disc, pool) {
   const bits = [];
   const indoor = !!INDOOR[a.type];
   if (a.movingTimeSec) bits.push(T.fmtDuration(Math.round(a.movingTimeSec / 60)));
   if (a.distance) bits.push((a.distance / 1000).toFixed(a.distance >= 10000 ? 0 : 1) + ' km');
   if (a.movingTimeSec && a.distance && !indoor) {
     if (disc === 'run') bits.push(T.fmtPace(a.movingTimeSec / (a.distance / 1000)) + ' /km');
-    if (disc === 'swim') bits.push(T.swimPaceLabel(a.movingTimeSec / (a.distance / 100), T.poolFor(plan && plan.profile)));
+    if (disc === 'swim') bits.push(T.swimPaceLabel(a.movingTimeSec / (a.distance / 100), pool));
     if (disc === 'bike') bits.push((a.distance / 1000 / (a.movingTimeSec / 3600)).toFixed(1) + ' km/h');
   }
   if (a.averageWatts) bits.push(Math.round(a.averageWatts) + ' W avg');
@@ -57,6 +63,10 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
   // and the disciplines table from crashing the row render.
   const day = (activities || []).filter(a => a && a.date === date && DISC[a.type] && T.DISCIPLINES[DISC[a.type]] && a.movingTimeSec);
   if (!day.length) return null;
+  // The athlete's pool, resolved ONCE here where `plan` actually is in scope,
+  // and passed down. poolFor tolerates a missing profile and returns the
+  // default, so a tracker or a half-hydrated plan still renders a pace.
+  const pool = T.poolFor(plan && plan.profile);
   const sessions = plan && Array.isArray(plan.weeks)
     ? plan.weeks.flatMap(w => w.workouts).filter(w => effDate(w, moves) === date) : [];
 
@@ -95,7 +105,7 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
     // two same-discipline recordings on one day can both fall in one session's
     // window, and re-deriving from the workout alone would resolve to the
     // recording closest to the planned duration, not the one actually tapped.
-    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc), manual: !!a.manual,
+    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc, pool), manual: !!a.manual,
       indoor: !!INDOOR[a.type],
       tag: a.manual ? 'Logged' : owner ? 'Matched' : null,
       open: owner ? { workout: owner, activity: a } : { activity: a } });
