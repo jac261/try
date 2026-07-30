@@ -332,6 +332,34 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           <div className="weekbar" style={{ height: 9 }}><span style={{ width: (twSess.length ? twDone / twSess.length * 100 : 0) + '%', background: 'var(--accent)' }} /></div>
         </div>
 
+      {/* Phase 2 §8, SHADOW MODE: which discipline comes first, across all
+          three — one card, ordered rules, a stated reason, and suppressed
+          candidates listed with theirs. It reads the same dashboard
+          builders the cards below render and actuates NOTHING. */}
+      {(() => {
+        if (tracker) return null;
+        const candidates = T.limiterCandidates({
+          plan, log, moves, activities, todayISO, retest, ftpRetest,
+          durabilityReads: durability, fuelLog, positionLog,
+        });
+        const arb = T.arbitrateLimiters(candidates);
+        if (!arb || candidates.length < 2) return null;   // one discipline needs no arbitration
+        return <>
+          <div className="section-title">Across your disciplines</div>
+          <div className="card">
+            <div className="testnote"><span><b>{arb.winner.label}</b> {arb.reason}</span></div>
+            {arb.suppressed.filter(sup => !arb.allClear).map(sup => (
+              <div className="d" key={sup.id} style={{ marginTop: 6 }}>
+                {sup.label} — {sup.reason}.
+              </div>
+            ))}
+            <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
+              This chooses what to look at first. It changes nothing in your plan.
+            </div>
+          </div>
+        </>;
+      })()}
+
         {/* Phase 7: the swim dashboard, for plans that actually swim. It sits
           after the general progress views because it answers a narrower
           question than they do. */}

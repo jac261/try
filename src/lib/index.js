@@ -27,6 +27,7 @@ export * from './coaching/evidence.js';
 export * from './coaching/decision.js';
 export * from './coaching/proposal.js';
 export * from './coaching/journal.js';
+export * from './coaching/limiter-arbitration.js';
 export * from './run-fuelling.js';
 export * from './run-readiness.js';
 export * from './run-dashboard.js';

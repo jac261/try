@@ -125,6 +125,16 @@ export function durability({ plan, longs, fuelLogs, todayISO }) {
  * its evidence, because a recommendation an athlete cannot audit is an
  * instruction, not coaching.
  */
+/* The stored per-session run reviews, newest first — ONE derivation, used
+   by the dashboard component and by the cross-discipline arbitration, so
+   the two can never disagree about what the evidence is. */
+export function runStoredReviews(plan, log, moves) {
+  return (plan.weeks || []).flatMap(w => w.workouts || [])
+    .filter(w => w.discipline === 'run' && log[w.id] && log[w.id].runReview)
+    .map(w => ({ ...log[w.id].runReview, date: (log[w.id].at || '').slice(0, 10) || (moves && moves[w.id]) || w.date }))
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
 export function nextAction({ profile, reviews, plan, longs, volume, signals, fuelLogs, raceKey }) {
   const readiness = runReadiness({ profile, reviews, longs, volume, signals, fuelLogs, raceKey });
   const gaps = runReadinessGaps(readiness);
