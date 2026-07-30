@@ -10,25 +10,26 @@ import { swimPaceLabel } from './swim-units.js';
 import { DEFAULT_POOL } from './domain.js';
 import { effDate } from './schedule.js';
 import { reviewActivity, intervalRows } from './review.js';
-import { bikeReview } from './bike-review.js';
-import { swimReview } from './swim-review.js';
 
 const fmtMin = sec => {
   const m = Math.round(sec / 60);
   return m >= 60 ? Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm' : m + ' min';
 };
 
-export function buildRecap({ workout, activity, intervals, route, paces, plan, log, moves, todayISO }) {
+export function buildRecap({ workout, activity, intervals, route, paces, plan, log, moves, todayISO, reviews }) {
   if (!workout || !activity || !activity.movingTimeSec) return null;
-  // Phase 4: the deck reads the same per-rep review the workout sheet does,
-  // so a recap cannot headline an in-band average minutes before the sheet
-  // says ease the next one (review catch 2026-07-27).
-  const sr = workout.discipline === 'swim' && !workout.adhoc && intervals
-    ? swimReview({ workout, activity, intervals, paces, feel: (log && log[workout.id] && log[workout.id].feel) || activity.feel }) : null;
-  // Phase 5: the bike's engine, on the same terms as the swim's above.
-  const br = workout.discipline === 'bike' && !workout.adhoc
-    ? bikeReview({ workout, activity, intervals, paces, feel: (log && log[workout.id] && log[workout.id].feel) || activity.feel }) : null;
-  const rv = reviewActivity({ workout, activity, paces, swimReview: sr, bikeReview: br }) || { stats: [], verdicts: [] };
+  /* Phase 2 §6: the deck no longer computes its own reviews. It takes the
+     SAME computeReviews output the persistence path reports (RecapSlides'
+     memo), so what the athlete is shown and what is stored are literally
+     one computation — the phase 1 gauntlet found them diverging on the feel
+     input, and this run review was missing entirely, so a run recap could
+     headline a whole-session verdict the sheet's per-rep read contradicted.
+     The old activity.feel fallback is gone with it: the persisted record
+     takes the athlete's own tap or nothing, and the display now agrees. */
+  const rvs = reviews || {};
+  const rv = reviewActivity({ workout, activity, paces,
+    swimReview: rvs.swimReview || null, bikeReview: rvs.bikeReview || null, runReview: rvs.runReview || null })
+    || { stats: [], verdicts: [] };
   const it = intervalRows({ workout, intervals, paces, activity });
   const slides = [];
 

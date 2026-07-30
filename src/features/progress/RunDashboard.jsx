@@ -38,10 +38,7 @@ export function RunDashboard({ plan, log, moves, activities, todayISO, fuelLog }
      it exists — dormant until then, exactly like the swim's harvest. The
      live review still renders on every recorded run via the workout sheet;
      this feed is what lets several of them argue together. */
-  const reviews = (plan.weeks || []).flatMap(w => w.workouts || [])
-    .filter(w => w.discipline === 'run' && log[w.id] && log[w.id].runReview)
-    .map(w => ({ ...log[w.id].runReview, date: (log[w.id].at || '').slice(0, 10) || (moves && moves[w.id]) || w.date }))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  const reviews = T.runStoredReviews(plan, log, moves);
   const runFuelLogs = Object.values(fuelLog || {}).filter(f => f && f.discipline === 'run');
 
   const d = T.runDashboard({ profile, plan, activities, log, reviews, fuelLogs: runFuelLogs, todayISO, raceKey });

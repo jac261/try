@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import * as T from '@/lib';
 import { PowerCurveCard } from '@/components/PowerCurveCard.jsx';
+import { DecisionHistory } from '@/components/coaching/DecisionHistory.jsx';
 import { Icon } from '@/components/Icon.jsx';
 import { BarChart, Donut, Sparkline, TrendChart } from '@/components/charts.jsx';
 import { fitnessSeries } from '@/features/progress/fitnessSeries.js';
@@ -11,9 +13,24 @@ import { BikeDashboard } from '@/features/progress/BikeDashboard.jsx';
 import { RunDashboard } from '@/features/progress/RunDashboard.jsx';
 const D = T.DISCIPLINES;
 
-export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog }) {
+export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog, decisionLog }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
+  /* The shadow arbitration, memoised: limiterCandidates runs the three
+     dashboard builders, and the child dashboards below run them again —
+     without the memo the whole set recomputed on every Progress render
+     (measured negligible today, but a known double-compute is a memo away
+     from not being one). */
+  const arbShadow = useMemo(() => {
+    if (!plan || plan.race === 'tracker') return { hide: true };
+    const candidates = T.limiterCandidates({
+      plan, log, moves, activities, todayISO, retest, ftpRetest,
+      durabilityReads: durability, fuelLog, positionLog,
+    });
+    const arb = T.arbitrateLimiters(candidates);
+    // one discipline needs no arbitration
+    return { hide: !arb || candidates.length < 2, arb };
+  }, [plan, log, moves, activities, todayISO, retest, ftpRetest, durability, fuelLog, positionLog]);
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
   const done = all.filter(w => log[w.id]);
   const daysToRace = Math.max(0, T.daysBetween(new Date(), plan.profile.raceDate));
@@ -280,6 +297,11 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
         </>;
       })()}
 
+      {/* Phase 2 §9: what Try offered and what you did about it. Folded by
+          default; rejections and supersessions stay visible, because a
+          coaching relationship you cannot audit is not one. */}
+      <DecisionHistory log={decisionLog} planCreatedAt={plan.createdAt || null} />
+
       {(() => {
         // Body mass: shown only when a weigh-in exists or a goal was set.
         // Without a goal this card is a number and a line, and it never
@@ -325,6 +347,30 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
             <div className="spacer" /><div style={{ fontSize: 26, fontWeight: 750 }}>{twSess.length ? Math.round(twDone / twSess.length * 100) : 0}%</div></div>
           <div className="weekbar" style={{ height: 9 }}><span style={{ width: (twSess.length ? twDone / twSess.length * 100 : 0) + '%', background: 'var(--accent)' }} /></div>
         </div>
+
+      {/* Phase 2 §8, SHADOW MODE: which discipline comes first, across all
+          three — one card, ordered rules, a stated reason, and suppressed
+          candidates listed with theirs. It reads the same dashboard
+          builders the cards below render and actuates NOTHING. */}
+      {(() => {
+        // (the !tracker fragment above already gates this; no second guard)
+        if (arbShadow.hide) return null;
+        const arb = arbShadow.arb;
+        return <>
+          <div className="section-title">Across your disciplines</div>
+          <div className="card">
+            <div className="testnote"><span><b>{arb.winner.label}</b> {arb.reason}</span></div>
+            {arb.suppressed.map(sup => (
+              <div className="d" key={sup.id} style={{ marginTop: 6 }}>
+                {sup.label} · {sup.reason}.
+              </div>
+            ))}
+            <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
+              This chooses what to look at first. It changes nothing in your plan.
+            </div>
+          </div>
+        </>;
+      })()}
 
         {/* Phase 7: the swim dashboard, for plans that actually swim. It sits
           after the general progress views because it answers a narrower

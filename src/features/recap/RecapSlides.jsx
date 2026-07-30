@@ -171,6 +171,7 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
   const slides = T.buildRecap({
     workout, activity, intervals: reps, route, paces: plan.paces,
     plan, log, moves, todayISO: T.iso(new Date()),
+    reviews,   // the same computation the persist effect reports (§6)
   });
   // Resolve the current slide by its kind (stable across a lazy reps insertion
   // that would otherwise shift positional indices under the user's finger).

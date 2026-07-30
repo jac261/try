@@ -283,12 +283,23 @@ export const CSS_CONFIDENCE = ['low', 'medium', 'high'];
 export function swimThreshold(profile) {
   const meta = (profile && profile.cssMeta) || {};
   const css = (profile && profile.css100Sec) || null;
+  const source = CSS_SOURCES.includes(meta.source) ? meta.source : (css ? 'manual' : 'estimated');
   return {
     cssSecondsPer100m: css,
-    source: CSS_SOURCES.includes(meta.source) ? meta.source : (css ? 'manual' : 'estimated'),
+    source,
     measuredAt: meta.measuredAt || null,
     confidence: CSS_CONFIDENCE.includes(meta.confidence) ? meta.confidence : null,
+    /* Phase 2: the real/estimated discriminator its bike and run siblings
+       carry (bikePowerAnchor.kind, runAnchor.kind) — the swim never got the
+       split, so consumers tested source strings ad hoc. Additive: every
+       existing reader consumes named fields. Real means a number the
+       athlete supplied or measured; the estimated fence is the source. */
+    kind: css && source !== 'estimated' ? 'real' : 'estimated',
   };
+}
+// The swim's sibling of hasRealFtp, for the same fences.
+export function hasRealCss(profile) {
+  return swimThreshold(profile).kind === 'real';
 }
 
 // estWkg mirrors est5k/estCss for the bike, in watts per kilo. It matches the

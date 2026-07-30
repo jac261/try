@@ -846,3 +846,23 @@ awareness (none of this needs backend work):
 | `totalElevationGain` + `totalElevationLoss` | activity DTO (the re-filed ask 7) | The downhill-assist 5 km guard is written, tested and dormant. It needs BOTH fields — the interval-level gain you shipped cannot see a point-to-point descent. Activity-level pair preferred; metres. |
 | `quality` population | power-curve endpoint | Every point serves `quality: null` today. The client deliberately reads null as usable (defaulting low would kill the rider profile), so until real values arrive, only an explicit `low` can ever protect an athlete from a bad point. Whatever heuristic you have — spike detection, sensor dropout — is more than the client can know. |
 | #24 merge | `runReview` + `runmaintenance` | The client's read AND write paths are already live; a runReview PUT 400s harmlessly until the column exists. Nothing else is waiting on it. |
+
+---
+
+## Ask - 30 July 2026 (phase 2): the coaching-decision journals
+
+Phase 2 built the shared coaching-decision layer client-side. Decisions,
+proposals, acceptances and rejections now flow through one shape and land in
+a device-local journal (`decisionLog`, capped 120). COACH_BRAIN.md's rule
+stands: a synced journal is a backend ask, never a silent assumption — so
+here is the ask.
+
+| Ask | Where | Why |
+|---|---|---|
+| `coaching_decisions` append-only journal | new endpoint | The one asymmetry left in coaching state: the adjustment OVERLAY syncs (PUT /adjustment) but the WHY does not — the headline, the evidence, the athlete's accept/reject. A phone that eased the week and a laptop that asks why cannot agree today. Client is source of truth; rows are opaque jsonb in the shipped review-envelope pattern `{schemaVersion, createdAt, engineVersion, decision}`; append-only with the client's deterministic decision id for idempotence. |
+| decision events (accept/reject/supersede) | same endpoint or a status column | Rejected proposals remain in history — that is the spec's rule and the client already enforces it locally. The server copy needs the same append-only semantics: never overwrite a rejection. |
+| `missedReason` | typed per-workout field | Device-local today by design (COACH_BRAIN: its own store, never in the log entry — a bare log entry means done everywhere). A typed nullable enum column (tired/life/niggle/choice) on the workout or its own endpoint lets the weekly decision speak consistently across devices. |
+| threshold-history retention | server-side | `fitnessHistory` is the one uncapped journal, riding inside the plan blob, because it is the only durable record of superseded thresholds. A server-side retention home would let the client cap the blob without losing the audit trail behind the history charts. |
+
+None of this blocks anything: the client journal works, device-local, and
+the DecisionHistory card renders from it today.
