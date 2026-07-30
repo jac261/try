@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import * as T from '@/lib';
 import { PowerCurveCard } from '@/components/PowerCurveCard.jsx';
 import { DecisionHistory } from '@/components/coaching/DecisionHistory.jsx';
@@ -16,6 +16,22 @@ const D = T.DISCIPLINES;
 export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog, decisionLog }) {
   const tracker = plan.race === 'tracker'; // no plan: hide every race/plan-relative surface
   const todayISO = T.iso(new Date());
+  // A solo plan trains one sport (hoisted here: the tab default reads it).
+  const solo = (T.RACES[plan.race] || {}).solo || null;
+  /* Phase 3: Progress is tabbed — Overview is the orchestration layer, each
+     discipline gets its dashboard and linked cards in its own tab (spec
+     §9.2/§22.3). Local state on purpose: ProgressView unmounts on nav, so
+     each visit opens on the default — Overview, or the discipline itself on
+     a solo plan (spec: solo plans open directly into their discipline).
+     Tracker mode renders EVERYTHING with no tab bar: on() is always true
+     there, and every block's existing internal tracker gate reproduces
+     today's tracker output unchanged. */
+  const [tab, setTab] = useState(() => (!tracker && solo) ? solo : 'overview');
+  const disciplineOn = d => !tracker && !(solo && solo !== d) && plan.profile.excludedDiscipline !== d;
+  const TABS = [['overview', 'Overview'], ...['swim', 'bike', 'run'].filter(disciplineOn).map(d => [d, D[d].name])];
+  const activeTab = tab === 'overview' || disciplineOn(tab) ? tab : 'overview';
+  const on = t => tracker || activeTab === t;
+  const panelProps = t => (tracker ? {} : { role: 'tabpanel', id: 'prog-panel-' + t, 'aria-labelledby': 'prog-tab-' + t });
   /* The shadow arbitration, memoised: limiterCandidates runs the three
      dashboard builders, and the child dashboards below run them again —
      without the memo the whole set recomputed on every Progress render
@@ -66,11 +82,11 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
   // fitness progression (from fitnessHistory snapshots + current baselines)
   const startISO = plan.profile.startDate || (plan.createdAt || '').slice(0, 10) || todayISO;
   const series = fitnessSeries(plan.profile, startISO);
-  // A solo plan trains one sport: swim/bike trend rows and the weakest-link
-  // card suppress (the card's own have-two-baselines self-hide is not enough;
-  // run plus one stale triathlon baseline would render it). Numbers stay on
-  // the profile and return on the next tri plan.
-  const solo = (T.RACES[plan.race] || {}).solo || null;
+  // Solo suppression (see the hoisted solo above): swim/bike trend rows and
+  // the weakest-link card suppress on a solo plan — the card's own
+  // have-two-baselines self-hide is not enough; run plus one stale triathlon
+  // baseline would render it. Numbers stay on the profile and return on the
+  // next tri plan.
   const swimPool = T.poolFor(plan.profile);
   const METRICS = [
     { key: 'run', label: 'Run · 5k pace', fmt: v => T.fmtPace(v / 5) + ' /km', div: 5, color: D.run.color, betterDown: true },
@@ -95,8 +111,9 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
   }).filter(Boolean);
 
   // Race projections: only from a REAL 5k time (a projection of the level
-  // estimate would be noise wearing a number). Lives inside the fitness card
-  // so it refreshes with the same renders that move the 5k trend.
+  // estimate would be noise wearing a number). Renders on the Run tab since
+  // phase 3 — it is a run artifact, and it still refreshes with the renders
+  // that move the 5k trend (same component, one render tree).
   const predict = T.predictRaceTimes(plan.profile);
 
   // Weekly run volume: what was actually recorded or logged, plan or no plan.
@@ -112,6 +129,42 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
         excludedDiscipline={plan.weeks.some(wk => wk.workouts.some(w => w.discipline === 'run' && log[w.id]))
           ? null : plan.profile.excludedDiscipline} />
       <div className="section-title">Progress</div>
+
+      {!tracker && TABS.length > 1 && (
+        <div className="prog-tabs" role="tablist" aria-label="Progress sections">
+          {TABS.map(([k, lab]) => (
+            <button key={k} role="tab" id={'prog-tab-' + k} aria-controls={'prog-panel-' + k}
+              aria-selected={activeTab === k}
+              className={'btn sm ' + (activeTab === k ? 'primary' : 'ghost')}
+              onClick={() => setTab(k)}>{lab}</button>
+          ))}
+        </div>
+      )}
+
+      {on('overview') && <div {...panelProps('overview')}>
+
+      {/* Phase 2 §8, SHADOW MODE, and phase 3 puts it FIRST: the Overview's
+          job is "what should I pay attention to now" (spec §23), and this is
+          that answer. Gated by arbShadow.hide (tracker and <2 candidates). */}
+      {(() => {
+        if (arbShadow.hide) return null;
+        const arb = arbShadow.arb;
+        return <>
+          <div className="section-title">Across your disciplines</div>
+          <div className="card">
+            <div className="testnote"><span><b>{arb.winner.label}</b> {arb.reason}</span></div>
+            {arb.suppressed.map(sup => (
+              <div className="d" key={sup.id} style={{ marginTop: 6 }}>
+                {sup.label} · {sup.reason}.
+              </div>
+            ))}
+            <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
+              This chooses what to look at first. It changes nothing in your plan.
+            </div>
+          </div>
+        </>;
+      })()}
+
       {!tracker && <>
         <div className="kpis">
           <div className="kpi"><div className="v">{daysToRace}<small> days</small></div><div className="k">Until race day</div></div>
@@ -138,34 +191,8 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
               {t.vals.length >= 2 ? <Sparkline values={t.vals} betterDown={t.betterDown} color={t.color} /> : <span className="trend-base">baseline</span>}
             </div>
           ))}
-          {predict && <div className="predict">
-            <div className="predict-title">Race projections <span className="muted">from your 5k time</span></div>
-            <div className="predict-rows">
-              <div className="predict-row"><span className="pd">10k{plan.race === 'run10k' ? <span className="muted"> · your race</span> : null}</span><b>~{T.fmtClock(predict.tenK)}</b></div>
-              <div className="predict-row"><span className="pd">Half marathon{plan.race === 'runhalf' ? <span className="muted"> · your race</span> : null}</span><b>~{T.fmtClock(predict.halfMarathon)}</b></div>
-              <div className="predict-row"><span className="pd">Marathon{plan.race === 'runmarathon' ? <span className="muted"> · your race</span> : null}</span><b>~{T.fmtClock(predict.marathon.lo)} to {T.fmtClock(predict.marathon.hi)}</b></div>
-            </div>
-            <div className="predict-note">Assumes each distance is trained for. The marathon range most of all: a 5k time says little about marathon endurance until the long runs are in.</div>
-          </div>}
         </div>
       )}
-
-      {anyKm && <>
-        <div className="section-title">Run volume <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(weekly km from runs with a distance)</span></div>
-        <div className="card">
-          <TrendChart height={120} axis series={[]}
-            bars={runVol.map(w => ({ v: w.km, color: D.run.color, label: T.fmtDate(w.start, { day: 'numeric', month: 'numeric' }) }))} />
-        </div>
-      </>}
-
-      {/* Phase 7 §6: silent until a power curve exists. A SIBLING of the
-          durability card, not a child — it was nested inside the durability
-          IIFE's early return, so an athlete with no durability reads would
-          never have seen the curve: two unrelated features accidentally
-          coupled, invisible today because the curve is gated, and a silent
-          suppression on exactly the day it goes live. */}
-      <PowerCurveCard curve={powerCurve} previous={previousPowerCurve}
-        ftpWatts={plan.profile && plan.profile.ftp} todayISO={todayISO} />
 
       {(() => {
         // Durability: how the long sessions ended, from their recorded laps.
@@ -353,37 +380,37 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           <div className="weekbar" style={{ height: 9 }}><span style={{ width: (twSess.length ? twDone / twSess.length * 100 : 0) + '%', background: 'var(--accent)' }} /></div>
         </div>
 
-      {/* Phase 2 §8, SHADOW MODE: which discipline comes first, across all
-          three — one card, ordered rules, a stated reason, and suppressed
-          candidates listed with theirs. It reads the same dashboard
-          builders the cards below render and actuates NOTHING. */}
-      {(() => {
-        // (the !tracker fragment above already gates this; no second guard)
-        if (arbShadow.hide) return null;
-        const arb = arbShadow.arb;
-        return <>
-          <div className="section-title">Across your disciplines</div>
-          <div className="card">
-            <div className="testnote"><span><b>{arb.winner.label}</b> {arb.reason}</span></div>
-            {arb.suppressed.map(sup => (
-              <div className="d" key={sup.id} style={{ marginTop: 6 }}>
-                {sup.label} · {sup.reason}.
-              </div>
-            ))}
-            <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
-              This chooses what to look at first. It changes nothing in your plan.
-            </div>
+        <div className="section-title">Discipline balance</div>
+        <div className="card center">
+          <Donut segments={donut} size={170} />
+          <div className="legend" style={{ justifyContent: 'center' }}>
+            {donut.map(s => <div className="li" key={s.label}><i style={{ background: s.color }} />{s.label} · {Math.round(s.value)}h</div>)}
           </div>
-        </>;
-      })()}
+        </div>
+      </>}
 
-        {/* Phase 7: the swim dashboard, for plans that actually swim. It sits
-          after the general progress views because it answers a narrower
-          question than they do. */}
-      {!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
-        && plan.profile.excludedDiscipline !== 'swim'
-        && <SwimDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO} retest={retest} onSupport={onSupport} />}
+      </div>}
 
+      {/* Each discipline's panel holds its dashboard and linked cards. The
+          full gate expressions are kept LITERAL and redundantly &&-ed under
+          the tab predicate on purpose: four lib tests pin this file's source
+          text (the gate within 400 chars of the tag) — do not fold them into
+          disciplineOn. In tracker mode on() is always true, the panels carry
+          no tabpanel role, and each block's own tracker gate decides. */}
+      {on('swim') && <div {...panelProps('swim')}>
+        {/* Phase 7: the swim dashboard, for plans that actually swim. */}
+        {!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
+          && plan.profile.excludedDiscipline !== 'swim'
+          && <SwimDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO} retest={retest} onSupport={onSupport} />}
+      </div>}
+
+      {on('bike') && <div {...panelProps('bike')}>
+        {/* Phase 7 §6: silent until a power curve exists. A SIBLING of the
+            dashboard below, not a child — the sibling-not-nested lesson from
+            the durability coupling stands; the tab panel is a placement, not
+            a nesting. Self-gating, so an empty curve renders nothing. */}
+        <PowerCurveCard curve={powerCurve} previous={previousPowerCurve}
+          ftpWatts={plan.profile && plan.profile.ftp} todayISO={todayISO} />
         {/* Phase 8: the bike's own dashboard, on the swim's terms. */}
         {/* Guarded exactly as the swim dashboard above is. Without this a
             run-only athlete with no rides in their plan was shown a full bike
@@ -393,23 +420,39 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           && <BikeDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO}
             retest={ftpRetest} durabilityReads={durability}
             fuelLog={fuelLog} positionLog={positionLog} powerCurve={powerCurve} />}
+      </div>}
 
+      {on('run') && <div {...panelProps('run')}>
         {/* Phase 9: the run's dashboard, guarded exactly as the two above.
             (Audit catch 2026-07-30: it was built with no component.) */}
         {!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'run')
           && plan.profile.excludedDiscipline !== 'run'
           && <RunDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO} fuelLog={fuelLog} />}
 
-      <div className="section-title">Discipline balance</div>
-        <div className="card center">
-          <Donut segments={donut} size={170} />
-          <div className="legend" style={{ justifyContent: 'center' }}>
-            {donut.map(s => <div className="li" key={s.label}><i style={{ background: s.color }} />{s.label} · {Math.round(s.value)}h</div>)}
+        {anyKm && <>
+          <div className="section-title">Run volume <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(weekly km from runs with a distance)</span></div>
+          <div className="card">
+            <TrendChart height={120} axis series={[]}
+              bars={runVol.map(w => ({ v: w.km, color: D.run.color, label: T.fmtDate(w.start, { day: 'numeric', month: 'numeric' }) }))} />
           </div>
-        </div>
-      </>}
+        </>}
 
-      <WellnessTrends onSupport={onSupport} wellness={wellness} onWhatIf={onWhatIf} />
+        {predict && <>
+          <div className="section-title">Race projections <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(from your 5k time)</span></div>
+          <div className="card">
+            <div className="predict standalone">
+              <div className="predict-rows">
+                <div className="predict-row"><span className="pd">10k{plan.race === 'run10k' ? <span className="muted"> · your race</span> : null}</span><b>~{T.fmtClock(predict.tenK)}</b></div>
+                <div className="predict-row"><span className="pd">Half marathon{plan.race === 'runhalf' ? <span className="muted"> · your race</span> : null}</span><b>~{T.fmtClock(predict.halfMarathon)}</b></div>
+                <div className="predict-row"><span className="pd">Marathon{plan.race === 'runmarathon' ? <span className="muted"> · your race</span> : null}</span><b>~{T.fmtClock(predict.marathon.lo)} to {T.fmtClock(predict.marathon.hi)}</b></div>
+              </div>
+              <div className="predict-note">Assumes each distance is trained for. The marathon range most of all: a 5k time says little about marathon endurance until the long runs are in.</div>
+            </div>
+          </div>
+        </>}
+      </div>}
+
+      {on('overview') && <WellnessTrends onSupport={onSupport} wellness={wellness} onWhatIf={onWhatIf} />}
     </>
   );
 }

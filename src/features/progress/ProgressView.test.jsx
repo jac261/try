@@ -19,11 +19,18 @@ const profile = {
   startDate: '2026-06-01', raceDate: '2026-08-30',
 };
 
-const mount = async props => {
+/* Phase 3: Progress is tabbed, so assertions live on the tab where their
+   subject renders. mount(props) captures the DEFAULT tab (Overview, or the
+   discipline on a solo plan); mount(props, 'Run') clicks that tab first. */
+const mount = async (props, tabLabel) => {
   const el = document.createElement('div');
   document.body.appendChild(el);
   const root = createRoot(el);
   await act(async () => { root.render(<ProgressView log={{}} wellness={[]} runLoad={null} recovery={null} onSupport={() => {}} {...props} />); });
+  if (tabLabel) {
+    const btn = [...el.querySelectorAll('[role="tab"]')].find(b => b.textContent === tabLabel);
+    if (btn) await act(async () => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  }
   const html = el.innerHTML;
   root.unmount(); el.remove();
   return html;
@@ -33,20 +40,21 @@ const run = (date, km) => ({ id: 'r' + date, type: 'Run', date, movingTimeSec: 3
 
 describe('ProgressView renders in every mode', () => {
   it('plan mode with activities: projections and the volume chart appear', async () => {
-    const html = await mount({ plan: generatePlan(profile), activities: [run('2026-07-14', 8), run('2026-07-07', 12)] });
+    const html = await mount({ plan: generatePlan(profile), activities: [run('2026-07-14', 8), run('2026-07-07', 12)] }, 'Run');
     expect(html).toContain('Race projections');
     expect(html).toContain('Half marathon');
     expect(html).toContain('Run volume');
   });
 
   it('plan mode with no activities: no volume chart, no crash', async () => {
-    const html = await mount({ plan: generatePlan(profile), activities: null });
+    const html = await mount({ plan: generatePlan(profile), activities: null }, 'Run');
     expect(html).toContain('Race projections');
     expect(html).not.toContain('Run volume');
   });
 
   it('no real 5k time: no projections block at all', async () => {
-    const html = await mount({ plan: generatePlan({ ...profile, fivekSec: null }), activities: null });
+    // asserted on the tab where it WOULD render, so the absence is honest
+    const html = await mount({ plan: generatePlan({ ...profile, fivekSec: null }), activities: null }, 'Run');
     expect(html).not.toContain('Race projections');
   });
 
@@ -79,7 +87,9 @@ describe('ProgressView renders in every mode', () => {
       disciplines: { run: { decision: 'progress', headline: 'Earned it', evidence: [{ signal: 'key sessions', reading: 'both quality runs landed on target' }], clean: true } },
       progression: null,
     };
-    const html = await mount({ plan: solo, activities: null, coach });
+    // a solo plan opens on its discipline tab (spec rule); the coach week
+    // is orchestration, so it lives on Overview — click across to it
+    const html = await mount({ plan: solo, activities: null, coach }, 'Overview');
     expect(html).not.toContain('Weakest link');          // the bars stay solo-suppressed
     expect(html).toContain('This week so far');          // the verdict does not
     expect(html).toContain('both quality runs landed on target');
@@ -102,6 +112,8 @@ describe('ProgressView renders in every mode', () => {
     const t = buildTrackerPlan(generatePlan(profile), '2026-07-13T10:00:00.000Z');
     const html = await mount({ plan: t, activities: [run('2026-07-14', 8)] });
     expect(html).toContain('Run volume');
+    // tracker has no tabs: everything renders in one column, per-block gates deciding
+    expect(html).not.toContain('role="tablist"');
   });
 });
 

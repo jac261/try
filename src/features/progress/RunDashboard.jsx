@@ -12,7 +12,8 @@ import { SpiderChart } from '@/components/SpiderChart.jsx';
  *   - real and estimated are never mixed: the benchmark row names its kind,
  *     and projections are absent rather than approximate for an estimate
  *   - no charts intervals.icu already draws, and no second km chart — the
- *     eight-week volume chart already lives above this in Progress
+ *     eight-week volume chart renders beside this in the Run tab (phase 3
+ *     reunited them; it lived on the top level of Progress before)
  */
 
 const STATE_LABEL = { ready: 'Ready', building: 'Building', 'at-risk': 'Needs attention', unknown: 'Not enough data' };
