@@ -11,6 +11,8 @@
  * this file knows about paces, pools or minutes.
  */
 
+import { daysBetween } from './date.js';
+
 /* §1: the skills an open-water session can drill. Each carries the pool
    equivalent from §4, because the fallback is not a lesser session — it is
    the same objective done between walls. */
@@ -187,7 +189,7 @@ export function openWaterExposure({ activities, todayISO, days, workouts, logged
   const window = days || OW_EXPOSURE.recentDays;
   const list = (activities || []).filter(a => a && a.type === 'OpenWaterSwim' && a.date);
   const recent = list.filter(a => {
-    const d = daysBetweenISO(a.date, todayISO);
+    const d = daysBetween(a.date, todayISO);
     return d >= 0 && d <= window;
   });
   const longest = recent.reduce((m, a) => Math.max(m, a.movingTimeSec || 0), 0);
@@ -214,7 +216,7 @@ export function openWaterExposure({ activities, todayISO, days, workouts, logged
     longestMin: longest ? Math.round(longest / 60) : 0,
     longestM: recent.reduce((m, a) => Math.max(m, a.distance || 0), 0) || 0,
     lastDate: latest,
-    daysSince: latest ? daysBetweenISO(latest, todayISO) : null,
+    daysSince: latest ? daysBetween(latest, todayISO) : null,
     windowDays: window,
     // §6's remaining bullets, each counted from sessions actually completed
     wetsuitSessions: drilled.wetsuit || 0,
@@ -223,7 +225,4 @@ export function openWaterExposure({ activities, todayISO, days, workouts, logged
     racePaceSessions: racePace,
     skills: drilled,
   };
-}
-function daysBetweenISO(a, b) {
-  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
 }

@@ -15,6 +15,7 @@ import { AddWorkoutSheet } from '@/components/AddWorkoutSheet.jsx';
 import { CssProposalSheet } from '@/components/CssProposalSheet.jsx';
 import { CssRetestSheet } from '@/components/CssRetestSheet.jsx';
 import { FtpProposalSheet } from '@/components/FtpProposalSheet.jsx';
+import { RunProposalSheet } from '@/components/RunProposalSheet.jsx';
 import { TechniqueEditor } from '@/features/settings/TechniqueEditor.jsx';
 import { Onboarding } from '@/features/onboarding/Onboarding.jsx';
 import { FitnessEditor } from '@/features/settings/FitnessEditor.jsx';
@@ -50,6 +51,9 @@ export function App({ storage, getToken, user }) {
   // restore deletes its entries), so the week's story has to be written down
   // the moment it happens or it is gone.
   const [adjustLog, setAdjustLog] = useState(() => storage.load('adjustLog', []));
+  // Phase 2 §9: the unified decision journal — every terminal athlete action
+  // on a coaching decision (accepted, rejected, superseded), device-local.
+  const [decisionLog, setDecisionLog] = useState(() => storage.loadDecisionLog());
   const sync = useMemo(() => makeSync(getToken), [getToken]);
   const [hydrated, setHydrated] = useState(false);
   // Hold the splash for one full pulse even when hydration is instant (a
@@ -74,6 +78,10 @@ export function App({ storage, getToken, user }) {
   // the GUID. Populated from every plan response (hydrate / create / replace).
   const [refToId, setRefToId] = useState({});
   const [view, setView] = useState('today');
+  // Deep-link focus for Settings (phase 4): which section card to scroll to
+  // on open. Set by openSettings(section) below; the avatar's plain open
+  // clears it so a stale focus never re-scrolls a later visit.
+  const [settingsFocus, setSettingsFocus] = useState(null);
   const [detail, setDetail] = useState(null);
   // The what-if simulator sheet: null, {} (generic, from Progress), or
   // { initial: { tab, skipIds, skipLabel } } from a workout's own sheet.
@@ -163,6 +171,7 @@ export function App({ storage, getToken, user }) {
   // same scrim pattern as every other sheet.
   const [cssSheet, setCssSheet] = useState(null);
   const [ftpSheet, setFtpSheet] = useState(null);
+  const [runSheet, setRunSheet] = useState(null);
   const [retestOpen, setRetestOpen] = useState(false);
   // A failed plan write means this device and the account have diverged — the
   // catalog-drift incident proved that must never be silent again.
@@ -596,7 +605,7 @@ export function App({ storage, getToken, user }) {
       .map(w => ({ ...log[w.id].bikeReview, date: (log[w.id].at || '').slice(0, 10) || w.date }))
     : []), [plan, log]);
   const [focusLog, setFocusLog] = useState(() => storage.loadFocusLog());
-  const [blockReviewed, setBlockReviewed] = useState(() => storage.loadBlockReviewed());
+  const [blockReviewed, setBlockReviewed] = useState(() => storage.loadBlockReviewed(plan && plan.createdAt));
   // The one narrow write a focus change is allowed: patch the single field,
   // bump updatedAt, push the same plan. Never generatePlan, never a
   // fitness-history snapshot, no overlay touched (design panel 2026-07-21:
@@ -609,7 +618,7 @@ export function App({ storage, getToken, user }) {
     saveProfileBoth(np.profile);
     if (plan.race !== 'tracker') sync.replacePlan(np).then(adoptRes(np.createdAt));
   };
-  const markBlockReviewed = wm => setBlockReviewed(storage.saveBlockReviewed(wm));
+  const markBlockReviewed = wm => setBlockReviewed(storage.saveBlockReviewed(wm, plan && plan.createdAt));
   const answerFuel = (activityId, level, discipline) =>
     setFuelLog(storage.saveFuel(activityId, level, new Date().toISOString(), discipline));
   const answerPosition = (activityId, comfort, symptoms, minutes) =>
@@ -640,7 +649,17 @@ export function App({ storage, getToken, user }) {
     const out = [];
     if (plan && plan.race !== 'tracker' && Array.isArray(plan.weeks) && plan.weeks.length) {
       plan.weeks.flatMap(w => w.workouts)
-        .filter(w => ((w.role === 'long' && (w.discipline === 'run' || w.discipline === 'bike')) || w.discipline === 'brick') && log[w.id])
+        /* Raced sessions are refused EXPLICITLY (design panel 2026-07-30):
+           the durability read measures drift under a steady intent, and a
+           raced split is pacing by choice, not fatigue resistance. The
+           planBodySteady gate below cannot make this call — race cards carry
+           no zones, so it would pass them vacuously rather than by
+           judgement. This is a PLAN-branch guarantee only: the tracker
+           branch below reads raw activities, which carry no race flag, so a
+           race ridden in tracker mode is indistinguishable there and its
+           read persists across plans (the store spans plans by design). */
+        .filter(w => !w.race && !w.bRace
+          && ((w.role === 'long' && (w.discipline === 'run' || w.discipline === 'bike')) || w.discipline === 'brick') && log[w.id])
         .forEach(w => {
           if (w.discipline === 'brick') {
             // the BIKE leg only, judged by ITS OWN segments: a brick's run
@@ -712,11 +731,20 @@ export function App({ storage, getToken, user }) {
     });
     return out;
   };
-  // Freeze the coach brain's weekly decision at the digest's own boundary:
-  // the first render that sees a reviewed week with no stored decision writes
-  // it once; every later render quotes the store. Progress shows the OPEN
-  // week live and labelled as in progress; only closed weeks freeze (design
-  // panel 2026-07-20).
+  // Freeze the coach brain's weekly decision at the digest's own boundary.
+  // While the reviewed week still CONTAINS today (the Sunday-evening wrap),
+  // the stored bundle is PROVISIONAL — stamped so, recomputed on any input
+  // change, and never consumed as history (the block review waits for it).
+  // The first render after the week closes writes the FINAL bundle, with
+  // todayISO at last outside the week, so a race ticked at 21:00 AND a
+  // missed answer tapped at 18:00 both land: judged from inside the week a
+  // Sunday session reads 'upcoming' and a negative answer is invisible
+  // (gauntlet catch 2026-07-31). Before this, the 17:05 write was permanent
+  // and any Sunday key session unticked at that instant froze not-clean
+  // forever (re-verify catch 2026-07-30; design panel 2026-07-20 for the
+  // freeze itself). After the finalizing write, every render quotes the
+  // store: a tick landing later than that first post-week render is the
+  // named residual and never changes the verdict.
   useEffect(() => {
     if (!hydrated) return;
     const todayISO = T.iso(new Date());
@@ -729,26 +757,78 @@ export function App({ storage, getToken, user }) {
     // one (re-verify catch 2026-07-20).
     const stored = weekMonday && coachLog[weekMonday];
     const planId = (plan && plan.createdAt) || null;
-    if (!weekMonday || (stored && (stored.planCreatedAt ?? null) === planId)) return;
-    // Freeze only inside the digest's own window, and only after a settle
-    // delay: the post-hydration activity and wellness fetches land on later
-    // round-trips, and a verdict frozen from a half-loaded state would be
-    // wrong forever (gauntlet catch). Any dep change re-arms the timer with
-    // fresher data; the write happens at most once per week regardless.
-    if (!T.digestWindowOpen(weekMonday, todayISO)) return;
+    // Every provisional same-plan bundle whose week is truly over needs its
+    // finalize, however late the app next opens: the digest window gates the
+    // CARD and the first write, never the completion of an existing bundle.
+    // Without this, a Sunday-evening-only user strands every week
+    // provisional forever — the block review never fires and the repeat
+    // rule reads Sunday half-states (re-verify catch 2026-07-31). Named
+    // cost: a months-late finalize recomputes against today's bounded
+    // wellness and activity windows, so a very old week can finalize with
+    // thinner evidence than its provisional bundle held; log and answer
+    // data persist, so clean and the repeat rule stay honest either way.
+    const staleProvisional = Object.keys(coachLog).filter(k => {
+      const b = coachLog[k];
+      return b && b.provisional && (b.planCreatedAt ?? null) === planId
+        && T.reviewedWeekFinal(k, todayISO);
+    }).sort();
+    if (!weekMonday
+      || (T.coachDecisionStands(stored, planId, weekMonday, todayISO) && !staleProvisional.length)) return;
+    // The current week's own freeze stays inside the digest's window; the
+    // finalize sweep above is exempt. Both wait for settled fetches: a
+    // verdict written from a half-loaded state would be wrong forever
+    // (gauntlet catch). Any dep change re-arms the timer with fresher data.
+    const windowOpen = T.digestWindowOpen(weekMonday, todayISO);
+    if (!windowOpen && !staleProvisional.length) return;
     if (!fetchesSettled) return;
     // hold for the reviewed week's own durability read while this load's
     // backfill can still land it (it fetches that week first); once the
     // budget is spent the freeze proceeds with what exists
     if (!durabilityDone && Object.keys(durabilityFor(weekMonday)).length === 0) return;
     const t = setTimeout(() => {
-      const prevWeeks = Object.keys(coachLog).sort().reverse().map(k => coachLog[k]);
-      const decision = T.decideWeek({
+      const decideFor = (map, wk) => T.decideWeek({
         plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
-        missedReasons, todayISO, weekMonday, prevWeeks,
-        durabilityByDiscipline: durabilityFor(weekMonday),
+        missedReasons, todayISO, weekMonday: wk,
+        // strictly earlier weeks only: the log holds the decided week's own
+        // entry on a re-freeze, and feeding it back as prevWeeks[0] fails
+        // the repeat rule's adjacency check (gauntlet catch 2026-07-31)
+        prevWeeks: T.prevWeeksFor(map, wk),
+        durabilityByDiscipline: durabilityFor(wk),
       });
-      setCoachLog(storage.saveCoachDecision(weekMonday, decision));
+      // Finalize sweep, oldest first so a newer week's repeat rule reads
+      // already-finalized history within this same pass. The state map is
+      // accumulated HERE rather than taken from saveCoachDecision's return:
+      // that return re-reads localStorage, and a swallowed setItem failure
+      // (quota, private mode) would drop earlier sweep writes from it and
+      // oscillate this effect forever; state must carry every finalize this
+      // session even when persistence cannot (re-verify catch 2026-07-31).
+      let map = coachLog;
+      staleProvisional.forEach(wk => {
+        const fin = decideFor(map, wk);
+        storage.saveCoachDecision(wk, fin);
+        map = { ...map, [wk]: fin };
+      });
+      // The current reviewed week's own write: Sunday-evening provisional,
+      // or the first freeze of a closed week, inside the window only.
+      const st = map[weekMonday];
+      if (windowOpen && !T.coachDecisionStands(st, planId, weekMonday, todayISO)) {
+        const decision = decideFor(map, weekMonday);
+        // A mid-week write wears its provisionality; the post-week write is
+        // the bare, final bundle coachDecisionStands recognises. decideWeek
+        // is deterministic, so an unchanged recomputation must not rewrite:
+        // the write bumps coachLog, which re-runs this effect, and without
+        // the bail the provisional window would rewrite every 2s. Compared
+        // bundle-to-bundle so the provisional stamp itself cannot defeat
+        // the bail (and so the finalizing write, which drops it, always
+        // goes through).
+        const bundle = T.reviewedWeekFinal(weekMonday, todayISO)
+          ? decision : { ...decision, provisional: true };
+        if (!(st && (st.planCreatedAt ?? null) === planId && T.reviewEqual(st, bundle))) {
+          storage.saveCoachDecision(weekMonday, bundle);
+          map = { ...map, [weekMonday]: bundle }; // same rule as the sweep: state never re-read from storage
+        }
+      }
+      if (map !== coachLog) setCoachLog(map);
     }, 2000);
     return () => clearTimeout(t);
     // fuelLog is a real dependency since the lowFuel veto-disarm joined
@@ -834,11 +914,21 @@ export function App({ storage, getToken, user }) {
   // Calibration capture: when a session is completed (and again when its feel is
   // rated), snapshot the readiness inputs for that day next to the outcome —
   // stored locally (append-only) and embedded in the synced log's notes field.
-  const observe = (id, feel, at, actualMin) => {
+  // feelSource stamps who authored the feel — 'athlete' (their own tap) or
+  // 'rpe' (derived from the recording) — with the raw rpe alongside;
+  // see buildObservation for why the corpus needs the split.
+  const observe = (id, feel, at, actualMin, feelSource, rpe) => {
     const w = plan.weeks.flatMap(wk => wk.workouts).find(x => x.id === id);
     if (!w || w.discipline === 'rest') return null;
+    const date = effDate(w, moves);
+    // A tap replaces the derived row for the same workout+date; the rpe that
+    // row banked is carried forward, so the corpus keeps whether the tap
+    // agreed with or overrode the band rather than erasing the evidence.
+    const carried = feel && feelSource && rpe == null
+      ? (storage.loadCalibration().find(o => o.workout && o.workout.id === id && o.date === date) || {}).rpe
+      : rpe;
     const obs = buildObservation({
-      workout: w, date: effDate(w, moves), feel, eased: !!adjust[id], wellnessRecs: recs, at, actualMin,
+      workout: w, date, feel, eased: !!adjust[id], wellnessRecs: recs, at, actualMin, feelSource, rpe: carried,
     });
     storage.upsertCalibration(obs);
     return toNote(obs);
@@ -850,19 +940,23 @@ export function App({ storage, getToken, user }) {
   // Bricks resolve to a ride+run PAIR, folded into one combined recording (no
   // distance — summing km across two sports would render a misleading pace);
   // the link opens the ride leg. Everything else resolves to its single match.
+  // `pair: true` marks the fold, so display copy can present the rpe as the
+  // harder leg's rating rather than quoting it as one rating of one session.
+  const brickRecording = (ride, run) => {
+    const rpes = [ride.rpe, run.rpe].filter(v => Number.isFinite(v));
+    const load = (ride.trainingLoad != null || run.trainingLoad != null)
+      ? (ride.trainingLoad || 0) + (run.trainingLoad || 0) : null;
+    return {
+      id: ride.id, date: ride.date, type: 'Ride', name: 'Brick — ride + run legs', pair: true,
+      movingTimeSec: ride.movingTimeSec + run.movingTimeSec,
+      trainingLoad: load, rpe: rpes.length ? Math.max(...rpes) : null,
+    };
+  };
   const recordingFor = w => {
     if (!w) return null;
     if (w.discipline === 'brick') {
       const pair = T.brickPairFor({ workout: w, activities, moves });
-      if (!pair) return null;
-      const rpes = [pair.ride.rpe, pair.run.rpe].filter(v => v != null);
-      const load = (pair.ride.trainingLoad != null || pair.run.trainingLoad != null)
-        ? (pair.ride.trainingLoad || 0) + (pair.run.trainingLoad || 0) : null;
-      return {
-        id: pair.ride.id, date: pair.ride.date, type: 'Ride', name: 'Brick — ride + run legs',
-        movingTimeSec: pair.ride.movingTimeSec + pair.run.movingTimeSec,
-        trainingLoad: load, rpe: rpes.length ? Math.max(...rpes) : null,
-      };
+      return pair ? brickRecording(pair.ride, pair.run) : null;
     }
     return T.activityFor({ workout: w, activities, moves });
   };
@@ -1017,6 +1111,17 @@ export function App({ storage, getToken, user }) {
   // week/day IDs, so the log & moves overlays stay valid; only paces change.
   // Latest synced weight rides into the profile at every (re)generation so the
   // weakest-link bike score (W/kg) has something honest to stand on.
+  /* An existing plan's week grid is HISTORY: every tick, move and adjustment
+     is attached to a date on it. Regeneration therefore rebuilds on the same
+     anchor rather than re-deriving one from a startDate stamped when the
+     athlete first onboarded. Without this, the mid-week start rule would
+     re-interpret an old plan under today's rules on any regeneration: a
+     reshape would shift the whole grid a week and the same-date survivor
+     check would then discard every logged completion, and a one-tap
+     retarget would silently re-date them (gauntlet 2026-08-01). */
+  const planGrid = p => (p && p.weeks && p.weeks[0] && p.weeks[0].start
+    ? { start: p.weeks[0].start, firstWeekFrom: p.firstWeekFrom } : null);
+
   const withWeight = p => {
     const w = [...recs].reverse().find(r => r.weightKg);
     return w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p;
@@ -1027,6 +1132,13 @@ export function App({ storage, getToken, user }) {
     // The snapshot keeps the superseded values AND their provenance, so the
     // threshold history can say where each past number came from rather
     // than only what it was (phase 2 §3 auditability).
+    /* fitnessHistory is deliberately UNCAPPED (phase 2 decision): it rides
+       the plan blob to the backend, so a cap would change the synced blob,
+       and it is the only durable record of superseded thresholds — the
+       audit trail behind every history chart and the nearest thing a
+       retarget has to an undo record. One snapshot per retarget; years from
+       being a size problem. The real fix is the threshold-history retention
+       ask in BACKEND_HANDOFF. */
     const snapshot = { date: T.iso(new Date()), fivekSec: old.fivekSec, css100Sec: old.css100Sec, ftp: old.ftp, fitness: old.fitness,
       ...(old.ftpMeta ? { ftpMeta: old.ftpMeta } : {}), ...(old.cssMeta ? { cssMeta: old.cssMeta } : {}),
       ...(old.fivekMeta ? { fivekMeta: old.fivekMeta } : {}) };
@@ -1038,7 +1150,7 @@ export function App({ storage, getToken, user }) {
     // every hydrate, and trusting it silently un-swapped a reloaded plan on
     // its next retarget (re-verify catch). Legacy and unswapped plans detect
     // to null: no swap appears mid-flight.
-    const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan) });
+    const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan), grid: planGrid(plan) });
     np.createdAt = plan.createdAt;
     np.updatedAt = new Date().toISOString();
     np.serverId = plan.serverId; // same server row: replace updates in place
@@ -1086,7 +1198,7 @@ export function App({ storage, getToken, user }) {
       setEditTechnique(false);
       return;
     }
-    const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan) });
+    const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan), grid: planGrid(plan) });
     np.createdAt = plan.createdAt;
     np.updatedAt = new Date().toISOString();
     np.serverId = plan.serverId;
@@ -1106,7 +1218,12 @@ export function App({ storage, getToken, user }) {
     // Rebuilding the note must carry the entry's recorded duration forward —
     // omitting it once wrote actualMin:null into the synced note and silently
     // erased the measurement on every other device (2026-07-12 audit finding).
-    const entry = Object.assign({}, log[id], { done: true, at, feel, notes: observe(id, feel, at, (log[id] || {}).actualMin) });
+    // 'athlete': the tap is their own word, and the rebuilt observation
+    // replaces any earlier rpe-derived one for the same workout+date — the
+    // athlete's word always beats the derivation. (A session moved AFTER
+    // logging keeps its old row under the old date: the corpus key is
+    // workout+date, so that guarantee stops at a reschedule.)
+    const entry = Object.assign({}, log[id], { done: true, at, feel, notes: observe(id, feel, at, (log[id] || {}).actualMin, 'athlete') });
     setLog(l => ({ ...l, [id]: entry }));
     if (gid(id)) sync.saveLog(gid(id), entry);
   };
@@ -1184,23 +1301,32 @@ export function App({ storage, getToken, user }) {
     runTest: runFresh ? runTest : null,
   });
   // The open week's decision, computed live for Progress and labelled as in
-  // progress there; never stored (only closed weeks freeze).
+  // progress there; never stored by THIS computation. (From Sunday 17:00 the
+  // freeze effect above does hold a provisional bundle for the same week —
+  // stamped provisional, superseded by the post-week finalize — so "only
+  // closed weeks freeze" is true of final bundles only, 2026-07-31.)
   const coachNow = T.decideWeek({
     plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
     missedReasons, todayISO: T.iso(new Date()),
     weekMonday: T.iso(T.startOfWeekMonday(new Date())),
-    prevWeeks: Object.keys(coachLog).sort().reverse().map(k => coachLog[k]),
+    // strictly earlier weeks: after the Sunday-evening wrap the log holds
+    // THIS week's own entry, which must not read as the "previous" week
+    prevWeeks: T.prevWeeksFor(coachLog, T.iso(T.startOfWeekMonday(new Date()))),
     durabilityByDiscipline: durabilityFor(T.iso(T.startOfWeekMonday(new Date()))),
   });
-  const applyEftp = () => { if (eftp) retarget(eftp.retarget); };
-  // Phase 3b (§6): a swim CSS proposal opens the evidence sheet instead of
-  // retargeting on the tap; bike and run keep the one-tap flow for now.
+
+  // Phase 3b (§6), completed by phase 2 §4: every threshold proposal opens
+  // its evidence sheet — swim, bike, and now run. No one-tap retarget
+  // remains anywhere.
   // A swim or bike threshold proposal opens its evidence sheet rather than
   // retargeting on the tap; run keeps the one-tap flow for now.
   const onEftp = () => {
+    // Phase 2 §4: all three disciplines review the evidence before a
+    // retarget. The run was the last one-tap — deliberate at the time, now
+    // overridden by the spec: threshold changes remain proposals.
     if (eftp && eftp.sport === 'swim') setCssSheet(eftp);
     else if (eftp && eftp.sport === 'bike') setFtpSheet(eftp);
-    else applyEftp();
+    else if (eftp && eftp.sport === 'run') setRunSheet(eftp);
   };
   // §7's remaining branch (gauntlet catch 2026-07-27): the athlete logged
   // the CSS test but no recording ever matched it (wrong sport type on the
@@ -1293,14 +1419,23 @@ export function App({ storage, getToken, user }) {
     spotted.forEach(m => {
       const secs = (m.activity && m.activity.movingTimeSec || 0) + (m.activityRun && m.activityRun.movingTimeSec || 0);
       const actualMin = secs ? Math.round(secs / 60) : undefined;
-      const entry = { done: true, at, feel: m.feel, actualMin, notes: observe(m.workout.id, m.feel || null, at, actualMin) };
+      // m.rpe is the exact input the matcher derived m.feel from
+      const entry = { done: true, at, feel: m.feel, actualMin,
+        notes: observe(m.workout.id, m.feel || null, at, actualMin, m.feel ? 'rpe' : undefined, m.rpe) };
       entries[m.workout.id] = entry;
       if (gid(m.workout.id)) sync.saveLog(gid(m.workout.id), entry);
     });
     setLog(l => ({ ...l, ...entries }));
     if (spotted.length) {
-      markRecapSeen(recordingFor(spotted[0].workout));
-      setRecap({ workout: spotted[0].workout }); // recap the headline session
+      // The most significant session leads the deck — see headlineSpot. Its
+      // OWN recordings ride through: re-deriving via recordingFor has no
+      // claimed-set, so a second same-day recording could reopen brick
+      // ambiguity (no deck at all) or hand the deck — and the synced review —
+      // another session's recording (verified gauntlet catch 2026-07-30).
+      const head = T.headlineSpot(spotted);
+      const headAct = head.activityRun ? brickRecording(head.activity, head.activityRun) : head.activity;
+      markRecapSeen(headAct);
+      setRecap({ workout: head.workout, activity: headAct });
     }
   };
   // Every accepted proposal is journalled with the exact headline and why
@@ -1313,12 +1448,27 @@ export function App({ storage, getToken, user }) {
   // factor and targets ride along for the coach brain's week verdicts (a
   // recovery-depth trim reads differently from a 20% consolidation trim);
   // older entries without them degrade to the generic reduction.
+  /* Phase 2 §9: journal a decision's terminal state. The rows come from the
+     pure helper (supersession included); storage.appendDecision is
+     idempotent on (id, status), so a re-fired effect writes once. adjustLog
+     stays untouched beside this — coach.weekProposal reads it. */
+  const journalDecision = (decision, status) => {
+    if (!decision) return;
+    const at = new Date().toISOString();
+    // named jlog: a bare `log` here would shadow the log STATE in the TDZ
+    // guard's below-the-returns declaration sweep
+    let jlog = storage.loadDecisionLog();
+    T.journalRows(jlog, decision, status, { at, planCreatedAt: (plan && plan.createdAt) || null })
+      .forEach(row => { jlog = storage.appendDecision(row); });
+    setDecisionLog(jlog);
+  };
   const journalProposal = (p, at) => setAdjustLog(l =>
     [...l, { at, kind: p.kind, headline: p.headline, why: p.why, factor: p.factor ?? null, targets: p.targets || [], week: p.week ?? null, planCreatedAt: (plan && plan.createdAt) || null }].slice(-40));
   const applyWeekly = p => {
     if (!p) return;
     const at = new Date().toISOString();
     journalProposal(p, at);
+    journalDecision(T.fromWeeklyProposal(p, { at }), 'accepted');
     if (p.action === 'restoreWeek') {
       setAdjust(a => { const n = { ...a }; p.targets.forEach(id => delete n[id]); return n; });
       p.targets.forEach(id => { if (adjust[id] && gid(id)) sync.removeAdjustment(gid(id)); });
@@ -1346,7 +1496,11 @@ export function App({ storage, getToken, user }) {
     setPlanWork(2600);
     const fromTracker = plan.race === 'tracker';
     const profile = withWeight(Object.assign({}, plan.profile, fields));
-    const np = T.generatePlan(profile);
+    /* A caller supplying its own startDate is building a genuinely new block
+       (the maintenance roll does this, always on a Monday), so it derives a
+       fresh grid. Everything else is a reshape of a plan the athlete may
+       already have trained, and keeps the grid it has. */
+    const np = T.generatePlan(profile, fields && fields.startDate ? undefined : { grid: planGrid(plan) });
     // From tracker this is a brand-NEW plan: fresh identity (its own
     // createdAt nonce, no serverId — the old row was ended). From a real
     // plan it is a reshape of the same server row.
@@ -1419,23 +1573,41 @@ export function App({ storage, getToken, user }) {
     setSupportTopic(topic || null);
     setView('support');
   };
+  // Open Settings scrolled to a section card (phase 4 deep links). Sections
+  // are the ids SettingsView stamps on its cards: 'profile', 'plan',
+  // 'assumptions', 'connections'.
+  const openSettings = section => { setSettingsFocus(section || null); setView('settings'); };
 
   const tracker = plan.race === 'tracker';
   const race = T.RACES[plan.race];
-  const rawDaysToRace = T.daysBetween(new Date(), plan.profile.raceDate);
+  // iso() keeps the call in calendar days — the uniform shape the guard in
+  // lib/date-call-sites.test.js pins. daysBetween itself now pins both ends
+  // to local midnight too, so a raw Date no longer rounds one short after
+  // noon; same counting rule as PR #16's race-week card (race-chip catch
+  // 2026-07-30).
+  const rawDaysToRace = T.daysBetween(T.iso(new Date()), plan.profile.raceDate);
   const daysToRace = Math.max(0, rawDaysToRace);
+  // Strictly after a real race day (0 IS race day; noRace plans have horizons,
+  // not races, and that flag covers tracker too). The chip must state this
+  // phase rather than freeze at "0 days to go": the post-race banner below
+  // only renders on Today, and this window lasts up to a week before
+  // planEnded rolls the plan into tracker mode. Calendar language only — the
+  // app can never log the A race, so it cannot claim the race was run, only
+  // that its day is behind us.
+  const postRace = !race.noRace && rawDaysToRace < 0;
+  const maintWeeksLeft = Math.max(0, Math.ceil(rawDaysToRace / 7));
   // The plan's edges: race day passed → offer a maintenance block (with a
   // recovery week baked in); a maintenance block near its horizon → offer to
   // roll another. Both reshape the plan, pruning overlays to the new graph.
-  const rollMaintenance = postRace => {
+  const rollMaintenance = afterRace => {
     const mon = T.startOfWeekMonday(new Date());
     reshapePlan({
-      raceType: 'maintenance', postRace,
+      raceType: 'maintenance', postRace: afterRace,
       startDate: T.iso(mon), raceDate: T.iso(T.addDays(mon, 12 * 7 - 1)), horizonWeeks: 12,
     });
   };
   let planEdge = null;
-  if (!tracker && plan.race !== 'maintenance' && rawDaysToRace < 0) planEdge = {
+  if (postRace) planEdge = {
     key: 'post-race', icon: 'trophy',
     title: 'Race day is behind you — congratulations!',
     // Run-only maintenance is a deferred build; the prompt must not silently
@@ -1466,7 +1638,7 @@ export function App({ storage, getToken, user }) {
       <div className="topbar">
         <div className="topbar-top">
           <button className="avatar-btn" type="button" title="Profile &amp; settings"
-            aria-label="Profile and settings" onClick={() => setView('settings')}>
+            aria-label="Profile and settings" onClick={() => { setSettingsFocus(null); setView('settings'); }}>
             {avatarUrl ? <img className="avatar" src={avatarUrl} alt="" /> : <span className="avatar avatar-fallback">{initial}</span>}
           </button>
           <h1><Icon name="logo" size={26} /> Try</h1>
@@ -1477,8 +1649,10 @@ export function App({ storage, getToken, user }) {
         <div className="race-chip">{tracker
           ? <span>Ready for your next plan?</span>
           : race.noRace
-            ? <><span>Maintenance block</span><b>{Math.max(0, Math.ceil(rawDaysToRace / 7))}</b><span>weeks left</span></>
-            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span><b>{daysToRace}</b><span>days to go</span></>}</div>
+            ? <><span>Maintenance block</span><b>{maintWeeksLeft}</b><span>{maintWeeksLeft === 1 ? 'week' : 'weeks'} left</span></>
+            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span>{postRace
+              ? <span>race day has passed</span>
+              : <><b>{daysToRace}</b><span>{daysToRace === 1 ? 'day' : 'days'} to go</span></>}</>}</div>
       </div>
 
       {planSyncFailed && !tracker && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptRes(plan.createdAt)))}>
@@ -1486,16 +1660,26 @@ export function App({ storage, getToken, user }) {
         <div><div className="bt">Your plan didn't save to your account</div>
           <div className="bs">Changes are only on this device until it syncs. Tap to retry →</div></div>
       </div>}
-      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} runFail={runFail} onFixRun={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} />}
+      {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} runFail={runFail} onFixRun={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} onDecision={journalDecision} fuelLog={fuelLog} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} />}
-      {view === 'settings' && <SettingsView plan={plan}
+      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} decisionLog={decisionLog} onOpenSettings={openSettings} />}
+      {view === 'settings' && <SettingsView plan={plan} focus={settingsFocus} onFocusDone={() => setSettingsFocus(null)}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}
-        openWaterCapable={!tracker && !(T.RACES[plan.race] || {}).solo && !(T.RACES[plan.race] || {}).noRace}
         onEditFitness={() => setEditFitness(true)}
         onEditPlan={() => setEditPlan(true)}
+        onStartMaintenance={
+          // Mid-plan maintenance switch (phase 4). Hidden on maintenance
+          // plans (the roll offer already lives on Today's plan-edge chip)
+          // and on solo plans: a maintenance block trains all three sports,
+          // and run-only maintenance is a named deferred build. Post-race it
+          // must bake in the recovery week exactly as the Today chip does
+          // (postRace = the race is behind you), or the same athlete got a
+          // ~25% heavier first week from this button (gauntlet 2026-07-31).
+          !tracker && plan.race !== 'maintenance' && !(T.RACES[plan.race] || {}).solo
+            ? () => { if (confirm('Switch to a 12-week maintenance block? Your current race plan will be replaced.')) rollMaintenance(rawDaysToRace < 0); }
+            : null}
         onEnterTracker={endPlanToTracker} tracker={tracker}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) {
           // The component never unmounts (plan-null renders Onboarding from
@@ -1532,9 +1716,11 @@ export function App({ storage, getToken, user }) {
       {whatIf && <WhatIfSheet plan={plan} log={log} moves={moves} adjust={adjust} wellness={recs}
         todayISO={T.iso(new Date())} initial={whatIf.initial} onClose={() => setWhatIf(null)} />}
       {cssSheet && <CssProposalSheet proposal={cssSheet} plan={plan}
-        onAccept={() => retarget(cssSheet.retarget)} onClose={() => setCssSheet(null)} />}
+        onAccept={() => { journalDecision(T.fromThresholdProposal(cssSheet), 'accepted'); retarget(cssSheet.retarget); }} onClose={() => setCssSheet(null)} />}
       {ftpSheet && <FtpProposalSheet proposal={ftpSheet} plan={plan}
-        onAccept={() => retarget(ftpSheet.retarget)} onClose={() => setFtpSheet(null)} />}
+        onAccept={() => { journalDecision(T.fromThresholdProposal(ftpSheet), 'accepted'); retarget(ftpSheet.retarget); }} onClose={() => setFtpSheet(null)} />}
+      {runSheet && <RunProposalSheet proposal={runSheet} plan={plan}
+        onAccept={() => { journalDecision(T.fromThresholdProposal(runSheet), 'accepted'); retarget(runSheet.retarget); }} onClose={() => setRunSheet(null)} />}
       {retestOpen && <CssRetestSheet recommendation={retest || { headline: 'The CSS test', why: 'A fresh measurement keeps your swim paces honest.' }}
         plan={plan} onAddTest={addCssTestToWeek} onEditFitness={() => setEditFitness(true)} onClose={() => setRetestOpen(false)} />}
 
@@ -1545,7 +1731,7 @@ export function App({ storage, getToken, user }) {
         fromTest={(editFitness && editFitness.fromTest) || null}
         onClose={() => setEditFitness(false)} onSave={updateFitness} />}
       {editPlan && <PlanSettingsEditor profile={plan.profile} onClose={() => setEditPlan(false)} onSave={reshapePlan} />}
-      {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} />}
+      {editWellness && <WellnessEditor onClose={() => setEditWellness(false)} onSave={saveWellness} existing={wellness.find(r => r.date === T.iso(new Date()))} lastWeightKg={(() => { const w = [...wellness].reverse().find(r => r.weightKg); return w ? w.weightKg : null; })()} onOpenSettings={openSettings} />}
 
       {detail && <DetailSheet w={detailShown} plan={plan} done={detail.adhoc || !!log[detail.id]} eff={effDate(detail, moves)} missedReason={missedReasons[detail.id] && missedReasons[detail.id].reason} onMissed={answerMissed} fuelLog={fuelLog} onFuel={answerFuel} positionLog={positionLog} onPosition={answerPosition} brick={brickRead}
         /* An ad-hoc workout is synthesised from a recording and has no log

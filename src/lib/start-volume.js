@@ -102,9 +102,17 @@ export function anchorLongCap({ anchors, disc, isLong, trainingWeeksElapsed }) {
  * before it. The floor keeps a mistyped answer from flattening a plan;
  * below it the week is allowed to exceed the anchor, and honesty about
  * that beats a week of sessions too short to mean anything. */
-export function weeklyHoursScale({ anchors, plannedMin, flexibleMin, trainingWeeksElapsed, recoveryDepth }) {
+export function weeklyHoursScale({ anchors, plannedMin, flexibleMin, trainingWeeksElapsed, recoveryDepth, weekShare }) {
   if (!anchors || anchors.weeklyMin == null || !plannedMin || !flexibleMin) return null;
-  const allowed = grownCap(anchors.weeklyMin, trainingWeeksElapsed) * (recoveryDepth || 1);
+  /* weekShare pro-rates the budget for a week the athlete is only training
+     part of (a plan that starts mid-week). Without it a short week sits
+     under the full-week cap by construction, the anchor never fires, and
+     the sessions that DO survive keep their unscaled sizes: the athlete's
+     very first session ends up longer than anything in the two weeks after
+     it, on a profile that declared a small weekly budget (gauntlet
+     2026-08-01). */
+  const allowed = grownCap(anchors.weeklyMin, trainingWeeksElapsed) * (recoveryDepth || 1)
+    * (weekShare == null ? 1 : Math.max(0.1, Math.min(1, weekShare)));
   if (plannedMin <= allowed) return null;
   const cut = plannedMin - allowed;                 // minutes that must go
   const f = (flexibleMin - cut) / flexibleMin;      // borne by flexible sessions

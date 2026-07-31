@@ -461,10 +461,47 @@ describe('nothing here is a model without a caller', () => {
     expect(r.pattern).toBe(null);
     expect(brickHistory({ plan: null, activities: [] }).pattern).toBe(null);
   });
+
+  it('a raced tune-up never enters the brick window', () => {
+    // the run off the bike in a RACED brick is at race effort — it says
+    // nothing about habitual training pacing, and one fast race leg in the
+    // 3-brick window can push a ruined brick out and silence a real
+    // pattern (gauntlet catch 2026-07-30)
+    const brick = { id: 'b1', discipline: 'brick', type: 'RACE', date: '2026-07-08', durationMin: 80 };
+    const mk = extra => ({ weeks: [{ index: 0, workouts: [{ ...brick, ...extra }] }] });
+    const acts = [
+      { id: 'r1', type: 'Ride', date: '2026-07-08', movingTimeSec: 38 * 60, averageWatts: 180 },
+      { id: 'r2', type: 'Run', date: '2026-07-08', movingTimeSec: 26 * 60, distance: 5000 },
+    ];
+    const args = { activities: acts, log: { b1: { done: true } }, moves: {}, paces: { run: { easy: 360, long: 340 } }, fuelLog: {} };
+    // the same setup WITHOUT the flag builds an execution, so the empty
+    // result below is the bRace filter, not a failed pair
+    expect(brickHistory({ plan: mk({}), ...args }).executions.length).toBe(1);
+    expect(brickHistory({ plan: mk({ bRace: true, title: 'TUNE-UP — Sprint Triathlon' }), ...args }).executions).toEqual([]);
+  });
 });
 
 
 /* Gauntlet regressions for phase 6. */
+describe('gauntlet: raced sessions stay out of the durability evidence (design panel 2026-07-30)', () => {
+  // the brickHistory exclusion is pinned above ('a raced tune-up never
+  // enters the brick window'), with a control proving the empty result is
+  // the flag and not a failed pair
+
+  it('the plan-branch candidate filter refuses raced sessions explicitly, not via the vacuous steady gate', () => {
+    /* A race card's segments carry no zones, so planBodySteady passes it
+       vacuously — the exclusion has to be written into the candidate filter
+       itself. Source-level because the filter lives inside the App
+       component. Plan branch only: the tracker branch reads raw activities,
+       which carry no race flag, and its own comment says so. */
+    const src = readFileSync(new URL('../app/App.jsx', import.meta.url), 'utf8');
+    const at = src.indexOf('const durabilityCandidates');
+    expect(at, 'App no longer declares durabilityCandidates where this test can find it').toBeGreaterThan(-1);
+    expect(src.slice(at, at + 3000).includes('!w.race && !w.bRace'),
+      'the plan-branch durability candidate filter no longer refuses raced sessions explicitly').toBe(true);
+  });
+});
+
 describe('gauntlet: every declared objective is actually reachable', () => {
   it('reaches four of five from generation, and the fifth from the ease path', () => {
     /* Three of the five were structurally unreachable on the first cut. The

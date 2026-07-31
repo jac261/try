@@ -154,9 +154,10 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
      intervals.icu's 1-to-5 NUMBER, and persisting it would put a number in
      perceivedEffort where the sheet writes the easy/right/hard word — the
      two surfaces would then rewrite the same unchanged review at each other
-     forever (gauntlet catch 2026-07-30). buildRecap may still use the
-     numeric fallback for DISPLAY; the persisted record takes the athlete's
-     own tap or nothing. */
+     forever (gauntlet catch 2026-07-30). buildRecap's effort slide quotes a
+     STRING feel only (a manual entry's own tap) and never the number; the
+     persisted record takes the app's log feel — the athlete's tap, or the
+     RPE-derived band an auto-log stamped — never the passthrough number. */
   const feel = (log && log[workout.id] && log[workout.id].feel) || undefined;
   const reviews = useMemo(() => T.computeReviews({
     workout, activity, intervals: reps, paces: plan.paces, profile: plan.profile, feel,
@@ -171,6 +172,7 @@ export function RecapSlides({ workout, activity, plan, log, moves, onLoadInterva
   const slides = T.buildRecap({
     workout, activity, intervals: reps, route, paces: plan.paces,
     plan, log, moves, todayISO: T.iso(new Date()),
+    reviews,   // the same computation the persist effect reports (§6)
   });
   // Resolve the current slide by its kind (stable across a lazy reps insertion
   // that would otherwise shift positional indices under the user's finger).

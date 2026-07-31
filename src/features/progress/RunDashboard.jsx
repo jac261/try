@@ -12,7 +12,10 @@ import { SpiderChart } from '@/components/SpiderChart.jsx';
  *   - real and estimated are never mixed: the benchmark row names its kind,
  *     and projections are absent rather than approximate for an estimate
  *   - no charts intervals.icu already draws, and no second km chart — the
- *     eight-week volume chart already lives above this in Progress
+ *     eight-week volume chart renders beside this in the Run tab (phase 3
+ *     reunited them), and falls back to the Overview when no Run tab
+ *     exists (tracker, or a run-excluded plan): recorded kilometres must
+ *     never vanish with a hidden tab
  */
 
 const STATE_LABEL = { ready: 'Ready', building: 'Building', 'at-risk': 'Needs attention', unknown: 'Not enough data' };
@@ -38,10 +41,7 @@ export function RunDashboard({ plan, log, moves, activities, todayISO, fuelLog }
      it exists — dormant until then, exactly like the swim's harvest. The
      live review still renders on every recorded run via the workout sheet;
      this feed is what lets several of them argue together. */
-  const reviews = (plan.weeks || []).flatMap(w => w.workouts || [])
-    .filter(w => w.discipline === 'run' && log[w.id] && log[w.id].runReview)
-    .map(w => ({ ...log[w.id].runReview, date: (log[w.id].at || '').slice(0, 10) || (moves && moves[w.id]) || w.date }))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  const reviews = T.runStoredReviews(plan, log, moves);
   const runFuelLogs = Object.values(fuelLog || {}).filter(f => f && f.discipline === 'run');
 
   const d = T.runDashboard({ profile, plan, activities, log, reviews, fuelLogs: runFuelLogs, todayISO, raceKey });

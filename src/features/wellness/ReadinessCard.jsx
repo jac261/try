@@ -13,15 +13,26 @@ import { TrendChart } from '@/components/charts.jsx';
 // for the one who wants the evidence. The fold starts closed on every load —
 // only the athlete's stored choice opens it (Jon, 2026-07-16); alarm states
 // speak through the headline, the coach line and the toggle row's chip colours.
-const LOAD_PREF = 'try.showLoad';
-const loadPref = () => { try { return localStorage.getItem(LOAD_PREF); } catch (e) { return null; } };
-const saveLoadPref = v => { try { localStorage.setItem(LOAD_PREF, v ? '1' : '0'); } catch (e) { /* private mode */ } };
-// A rejected proposal stays rejected: the signature is kind + workout + day,
-// so "Not today" holds for the rest of the day but a NEW day (or a different
-// proposal, e.g. green-morning restore after an amber ease) speaks again.
-const PROP_DISMISS = 'try.todayProposalDismissed';
-const loadPropDismiss = () => { try { return localStorage.getItem(PROP_DISMISS); } catch (e) { return null; } };
-const savePropDismiss = v => { try { localStorage.setItem(PROP_DISMISS, v); } catch (e) { /* private mode */ } };
+/* Phase 2 stray fix: these two keys were browser-global (bare try.*) —
+   shared across every account on one device, the exact cross-account leak
+   the TodayView dismissals were already migrated away from; a proposal
+   dismissed by one athlete was silenced for the next. Same pattern as
+   TodayView's DISMISS_NS: per-user namespace set from the storage prop
+   before any lazy initialiser runs, reads fall back to the legacy global
+   key once so existing choices are honoured, writes go per-user only. */
+let CARD_NS = 'try.';
+const cGet = name => {
+  try { return localStorage.getItem(CARD_NS + name) ?? localStorage.getItem('try.' + name); }
+  catch (e) { return null; }
+};
+const cSet = (name, v) => { try { localStorage.setItem(CARD_NS + name, v); } catch (e) { /* private mode */ } };
+const loadPref = () => cGet('showLoad');
+const saveLoadPref = v => cSet('showLoad', v ? '1' : '0');
+// A rejected proposal stays rejected: the signature is kind + band + workout
+// + day, so "Not today" holds for the rest of the day but a new day (or a
+// different proposal) speaks again.
+const loadPropDismiss = () => cGet('todayProposalDismissed');
+const savePropDismiss = v => cSet('todayProposalDismissed', v);
 
 const BAND_COLOR = { green: 'var(--run)', amber: 'var(--bike)', red: 'var(--danger)' };
 
@@ -58,7 +69,8 @@ function ReadinessRing({ score, band }) {
   );
 }
 
-export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport, recovery, noPlan }) {
+export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport, recovery, noPlan, storage, onDecision }) {
+  if (storage && storage.ns) CARD_NS = storage.ns;
   const [loadChoice, setLoadChoice] = useState(loadPref);
   const [whyOpen, setWhyOpen] = useState(false);
   // Declared with the other hooks, ABOVE the !rec early return: a hook below
@@ -97,7 +109,10 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
   const propSig = rawProposal
     ? rawProposal.kind + ':' + rd.band + ':' + (rawProposal.workout ? rawProposal.workout.id : '') + ':' + todayISO : null;
   const proposal = rawProposal && propDismissed !== propSig ? rawProposal : null;
-  const rejectProposal = () => { savePropDismiss(propSig); setPropDismissed(propSig); };
+  const rejectProposal = () => {
+    savePropDismiss(propSig); setPropDismissed(propSig);
+    if (onDecision && rawProposal) onDecision(T.fromTodayProposal(rawProposal), 'rejected');
+  };
 
   // Training-load signals feed the coach line, the summary numbers and the
   // auto-expand rule, so they're computed up front (all null-safe on thin data).
@@ -134,9 +149,20 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
           from this morning's band — rules & thresholds in docs/ADAPTIVE_ENGINE.md.
           Stale wellness data never drives a change (yesterday's read isn't advice). */}
       {proposal ? (() => {
-        const accept = proposal.action === 'easeToday' ? onEase
+        const acceptRaw = proposal.action === 'easeToday' ? onEase
           : proposal.action === 'restoreToday' ? onRestore
           : () => onOpen && onOpen(proposal.workout);
+        const accept = () => {
+          /* ease/restore actuate on the tap, so accepting IS the decision.
+             move-test only OPENS the sheet — the reschedule is a separate
+             manual act the athlete may never take (the documented actuator
+             gap) — so journalling 'accepted' there recorded a change that
+             never happened, and the still-visible card could then append a
+             rejection minutes later: accepted-then-dismissed for one
+             decision (gauntlet catch). It journals nothing. */
+          if (onDecision && proposal.kind !== 'move-test') onDecision(T.fromTodayProposal(proposal), 'accepted');
+          acceptRaw();
+        };
         return (
           <div className="rd-proposal">
             <div className="ph"><Icon name={proposal.kind === 'restore' ? 'bolt' : proposal.kind === 'move-test' ? 'calendar' : 'rest'} size={16} /> {proposal.headline}</div>
