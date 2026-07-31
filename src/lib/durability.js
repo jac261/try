@@ -30,15 +30,27 @@
  * over weeks is the product.
  */
 
+import { iso, startOfWeekMonday } from './date.js';
+
 // Bump when read logic or thresholds change: stored reads carry the version
 // they were computed under.
 export const DURABILITY_RULE_VERSION = 1;
 
 // Session gates sit UNDER the sprint tier's own prescribed longs (run 55,
-// ride 70 minutes), so every race distance's long sessions can qualify.
+// ride 70, swim 40 minutes), so every race distance's long sessions can
+// qualify.
+//
+// Swim reads flow through the same pace branch as runs, and the honesty
+// gates below do the rest of the work unaided: a drill-heavy session loses
+// its drill laps to the outlier filter and then fails minCoverage, so only
+// a genuinely continuous swim ever produces a read. That is the intent —
+// the question "how did this long swim end" is only meaningful when the
+// swim was actually swum straight through. Pool HR is usually absent, which
+// surfaces honestly as hrMissing rather than as a missing read.
 export const DURABILITY_GATES = {
   bike: { minMovingSec: 65 * 60 },
   run: { minMovingSec: 50 * 60 },
+  swim: { minMovingSec: 35 * 60 },
   minLaps: 6,
   minCoverage: 0.8,      // usable laps must span this share of the session
   outlierLo: 0.6,        // lap speed vs median lap speed
@@ -199,6 +211,125 @@ export const DURABILITY_BAND_LABELS = {
   'faded-a-little': 'faded a little',
   'faded-hard': 'faded hard',
 };
+
+/* Which sessions count as "the long one".
+ *
+ * Run and bike carry role === 'long' in every plan template, so a planned
+ * week names its own long sessions and this helper is not needed there.
+ * Two cases have no role to read: swim, whose templates carry a long slot
+ * only when swim is the athlete's weakest discipline, and tracker mode,
+ * which has no plan at all. For those, the week's longest session IS the
+ * long one.
+ *
+ * "Above the gate" is the second half of the rule and it matters: without
+ * it, a week holding nothing but short sessions would promote its least
+ * short one and call a 30-minute jog a long run. A week with no genuinely
+ * long session should yield nothing, which is what this does.
+ *
+ * items: [{ id, date, discipline, movingTimeSec }] in any order.
+ * Returns a Set of qualifying ids.
+ */
+export function longestOfWeek(items) {
+  const best = new Map();
+  for (const it of items || []) {
+    if (!it || !it.id || !it.date || !it.discipline) continue;
+    const gate = DURABILITY_GATES[it.discipline];
+    const sec = it.movingTimeSec || 0;
+    if (!gate || sec < gate.minMovingSec) continue;
+    const key = it.discipline + '@' + iso(startOfWeekMonday(it.date));
+    const prev = best.get(key);
+    // Ties break on the earlier date, then the id: two equal-length sessions
+    // in one week must not pick differently between renders.
+    if (!prev || sec > prev.movingTimeSec
+      || (sec === prev.movingTimeSec
+        && (it.date < prev.date || (it.date === prev.date && it.id < prev.id)))) {
+      best.set(key, { id: it.id, date: it.date, movingTimeSec: sec });
+    }
+  }
+  return new Set([...best.values()].map(b => b.id));
+}
+
+/* Which recordings deserve a durability read, newest-and-most-relevant
+ * first. Pure: the caller supplies the clock and the store's contents.
+ *
+ * Extracted from App so the long-session rules above are exercised rather
+ * than merely wired. Depends only on lower-level lib helpers, all injected
+ * as `deps` to keep this module free of cross-imports it would not
+ * otherwise need.
+ *
+ * plan: the plan, or null/tracker for the no-plan branch
+ * have: Set of activity ids already read
+ * floor: ISO date below which candidates are out of the window, or null
+ */
+export function durabilityCandidates({ plan, activities, log, moves, have, floor, todayISO, hour, deps }) {
+  if (!Array.isArray(activities)) return [];
+  const { DISCIPLINE, planBodySteady, brickPairFor, activityFor, reviewedWeekMonday } = deps;
+  const seen = have || new Set();
+  const out = [];
+
+  if (plan && plan.race !== 'tracker' && Array.isArray(plan.weeks) && plan.weeks.length) {
+    /* Swim has no long role to read: 'swim:long' reaches a template only
+       when swim is the athlete's weakest discipline, so keying on role
+       would give a card that never fills. The week's longest planned swim
+       is the long one instead, judged on PLANNED minutes so the choice
+       cannot move when a recording is matched or re-matched. The read's
+       own gate still decides whether the recording supports a verdict.
+       Run and bike keep their roles untouched. */
+    const swimLongIds = longestOfWeek(plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline === 'swim' && !w.race && !w.bRace)
+      .map(w => ({ id: w.id, date: w.date, discipline: 'swim', movingTimeSec: (w.durationMin || 0) * 60 })));
+
+    plan.weeks.flatMap(w => w.workouts)
+      /* Raced sessions are refused EXPLICITLY (design panel 2026-07-30):
+         the durability read measures drift under a steady intent, and a
+         raced split is pacing by choice, not fatigue resistance. The
+         planBodySteady gate below cannot make this call — race cards carry
+         no zones, so it would pass them vacuously rather than by
+         judgement. This is a PLAN-branch guarantee only: the tracker
+         branch below reads raw activities, which carry no race flag, so a
+         race ridden in tracker mode is indistinguishable there and its
+         read persists across plans (the store spans plans by design). */
+      .filter(w => !w.race && !w.bRace
+        && ((w.role === 'long' && (w.discipline === 'run' || w.discipline === 'bike'))
+          || w.discipline === 'brick' || swimLongIds.has(w.id)) && log[w.id])
+      .forEach(w => {
+        if (w.discipline === 'brick') {
+          // the BIKE leg only, judged by ITS OWN segments: a brick's run
+          // leg starts pre-fatigued by design and is deferred
+          if (!planBodySteady(w, 'bike')) return;
+          const pair = brickPairFor({ workout: w, activities, moves });
+          if (pair && !seen.has(pair.ride.id)) out.push({ activity: pair.ride, discipline: 'bike' });
+        } else {
+          if (!planBodySteady(w)) return;
+          const a = activityFor({ workout: w, activities, moves });
+          if (a && !seen.has(a.id)) out.push({ activity: a, discipline: w.discipline });
+        }
+      });
+  } else if (!plan || plan.race === 'tracker') {
+    /* No plan, so nothing is named "long" — the week's longest per
+       discipline is, provided it clears the gate too. Taking every
+       qualifying session instead fills the card with ordinary midweek work
+       and calls all of it durability. */
+    const eligible = activities.filter(a => {
+      const d = DISCIPLINE[a.type];
+      return (d === 'run' || d === 'bike' || d === 'swim') && !a.manual;
+    });
+    const longIds = longestOfWeek(eligible.map(a => ({
+      id: a.id, date: a.date, discipline: DISCIPLINE[a.type], movingTimeSec: a.movingTimeSec || 0,
+    })));
+    eligible.forEach(a => {
+      if (longIds.has(a.id) && !seen.has(a.id)) out.push({ activity: a, discipline: DISCIPLINE[a.type] });
+    });
+  }
+
+  const bounded = floor ? out.filter(c => c.activity.date >= floor) : out;
+  const wm = iso(startOfWeekMonday(todayISO));
+  const reviewed = reviewedWeekMonday(todayISO, hour);
+  const inReviewed = c => reviewed && c.activity.date >= reviewed && c.activity.date < wm;
+  return bounded.sort((a, b) =>
+    (inReviewed(b) ? 1 : 0) - (inReviewed(a) ? 1 : 0)
+    || (a.activity.date < b.activity.date ? 1 : -1));
+}
 
 // Trend over a discipline's recent reads (newest first): only speaks with
 // three or more comparable reads, and only in coarse, honest strokes.

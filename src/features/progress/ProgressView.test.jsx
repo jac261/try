@@ -102,17 +102,52 @@ describe('ProgressView renders in every mode', () => {
     expect(html).toContain('both quality runs landed on target');
   });
 
-  it('renders durability rows with honest per-discipline wording', async () => {
+  const DURABILITY_FIXTURE = [
+    { activityId: 'r1', date: '2026-07-14', discipline: 'run', durationMin: 95, read: { band: 'held-strong', outputDropPct: 2.1, hrDriftPct: 3.0, efDropPct: null, hrMissing: false } },
+    { activityId: 'b1', date: '2026-07-12', discipline: 'bike', durationMin: 160, read: { band: 'faded-a-little', outputDropPct: 5.2, hrDriftPct: null, efDropPct: null, hrMissing: true } },
+    { activityId: 's1', date: '2026-07-11', discipline: 'swim', durationMin: 55, read: { band: 'held-strong', outputDropPct: 1.4, hrDriftPct: null, efDropPct: null, hrMissing: true } },
+  ];
+
+  it('durability lives in each discipline tab, wording honest to that discipline', async () => {
     const plan = generatePlan(profile);
-    const durability = [
-      { activityId: 'r1', date: '2026-07-14', discipline: 'run', durationMin: 95, read: { band: 'held-strong', outputDropPct: 2.1, hrDriftPct: 3.0, efDropPct: null, hrMissing: false } },
-      { activityId: 'b1', date: '2026-07-12', discipline: 'bike', durationMin: 160, read: { band: 'faded-a-little', outputDropPct: 5.2, hrDriftPct: null, efDropPct: null, hrMissing: true } },
-    ];
-    const html = await mount({ plan, activities: null, durability });
+    const run = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE }, 'Run');
+    expect(run).toContain('Durability');
+    expect(run).toContain('how the long runs ended');
+    expect(run).toContain('slower late');            // run wording is pace
+    expect(run).not.toContain('power ~5.2% down late');  // the ride is not here
+
+    const bike = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE }, 'Bike');
+    expect(bike).toContain('how the long rides ended');
+    expect(bike).toContain('power ~5.2% down late'); // bike wording is power
+    expect(bike).toContain('no heart rate data');    // hrMissing says so
+    expect(bike).not.toContain('slower late');
+
+    const swim = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE }, 'Swim');
+    expect(swim).toContain('how the long swims ended');
+    expect(swim).toContain('Swim ·');                // its own row label
+    expect(swim).toContain('no heart rate data');    // pool HR absent, said plainly
+  });
+
+  it('Overview no longer carries durability when the discipline has its own tab', async () => {
+    const plan = generatePlan(profile);
+    const overview = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE });
+    expect(overview).not.toContain('Durability');
+  });
+
+  it('a discipline with no tab keeps its card on Overview', async () => {
+    // solo run plan: swim and bike have no tab, so a run card must still
+    // appear somewhere rather than vanishing with the tab that never existed
+    const plan = generatePlan({ ...profile, raceType: 'run10k' });
+    // a solo plan opens on its own discipline, so ask for Overview by name
+    const html = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE }, 'Overview');
     expect(html).toContain('Durability');
-    expect(html).toContain('slower late');          // run wording is pace
-    expect(html).toContain('power ~5.2% down late'); // bike wording is power
-    expect(html).toContain('no heart rate data');    // hrMissing says so
+    expect(html).toContain('how the long rides ended');  // bike has no tab here
+    expect(html).toContain('how the long swims ended');  // nor does swim
+    expect(html).not.toContain('how the long runs ended'); // run has one, so it is not here
+
+    // and the run card is on the Run tab, not lost with the fallback
+    const run = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE }, 'Run');
+    expect(run).toContain('how the long runs ended');
   });
 
   it('maintenance block: the countdown speaks in block weeks, never race day', async () => {

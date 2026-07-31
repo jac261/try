@@ -60,7 +60,18 @@ boundaries), or on a four-week cadence where no boundaries exist.
 ## Durability as a decision input (pass 5)
 
 `durability.js` reads a long session's first vs final third (output, HR drift,
-efficiency) and bands it held-strong / faded-a-little / faded-hard. Pass 5 gave
+efficiency) and bands it held-strong / faded-a-little / faded-hard. All three
+disciplines qualify: swim reads flow through the same pace branch as runs,
+gated at 35 minutes, and the coverage gate means only a continuously swum
+session is ever read (a drill-heavy one loses its drill laps to the outlier
+filter and then fails coverage). Which session counts as the long one comes
+from `role === 'long'` for run and bike, and from `longestOfWeek` where no
+role names one — swim, whose templates carry a long slot only when swim is
+the weakest discipline, and tracker mode, which has no plan. That helper
+requires the gate as well as the weekly maximum, so a week of only short
+sessions yields nothing rather than promoting its least short session.
+Selection lives in `durabilityCandidates`, a pure lib function; the Progress
+tab renders one card per discipline inside that discipline's own tab. Pass 5 gave
 it exactly one decision effect: when a discipline has otherwise fully earned
 progression, a **corroborated hard fade** (`fadeCorroborated`: output *and* the
 cardiac picture both past the hard band) converts that week to a hold, once per
