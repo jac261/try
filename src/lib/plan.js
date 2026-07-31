@@ -1327,6 +1327,13 @@ const LONG_RUN = {
 // handed a 235 minute run. Solo plans only, so triathlon output stays
 // byte-identical. Mirrors LONG_SWIM_CAP below.
 const LONG_RUN_CAP = 180;
+/* How much of the start week must remain for the plan to begin in it. Below
+   this the first week would be a stub (a Sunday start on a five-day week
+   leaves one session), so the plan rolls to the following Monday instead.
+   Two is deliberately low: a Friday or Saturday start keeps its weekend,
+   which is usually where the long and key sessions live, and training two
+   days sooner beats a tidier grid. */
+const FIRST_WEEK_MIN_DAYS = 2;
 // A marathon taper that still schedules a 2 hour run 7 days out is the first
 // thing a marathon buyer inspects. Solo Taper weeks before race week cap the
 // long run; race week demotes it to a shakeout entirely.
@@ -2069,7 +2076,60 @@ export const generatePlan = function (profile, opts) {
   const fitness = FITNESS[profile.fitness] || FITNESS.intermediate;
   const pc = computePaces(profile);
 
-  const weekStart0 = startOfWeekMonday(profile.startDate || new Date());
+  /* Hoisted above the week grid because the start-day rule below needs the
+     athlete's training weekdays before any date exists. Read again as
+     `prefDays` in the layout section, unchanged. */
+  const prefDays0 = (profile.trainingDays && profile.trainingDays.length >= 3)
+    ? profile.trainingDays.slice().sort((a, b) => a - b) : null;
+
+  /* A plan starts on the day the athlete started it, not on that week's
+     Monday (bug, 2026-08-01: a Thursday start laid sessions on the Monday,
+     Tuesday and Wednesday before it — days that were never available, that
+     the athlete cannot do, and that the coach brain then counts as missed on
+     day one, denying progression before any training has happened).
+     Two shapes, per Jon: TRIM the first week to the days that remain, unless
+     so little of the week is left that the first week would be a stub, in
+     which case the whole plan ROLLS to the following Monday and starts
+     clean. Rolling recomputes totalWeeks from the new anchor, which is
+     correct: an athlete who begins next Monday has one fewer week to train.
+     A Monday start hits neither branch and generates exactly as before. */
+  /* REGENERATION KEEPS ITS GRID. A plan's week anchor is history the moment
+     the athlete trains a day of it: their ticks, moves and adjustments are
+     all attached to specific dates. Re-deriving the anchor from a startDate
+     stamped months ago would re-interpret that history under today's rules
+     — on a plan created before this fix, a reshape would roll the whole grid
+     a week and the same-date survivor check would then discard EVERY logged
+     completion, while a one-tap retarget would silently re-date them
+     (gauntlet 2026-08-01). So callers regenerating an existing plan pass its
+     grid, and only a genuinely new plan derives one. */
+  const grid = (opts && opts.grid && opts.grid.start) ? opts.grid : null;
+  const startISO = iso(profile.startDate || new Date());
+  let weekStart0, firstWeekFrom;
+  if (grid) {
+    weekStart0 = startOfWeekMonday(grid.start);
+    firstWeekFrom = grid.firstWeekFrom || null;
+  } else {
+    weekStart0 = startOfWeekMonday(profile.startDate || new Date());
+    // 0 = Monday ... 6 = Sunday, from the helpers rather than a second rule.
+    const startDow = daysBetween(iso(weekStart0), startISO);
+    // Legacy profiles carry no trainingDays (the daysPerWeek queues place
+    // them instead); those are trimmed but never rolled, since the
+    // surviving-day count cannot be known before the layout runs.
+    const daysLeft = prefDays0 ? prefDays0.filter(d => d >= startDow).length : null;
+    const rolled = iso(addDays(weekStart0, 7));
+    /* Never roll past the race. A Saturday start with a race the next day
+       would otherwise anchor the plan AFTER race day, and the race would
+       vanish from the plan entirely (no race workout, no taper). */
+    const raceSurvivesRoll = !profile.raceDate || rolled <= iso(profile.raceDate);
+    if (daysLeft !== null && daysLeft < FIRST_WEEK_MIN_DAYS && raceSurvivesRoll) {
+      weekStart0 = addDays(weekStart0, 7);
+    }
+    /* Stamped only when sessions are ACTUALLY trimmed. A Tuesday start for a
+       Tue/Thu/Sat athlete removes nothing, and flagging it would send the
+       load seed to week two for a week that is already whole. */
+    const anyDayBeforeStart = prefDays0 ? prefDays0.some(d => d < startDow) : true;
+    firstWeekFrom = startISO > iso(weekStart0) && anyDayBeforeStart ? startISO : null;
+  }
   // Whole weeks from the start Monday THROUGH the race's own week, so race day
   // always lands inside the plan. (Math.round(weeksBetween) truncated a race
   // that fell more than half a week past the last Monday — e.g. the default
@@ -2112,8 +2172,7 @@ export const generatePlan = function (profile, opts) {
       .concat(raceRecovery ? ['Maintain'] : []);
   // Scheduling preference: explicit training weekdays (0=Mon..6=Sun) + a long-session
   // day. Falls back to the legacy fixed layout when a profile predates the preference.
-  const prefDays = (profile.trainingDays && profile.trainingDays.length >= 3)
-    ? profile.trainingDays.slice().sort((a, b) => a - b) : null;
+  const prefDays = prefDays0;
   const days = prefDays ? prefDays.length : profile.daysPerWeek;
   const template = disciplineTemplate(days, profile.excludedDiscipline, race.solo || null);
   let longDay = profile.longDay;
@@ -2376,7 +2435,14 @@ export const generatePlan = function (profile, opts) {
     const occCount = {};
     for (let d = 0; d < 7; d++) {
       const date = iso(addDays(weekStart0, w * 7 + d));
-      const s = dayMap[d];
+      // Days before the athlete's start date were never available to them.
+      // They become Rest rather than disappearing, so every week keeps its
+      // seven entries and no consumer meets an empty week 0 (the digest's
+      // week resolution and Today's current-week find both degrade on one).
+      // Trimming HERE rather than after assembly is what keeps the doubles
+      // safe: they pick their host from the workouts already built, so they
+      // simply choose among surviving days.
+      const s = firstWeekFrom && w === 0 && date < firstWeekFrom ? null : dayMap[d];
       if (!s) {
         workouts.push({ id: w + '-' + d, week: w, phase: phase, date: date, discipline: 'rest', type: 'Rest', title: 'Rest', durationMin: 0, segments: [], distance: null });
         continue;
@@ -2686,7 +2752,17 @@ export const generatePlan = function (profile, opts) {
       || ((x.discipline === 'bike' || x.discipline === 'brick') && anchors.rideLongMin != null);
     const isLongish = x => x.role === 'long' || x.discipline === 'brick' || x.discipline === 'swim';
     let tw = 0;
-    weeks.forEach(wk => {
+    /* A trimmed first week trains only part of the week, so it may only
+       spend part of the week's budget. Measured against the first FULL week
+       rather than a day count, so it holds for legacy profiles whose
+       training days the layout chooses rather than the athlete. */
+    const realCount = wk => wk.workouts.filter(x => x.discipline !== 'rest' && !x.second).length;
+    const shareFor = (wk, i) => {
+      if (i !== 0 || !firstWeekFrom || !weeks[1]) return 1;
+      const full = realCount(weeks[1]);
+      return full ? Math.min(1, realCount(wk) / full) : 1;
+    };
+    weeks.forEach((wk, wkIdx) => {
       const flexible = wk.workouts.filter(x => !x.race && !x.bRace && !x.test && !x.second
         && x.discipline !== 'rest' && x.discipline !== 'strength'
         && !(isLongish(x) && hasOwnAnchor(x)) && x.durationMin > 20);
@@ -2700,6 +2776,7 @@ export const generatePlan = function (profile, opts) {
            week before it, so the step-back week carried MORE load and the
            plan ran four months without a real one */
         recoveryDepth: wk.isRecovery ? fitness.recoveryDepth : 1,
+        weekShare: shareFor(wk, wkIdx),
       });
       if (f != null && f < 1) {
         flexible.forEach(x => {
@@ -2797,6 +2874,9 @@ export const generatePlan = function (profile, opts) {
     profile: profile, race: race.key, createdAt: new Date().toISOString(),
     totalWeeks: totalWeeks, paces: pc, weeks: weeks,
     leadIn: leadIn || undefined, shortRunway: shortRunway || undefined,
+    // Set when the first week was trimmed to a mid-week start. Internal:
+    // consumers that model a TYPICAL week must not read a short one.
+    firstWeekFrom: firstWeekFrom || undefined,
     // The swap verdict this plan was built with, so retargets can hold it
     // steady (see the swapWl note above). null means "built with no swap".
     limiterSwap: swapWl,

@@ -68,6 +68,14 @@ selection then leads with that work without filling the session with it, and
 only prescribes drills they own the equipment for. Declaring nothing leaves
 sessions exactly as they were.
 
+`swim-kit.js` (phase 6) aggregates the session's drill gear into the detail
+sheet's one Bring line. It resolves drills by label suffix against the closed
+catalogues (drillSegs builds labels as reps, length, then the drill name), a
+contract pinned by a per-drill coupling test plus the invariant that no drill
+name is a suffix of another; open-water wetsuit rehearsals add the wetsuit.
+The line only ever names kit the prescription actually uses, and a session
+that needs nothing shows nothing.
+
 ## Open water
 
 `swim-open-water.js`: five race-specific categories, ten skills each with a

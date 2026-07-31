@@ -7,7 +7,7 @@ import { CalendarView } from '@/features/calendar/CalendarView.jsx';
 import { App } from '@/app/App.jsx';
 import { storageForUser } from '@/app/storage.js';
 import { buildTrackerPlan, generatePlan } from '@/lib/plan.js';
-import { iso } from '@/lib/date.js';
+import { iso, addDays } from '@/lib/date.js';
 
 /* The calendar's add-a-session cards (Jon, 2026-07-17): one heading and one
    card design in both modes, full discipline colour, icon front and centre,
@@ -111,4 +111,137 @@ describe('the full add and remove journey (tracker diary via the calendar)', () 
     root.unmount();
     el.remove();
   }, 20000);
+});
+
+describe('history survives a new plan (field report 2026-07-30)', () => {
+  /* "Starting a new plan deletes all my past recorded activities in the
+     calendar." Nothing was deleted: the previous-month button stopped at the
+     plan's first week, and recorded dots were tracker-only — so an athlete
+     who came from a tracker lost SIGHT of their whole diary the moment a
+     plan began. These pin the display fix; moves and add-targets stay
+     clamped to the plan window. */
+  const planProfile = {
+    name: 'T', raceType: 'olympic', fitness: 'intermediate',
+    fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70,
+    trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5,
+    startDate: iso(new Date()), raceDate: iso(addDays(new Date(), 112)),
+  };
+  const monthsBack = n => { const d = new Date(); d.setMonth(d.getMonth() - n); return iso(d); };
+  const oldRide = { id: 'old1', type: 'Ride', date: monthsBack(2), movingTimeSec: 3600, distance: 30000 };
+
+  it('the previous-month button reaches months before the plan', async () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    await act(async () => {
+      createRoot(el).render(<CalendarView plan={generatePlan(planProfile)} log={{}} moves={{}}
+        open={() => {}} easedOf={w => w} onToggleWorkout={() => {}} onMove={() => {}}
+        activities={[oldRide]} onOpenRecording={() => {}} onAddWorkout={() => {}} />);
+    });
+    const prev = el.querySelector('[aria-label="Previous month"]');
+    expect(prev.disabled).toBe(false);                       // was disabled at the plan's first month
+    await act(async () => { prev.click(); });
+    await act(async () => { prev.click(); });
+    // two months back: the old ride's month is reachable and its day is dotted
+    const dotted = [...el.querySelectorAll('.cal-day')].find(c =>
+      (c.getAttribute('aria-label') || '').includes('recorded'));
+    expect(dotted).toBeTruthy();
+    expect(dotted.querySelector('.cd-dots i.done')).toBeTruthy();
+    el.remove();
+  });
+
+  /* The grid opens on TODAY's month, and a plan that starts mid-week can have
+     its first sessions in the next one (a Friday start on a Mon/Tue/Thu/Sat/Sun
+     week begins on the Saturday). Walk forward rather than assuming. */
+  const renderAt = async (plan, activities, log) => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    await act(async () => {
+      createRoot(el).render(<CalendarView plan={plan} log={log || {}} moves={{}}
+        open={() => {}} easedOf={w => w} onToggleWorkout={() => {}} onMove={() => {}}
+        activities={activities} onOpenRecording={() => {}} onAddWorkout={() => {}} />);
+    });
+    return el;
+  };
+  const cellFor = async (el, d) => {
+    for (let i = 0; i < 4; i++) {
+      const c = el.querySelector('[data-caldate="' + d + '"]');
+      if (c) return c;
+      const next = el.querySelector('[aria-label="Next month"]');
+      if (!next || next.disabled) return null;
+      await act(async () => { next.click(); });
+    }
+    return el.querySelector('[data-caldate="' + d + '"]');
+  };
+  // a planned bike day, so a Ride recording can genuinely match it
+  const bikeDay = plan => plan.weeks.flatMap(w => w.workouts)
+    .find(w => w.discipline === 'bike' && w.durationMin > 0 && !w.race);
+
+  it('a planned day never wears two dots for one session', async () => {
+    /* One session, one dot: a TICKED session whose recording matches it on
+       discipline and duration is already represented by the planned dot.
+       (This fixture used to pass for the wrong reason — its ride was a
+       different discipline, out of window and unticked, so nothing was ever
+       actually claimed.) */
+    const plan = generatePlan(planProfile);
+    const ride = bikeDay(plan);
+    expect(ride).toBeTruthy();
+    const matched = { id: 'm1', type: 'Ride', date: ride.date, movingTimeSec: ride.durationMin * 60, distance: 30000 };
+    const el = await renderAt(plan, [matched], { [ride.id]: { done: true } });
+    const cell = await cellFor(el, ride.date);
+    expect(cell, 'the planned day never came into view').toBeTruthy();
+    const planned = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline !== 'rest' && w.date === ride.date).length;
+    expect(cell.querySelectorAll('.cd-dots i').length).toBe(Math.min(3, planned));
+    el.remove();
+  });
+
+  it('a recording no planned session speaks for still gets its dot', async () => {
+    /* The bug Jon reported: recorded sessions appeared in the day card but
+       wore no dot, because ANY planned session suppressed every recording.
+       An unticked session claims nothing, so its day shows both facts. */
+    const plan = generatePlan(planProfile);
+    const ride = bikeDay(plan);
+    const extra = { id: 'm2', type: 'Ride', date: ride.date, movingTimeSec: ride.durationMin * 60, distance: 30000 };
+    const el = await renderAt(plan, [extra], {});   // nothing ticked
+    const cell = await cellFor(el, ride.date);
+    const planned = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline !== 'rest' && w.date === ride.date).length;
+    expect(cell.querySelectorAll('.cd-dots i').length).toBe(Math.min(3, planned + 1));
+    expect(cell.getAttribute('aria-label')).toContain('1 recorded session');
+    el.remove();
+  });
+
+  it('a second ride on a matched day is not swallowed by the first', async () => {
+    // one-to-one claiming: the ticked session speaks for ONE recording, and
+    // the other is a real session the grid must still show
+    const plan = generatePlan(planProfile);
+    const ride = bikeDay(plan);
+    const secs = ride.durationMin * 60;
+    const two = [
+      { id: 'm3', type: 'Ride', date: ride.date, movingTimeSec: secs, distance: 30000 },
+      { id: 'm4', type: 'Ride', date: ride.date, movingTimeSec: secs, distance: 28000 },
+    ];
+    const el = await renderAt(plan, two, { [ride.id]: { done: true } });
+    const cell = await cellFor(el, ride.date);
+    const planned = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline !== 'rest' && w.date === ride.date).length;
+    expect(cell.querySelectorAll('.cd-dots i').length).toBe(Math.min(3, planned + 1));
+    el.remove();
+  });
+
+  it('a pre-plan day speaks about history, never about dropping sessions', async () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    await act(async () => {
+      createRoot(el).render(<CalendarView plan={generatePlan(planProfile)} log={{}} moves={{}}
+        open={() => {}} easedOf={w => w} onToggleWorkout={() => {}} onMove={() => {}}
+        activities={[]} onOpenRecording={() => {}} onAddWorkout={() => {}} />);
+    });
+    const prev = el.querySelector('[aria-label="Previous month"]');
+    await act(async () => { prev.click(); });
+    const anyDay = [...el.querySelectorAll('.cal-day')].find(c => c.getAttribute('data-caldate'));
+    await act(async () => { anyDay.click(); });
+    expect(el.textContent).not.toContain('drop a session here');
+    el.remove();
+  });
 });

@@ -19,19 +19,12 @@ import { swimReviewEvidence } from './swim-review.js';
 import { TECHNIQUE_FOCUS, saneTechnique } from './swim-drills.js';
 
 /* §7: where a number came from. Every metric carries one, and 'missing' is
-   a first-class answer rather than a zero pretending to be data. */
-export const SOURCE_KINDS = ['recorded', 'derived', 'reported', 'estimated', 'missing'];
-export const SOURCE_WORDS = {
-  recorded: 'from your recordings',
-  derived: 'worked out from your plan and logs',
-  reported: 'your own answer',
-  estimated: 'an estimate',
-  missing: 'not enough data yet',
-};
-export function metric(value, kind, note) {
-  const k = SOURCE_KINDS.includes(kind) ? kind : 'missing';
-  return { value: value == null ? null : value, kind: value == null ? 'missing' : k, note: note || null };
-}
+   a first-class answer rather than a zero pretending to be data. Phase 2
+   hoisted the vocabulary to coaching/evidence.js (the spec's §2 kinds are
+   these, verbatim); re-exported here so every existing consumer is
+   byte-unchanged. */
+import { SOURCE_KINDS, SOURCE_WORDS, metric } from './coaching/evidence.js';
+export { SOURCE_KINDS, SOURCE_WORDS, metric };
 
 export const DASH_RULES = {
   weeks: 6,              // the window every rolling figure uses
