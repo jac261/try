@@ -33,6 +33,16 @@ export function digestWindowOpen(weekMonday, todayISO) {
   return todayISO <= iso(addDays(weekMonday, 9));
 }
 
+// When a stored weekly decision stops being provisional (2026-07-31). The
+// Sunday 17:00 rule wraps a week that still CONTAINS today, so a verdict
+// written then can be wrong by 21:00 for reasons the athlete just fixed — a
+// race ticked after the write froze as an unfinished key session forever.
+// While the reviewed week still contains today the stored decision may be
+// recomputed and rewritten; from the Monday after, it is history.
+export function reviewedWeekFinal(weekMonday, todayISO) {
+  return todayISO > iso(addDays(weekMonday, 6));
+}
+
 const inRange = (d, a, b) => d >= a && d <= b;
 
 /* ---- the block review (pass 4) ----

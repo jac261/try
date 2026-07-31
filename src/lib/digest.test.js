@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reviewedWeekMonday, digestWindowOpen, buildWeeklyDigest } from './digest.js';
+import { reviewedWeekMonday, digestWindowOpen, reviewedWeekFinal, buildWeeklyDigest } from './digest.js';
 import { estimateTss } from './adapt.js';
 
 // 2026-07-06 is a Monday; 2026-07-12 the Sunday closing that week.
@@ -33,6 +33,18 @@ describe('reviewedWeekMonday (which week wraps)', () => {
   it('Monday through Saturday wrap the finished week', () => {
     expect(reviewedWeekMonday(NEXT_MON, 9)).toBe(MON);
     expect(reviewedWeekMonday('2026-07-18', 12)).toBe(MON); // Saturday
+  });
+});
+
+describe('reviewedWeekFinal (when a stored decision stops being provisional)', () => {
+  it('the reviewed week is not final while it still contains today', () => {
+    // Sunday evening: the week wraps for review, but a session ticked at
+    // 21:00 must still be able to correct the verdict written at 17:05
+    expect(reviewedWeekFinal(MON, SUN)).toBe(false);
+  });
+  it('from the Monday after, the decision is frozen for good', () => {
+    expect(reviewedWeekFinal(MON, NEXT_MON)).toBe(true);
+    expect(reviewedWeekFinal(MON, '2026-07-15')).toBe(true); // Wednesday, digest window still open
   });
 });
 

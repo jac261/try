@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideWeek, classifyCompletion, DECISION_LABELS, COACH_RULE_VERSION, MISSED_REASONS } from './coach.js';
+import { decideWeek, classifyCompletion, prevWeeksFor, DECISION_LABELS, COACH_RULE_VERSION, MISSED_REASONS } from './coach.js';
 import { generatePlan, buildTrackerPlan } from './plan.js';
 import { iso, startOfWeekMonday } from './date.js';
 
@@ -289,6 +289,23 @@ describe('tune-up races are judged as races, not workouts', () => {
     expect(d.overall.headline).toBe('Room to build soon, not yet');
     expect(d.overall.conflicting.some(c => /tune-up race has no result marked yet/.test(c))).toBe(true);
     expect(d.overall.conflicting.some(c => /not clean enough/.test(c))).toBe(false);
+  });
+});
+
+describe('prevWeeksFor (the stored history a decision may read)', () => {
+  it('excludes the decided week itself and anything after it, newest first', () => {
+    // On a Sunday-evening provisional freeze the log already holds THIS
+    // week's entry; feeding it back as prevWeeks[0] would fail the repeat
+    // rule's adjacency check and wrongly deny progression.
+    const coachLog = {
+      '2026-07-06': { weekMonday: '2026-07-06' },
+      '2026-07-13': { weekMonday: '2026-07-13' },
+      '2026-07-20': { weekMonday: '2026-07-20' },
+    };
+    expect(prevWeeksFor(coachLog, '2026-07-20').map(d => d.weekMonday)).toEqual(['2026-07-13', '2026-07-06']);
+    expect(prevWeeksFor(coachLog, '2026-07-27').map(d => d.weekMonday)).toEqual(['2026-07-20', '2026-07-13', '2026-07-06']);
+    expect(prevWeeksFor({}, '2026-07-20')).toEqual([]);
+    expect(prevWeeksFor(null, '2026-07-20')).toEqual([]);
   });
 });
 

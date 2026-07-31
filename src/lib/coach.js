@@ -153,6 +153,16 @@ export function classifyCompletion({ workout, entry, adjustEntry, missedReason, 
 
 const week = (weekMonday, d) => iso(addDays(weekMonday, d));
 
+// The stored history a decision for weekMonday may read: strictly earlier
+// weeks, newest first. Strictly earlier matters — on a Sunday-evening
+// provisional freeze the log already holds the decided week's own entry,
+// and feeding it back as prevWeeks[0] fails the repeat rule's adjacency
+// check and wrongly denies progression (2026-07-31).
+export function prevWeeksFor(coachLog, weekMonday) {
+  return Object.keys(coachLog || {}).filter(k => k < weekMonday)
+    .sort().reverse().map(k => coachLog[k]);
+}
+
 // Sessions of the reviewed week with their classifications, by discipline.
 function weekSessions({ plan, log, moves, adjust, missedReasons, weekMonday, todayISO }) {
   const weekEnd = week(weekMonday, 6);

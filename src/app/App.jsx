@@ -731,11 +731,15 @@ export function App({ storage, getToken, user }) {
     });
     return out;
   };
-  // Freeze the coach brain's weekly decision at the digest's own boundary:
-  // the first render that sees a reviewed week with no stored decision writes
-  // it once; every later render quotes the store. Progress shows the OPEN
-  // week live and labelled as in progress; only closed weeks freeze (design
-  // panel 2026-07-20).
+  // Freeze the coach brain's weekly decision at the digest's own boundary.
+  // While the reviewed week still CONTAINS today (the Sunday-evening wrap),
+  // the stored decision is provisional: it recomputes on any input change,
+  // so a race ticked at 21:00 corrects the verdict written at 17:05. From
+  // the Monday after, every render quotes the store — a verdict frozen at
+  // that Sunday wrap used to be permanent, and any Sunday key session
+  // unticked at 17:00 froze 'upcoming'/not-clean forever (tracked catch
+  // 2026-07-31; design panel 2026-07-20 for the freeze itself). Progress
+  // shows the OPEN week live and labelled as in progress.
   useEffect(() => {
     if (!hydrated) return;
     const todayISO = T.iso(new Date());
@@ -748,12 +752,13 @@ export function App({ storage, getToken, user }) {
     // one (re-verify catch 2026-07-20).
     const stored = weekMonday && coachLog[weekMonday];
     const planId = (plan && plan.createdAt) || null;
-    if (!weekMonday || (stored && (stored.planCreatedAt ?? null) === planId)) return;
+    const storedStands = stored && (stored.planCreatedAt ?? null) === planId;
+    if (!weekMonday || (storedStands && T.reviewedWeekFinal(weekMonday, todayISO))) return;
     // Freeze only inside the digest's own window, and only after a settle
     // delay: the post-hydration activity and wellness fetches land on later
     // round-trips, and a verdict frozen from a half-loaded state would be
     // wrong forever (gauntlet catch). Any dep change re-arms the timer with
-    // fresher data; the write happens at most once per week regardless.
+    // fresher data.
     if (!T.digestWindowOpen(weekMonday, todayISO)) return;
     if (!fetchesSettled) return;
     // hold for the reviewed week's own durability read while this load's
@@ -761,12 +766,19 @@ export function App({ storage, getToken, user }) {
     // budget is spent the freeze proceeds with what exists
     if (!durabilityDone && Object.keys(durabilityFor(weekMonday)).length === 0) return;
     const t = setTimeout(() => {
-      const prevWeeks = Object.keys(coachLog).sort().reverse().map(k => coachLog[k]);
+      // strictly earlier weeks only: on a provisional re-freeze the log
+      // already holds THIS week's entry, and feeding it back as prevWeeks[0]
+      // fails the repeat rule's adjacency check (2026-07-31)
+      const prevWeeks = T.prevWeeksFor(coachLog, weekMonday);
       const decision = T.decideWeek({
         plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
         missedReasons, todayISO, weekMonday, prevWeeks,
         durabilityByDiscipline: durabilityFor(weekMonday),
       });
+      // decideWeek is deterministic, so an unchanged recomputation must not
+      // rewrite: the write bumps coachLog, which re-runs this effect, and
+      // without this bail the provisional window would rewrite every 2s.
+      if (storedStands && T.reviewEqual(stored, decision)) return;
       setCoachLog(storage.saveCoachDecision(weekMonday, decision));
     }, 2000);
     return () => clearTimeout(t);
@@ -1234,7 +1246,9 @@ export function App({ storage, getToken, user }) {
     plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
     missedReasons, todayISO: T.iso(new Date()),
     weekMonday: T.iso(T.startOfWeekMonday(new Date())),
-    prevWeeks: Object.keys(coachLog).sort().reverse().map(k => coachLog[k]),
+    // strictly earlier weeks: after the Sunday-evening wrap the log holds
+    // THIS week's own entry, which must not read as the "previous" week
+    prevWeeks: T.prevWeeksFor(coachLog, T.iso(T.startOfWeekMonday(new Date()))),
     durabilityByDiscipline: durabilityFor(T.iso(T.startOfWeekMonday(new Date()))),
   });
 
