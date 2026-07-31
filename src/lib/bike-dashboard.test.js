@@ -452,3 +452,25 @@ describe('gauntlet: the race date is read from where it lives', () => {
     expect(d.daysToRace).toBeGreaterThan(0);
   });
 });
+
+describe('gauntlet: raced tune-ups stay out of the training-riding figures (design panel 2026-07-30)', () => {
+  it('a bRace brick moves the rides-per-week figure neither logged nor skipped', () => {
+    /* These figures describe training riding — a race is an outcome, not a
+       prescribed dose — so ridesIn must agree with isTrainingRide, which
+       already refuses raced rides. Proven behaviourally: with the tune-up
+       excluded, logging it or not cannot move the figure. */
+    const day = plan.weeks.flatMap(w => w.workouts)
+      .find(w => w.date >= '2026-07-06' && w.date <= '2026-07-18'
+        && w.discipline !== 'rest' && !w.second && !w.race).date;
+    const p2 = generatePlan({ ...base, bRaces: [{ date: day, kind: 'olympic' }] });
+    const tune = p2.weeks.flatMap(w => w.workouts).find(w => w.bRace);
+    expect(tune.discipline).toBe('brick');
+    const logAll = Object.fromEntries(p2.weeks.flatMap(w => w.workouts)
+      .filter(w => w.date <= TODAY).map(w => [w.id, { done: true }]));
+    const logSans = { ...logAll };
+    delete logSans[tune.id];
+    const withTune = bikeDashboard({ plan: p2, log: logAll, moves: {}, activities: [], todayISO: TODAY });
+    const without = bikeDashboard({ plan: p2, log: logSans, moves: {}, activities: [], todayISO: TODAY });
+    expect(withTune.status.ridesPerWeek.value).toBe(without.status.ridesPerWeek.value);
+  });
+});

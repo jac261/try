@@ -33,6 +33,30 @@ export function digestWindowOpen(weekMonday, todayISO) {
   return todayISO <= iso(addDays(weekMonday, 9));
 }
 
+// When the reviewed week is truly over (2026-07-31). The Sunday 17:00 rule
+// wraps a week that still CONTAINS today, so a verdict written then can be
+// wrong by 21:00 for reasons the athlete just fixed — a race ticked after
+// the write froze as an unfinished key session forever (re-verify catch
+// 2026-07-30). While the reviewed week still contains today, a stored
+// decision is PROVISIONAL; the first render after the week closes writes
+// the final one.
+export function reviewedWeekFinal(weekMonday, todayISO) {
+  return todayISO > iso(addDays(weekMonday, 6));
+}
+
+// Whether a stored weekly decision STANDS — must be quoted, never
+// recomputed. Three things have to be true: it belongs to the current
+// plan; the reviewed week is truly over; and the bundle itself is not a
+// provisional Sunday-evening write. A provisional bundle carries
+// `provisional: true` and is superseded by the finalizing recompute, whose
+// todayISO sits outside the week — which is also what lets a Sunday
+// session's missed answer count: judged from inside the week it still
+// reads 'upcoming' and the answer is invisible (gauntlet catch 2026-07-31).
+export function coachDecisionStands(stored, planId, weekMonday, todayISO) {
+  return !!(stored && (stored.planCreatedAt ?? null) === (planId ?? null)
+    && !stored.provisional && reviewedWeekFinal(weekMonday, todayISO));
+}
+
 const inRange = (d, a, b) => d >= a && d <= b;
 
 /* ---- the block review (pass 4) ----
@@ -49,9 +73,19 @@ export function buildBlockReview({ plan, coachLog, weekMonday, focus, lastReview
   if (!plan || !coachLog) return null;
   const stored = coachLog[weekMonday];
   if (!stored) return null;
+  // A provisional Sunday-evening bundle must not close a block: the review's
+  // taps are permanent (the acknowledge stamp suppresses it forever, a focus
+  // change edits the plan), and a tally that can still move tonight must not
+  // earn either. The review simply waits for the finalized verdict
+  // (gauntlet catch 2026-07-31).
+  if (stored.provisional) return null;
   const tracker = !Array.isArray(plan.weeks) || !plan.weeks.length;
+  // !d.provisional twice over: the early return above keeps a provisional
+  // reviewed week from closing a block, and this filter keeps any stray
+  // provisional bundle in the middle of history out of the tallies and the
+  // boundary trigger (re-verify catch 2026-07-31).
   const decisions = Object.keys(coachLog).sort().map(k => coachLog[k])
-    .filter(d => d.planCreatedAt === ((plan && plan.createdAt) || null));
+    .filter(d => !d.provisional && d.planCreatedAt === ((plan && plan.createdAt) || null));
 
   // Everything below reads ONLY frozen decisions. The live plan's week
   // layout is untrustworthy here: an ordinary settings edit reshapes every
@@ -131,7 +165,7 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
       load: loads.length ? Math.round(loads.reduce((s, v) => s + v, 0)) : null,
       loadEstimated: acts.some(a => a.estimated),
       fitness: fitnessLine(wellness, weekMonday, weekEnd),
-      missed: [], engine: [], ahead: null,
+      missed: [], raceUnlogged: [], engine: [], ahead: null,
     };
   }
 
@@ -153,13 +187,22 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
 
   // Missed = strictly past sessions with no log entry. A session sitting on
   // today is not missed yet — the digest can be read before an evening swim.
-  const missed = sessions.filter(w => eff(w) < todayISO && !(log || {})[w.id])
-    .map(w => ({ title: w.title || w.type, day: eff(w) }))
-    // a race that passed without a recording is the most important miss of
-    // all; it lives outside `sessions` (load math excludes races) so it is
-    // appended here explicitly
-    .concat(races.filter(w => eff(w) < todayISO && !(log || {})[w.id])
-      .map(w => ({ title: w.title || 'Race', day: eff(w) })));
+  // Races stay OUT of this list: the A race is unloggable by design — every
+  // toggle gates on !w.race, autolog too — so "no log entry" is the app's
+  // ignorance, not the athlete's absence; a "didn't happen" line here fired
+  // for every athlete post-race (gauntlet catch 2026-07-30).
+  const missed = sessions.filter(w => eff(w) < todayISO && !w.bRace && !(log || {})[w.id])
+    .map(w => ({ title: w.title || w.type, day: eff(w) }));
+  // The unmarked tune-up keeps its own prompt line rather than a "didn't
+  // happen" verdict (2026-07-31, reconciling two rounds of gauntlet catches):
+  // it must stay visible and actionable — brick tune-ups, ambiguous days and
+  // out-of-window recordings only ever close by the athlete's own tap, even
+  // though a run tune-up's lone in-window recording proposes itself — but
+  // the coach card on the same screen says the race counts neither way, so
+  // asserting the miss here would contradict it. It also stays in the
+  // planned count, so this line explains the shortfall the counts show.
+  const raceUnlogged = sessions.filter(w => w.bRace && eff(w) < todayISO && !(log || {})[w.id])
+    .map(w => ({ title: w.title || w.type, day: eff(w) }));
 
   // Engine rows: the accepted weekly proposals quoted VERBATIM from the
   // accept-time log (one source of truth for "why" — never re-derived), plus
@@ -216,9 +259,11 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
     done: doneOnes.length, planned: sessions.length, totalMin,
     load: doneOnes.length ? load : null,
     loadEstimated: true,
-    raceDone: races.filter(w => (log || {})[w.id]).map(w => w.title || 'Race'),
+    // The race is a calendar fact, nothing more: with no log entry possible,
+    // the digest can say when it was, never whether or how it went.
+    raceDays: races.map(w => ({ title: w.title || 'Race', day: eff(w) })),
     fitness: fitnessLine(wellness, weekMonday, weekEnd),
-    missed, engine, ahead,
+    missed, raceUnlogged, engine, ahead,
   };
 }
 

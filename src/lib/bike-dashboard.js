@@ -54,10 +54,16 @@ const QUALITY_TYPES = ['Tempo', 'Sweet Spot', 'Threshold', 'VO2 Intervals'];
 /* Rides in the window. `to` is EXCLUSIVE of today by default: a session
    scheduled for today has not come due, and counting it as a missed
    opportunity is the same error as the day-one 0% this module's header
-   promises not to repeat. */
+   promises not to repeat.
+   The brick clause refuses raced bricks for the same reason isTrainingRide
+   refuses raced rides: these figures describe TRAINING riding — volume the
+   plan prescribed and the athlete hit — and a race is an outcome, not a
+   prescribed dose. The two filters agreeing is the point (design panel
+   2026-07-30; the tune-up hours are still real and still count where load
+   is measured, e.g. the fitness curve). */
 function ridesIn({ plan, moves, from, to, bikeOnly }) {
   return (plan && plan.weeks ? plan.weeks.flatMap(w => w.workouts) : [])
-    .filter(w => (isTrainingRide(w) || (!bikeOnly && w.discipline === 'brick' && !w.race)))
+    .filter(w => (isTrainingRide(w) || (!bikeOnly && w.discipline === 'brick' && !w.race && !w.bRace)))
     .map(w => ({ w, date: (moves && moves[w.id]) || w.date }))
     .filter(x => x.date >= from && x.date < to);
 }

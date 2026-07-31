@@ -112,7 +112,10 @@ function provenIntake(fuelLog) {
   const grams = Object.values(fuelLog || {})
     // a brick IS a ride with a run on the end, and it is the session the
     // fuelling model itself calls the one that most needs a plan — so its
-    // answers train the same gut ceiling rides do
+    // answers train the same gut ceiling rides do. Race-day answers count
+    // too, deliberately (design panel 2026-07-30): proven intake is a max
+    // over what the gut actually held, and effort does not change that
+    // answer — race day is usually the best-rehearsed fuelling in the set
     .filter(v => v && typeof v === 'object' && (v.discipline === 'bike' || v.discipline === 'brick'))
     .map(v => v.level)
     .filter(l => l && l !== 'none' && FUEL_LEVEL_GRAMS[l] != null)

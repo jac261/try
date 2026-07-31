@@ -14,11 +14,19 @@ document records what pass 1 ships, what was deliberately narrowed, and why.
 - **The one-tap prompt**: a past session that did not happen shows four
   chips in its detail sheet (run down / life / niggle / on purpose). The
   answer is optional, stored per workout id, device-local.
-- **The decision card** in the weekly digest quotes the FROZEN decision for
-  the reviewed week: it is written once, at the digest's own boundary, by
-  the first render that sees the week closed. A device with no stored
-  decision shows no card; nothing is ever recomputed and presented as the
-  original call.
+- **The decision card** in the weekly digest quotes the stored decision for
+  the reviewed week. From Sunday 17:00 — while the reviewed week still
+  contains today — the stored bundle is PROVISIONAL: stamped
+  `provisional: true`, recomputed as evidence lands (a race ticked at nine
+  corrects the verdict written at five), labelled provisional on the card,
+  and never consumed as history (the block review waits for it). The FINAL
+  bundle is written once, by the first render after the week closes, with
+  todayISO at last outside the week so Sunday ticks and missed answers both
+  land; from then nothing is ever recomputed and presented as the original
+  call. A device with no stored decision shows no card. Known residual: a
+  tick or answer landing after that first post-week render never changes
+  the verdict — the correction window is real but ends at the finalize,
+  and a device first opened on Monday finalizes immediately (2026-07-31).
 - **The week-so-far rows** in Progress (inside the weakest-link card) show
   the open week live, labelled as in progress.
 
