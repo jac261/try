@@ -8,6 +8,7 @@ export * from './domain.js';
 export * from './assumptions.js';
 export * from './today-briefing.js';
 export * from './why-not-harder.js';
+export * from './swim-kit.js';
 export * from './swim-units.js';
 export * from './swim-zones.js';
 export * from './css-retest.js';
