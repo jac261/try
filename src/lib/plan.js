@@ -2093,20 +2093,43 @@ export const generatePlan = function (profile, opts) {
      clean. Rolling recomputes totalWeeks from the new anchor, which is
      correct: an athlete who begins next Monday has one fewer week to train.
      A Monday start hits neither branch and generates exactly as before. */
-  let weekStart0 = startOfWeekMonday(profile.startDate || new Date());
+  /* REGENERATION KEEPS ITS GRID. A plan's week anchor is history the moment
+     the athlete trains a day of it: their ticks, moves and adjustments are
+     all attached to specific dates. Re-deriving the anchor from a startDate
+     stamped months ago would re-interpret that history under today's rules
+     — on a plan created before this fix, a reshape would roll the whole grid
+     a week and the same-date survivor check would then discard EVERY logged
+     completion, while a one-tap retarget would silently re-date them
+     (gauntlet 2026-08-01). So callers regenerating an existing plan pass its
+     grid, and only a genuinely new plan derives one. */
+  const grid = (opts && opts.grid && opts.grid.start) ? opts.grid : null;
   const startISO = iso(profile.startDate || new Date());
-  // 0 = Monday ... 6 = Sunday, from the helpers rather than a second rule.
-  const startDow = daysBetween(iso(weekStart0), startISO);
-  // Legacy profiles carry no trainingDays (the daysPerWeek queues place them
-  // instead); those are trimmed but never rolled, since the surviving-day
-  // count cannot be known before the layout runs.
-  const daysLeftInStartWeek = prefDays0 ? prefDays0.filter(d => d >= startDow).length : null;
-  if (daysLeftInStartWeek !== null && daysLeftInStartWeek < FIRST_WEEK_MIN_DAYS) {
-    weekStart0 = addDays(weekStart0, 7);
+  let weekStart0, firstWeekFrom;
+  if (grid) {
+    weekStart0 = startOfWeekMonday(grid.start);
+    firstWeekFrom = grid.firstWeekFrom || null;
+  } else {
+    weekStart0 = startOfWeekMonday(profile.startDate || new Date());
+    // 0 = Monday ... 6 = Sunday, from the helpers rather than a second rule.
+    const startDow = daysBetween(iso(weekStart0), startISO);
+    // Legacy profiles carry no trainingDays (the daysPerWeek queues place
+    // them instead); those are trimmed but never rolled, since the
+    // surviving-day count cannot be known before the layout runs.
+    const daysLeft = prefDays0 ? prefDays0.filter(d => d >= startDow).length : null;
+    const rolled = iso(addDays(weekStart0, 7));
+    /* Never roll past the race. A Saturday start with a race the next day
+       would otherwise anchor the plan AFTER race day, and the race would
+       vanish from the plan entirely (no race workout, no taper). */
+    const raceSurvivesRoll = !profile.raceDate || rolled <= iso(profile.raceDate);
+    if (daysLeft !== null && daysLeft < FIRST_WEEK_MIN_DAYS && raceSurvivesRoll) {
+      weekStart0 = addDays(weekStart0, 7);
+    }
+    /* Stamped only when sessions are ACTUALLY trimmed. A Tuesday start for a
+       Tue/Thu/Sat athlete removes nothing, and flagging it would send the
+       load seed to week two for a week that is already whole. */
+    const anyDayBeforeStart = prefDays0 ? prefDays0.some(d => d < startDow) : true;
+    firstWeekFrom = startISO > iso(weekStart0) && anyDayBeforeStart ? startISO : null;
   }
-  // Set only when sessions will actually be trimmed: consumers that model a
-  // typical week (the load seed) must not read a deliberately short one.
-  const firstWeekFrom = startISO > iso(weekStart0) ? startISO : null;
   // Whole weeks from the start Monday THROUGH the race's own week, so race day
   // always lands inside the plan. (Math.round(weeksBetween) truncated a race
   // that fell more than half a week past the last Monday — e.g. the default
@@ -2729,7 +2752,17 @@ export const generatePlan = function (profile, opts) {
       || ((x.discipline === 'bike' || x.discipline === 'brick') && anchors.rideLongMin != null);
     const isLongish = x => x.role === 'long' || x.discipline === 'brick' || x.discipline === 'swim';
     let tw = 0;
-    weeks.forEach(wk => {
+    /* A trimmed first week trains only part of the week, so it may only
+       spend part of the week's budget. Measured against the first FULL week
+       rather than a day count, so it holds for legacy profiles whose
+       training days the layout chooses rather than the athlete. */
+    const realCount = wk => wk.workouts.filter(x => x.discipline !== 'rest' && !x.second).length;
+    const shareFor = (wk, i) => {
+      if (i !== 0 || !firstWeekFrom || !weeks[1]) return 1;
+      const full = realCount(weeks[1]);
+      return full ? Math.min(1, realCount(wk) / full) : 1;
+    };
+    weeks.forEach((wk, wkIdx) => {
       const flexible = wk.workouts.filter(x => !x.race && !x.bRace && !x.test && !x.second
         && x.discipline !== 'rest' && x.discipline !== 'strength'
         && !(isLongish(x) && hasOwnAnchor(x)) && x.durationMin > 20);
@@ -2743,6 +2776,7 @@ export const generatePlan = function (profile, opts) {
            week before it, so the step-back week carried MORE load and the
            plan ran four months without a real one */
         recoveryDepth: wk.isRecovery ? fitness.recoveryDepth : 1,
+        weekShare: shareFor(wk, wkIdx),
       });
       if (f != null && f < 1) {
         flexible.forEach(x => {

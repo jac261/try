@@ -203,6 +203,26 @@ describe('ownerFor (which planned session already speaks for a recording)', () =
     expect(ownerFor({ activity: rec({ id: 'a2' }), sessions, log: done })).toBe(ride);
   });
 
+  it('claims by NEAREST duration, so feed order cannot change the outcome', () => {
+    /* Two ticked runs on one day with overlapping windows: first-fit let the
+       short recording claim the long session and orphaned the long one, so
+       the calendar's dot count flipped with feed order (gauntlet). */
+    const long = wk('L', 'run', 'Long', '2026-07-08', 60);
+    const short = wk('S', 'run', 'Easy', '2026-07-08', 30);
+    const both = [long, short];
+    const lg = { L: { done: true }, S: { done: true } };
+    const rec30 = { id: 'a30', type: 'Run', date: '2026-07-08', movingTimeSec: 1800 };
+    const rec60 = { id: 'a60', type: 'Run', date: '2026-07-08', movingTimeSec: 3600 };
+    expect(ownerFor({ activity: rec30, sessions: both, log: lg }).id).toBe('S');
+    expect(ownerFor({ activity: rec60, sessions: both, log: lg }).id).toBe('L');
+    // and resolving in either feed order pairs them the same way
+    for (const order of [[rec30, rec60], [rec60, rec30]]) {
+      const used = new Set(); const got = {};
+      order.forEach(a => { const o = ownerFor({ activity: a, sessions: both, log: lg, used }); if (o) { used.add(o.id); got[a.id] = o.id; } });
+      expect(got).toEqual({ a30: 'S', a60: 'L' });
+    }
+  });
+
   it('degrades to null on junk rather than throwing', () => {
     expect(ownerFor({ activity: null, sessions, log: done })).toBe(null);
     expect(ownerFor({ activity: rec({ type: 'Yoga' }), sessions, log: done })).toBe(null);

@@ -193,12 +193,20 @@ export function ownerFor({ activity, sessions, log, used }) {
   const disc = DISCIPLINE[activity.type];
   const min = (activity.movingTimeSec || 0) / 60;
   if (!disc || !min) return null;
-  return sessions.find(w => w.discipline === disc
+  /* NEAREST duration wins, matching matchActivities and activityFor rather
+     than taking the first session that merely fits. On a day holding two
+     ticked same-discipline sessions with overlapping windows, first-fit let
+     a short recording claim the long session and orphaned the long
+     recording, so the grid's dot count changed with the order the feed
+     happened to arrive in (gauntlet 2026-08-01). */
+  return sessions.filter(w => w.discipline === disc
     && !(used && used.has(w.id))
     && (log || {})[w.id] && log[w.id].done
     && w.durationMin
     && min >= w.durationMin * MATCH_WINDOW.lo
-    && min <= w.durationMin * MATCH_WINDOW.hi) || null;
+    && min <= w.durationMin * MATCH_WINDOW.hi)
+    .sort((a, b) => Math.abs(min - a.durationMin) - Math.abs(min - b.durationMin)
+      || (a.id < b.id ? -1 : 1))[0] || null;
 }
 
 // Link-out matching for a single (typically logged) session: the same

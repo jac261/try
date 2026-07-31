@@ -390,6 +390,66 @@ describe('a plan starts on the day the athlete started it (bug, 2026-08-01)', ()
     });
   });
 
+  it('regenerating an existing plan keeps its grid: history is not re-interpreted', () => {
+    /* The rule must never be applied retroactively. A plan created before it
+       existed carries a startDate stamped on whatever weekday the athlete
+       onboarded; re-deriving the anchor from that would roll or trim a grid
+       the athlete has already trained, and the same-date survivor check in
+       reshapePlan would then discard EVERY logged completion (gauntlet). */
+    const sunday = '2026-08-09';                       // would roll if derived fresh
+    const fresh = at(sunday);
+    expect(fresh.weeks[0].start).toBe('2026-08-10');   // a NEW plan rolls
+    // an existing plan regenerated on its own grid keeps every date
+    const asExisting = generatePlan({ ...profile('2026-11-14', sunday), fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70 },
+      { grid: { start: '2026-08-03', firstWeekFrom: null } });
+    expect(asExisting.weeks[0].start).toBe('2026-08-03');
+    expect(asExisting.firstWeekFrom).toBeUndefined();
+    // every id keeps its date, which is what the survivor check joins on
+    const dates = p => p.weeks.flatMap(w => w.workouts).map(w => w.id + '@' + w.date).join(',');
+    const again = generatePlan({ ...profile('2026-11-14', sunday), fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70 },
+      { grid: { start: '2026-08-03', firstWeekFrom: null } });
+    expect(dates(again)).toBe(dates(asExisting));
+  });
+
+  it('a plan born trimmed stays trimmed when regenerated, and is idempotent', () => {
+    const p = at('2026-08-06');
+    const re = generatePlan({ ...profile('2026-11-14', '2026-08-06'), fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70 },
+      { grid: { start: p.weeks[0].start, firstWeekFrom: p.firstWeekFrom } });
+    const sig = x => x.weeks.flatMap(w => w.workouts).map(w => w.id + '@' + w.date + ':' + w.discipline).join(',');
+    expect(sig(re)).toBe(sig(p));
+    expect(re.firstWeekFrom).toBe('2026-08-06');
+  });
+
+  it('never rolls past the race: a race inside the skipped week keeps its day', () => {
+    // Saturday start, race the next day: rolling would anchor the plan AFTER
+    // race day and the race would vanish from the plan entirely (gauntlet)
+    const p = generatePlan({ ...profile('2026-08-09', '2026-08-08'), fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70, trainingDays: [0, 2, 4], daysPerWeek: 3, longDay: 4 });
+    expect(p.weeks[0].start).toBe('2026-08-03');   // did NOT roll
+    expect(p.weeks.flatMap(w => w.workouts).some(w => w.race)).toBe(true);
+  });
+
+  it('stamps the trim flag only when something is actually trimmed', () => {
+    // a Tue/Thu/Sat athlete starting Tuesday loses nothing: no training day
+    // precedes the start, so the load seed must not be sent to week two
+    const p = generatePlan({ ...profile('2026-11-14', '2026-08-04'), fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70, trainingDays: [1, 3, 5], daysPerWeek: 3, longDay: 5 });
+    expect(p.firstWeekFrom).toBeUndefined();
+    const monday = generatePlan({ ...profile('2026-11-14', '2026-08-03'), fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70, trainingDays: [1, 3, 5], daysPerWeek: 3, longDay: 5 });
+    const real = x => x.weeks[0].workouts.filter(w => w.discipline !== 'rest').length;
+    expect(real(p)).toBe(real(monday));
+  });
+
+  it('a trimmed week spends only its share of a weekly-hours budget', () => {
+    /* The anchor compares a week's planned minutes against an hours cap, so
+       a short week sat under the cap by construction and never got cut: the
+       athlete's very first session came out longer than anything in the two
+       weeks after it (gauntlet). */
+    const hours = { fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70, weeklyHours: 4 };
+    const p = generatePlan({ ...profile('2026-11-14', '2026-08-07'), ...hours });
+    const longest = i => Math.max(...p.weeks[i].workouts.filter(w => w.discipline !== 'rest').map(w => w.durationMin), 0);
+    expect(longest(0)).toBeLessThanOrEqual(longest(1));
+    expect(longest(0)).toBeLessThanOrEqual(longest(2));
+  });
+
   it('the coach brain does not accuse a mid-week starter of missing anything on day one', () => {
     const start = '2026-08-06';
     const p = at(start);
