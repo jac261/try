@@ -953,6 +953,7 @@ describe('Phase 3b: CSS provenance capture (source, date, confidence)', () => {
     expect(plan.profile.cssMeta).toEqual(measured); // the opaque profile blob carries it
     expect(swimThreshold(plan.profile)).toEqual({
       cssSecondsPer100m: 120, source: 'try-test', measuredAt: '2026-06-15', confidence: 'high',
+      kind: 'real',
     });
   });
 

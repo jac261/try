@@ -18,6 +18,7 @@ import { swimReviewVerdict, plannedSwimReps } from './swim-review.js';
 import { runReviewVerdict } from './run-review.js';
 import { bikeReviewVerdict, bandForRep } from './bike-review.js';
 import { judgeBandForType } from './bike-zones.js';
+import { reviewAuthority } from './coaching/review-authority.js';
 
 // Session types whose whole intent is one steady band — the only ones an
 // average can judge. Everything else (reps, drills, bricks) is mixed.
@@ -34,22 +35,16 @@ const secPer100 = a => a.movingTimeSec / (a.distance / 100);
 // tone: 'good' | 'warn' | 'info'.
 export function reviewActivity({ workout, activity, paces, log, swimReview, bikeReview, runReview }) {
   if (!workout || !activity || !activity.movingTimeSec) return null;
-  // Phase 4: when the per-rep swim engine can read this session, it is the
-  // single voice. A whole-session average verdict rendered beside it can
-  // flatly contradict it (an in-band average above a late-fade 'ease the
-  // next one'), and the spec's own line is intervals over averages wherever
-  // structure exists (review catch 2026-07-27).
-  const perRepSwim = swimReview && swimReview.outcome !== 'insufficient-data' ? swimReview : null;
-  // Phase 5: the bike gained the same engine, so it gets the same right to be
-  // the single voice. Everything below that would otherwise speak about this
-  // ride now yields to it, because two verdicts on one screen can flatly
-  // contradict each other and the specific one is the better one.
-  const perRepBike = bikeReview && bikeReview.outcome !== 'insufficient-data' ? bikeReview : null;
-  // Phase 8's run review, wired the same way (audit catch 2026-07-30: it was
-  // built and had no caller, so the splits table it claims to agree with was
-  // rendering above nothing).
-  const perRepRun = runReview && runReview.outcome !== 'insufficient-data' ? runReview : null;
-  const perRep = perRepSwim || perRepBike || perRepRun;
+  /* One voice per session (phase 2 §6): the authority question — which
+     review source may speak — now lives in coaching/review-authority.js,
+     shared with the recap so the two surfaces cannot disagree about who is
+     speaking. Behaviour identical to the inline guards this replaces
+     (swim phase 4, bike phase 5, run phase 8 wiring). */
+  const authority = reviewAuthority({ workout, activity, swimReview, bikeReview, runReview });
+  const perRep = authority.authority === 'structured' ? authority.review : null;
+  const perRepSwim = perRep && perRep === swimReview ? perRep : null;
+  const perRepBike = perRep && perRep === bikeReview ? perRep : null;
+  const perRepRun = perRep && perRep === runReview ? perRep : null;
   const w = workout, a = activity, pc = paces || {};
   // Swim pace shows and compares per 100 of the athlete's pool unit; the
   // comparison thresholds stay canonical per 100 m, only the display converts.
@@ -86,8 +81,11 @@ export function reviewActivity({ workout, activity, paces, log, swimReview, bike
   if (a.rpe != null) stats.push(['RPE', Math.round(a.rpe) + '/10']);
 
   // Duration vs plan (the plan's number, after any ease/trim the athlete saw).
+  // Not for tune-ups: their planned number is a slot estimate, and "Cut
+  // short" was headlining the recap of a finished 5k race (gauntlet catch
+  // 2026-07-30).
   const planned = w.durationMin || 0;
-  if (planned) {
+  if (planned && !w.bRace) {
     const r = actualMin / planned;
     if (r < 0.8) verdicts.push({ tone: 'info', text: 'Cut short: ' + fmtDur(a.movingTimeSec) + ' of a planned ' + planned + ' min. Fine occasionally — the load model counts what you did.' });
     else if (r > 1.25) verdicts.push({ tone: 'info', text: 'Ran long: ' + fmtDur(a.movingTimeSec) + ' against a planned ' + planned + ' min. Extra volume adds up — make sure it was deliberate.' });
@@ -133,12 +131,20 @@ export function reviewActivity({ workout, activity, paces, log, swimReview, bike
   // No promise of a rep table either: that view loads separately and can
   // legitimately be absent (no WORK laps, fetch failure), so this verdict
   // must stand alone without pointing at numbers that may never render.
-  if (!w.adhoc && !perRep && !steadyKey && !EASY_INTENT[w.type] && (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim')) {
+  // (Not for tune-ups either: a race is not an interval session, and with
+  // the duration verdict gone this line was next in queue to headline the
+  // recap of a finished 5k — same class, one block down.)
+  if (!w.adhoc && !w.bRace && !perRep && !steadyKey && !EASY_INTENT[w.type] && (w.discipline === 'run' || w.discipline === 'bike' || w.discipline === 'swim')) {
     verdicts.push({ tone: 'info', text: 'Interval session — the average blurs work and recovery together, so no pace verdict here.' });
   }
 
-  // Load vs plan (meaningless for an unplanned session — there is no plan dose).
-  if (!w.adhoc && a.trainingLoad != null) {
+  // Load vs plan (meaningless for an unplanned session — there is no plan
+  // dose). Raced and tested sessions are skipped too: their intensity factor
+  // in estimateTss is a planning placeholder, and a recorded dose well above
+  // it is the point of racing a race, not a deviation worth a warning
+  // (design panel 2026-07-30). Flags, as everywhere a raced card is refused
+  // (isTrainingRide's spelling); race + bRace cover goal race and tune-ups.
+  if (!w.adhoc && !w.race && !w.bRace && !w.test && a.trainingLoad != null) {
     const plannedTss = estimateTss(w, undefined, log && log.actualMin);
     if (plannedTss > 10 && a.trainingLoad / plannedTss > 1.4) {
       verdicts.push({ tone: 'warn', text: 'Training load came in well above the plan’s estimate for this session — a much bigger dose than intended.' });

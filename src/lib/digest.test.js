@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reviewedWeekMonday, digestWindowOpen, buildWeeklyDigest } from './digest.js';
+import { reviewedWeekMonday, digestWindowOpen, reviewedWeekFinal, coachDecisionStands, buildBlockReview, buildWeeklyDigest } from './digest.js';
 import { estimateTss } from './adapt.js';
 
 // 2026-07-06 is a Monday; 2026-07-12 the Sunday closing that week.
@@ -33,6 +33,68 @@ describe('reviewedWeekMonday (which week wraps)', () => {
   it('Monday through Saturday wrap the finished week', () => {
     expect(reviewedWeekMonday(NEXT_MON, 9)).toBe(MON);
     expect(reviewedWeekMonday('2026-07-18', 12)).toBe(MON); // Saturday
+  });
+});
+
+describe('reviewedWeekFinal (when the reviewed week is truly over)', () => {
+  it('the reviewed week is not final while it still contains today', () => {
+    // Sunday evening: the week wraps for review, but a session ticked at
+    // 21:00 must still be able to correct the verdict written at 17:05
+    expect(reviewedWeekFinal(MON, SUN)).toBe(false);
+  });
+  it('from the Monday after, the week is history', () => {
+    expect(reviewedWeekFinal(MON, NEXT_MON)).toBe(true);
+    expect(reviewedWeekFinal(MON, '2026-07-15')).toBe(true); // Wednesday, digest window still open
+  });
+});
+
+describe('coachDecisionStands (quote it, or recompute it)', () => {
+  const final = { planCreatedAt: 'p1', overall: {} };
+  const provisional = { ...final, provisional: true };
+  it('a final same-plan bundle stands once the week is over', () => {
+    expect(coachDecisionStands(final, 'p1', MON, NEXT_MON)).toBe(true);
+  });
+  it('nothing stands while the reviewed week still contains today', () => {
+    // the Sunday-evening window: even a bundle without the stamp recomputes
+    expect(coachDecisionStands(final, 'p1', MON, SUN)).toBe(false);
+    expect(coachDecisionStands(provisional, 'p1', MON, SUN)).toBe(false);
+  });
+  it('a provisional bundle never stands: the post-week render finalizes it', () => {
+    // this is what lets a Sunday missed answer count — the finalize runs
+    // with todayISO outside the week, where the session is no longer
+    // 'upcoming' and the athlete's answer is visible
+    expect(coachDecisionStands(provisional, 'p1', MON, NEXT_MON)).toBe(false);
+  });
+  it('no bundle, or another plan\'s bundle, never stands', () => {
+    expect(coachDecisionStands(null, 'p1', MON, NEXT_MON)).toBe(false);
+    expect(coachDecisionStands(final, 'p2', MON, NEXT_MON)).toBe(false);
+    expect(coachDecisionStands({ ...final, planCreatedAt: undefined }, null, MON, NEXT_MON)).toBe(true); // legacy null-plan match
+  });
+});
+
+describe('the block review never closes on a provisional bundle', () => {
+  it('a provisional reviewed week returns no review; the finalized one may', () => {
+    // permanent taps (acknowledge, focus change) must not be earned by a
+    // tally that can still move tonight
+    const mk = over => ({
+      weekMonday: MON, planCreatedAt: null, phase: 'Maintain', tracker: false,
+      overall: { decision: 'hold' }, disciplines: {}, ...over,
+    });
+    const weeks = {
+      '2026-06-15': mk({ weekMonday: '2026-06-15' }),
+      '2026-06-22': mk({ weekMonday: '2026-06-22' }),
+      '2026-06-29': mk({ weekMonday: '2026-06-29' }),
+      [MON]: mk({ provisional: true }),
+    };
+    const args = { plan: { createdAt: null, weeks: [{}] }, coachLog: weeks, weekMonday: MON, focus: null, lastReviewedMonday: null };
+    expect(buildBlockReview(args)).toBe(null);
+    const finalized = { ...weeks, [MON]: mk({}) };
+    expect(buildBlockReview({ ...args, coachLog: finalized })).toBeTruthy();
+    // a STRAY provisional bundle mid-history (a device that missed its
+    // finalize) never joins the tally either: four finalized weeks are
+    // needed, and the provisional one does not count as the fourth
+    const stray = { ...finalized, '2026-06-22': mk({ weekMonday: '2026-06-22', provisional: true }) };
+    expect(buildBlockReview({ ...args, coachLog: stray })).toBe(null);
   });
 });
 
@@ -75,6 +137,22 @@ describe('buildWeeklyDigest (plan mode)', () => {
     expect(d.missed.map(m => m.title)).toEqual(['Threshold Run']);
   });
 
+  it('an unmarked tune-up race never lands in missed: the app cannot always see race day', () => {
+    // a bRace auto-closes only in autolog's narrowest case (a lone run
+    // recording), so "no log entry" is the app's blindness; a ticked one
+    // still counts as a done session as before
+    const p = plan();
+    p.weeks[0].workouts.push(w('0-4', '2026-07-09', { bRace: true, type: 'RACE', title: 'TUNE-UP — 5k Run Race', key: true }));
+    const silent = buildWeeklyDigest({ ...base, plan: p, log: done });
+    expect(silent.missed.map(m => m.title)).not.toContain('TUNE-UP — 5k Run Race');
+    expect(silent.planned).toBe(4); // it stays a planned session
+    // ...and the planned/done gap it leaves is named on its own line
+    expect(silent.raceUnlogged.map(m => m.title)).toEqual(['TUNE-UP — 5k Run Race']);
+    const ticked = buildWeeklyDigest({ ...base, plan: p, log: { ...done, '0-4': { done: true } } });
+    expect(ticked.done).toBe(Object.keys(done).length + 1);
+    expect(ticked.raceUnlogged).toEqual([]);
+  });
+
   it('quotes accepted proposals verbatim from the journal and never re-derives', () => {
     const adjustLog = [
       { at: '2026-07-09T08:00:00Z', kind: 'trim-week', headline: 'Pull back next week', why: 'Form said so.' },
@@ -115,15 +193,28 @@ describe('buildWeeklyDigest (plan mode)', () => {
     expect(buildWeeklyDigest({ ...base, log: done, wellness: [wellness[0]] }).fitness).toBe(null);
   });
 
-  it('a race that passed without a recording lands in missed; a logged one in raceDone', () => {
+  it('the race is calendar-only: reported as a race day, never as missed', () => {
+    // The A race is unloggable by design (every toggle gates on !w.race and
+    // autolog excludes it), so an absent log entry proves
+    // nothing about race day — the digest reports the calendar fact and
+    // stops there. The title matches what the generator actually stamps
+    // ('RACE DAY — ' + race.name): the render shows it bare, and a fixture
+    // title that never occurs in the field hid a doubled prefix once.
     const raced = plan();
-    raced.weeks[0].workouts.push(w('0-9', '2026-07-12', { race: true, title: 'Olympic Tri', type: 'RACE' }));
-    const skipped = buildWeeklyDigest({ ...base, plan: raced, log: done });
-    expect(skipped.missed.map(m => m.title)).toContain('Olympic Tri');
-    expect(skipped.raceDone).toEqual([]);
-    const logged = buildWeeklyDigest({ ...base, plan: raced, log: { ...done, '0-9': { done: true, at: '2026-07-12T10:00:00Z' } } });
-    expect(logged.raceDone).toEqual(['Olympic Tri']);
-    expect(logged.missed.map(m => m.title)).not.toContain('Olympic Tri');
+    raced.weeks[0].workouts.push(w('0-9', '2026-07-12', { race: true, title: 'RACE DAY — Olympic', type: 'RACE' }));
+    const d = buildWeeklyDigest({ ...base, plan: raced, log: done });
+    expect(d.raceDays).toEqual([{ title: 'RACE DAY — Olympic', day: '2026-07-12' }]);
+    expect(d.missed.map(m => m.title)).not.toContain('RACE DAY — Olympic');
+  });
+
+  it('a moved race reports the day it landed on', () => {
+    // No UI path moves a race, but `moves` is synced state (merged from the
+    // server against positional, reused ids) — this pins the eff() contract
+    // for the race row, same as the moved-week test below.
+    const raced = plan();
+    raced.weeks[0].workouts.push(w('0-9', '2026-07-12', { race: true, title: 'RACE DAY — Olympic', type: 'RACE' }));
+    const d = buildWeeklyDigest({ ...base, plan: raced, log: done, moves: { '0-9': '2026-07-11' } });
+    expect(d.raceDays).toEqual([{ title: 'RACE DAY — Olympic', day: '2026-07-11' }]);
   });
 
   it('week identity survives every session moving out: phase comes from native dates', () => {

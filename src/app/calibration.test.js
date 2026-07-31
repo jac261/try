@@ -37,6 +37,42 @@ describe('calibration observations', () => {
     expect(obs.eased).toBe(true);
   });
 
+  it('stamps who authored the feel, and keeps the derivation reproducible', () => {
+    // the athlete's own tap, no recording rpe known: provenance alone
+    const tap = buildObservation({ workout, date: '2026-07-02', feel: 'hard', eased: false, wellnessRecs: recs, at: null, feelSource: 'athlete' });
+    expect(tap.feelSource).toBe('athlete');
+    expect('rpe' in tap).toBe(false);
+    // machine-derived from the recording: provenance plus the raw input, so
+    // the band stays re-derivable if feelFromRpe is ever re-cut
+    const derived = buildObservation({ workout, date: '2026-07-02', feel: 'hard', eased: false, wellnessRecs: recs, at: null, feelSource: 'rpe', rpe: 9 });
+    expect(derived.feelSource).toBe('rpe');
+    expect(derived.rpe).toBe(9);
+    expect(fromNote(toNote(derived))).toEqual(derived); // survives the synced note
+    // a tap that replaces a derived row carries the recording's rpe forward,
+    // so the corpus keeps whether the tap agreed with or overrode the band
+    const overrode = buildObservation({ workout, date: '2026-07-02', feel: 'right', eased: false, wellnessRecs: recs, at: null, feelSource: 'athlete', rpe: 9 });
+    expect(overrode.feelSource).toBe('athlete');
+    expect(overrode.rpe).toBe(9);
+  });
+
+  it('unknown provenance stays unmarked — never guessed, never defaulted', () => {
+    // legacy path: feel present, no source given
+    const legacy = buildObservation({ workout, date: '2026-07-02', feel: 'easy', eased: false, wellnessRecs: recs, at: null });
+    expect('feelSource' in legacy).toBe(false);
+    // no feel at all: nothing to stamp, even if a caller passes strays
+    const none = buildObservation({ workout, date: '2026-07-02', feel: null, eased: false, wellnessRecs: recs, at: null, feelSource: 'rpe', rpe: 6 });
+    expect('feelSource' in none).toBe(false);
+    expect('rpe' in none).toBe(false);
+    // outside the FEEL_SOURCES fence: dropped, not written
+    const junkSource = buildObservation({ workout, date: '2026-07-02', feel: 'easy', eased: false, wellnessRecs: recs, at: null, feelSource: 'banana', rpe: 6 });
+    expect('feelSource' in junkSource).toBe(false);
+    expect('rpe' in junkSource).toBe(false);
+    // a non-finite rpe never reaches the corpus (NaN would serialise to null)
+    const junkRpe = buildObservation({ workout, date: '2026-07-02', feel: 'right', eased: false, wellnessRecs: recs, at: null, feelSource: 'rpe', rpe: NaN });
+    expect(junkRpe.feelSource).toBe('rpe');
+    expect('rpe' in junkRpe).toBe(false);
+  });
+
   it('round-trips through the log-notes encoding and fits the backend limit', () => {
     const obs = buildObservation({
       workout, date: '2026-07-02', feel: 'right', eased: false,

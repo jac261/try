@@ -30,7 +30,7 @@
  * anything can be excluded.
  */
 
-import { iso, addDays, startOfWeekMonday, daysBetween } from './date.js';
+import { iso, addDays, startOfWeekMonday } from './date.js';
 import { DISCIPLINE, isIndoor } from './autolog.js';
 import { RUN_QUALITY_TYPES } from './runschema.js';
 

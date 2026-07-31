@@ -245,6 +245,18 @@ A custom **monoline** SVG set, drawn on a **24×24 viewBox**, `fill: none`,
 
 **Cards** — `--card` bg, `1px --line` border, `--radius`, `--shadow`, 18px padding.
 
+**Tablist (segmented view switcher)** — a row of small buttons, exactly one
+`primary` (the selected tab), the rest `ghost`; proper `role="tablist"` /
+`role="tab"` / `role="tabpanel"` wiring, inactive panels unmounted. Two
+instances share the idiom: the what-if sheet's mode tabs (`.wi-tabs`) and the
+Progress view's Overview · Swim · Bike · Run tabs (`.prog-tabs`, phase 3).
+Progress rules: a discipline whose plan gate fails (solo race, excluded
+discipline) gets no tab rather than a disabled one; a solo plan opens
+directly on its discipline's tab; tracker mode renders the Overview flow in
+one column with no tab bar at all. A discipline-linked block whose tab does
+not exist falls back to its pre-tab Overview position instead of
+disappearing — losing a tab must never lose the content.
+
 **Discipline tile (the signature element)** — rounded square, discipline **gradient**,
 white icon, inset hairline. Sizes in-app: 46px (rows), 54px (sheet hero), 60px (building screen).
 
@@ -255,6 +267,31 @@ white icon, inset hairline. Sizes in-app: 46px (rows), 54px (sheet hero), 60px (
 **Bottom nav** — 4 training tabs (Today / Calendar / Plan / Progress); active = `--accent`
 (white), inactive = `--muted`; 11px/700 labels. Profile & settings live behind the
 **avatar**, not the nav.
+
+**Settings sections (phase 4)** — stable cards in a fixed order, each with a deep-link
+id (`settings-profile`, `settings-plan`, `settings-assumptions`, `settings-connections`):
+Profile (fitness surface only), Your plan (every plan-lifecycle action in one card:
+edit race, .ics export, maintenance switch, end-to-tracker, start over), What Try knows
+(the Assumption Center: per-discipline anchor rows, real with provenance and date,
+estimated with the `~` and its never-judges role, missing named as missing and never a
+zero), Connections, Support, Account, then the lone destructive reset. `openSettings(section)`
+in App opens Settings scrolled to a card; in-copy mentions of Settings should become
+links via a nullable `onOpenSettings` callback where cheap.
+
+**Chevroned-question fold** — a muted bold question ending in a chevron
+(`▸`/`▾`), `role="button"` + `aria-expanded`, folding out derived reasons.
+Two consumers: the readiness card's "Why?" (`.rd-why-toggle`) and the detail
+sheet's "Why not harder?" (`.wnh-toggle`, phase 6). The folded content only
+ever states what its selector can prove; a fold that cannot prove anything
+does not render its toggle.
+
+**Today briefing (phase 5)** — context under the date line (`.tb-context`: muted
+phase/week line + bold priority line, two short lines max), a tiny uppercase
+`Main session` caption (`.tb-main`, key-tag blue `#9ab8ff`) above the primary row
+on multi-session days only, muted prep-cue lines under their row (`.tb-cue`,
+indented past the discipline tile), and a hairline-topped dependency line
+(`.tb-dep`) closing the list. Decorations live in TodayView around untouched
+WorkoutRows; the row component stays shared and undecorated.
 
 **Avatar (profile entry)** — 34px circle, top-left of the topbar; the Clerk photo with a
 `1.5px rgba(255,255,255,.18)` hairline, or a gradient fallback

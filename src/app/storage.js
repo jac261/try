@@ -83,10 +83,13 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'missedReasons', JSON.stringify(m)); } catch (e) {}
       return m;
     },
-    // The coach brain's frozen weekly decisions, keyed by week Monday.
-    // Device-local by design (the digest quotes a stored decision verbatim or
-    // shows none; it never recomputes one and presents it as the original
-    // call). Capped in WEEKS, not entries: each week stores one bundle.
+    // The coach brain's weekly decisions, keyed by week Monday. From Sunday
+    // 17:00 the reviewed week's bundle is PROVISIONAL (stamped so, rewritten
+    // in place as evidence lands); the first render after the week closes
+    // writes the final bundle, and from then the digest quotes it verbatim
+    // or shows none — a final bundle is never recomputed and presented as
+    // the original call (2026-07-31). Device-local by design. Capped in
+    // WEEKS, not entries: each week stores one bundle.
     loadCoachLog() { try { return JSON.parse(localStorage.getItem(ns + 'coachLog') || '{}'); } catch (e) { return {}; } },
     saveCoachDecision(weekMonday, decision) {
       const m = this.loadCoachLog();
@@ -96,6 +99,29 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'coachLog', JSON.stringify(m)); } catch (e) {}
       return m;
     },
+    /* The unified decision journal (phase 2 §9): every terminal athlete
+       action on a coaching decision — accepted, rejected (a dismissal IS a
+       rejection), superseded — appended in the shared decision shape.
+       Device-local by design (COACH_BRAIN rule: a synced journal is a
+       backend ask, filed); rejections are never deleted, because history
+       is the point. Idempotent: re-appending the latest (id, status) pair
+       is a no-op, so an effect that fires twice writes once. */
+    loadDecisionLog() { try { return JSON.parse(localStorage.getItem(ns + 'decisionLog') || '[]'); } catch (e) { return []; } },
+    appendDecision(entry) {
+      const log = this.loadDecisionLog();
+      const last = [...log].reverse().find(e => e.id === entry.id);
+      /* Idempotent on (id, status, why) — the WHY matters (gauntlet catch):
+         a today-proposal id carries no band, so an amber ease rejected and
+         its RED escalation rejected the same day share (id, status), and
+         comparing only those silently dropped the materially different
+         second rejection. A re-fired effect still dedupes: its why is
+         byte-identical. */
+      if (last && last.status === entry.status && (last.why || null) === (entry.why || null)) return log;
+      const next = log.concat([entry]).slice(-120);
+      try { localStorage.setItem(ns + 'decisionLog', JSON.stringify(next)); } catch (e) {}
+      return next;
+    },
+
     // Durability reads, keyed by activity id. Like calibration and the
     // manual diary this is an append-only record of facts about PAST
     // recordings, spanning plans by design: it must NOT join clear()'s
@@ -169,8 +195,29 @@ export function storageForUser(userId) {
     },
     // the last week a block review was shown, so the cadence fallback
     // cannot re-fire weekly once it starts
-    loadBlockReviewed() { try { return localStorage.getItem(ns + 'blockReviewed') || null; } catch (e) { return null; } },
-    saveBlockReviewed(weekMonday) { try { localStorage.setItem(ns + 'blockReviewed', weekMonday); } catch (e) {} return weekMonday; },
+    /* Phase 2 stray fix: stamped with planCreatedAt like every sibling
+       journal (adjustLog/coachLog/focusLog all carry it) — a bare week
+       string survived storage.clear() and a plan replace, so a block review
+       answered on a PREVIOUS plan suppressed the next plan's first review.
+       A legacy bare string is honoured as current-plan once and restamped
+       on the next write. */
+    loadBlockReviewed(planCreatedAt) {
+      try {
+        const raw = localStorage.getItem(ns + 'blockReviewed');
+        if (!raw) return null;
+        try {
+          const v = JSON.parse(raw);
+          if (v && typeof v === 'object') {
+            return planCreatedAt == null || v.planCreatedAt === planCreatedAt ? v.weekMonday : null;
+          }
+        } catch (e2) { /* legacy bare week string */ }
+        return raw;
+      } catch (e) { return null; }
+    },
+    saveBlockReviewed(weekMonday, planCreatedAt) {
+      try { localStorage.setItem(ns + 'blockReviewed', JSON.stringify({ weekMonday, planCreatedAt: planCreatedAt ?? null })); } catch (e) {}
+      return weekMonday;
+    },
     loadFeels,
     saveFeel(date, value) {
       const m = loadFeels();

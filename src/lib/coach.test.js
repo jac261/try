@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideWeek, classifyCompletion, DECISION_LABELS, COACH_RULE_VERSION, MISSED_REASONS } from './coach.js';
+import { decideWeek, classifyCompletion, prevWeeksFor, DECISION_LABELS, COACH_RULE_VERSION, MISSED_REASONS } from './coach.js';
 import { generatePlan, buildTrackerPlan } from './plan.js';
 import { iso, startOfWeekMonday } from './date.js';
 
@@ -124,6 +124,15 @@ describe('the weekly decision: spec scenarios', () => {
     expect(second.progression).toEqual({ discipline: 'swim', what: 'a third swim in the week' });
   });
 
+  it('a provisional prior week never certifies the streak', () => {
+    // a Sunday-evening bundle judged its week from inside it, so its clean
+    // flag is a half-state; the finalize sweep normally replaces it and
+    // this is the decision-layer backstop
+    const prevMonday = iso(new Date(new Date(weekMonday + 'T00:00:00Z').getTime() - 7 * 864e5));
+    const d = decideWeek({ ...base, log: logAll(wk), prevWeeks: [{ weekMonday: prevMonday, tracker: false, planCreatedAt: plan.createdAt, provisional: true, disciplines: { swim: { clean: true } } }] });
+    expect(d.disciplines.swim.decision).toBe('hold');
+  });
+
   it('a dirty prior week resets the repeat rule', () => {
     const prevMonday = iso(new Date(new Date(weekMonday + 'T00:00:00Z').getTime() - 7 * 864e5));
     const d = decideWeek({ ...base, log: logAll(wk), prevWeeks: [{ weekMonday: prevMonday, tracker: false, planCreatedAt: plan.createdAt, disciplines: { swim: { clean: false } } }] });
@@ -139,6 +148,174 @@ describe('the weekly decision: spec scenarios', () => {
       const all = [d.overall.decision].concat(Object.values(d.disciplines).map(x => x.decision));
       all.forEach(x => expect(['progress', 'hold', 'reduce-volume', 'ease-intensity', 'recover']).toContain(x));
     });
+  });
+});
+
+describe('prevWeeksFor (the stored history a decision may read)', () => {
+  it('excludes the decided week itself and anything after it, newest first', () => {
+    // On a Sunday-evening provisional freeze the log already holds THIS
+    // week's entry; feeding it back as prevWeeks[0] would fail the repeat
+    // rule's adjacency check and wrongly deny progression.
+    const coachLog = {
+      '2026-07-06': { weekMonday: '2026-07-06' },
+      '2026-07-13': { weekMonday: '2026-07-13' },
+      '2026-07-20': { weekMonday: '2026-07-20' },
+      '2026-07-27': { weekMonday: '2026-07-27' }, // later than the decided week: clock skew or import
+    };
+    expect(prevWeeksFor(coachLog, '2026-07-20').map(d => d.weekMonday)).toEqual(['2026-07-13', '2026-07-06']);
+    expect(prevWeeksFor(coachLog, '2026-08-03').map(d => d.weekMonday)).toEqual(['2026-07-27', '2026-07-20', '2026-07-13', '2026-07-06']);
+    expect(prevWeeksFor({}, '2026-07-20')).toEqual([]);
+    expect(prevWeeksFor(null, '2026-07-20')).toEqual([]);
+  });
+});
+
+describe('tune-up races are judged as races, not workouts', () => {
+  // A synthetic bRace slot, shaped like the plan builder's tune-up output.
+  const tuneup = { id: 'bx', date: weekMonday, discipline: 'run', type: 'RACE', bRace: true, key: true, durationMin: 30 };
+
+  it('done is done: no partial or modified judgment on a race', () => {
+    expect(classifyCompletion({ workout: tuneup, entry: { done: true }, day: tuneup.date, todayISO: today })).toBe('completed');
+    // a 20-minute 5k against a 30-minute slot is a fast race, not a partial workout
+    expect(classifyCompletion({ workout: tuneup, entry: { done: true, actualMin: 20 }, day: tuneup.date, todayISO: today })).toBe('completed');
+    expect(classifyCompletion({ workout: tuneup, entry: { done: true }, adjustEntry: { kind: 'ease' }, day: tuneup.date, todayISO: today })).toBe('completed');
+  });
+
+  it('silence stays neutral; the athlete\'s own answer still stands', () => {
+    // a bRace auto-closes only in autolog's narrowest case, so silence is
+    // the app being blind, never a miss
+    expect(classifyCompletion({ workout: tuneup, day: tuneup.date, todayISO: today })).toBe('unlogged-race');
+    expect(classifyCompletion({ workout: tuneup, missedReason: 'life', day: tuneup.date, todayISO: today })).toBe('missed-life');
+    expect(classifyCompletion({ workout: tuneup, day: today, todayISO: today })).toBe('upcoming');
+  });
+
+  // The same profile with a run tune-up dropped into the reviewed week, on a
+  // non-key day: each discipline's own key work stays observable, which is
+  // what lets the week stay clean around the race.
+  const bDate = sessionsOf(wk).find(x => !x.key && !x.test).date;
+  const planB = generatePlan({ ...profile, bRaces: [{ date: bDate, kind: 'run5k' }] });
+  const wkB = planB.weeks.find(w => w.start === weekMonday);
+  const tuneB = wkB.workouts.find(x => x.bRace);
+  const logB = () => Object.fromEntries(wkB.workouts
+    .filter(x => x.discipline !== 'rest' && !x.race && !x.bRace)
+    .map(x => [x.id, { done: true, at: x.date + 'T10:00:00Z' }]));
+  const baseB = { ...base, plan: planB };
+
+  it('an unmarked tune-up keeps the week clean, stays in the planned counts, and is named', () => {
+    expect(tuneB).toBeTruthy();
+    const d = decideWeek({ ...baseB, log: logB() });
+    Object.values(d.disciplines).forEach(row => expect(row.clean).toBe(true));
+    // no strain evidence and no athlete-answer evidence appear for it
+    expect(d.overall.evidence.some(e => e.signal === 'your answers')).toBe(false);
+    // the denominator keeps the race (a shrunken tally presented as complete
+    // was a re-verify catch), and the gap is disclosed next to it
+    const keys = d.overall.evidence.find(e => e.signal === 'key sessions');
+    expect(keys).toBeTruthy();
+    const [, kd, kp] = keys.reading.match(/^(\d+) of (\d+) completed$/);
+    expect(Number(kp)).toBe(Number(kd) + 1);
+    expect(d.overall.evidence.some(e => e.signal === 'tune-up race')).toBe(true);
+    expect(d.disciplines.run.evidence.some(e => e.signal === 'tune-up race')).toBe(true);
+  });
+
+  it('a ticked tune-up counts as key work done, however fast the finish', () => {
+    const log = { ...logB(), [tuneB.id]: { done: true, at: tuneB.date + 'T10:00:00Z', actualMin: 20 } };
+    const d = decideWeek({ ...baseB, log });
+    expect(d.disciplines.run.clean).toBe(true);
+    const keys = d.overall.evidence.find(e => e.signal === 'key sessions');
+    expect(keys).toBeTruthy();
+    expect(keys.reading).toMatch(/^(\d+) of \1 completed$/);
+    expect(d.overall.evidence.some(e => e.signal === 'tune-up race')).toBe(false);
+  });
+
+  it('a tune-up the athlete SAID was missed still counts, and still resets clean', () => {
+    const d = decideWeek({ ...baseB, log: logB(), missedReasons: { [tuneB.id]: { reason: 'niggle', at: today } } });
+    expect(d.disciplines.run.clean).toBe(false);
+    expect(d.overall.evidence.some(e => /injury niggle came up/.test(e.reading))).toBe(true);
+  });
+
+  it('an unmarked BRICK tune-up leaves both the run and the bike rows clean, and both are told', () => {
+    // a brick tune-up NEVER auto-closes (pairing would bank the race minus
+    // its swim leg), so only the athlete can close it: permanent 'missed'
+    // here was the original defect
+    const planC = generatePlan({ ...profile, bRaces: [{ date: bDate, kind: 'sprint' }] });
+    const wkC = planC.weeks.find(w => w.start === weekMonday);
+    const tuneC = wkC.workouts.find(x => x.bRace);
+    expect(tuneC.discipline).toBe('brick');
+    const log = Object.fromEntries(wkC.workouts
+      .filter(x => x.discipline !== 'rest' && !x.race && !x.bRace)
+      .map(x => [x.id, { done: true, at: x.date + 'T10:00:00Z' }]));
+    const d = decideWeek({ ...base, plan: planC, log });
+    ['run', 'bike'].forEach(k => {
+      expect(d.disciplines[k], k + ' row must exist').toBeTruthy();
+      expect(d.disciplines[k].clean).toBe(true);
+      expect(d.disciplines[k].evidence.some(e => e.signal === 'tune-up race')).toBe(true);
+    });
+  });
+
+  // The progression gate: the fade veto's shape, in-week only. A solo run
+  // plan makes the run the limiter outright; the tune-up sits on an EASY
+  // day, so the week's key long run stays observable and the week is clean.
+  const soloProfile = { ...profile, raceType: 'runhalf' };
+  const planS0 = generatePlan(soloProfile);
+  const wkS0 = planS0.weeks.find(w => (w.phase === 'Base' || w.phase === 'Build') && !w.isRecovery && w.index >= 2);
+  const keyRun = wkS0.workouts.find(x => x.discipline === 'run' && x.key && !x.test);
+  const easyRun = wkS0.workouts.find(x => x.discipline === 'run' && !x.key && !x.test);
+  const planS = generatePlan({ ...soloProfile, bRaces: [{ date: easyRun.date, kind: 'run5k' }] });
+  const wkS = planS.weeks.find(w => w.start === wkS0.start);
+  const tuneS = wkS.workouts.find(x => x.bRace);
+  const todayS = iso(new Date(new Date(wkS.start + 'T00:00:00Z').getTime() + 8 * 864e5));
+  const prevS = iso(new Date(new Date(wkS.start + 'T00:00:00Z').getTime() - 7 * 864e5));
+  const prevSunday = iso(new Date(new Date(wkS.start + 'T00:00:00Z').getTime() - 1 * 864e5));
+  const logS = () => Object.fromEntries(wkS.workouts
+    .filter(x => x.discipline !== 'rest' && !x.race && !x.bRace)
+    .map(x => [x.id, { done: true, at: x.date + 'T10:00:00Z' }]));
+  const baseS = {
+    ...base, plan: planS, weekMonday: wkS.start, todayISO: todayS,
+    prevWeeks: [{ weekMonday: prevS, tracker: false, planCreatedAt: planS.createdAt, disciplines: { run: { clean: true } } }],
+  };
+
+  it('an unmarked tune-up holds the progression call without resetting the streak', () => {
+    expect(tuneS).toBeTruthy();
+    const d = decideWeek({ ...baseS, log: logS() });
+    expect(d.disciplines.run.clean).toBe(true); // the streak survives
+    expect(d.disciplines.run.decision).toBe('hold');
+    expect(d.disciplines.run.headline).toMatch(/Mark the tune-up complete/);
+    expect(d.progression).toBe(null);
+  });
+
+  it('the same week with the tune-up marked complete progresses', () => {
+    const d = decideWeek({ ...baseS, log: { ...logS(), [tuneS.id]: { done: true, at: tuneS.date + 'T10:00:00Z' } } });
+    expect(d.disciplines.run.decision).toBe('progress');
+    expect(d.progression).toEqual({ discipline: 'run', what: 'extending the long run' });
+  });
+
+  it('a week whose ONLY key work was the unmarked race cannot certify the streak', () => {
+    // the tune-up replaces the key long run itself: with zero key sessions
+    // observed, clean would let next week progress on no evidence at all
+    // (re-verify catch 2026-07-30)
+    const planZ = generatePlan({ ...soloProfile, bRaces: [{ date: keyRun.date, kind: 'run5k' }] });
+    const wkZ = planZ.weeks.find(w => w.start === wkS0.start);
+    const logZ = Object.fromEntries(wkZ.workouts
+      .filter(x => x.discipline !== 'rest' && !x.race && !x.bRace)
+      .map(x => [x.id, { done: true, at: x.date + 'T10:00:00Z' }]));
+    const d = decideWeek({ ...baseS, plan: planZ, log: logZ,
+      prevWeeks: [{ weekMonday: prevS, tracker: false, planCreatedAt: planZ.createdAt, disciplines: { run: { clean: true } } }] });
+    expect(d.disciplines.run.clean).toBe(false);
+    expect(d.disciplines.run.decision).toBe('hold');
+    // but marking the race complete restores both the streak and progression
+    const tuneZ = wkZ.workouts.find(x => x.bRace);
+    const ticked = decideWeek({ ...baseS, plan: planZ, log: { ...logZ, [tuneZ.id]: { done: true, at: tuneZ.date + 'T10:00:00Z' } },
+      prevWeeks: [{ weekMonday: prevS, tracker: false, planCreatedAt: planZ.createdAt, disciplines: { run: { clean: true } } }] });
+    expect(ticked.disciplines.run.clean).toBe(true);
+    expect(ticked.disciplines.run.decision).toBe('progress');
+  });
+
+  it('a boost week held back by an unmarked race says so, not "not clean enough"', () => {
+    const adjustLog = [{ at: prevSunday + 'T18:00:00Z', kind: 'boost-week', headline: 'Room to build', why: 'form' }];
+    const d = decideWeek({ ...baseS, log: logS(), adjustLog });
+    expect(d.overall.decision).toBe('hold');
+    expect(d.overall.headline).toBe('Room to build soon, not yet');
+    expect(d.overall.conflicting.some(c => /tune-up race has no result marked yet/.test(c))).toBe(true);
+    expect(d.overall.conflicting.some(c => /not clean enough/.test(c))).toBe(false);
   });
 });
 

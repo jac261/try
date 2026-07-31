@@ -179,7 +179,18 @@ export function ftpProposalDetails({ proposal, plan, todayISO }) {
 
 const RIDE_TYPES = new Set(['Ride', 'VirtualRide', 'MountainBikeRide', 'GravelRide', 'TrackRide', 'Cyclocross']);
 
-export function eftpProposal({ activities, thresholds, plan, todayISO, cssTest, runTest }) {
+/* Phase 2: every proposal carries a dismissal signature, like its retest
+   siblings — the banner's dismiss can finally exist, and the decision
+   journal gets a deterministic identity. Additive: nothing else changes,
+   pinned by test. */
+export function eftpProposal(args) {
+  const p = eftpProposalInner(args);
+  if (!p) return null;
+  const proposed = p.retarget && (p.retarget.css100Sec ?? p.retarget.ftp ?? p.retarget.fivekSec);
+  return { ...p, sig: p.kind + ':' + p.sport + ':' + (proposed ?? '') };
+}
+
+function eftpProposalInner({ activities, thresholds, plan, todayISO, cssTest, runTest }) {
   const candidates = [];
   const profile = plan && plan.profile;
   const pc = plan && plan.paces;

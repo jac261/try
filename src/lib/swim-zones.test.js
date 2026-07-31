@@ -40,10 +40,10 @@ describe('targetPaceForZone / zoneTarget', () => {
 describe('the canonical swim threshold model', () => {
   it('keeps css100Sec as the number and records provenance without replacing it', () => {
     const measured = swimThreshold({ css100Sec: 118, cssMeta: { source: 'try-test', measuredAt: '2026-07-01', confidence: 'high' } });
-    expect(measured).toEqual({ cssSecondsPer100m: 118, source: 'try-test', measuredAt: '2026-07-01', confidence: 'high' });
+    expect(measured).toEqual({ cssSecondsPer100m: 118, source: 'try-test', measuredAt: '2026-07-01', confidence: 'high', kind: 'real' });
   });
   it('an existing athlete with a css but no meta reads as a manual source', () => {
-    expect(swimThreshold({ css100Sec: 120 })).toEqual({ cssSecondsPer100m: 120, source: 'manual', measuredAt: null, confidence: null });
+    expect(swimThreshold({ css100Sec: 120 })).toEqual({ cssSecondsPer100m: 120, source: 'manual', measuredAt: null, confidence: null, kind: 'real' });
   });
   it('no css reads as estimated; a bad source falls back', () => {
     expect(swimThreshold({}).source).toBe('estimated');
