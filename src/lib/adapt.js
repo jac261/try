@@ -300,7 +300,12 @@ export const RACE_RULES = {
 
 // Rough per-type intensity factors for estimating a session's training load:
 // TSS ≈ hours × IF² × 100. Estimates only — the projection needs the shape of
-// the taper, not watt-accurate numbers.
+// the taper, not watt-accurate numbers. 'RACE' in particular is a planning
+// placeholder (a future tune-up must carry SOME dose or the taper projection
+// under-reads fatigue): legitimate as an estimate wherever estimated load is
+// the stated currency — the load bars, digest and derived curve all wear
+// their estimate markers — but never as a yardstick, which is why the
+// post-session review refuses to judge a raced session against it (review.js).
 const TYPE_IF = {
   'Easy': 0.65, 'Recovery': 0.6, 'Endurance': 0.7, 'Technique': 0.6, 'Long': 0.72,
   'Fartlek': 0.78, 'Tempo': 0.85, 'Sweet Spot': 0.9, 'Threshold': 0.95, 'VO2 Intervals': 1.05,

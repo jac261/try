@@ -44,6 +44,9 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
   // The rep table: lazily fetch the recording's interval analysis once the
   // session is done and matched. null → loading/none; [] handled by the lib.
   const [reps, setReps] = useState(null);
+  // The why-not-harder fold (phase 6). Sheet-local on purpose: wording-only
+  // UI state, the BikeExecution precedent.
+  const [whyMore, setWhyMore] = useState(false);
   // Settled = the lap question has an ANSWER (rows, or a definitive none).
   // The report effect below waits for it: reporting a repless bike or run
   // review while the fetch is in flight PUT a downgrade over stored
@@ -109,7 +112,11 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             attributed (wellness never infers it), it feeds the weekly
             decision, and answering is always optional. */}
         {!done && !w.race && !w.test && onMissed && shown < T.iso(new Date()) && <div className="feel" style={{ marginTop: 4, marginBottom: 14 }}>
-          <div className="feel-q">This one didn't happen. What got in the way?</div>
+          {/* A tune-up gets the conditional form: the app cannot always see
+              whether a race happened (bricks and ambiguous days never
+              auto-close), so it must not assert the miss it is asking about
+              (gauntlet 2026-07-30). */}
+          <div className="feel-q">{w.bRace ? 'If this race didn\'t happen, what got in the way?' : 'This one didn\'t happen. What got in the way?'}</div>
           <div className="feel-row missed">
             {Object.entries(T.MISSED_REASONS).map(([k, lab]) =>
               <button key={k} className={'feelbtn' + (missedReason === k ? ' on right' : '')}
@@ -201,6 +208,22 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           </div>;
         })()}
         {why && <div className="why" style={{ borderColor: disc.color }}><span className="why-label">Why this session</span>{why}</div>}
+        {/* Phase 6 §7.7: the fold for the athlete who feels good and wonders
+            why the session is not bigger. Shares the why gate (races and
+            tests have no harder alternative); the selector returns null for
+            anything it cannot prove, so the toggle never opens onto air. */}
+        {why && (() => {
+          const wnh = T.whyNotHarder({ workout: w, plan });
+          if (!wnh) return null;
+          return <>
+            <a className="wnh-toggle" {...tap(() => setWhyMore(o => !o))} role="button" aria-expanded={whyMore}>
+              Why not harder? <span aria-hidden="true">{whyMore ? '▾' : '▸'}</span>
+            </a>
+            {whyMore && <div className="why" style={{ borderColor: disc.color }}>
+              {wnh.lines.map((l, i) => <div key={i} style={i ? { marginTop: 6 } : undefined}>{l}</div>)}
+            </div>}
+          </>;
+        })()}
         <div className="section-title" style={{ margin: '8px 0 2px' }}>{!w.race && !w.bRace && <InfoLink onOpen={onSupport} topic="workout-library" />}{w.race || w.bRace ? 'Race plan' : 'Workout'}</div>
         <WorkoutProfile w={w} />
         {/* Defensive: an ad-hoc session has no prescription to render, and a
@@ -212,6 +235,17 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
             {s.min ? <div className="m">{s.min} min</div> : null}
           </div>
         ))}
+        {/* Phase 6 §26: the session's kit, aggregated from the drill gear
+            already named per segment above. Nothing renders when the session
+            needs nothing: an empty Bring line would be noise wearing a
+            checklist. Bike and run deliberately get no equipment block; see
+            swim-kit.js for why that absence is a decision, not an omission. */}
+        {w.discipline === 'swim' && (() => {
+          const kit = T.swimKit(w);
+          if (!kit) return null;
+          return <div className="lead" style={{ margin: '4px 2px 0', fontSize: 12 }}>
+            Bring: {kit.items.map(s => s.toLowerCase()).join(', ')}.</div>;
+        })()}
         {/* Phase 4 §5: the same card is a different session on a trainer and
             on a road, so it says which it was written for and what changes in
             the other place. The choice is local to this sheet on purpose —
@@ -352,7 +386,12 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
         })()}
         {activity && <a className="act-link" href={T.activityUrl(activity)} target="_blank" rel="noopener noreferrer">
           <Icon name="watch" size={15} /> See the full recording{activity.name ? ' · ' + activity.name : ''} ↗</a>}
-        {(w.race || w.bRace) && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
+        {/* Future-tense encouragement ends with race day — opened from the
+            calendar a week later, "You've got this" reads as a glitch — and
+            ends the moment a tune-up is ticked done, or the same sheet would
+            ask "How did it feel?" above it (gauntlet catch 2026-07-30). The
+            A race can never be done, so for it the gate is date-only. */}
+        {(w.race || w.bRace) && !done && shown >= T.iso(new Date()) && <div className="card center" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)', margin: 0 }}><b style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={18} /> You've got this.</b></div>}
         {w.custom && onRemove && <>
           <div style={{ height: 10 }} />
           <button className="btn ghost remove" onClick={onRemove}>Remove this session</button>

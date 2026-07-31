@@ -110,8 +110,19 @@ export function buildRecap({ workout, activity, intervals, route, paces, plan, l
 
   // 5 — effort and load.
   const effortLines = [];
-  if (activity.rpe != null) effortLines.push('You rated it ' + Math.round(activity.rpe) + '/10.');
-  else if (activity.feel) effortLines.push('You called it ' + (activity.feel === 'right' ? 'just right' : activity.feel) + '.');
+  // A folded brick pair (pair: true) carries the HARDER leg's rating — a
+  // summary of two answers, so it is presented as one, never quoted as a
+  // single rating the athlete gave.
+  if (activity.rpe != null) effortLines.push(activity.pair
+    ? 'Your harder leg came in at ' + Math.round(activity.rpe) + '/10.'
+    : 'You rated it ' + Math.round(activity.rpe) + '/10.');
+  else if (activity.feel === 'easy' || activity.feel === 'right' || activity.feel === 'hard') {
+    // Only words the athlete actually said are quoted back: a manual diary
+    // entry's feel is their own tap. A real recording's feel is
+    // intervals.icu's numeric 1-5, which is not a thing anyone "called" —
+    // it stays silent here rather than being ventriloquised.
+    effortLines.push('You called it ' + (activity.feel === 'right' ? 'just right' : activity.feel) + '.');
+  }
   const warn = rv.verdicts.find(v => v.tone === 'warn');
   if (warn && warn !== lead) effortLines.push(warn.text);
   if (activity.trainingLoad != null) {

@@ -107,7 +107,10 @@ export function bikeReadiness(d) {
     ? st('at-risk', d.brick.pattern.text)
     : d.brick && d.brick.executions.length
       ? st('ready', 'Your recent brick runs held close to the pace you run fresh.')
-      : st('unknown', 'No completed bricks recorded yet.');
+      // "training bricks": raced tune-ups are excluded from the habit
+      // evidence by design (brick.js), so this must stay true for an
+      // athlete whose only completed brick was raced
+      : st('unknown', 'No training bricks to read yet.');
 
   // how much of the above is measured rather than absent
   const known = Object.values(out).filter(c => c.state !== 'unknown').length;

@@ -45,6 +45,14 @@ describe('the review is session specific and always states confidence', () => {
     expect(r.type).toBe('Threshold');
   });
 
+  it('a race is never reviewed as a training run', () => {
+    // runschema's isTrainingRun rules races out of judgment; without the
+    // bRace gate a finished 5k tune-up read "Repeat this one · about 73%
+    // of the session happened" (gauntlet catch 2026-07-30)
+    expect(runReview({ workout: wo('RACE', { race: true }), activity: act(22), rows: null, profile: base })).toBe(null);
+    expect(runReview({ workout: wo('RACE', { bRace: true, durationMin: 30 }), activity: act(22), rows: null, profile: base })).toBe(null);
+  });
+
   it('every verdict exposes a confidence, and it is never invented', () => {
     const r = runReview({ workout: wo('Threshold'), activity: act(60), rows: rows(4, 'good'), profile: base });
     expect(['low', 'medium', 'high']).toContain(r.confidence);

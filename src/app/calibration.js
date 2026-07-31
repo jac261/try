@@ -18,9 +18,13 @@ import * as T from '@/lib';
 
 const NOTE_PREFIX = 'cal:'; // namespaces the notes payload so a future human-notes feature can coexist
 
+// The only provenances a feel may carry — same fence as FTP_SOURCES et al:
+// anything else a caller passes is dropped, never written into the corpus.
+export const FEEL_SOURCES = ['athlete', 'rpe'];
+
 // One observation for a completed session. `wellnessRecs` is the full records
 // list; the readiness inputs are taken from the session's own (effective) day.
-export function buildObservation({ workout, date, feel, eased, wellnessRecs, at, actualMin }) {
+export function buildObservation({ workout, date, feel, eased, wellnessRecs, at, actualMin, feelSource, rpe }) {
   const rec = (wellnessRecs || []).find(r => r.date === date) || null;
   const base = T.wellness.baseline(wellnessRecs || [], date);
   const snap = T.wellness.snapshot(rec, base);
@@ -36,6 +40,18 @@ export function buildObservation({ workout, date, feel, eased, wellnessRecs, at,
     },
     eased: !!eased,
     feel: feel || null,
+    // Where the feel came from — 'athlete' (their own tap) or 'rpe' (a band
+    // feelFromRpe derived from the recording). The corpus is fitted against
+    // feel as an outcome label, and a derived band is not a self-report, so
+    // the two must stay distinguishable (the same rule as fivekMeta.source
+    // and the manual diary's `estimated`). Legacy rows without the stamp
+    // stay unstamped: unknown provenance is never guessed. The raw rpe rides
+    // along on any stamped row that has one — on 'rpe' rows it keeps the
+    // derivation reproducible if the bands are ever re-cut; on 'athlete'
+    // rows (carried forward from the derived row the tap replaces) it keeps
+    // whether the tap agreed with or overrode the band.
+    ...(feel && FEEL_SOURCES.includes(feelSource) ? { feelSource } : {}),
+    ...(feel && FEEL_SOURCES.includes(feelSource) && Number.isFinite(rpe) ? { rpe } : {}),
     at: at || null,
     // Recorded moving time when a watch activity matched — planned vs actual is
     // itself a calibration signal, and the synced note makes actualMin durable

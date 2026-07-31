@@ -83,10 +83,13 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'missedReasons', JSON.stringify(m)); } catch (e) {}
       return m;
     },
-    // The coach brain's frozen weekly decisions, keyed by week Monday.
-    // Device-local by design (the digest quotes a stored decision verbatim or
-    // shows none; it never recomputes one and presents it as the original
-    // call). Capped in WEEKS, not entries: each week stores one bundle.
+    // The coach brain's weekly decisions, keyed by week Monday. From Sunday
+    // 17:00 the reviewed week's bundle is PROVISIONAL (stamped so, rewritten
+    // in place as evidence lands); the first render after the week closes
+    // writes the final bundle, and from then the digest quotes it verbatim
+    // or shows none — a final bundle is never recomputed and presented as
+    // the original call (2026-07-31). Device-local by design. Capped in
+    // WEEKS, not entries: each week stores one bundle.
     loadCoachLog() { try { return JSON.parse(localStorage.getItem(ns + 'coachLog') || '{}'); } catch (e) { return {}; } },
     saveCoachDecision(weekMonday, decision) {
       const m = this.loadCoachLog();
