@@ -1587,19 +1587,27 @@ export function App({ storage, getToken, user }) {
   // 2026-07-30).
   const rawDaysToRace = T.daysBetween(T.iso(new Date()), plan.profile.raceDate);
   const daysToRace = Math.max(0, rawDaysToRace);
+  // Strictly after a real race day (0 IS race day; noRace plans have horizons,
+  // not races, and that flag covers tracker too). The chip must state this
+  // phase rather than freeze at "0 days to go": the post-race banner below
+  // only renders on Today, and this window lasts up to a week before
+  // planEnded rolls the plan into tracker mode. Calendar language only — the
+  // app can never log the A race, so it cannot claim the race was run, only
+  // that its day is behind us.
+  const postRace = !race.noRace && rawDaysToRace < 0;
   const maintWeeksLeft = Math.max(0, Math.ceil(rawDaysToRace / 7));
   // The plan's edges: race day passed → offer a maintenance block (with a
   // recovery week baked in); a maintenance block near its horizon → offer to
   // roll another. Both reshape the plan, pruning overlays to the new graph.
-  const rollMaintenance = postRace => {
+  const rollMaintenance = afterRace => {
     const mon = T.startOfWeekMonday(new Date());
     reshapePlan({
-      raceType: 'maintenance', postRace,
+      raceType: 'maintenance', postRace: afterRace,
       startDate: T.iso(mon), raceDate: T.iso(T.addDays(mon, 12 * 7 - 1)), horizonWeeks: 12,
     });
   };
   let planEdge = null;
-  if (!tracker && plan.race !== 'maintenance' && rawDaysToRace < 0) planEdge = {
+  if (postRace) planEdge = {
     key: 'post-race', icon: 'trophy',
     title: 'Race day is behind you — congratulations!',
     // Run-only maintenance is a deferred build; the prompt must not silently
@@ -1642,7 +1650,9 @@ export function App({ storage, getToken, user }) {
           ? <span>Ready for your next plan?</span>
           : race.noRace
             ? <><span>Maintenance block</span><b>{maintWeeksLeft}</b><span>{maintWeeksLeft === 1 ? 'week' : 'weeks'} left</span></>
-            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span><b>{daysToRace}</b><span>{daysToRace === 1 ? 'day' : 'days'} to go</span></>}</div>
+            : <><span>{race.name}{race.solo ? '' : ' Triathlon'}</span>{postRace
+              ? <span>race day has passed</span>
+              : <><b>{daysToRace}</b><span>{daysToRace === 1 ? 'day' : 'days'} to go</span></>}</>}</div>
       </div>
 
       {planSyncFailed && !tracker && <div className="banner ramp" {...tap(() => sync.replacePlan(plan).then(adoptRes(plan.createdAt)))}>

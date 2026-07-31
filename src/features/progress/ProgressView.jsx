@@ -52,12 +52,19 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
   // todayISO, not the raw Date: call-site uniformity, per the guard in
   // lib/date-call-sites.test.js — daysBetween now pins both ends to local
   // midnight itself (race-chip catch 2026-07-30, same shape as the App chip).
-  const daysToRace = Math.max(0, T.daysBetween(todayISO, plan.profile.raceDate));
+  const rawDaysToRace = T.daysBetween(todayISO, plan.profile.raceDate);
+  const daysToRace = Math.max(0, rawDaysToRace);
   // A maintenance block's raceDate is the block's horizon, not a race
   // (RACES.maintenance is noRace) — the countdown KPI speaks in block weeks,
   // matching the header chip, and never says "race day".
-  const maintenance = !tracker && !!(T.RACES[plan.race] || {}).noRace;
-  const weeksLeft = Math.max(0, Math.ceil(T.daysBetween(todayISO, plan.profile.raceDate) / 7));
+  const noRace = !!(T.RACES[plan.race] || {}).noRace;
+  const maintenance = !tracker && noRace;
+  const weeksLeft = Math.max(0, Math.ceil(rawDaysToRace / 7));
+  // Same phase read as the topbar chip: strictly after a real race day the
+  // countdown would freeze at 0, so the tile counts up instead. A calendar
+  // fact, not an outcome claim — the app never learns whether the race was
+  // started, so "done" language stays off this tile.
+  const postRace = !noRace && rawDaysToRace < 0;
   const pct = all.length ? Math.round(done.length / all.length * 100) : 0;
 
   // weekly bars — training load, not raw minutes. A benchmark test or a sharp
@@ -220,7 +227,9 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
       <div className="kpis">
         <div className="kpi">{maintenance
           ? <><div className="v">{weeksLeft}<small> {weeksLeft === 1 ? 'week' : 'weeks'}</small></div><div className="k">Left in the block</div></>
-          : <><div className="v">{daysToRace}<small> {daysToRace === 1 ? 'day' : 'days'}</small></div><div className="k">Until race day</div></>}</div>
+          : postRace
+            ? <><div className="v">{-rawDaysToRace}<small> {-rawDaysToRace === 1 ? 'day' : 'days'}</small></div><div className="k">Since race day</div></>
+            : <><div className="v">{daysToRace}<small> {daysToRace === 1 ? 'day' : 'days'}</small></div><div className="k">Until race day</div></>}</div>
         <div className="kpi"><div className="v">{pct}<small>%</small></div><div className="k">Sessions completed</div></div>
         <div className="kpi"><div className="v">{done.length}<small>/{all.length}</small></div><div className="k">Workouts done</div></div>
         <div className="kpi"><div className="v" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>{streak}<Icon name="flame" size={22} /></div><div className="k">Current streak</div></div>
