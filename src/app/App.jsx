@@ -1111,6 +1111,17 @@ export function App({ storage, getToken, user }) {
   // week/day IDs, so the log & moves overlays stay valid; only paces change.
   // Latest synced weight rides into the profile at every (re)generation so the
   // weakest-link bike score (W/kg) has something honest to stand on.
+  /* An existing plan's week grid is HISTORY: every tick, move and adjustment
+     is attached to a date on it. Regeneration therefore rebuilds on the same
+     anchor rather than re-deriving one from a startDate stamped when the
+     athlete first onboarded. Without this, the mid-week start rule would
+     re-interpret an old plan under today's rules on any regeneration: a
+     reshape would shift the whole grid a week and the same-date survivor
+     check would then discard every logged completion, and a one-tap
+     retarget would silently re-date them (gauntlet 2026-08-01). */
+  const planGrid = p => (p && p.weeks && p.weeks[0] && p.weeks[0].start
+    ? { start: p.weeks[0].start, firstWeekFrom: p.firstWeekFrom } : null);
+
   const withWeight = p => {
     const w = [...recs].reverse().find(r => r.weightKg);
     return w ? { ...p, weightKg: Math.round(w.weightKg * 10) / 10 } : p;
@@ -1139,7 +1150,7 @@ export function App({ storage, getToken, user }) {
     // every hydrate, and trusting it silently un-swapped a reloaded plan on
     // its next retarget (re-verify catch). Legacy and unswapped plans detect
     // to null: no swap appears mid-flight.
-    const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan) });
+    const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan), grid: planGrid(plan) });
     np.createdAt = plan.createdAt;
     np.updatedAt = new Date().toISOString();
     np.serverId = plan.serverId; // same server row: replace updates in place
@@ -1187,7 +1198,7 @@ export function App({ storage, getToken, user }) {
       setEditTechnique(false);
       return;
     }
-    const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan) });
+    const np = T.generatePlan(profile, { lockedSwap: T.detectLimiterSwap(plan), grid: planGrid(plan) });
     np.createdAt = plan.createdAt;
     np.updatedAt = new Date().toISOString();
     np.serverId = plan.serverId;
@@ -1485,7 +1496,11 @@ export function App({ storage, getToken, user }) {
     setPlanWork(2600);
     const fromTracker = plan.race === 'tracker';
     const profile = withWeight(Object.assign({}, plan.profile, fields));
-    const np = T.generatePlan(profile);
+    /* A caller supplying its own startDate is building a genuinely new block
+       (the maintenance roll does this, always on a Monday), so it derives a
+       fresh grid. Everything else is a reshape of a plan the athlete may
+       already have trained, and keeps the grid it has. */
+    const np = T.generatePlan(profile, fields && fields.startDate ? undefined : { grid: planGrid(plan) });
     // From tracker this is a brand-NEW plan: fresh identity (its own
     // createdAt nonce, no serverId — the old row was ended). From a real
     // plan it is a reshape of the same server row.

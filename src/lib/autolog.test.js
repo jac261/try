@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchActivities, activityFor, activityUrl } from './autolog.js';
+import { matchActivities, activityFor, activityUrl, ownerFor, MATCH_WINDOW } from './autolog.js';
 
 const TODAY = '2026-07-09';
 const wk = (id, discipline, type, date, durationMin) => ({
@@ -158,6 +158,77 @@ describe('matchActivities (spotted on your watch)', () => {
     expect(matchActivities({ ...base, activities: null })).toEqual([]);
     expect(matchActivities({ ...base, activities: [] })).toEqual([]);
     expect(matchActivities({ activities: [act('a1', 'Run', TODAY, 40)], plan: null, log: {}, moves: {}, todayISO: TODAY })).toEqual([]);
+  });
+});
+
+describe('ownerFor (which planned session already speaks for a recording)', () => {
+  const ride = wk('b1', 'bike', 'Endurance', '2026-07-08', 60);
+  const sessions = [ride];
+  const done = { b1: { done: true } };
+  const rec = (over = {}) => ({ id: 'a1', type: 'Ride', date: '2026-07-08', movingTimeSec: 3600, ...over });
+
+  it('claims a ticked same-discipline session inside the window', () => {
+    expect(ownerFor({ activity: rec(), sessions, log: done })).toBe(ride);
+  });
+
+  it('an UNTICKED session claims nothing: a match is not yet a claim', () => {
+    expect(ownerFor({ activity: rec(), sessions, log: {} })).toBe(null);
+    // a log entry that exists but is not done is still not a claim
+    expect(ownerFor({ activity: rec(), sessions, log: { b1: { feel: 2 } } })).toBe(null);
+  });
+
+  it('a manual entry never claims a planned session', () => {
+    expect(ownerFor({ activity: rec({ manual: true }), sessions, log: done })).toBe(null);
+  });
+
+  it('discipline must match', () => {
+    expect(ownerFor({ activity: rec({ type: 'Run' }), sessions, log: done })).toBe(null);
+  });
+
+  it('honours the shared duration window at both edges', () => {
+    const lo = 60 * MATCH_WINDOW.lo * 60, hi = 60 * MATCH_WINDOW.hi * 60;
+    expect(ownerFor({ activity: rec({ movingTimeSec: lo }), sessions, log: done })).toBe(ride);
+    expect(ownerFor({ activity: rec({ movingTimeSec: hi }), sessions, log: done })).toBe(ride);
+    expect(ownerFor({ activity: rec({ movingTimeSec: lo - 60 }), sessions, log: done })).toBe(null);
+    expect(ownerFor({ activity: rec({ movingTimeSec: hi + 60 }), sessions, log: done })).toBe(null);
+  });
+
+  it('the used set makes claiming one-to-one for callers that need it', () => {
+    const used = new Set();
+    expect(ownerFor({ activity: rec({ id: 'a1' }), sessions, log: done, used })).toBe(ride);
+    used.add(ride.id);
+    // the second recording of the day is NOT swallowed by the same session
+    expect(ownerFor({ activity: rec({ id: 'a2' }), sessions, log: done, used })).toBe(null);
+    // and without a used set both resolve, which is what a list wants
+    expect(ownerFor({ activity: rec({ id: 'a2' }), sessions, log: done })).toBe(ride);
+  });
+
+  it('claims by NEAREST duration, so feed order cannot change the outcome', () => {
+    /* Two ticked runs on one day with overlapping windows: first-fit let the
+       short recording claim the long session and orphaned the long one, so
+       the calendar's dot count flipped with feed order (gauntlet). */
+    const long = wk('L', 'run', 'Long', '2026-07-08', 60);
+    const short = wk('S', 'run', 'Easy', '2026-07-08', 30);
+    const both = [long, short];
+    const lg = { L: { done: true }, S: { done: true } };
+    const rec30 = { id: 'a30', type: 'Run', date: '2026-07-08', movingTimeSec: 1800 };
+    const rec60 = { id: 'a60', type: 'Run', date: '2026-07-08', movingTimeSec: 3600 };
+    expect(ownerFor({ activity: rec30, sessions: both, log: lg }).id).toBe('S');
+    expect(ownerFor({ activity: rec60, sessions: both, log: lg }).id).toBe('L');
+    // and resolving in either feed order pairs them the same way
+    for (const order of [[rec30, rec60], [rec60, rec30]]) {
+      const used = new Set(); const got = {};
+      order.forEach(a => { const o = ownerFor({ activity: a, sessions: both, log: lg, used }); if (o) { used.add(o.id); got[a.id] = o.id; } });
+      expect(got).toEqual({ a30: 'S', a60: 'L' });
+    }
+  });
+
+  it('degrades to null on junk rather than throwing', () => {
+    expect(ownerFor({ activity: null, sessions, log: done })).toBe(null);
+    expect(ownerFor({ activity: rec({ type: 'Yoga' }), sessions, log: done })).toBe(null);
+    expect(ownerFor({ activity: rec({ movingTimeSec: 0 }), sessions, log: done })).toBe(null);
+    expect(ownerFor({ activity: rec(), sessions: null, log: done })).toBe(null);
+    expect(ownerFor({ activity: rec(), sessions, log: null })).toBe(null);
   });
 });
 

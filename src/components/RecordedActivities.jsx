@@ -95,12 +95,13 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
   // that has been ticked off.
   day.filter(a => !claimed.has(a.id)).forEach(a => {
     const disc = DISC[a.type];
-    const min = a.movingTimeSec / 60;
-    // A manual entry never claims a plan workout: routing it through the
-    // matched branch would hijack its edit sheet and lend it plan-relative
-    // verdicts it has no data for (gauntlet catch).
-    const owner = a.manual ? null : sessions.find(w => w.discipline === disc && (log || {})[w.id] && log[w.id].done
-      && w.durationMin && min >= w.durationMin * T.MATCH_WINDOW.lo && min <= w.durationMin * T.MATCH_WINDOW.hi);
+    /* The shared claim rule (a manual entry never claims a plan workout:
+       routing it through the matched branch would hijack its edit sheet and
+       lend it plan-relative verdicts it has no data for, a gauntlet catch).
+       No `used` set here on purpose: two same-discipline recordings on one
+       day can both fall in one session's window and BOTH still render as
+       their own rows, each opening the file actually tapped. */
+    const owner = T.ownerFor({ activity: a, sessions, log });
     // Always carry THIS activity, even when it matched a planned session:
     // two same-discipline recordings on one day can both fall in one session's
     // window, and re-deriving from the workout alone would resolve to the
