@@ -36,7 +36,13 @@ export function deriveLoadRecords({ plan, log, moves, adjust, todayISO, seed }) 
   if (today < start) return [];
 
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
-  const wk1 = plan.weeks[0].workouts.filter(w => w.discipline !== 'rest' && !w.race);
+  /* The seed models the athlete's TYPICAL week, so it must not read a first
+     week that was deliberately trimmed to a mid-week start: three days of
+     sessions divided across seven would open the model well below the load
+     the athlete actually carries. Any trimmed plan seeds from week two, its
+     first full week instead. */
+  const seedWeek = plan.firstWeekFrom && plan.weeks.length > 1 ? plan.weeks[1] : plan.weeks[0];
+  const wk1 = seedWeek.workouts.filter(w => w.discipline !== 'rest' && !w.race);
   const wk1Daily = wk1.reduce((s, w) => s + estimateTss(w), 0) / 7;
 
   const byDate = {};

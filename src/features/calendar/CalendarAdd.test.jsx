@@ -162,7 +162,22 @@ describe('history survives a new plan (field report 2026-07-30)', () => {
         open={() => {}} easedOf={w => w} onToggleWorkout={() => {}} onMove={() => {}}
         activities={[matched]} onOpenRecording={() => {}} onAddWorkout={() => {}} />);
     });
-    const cell = el.querySelector('[data-caldate="' + firstWorkout.date + '"]');
+    /* The grid opens on TODAY's month, and a plan that starts mid-week can
+       have its first surviving session in the next one (a Friday start on a
+       Mon/Tue/Thu/Sat/Sun week begins on the Saturday). Walk forward until
+       the day is on screen rather than assuming it already is. */
+    const cellFor = async d => {
+      for (let i = 0; i < 3; i++) {
+        const c = el.querySelector('[data-caldate="' + d + '"]');
+        if (c) return c;
+        const next = el.querySelector('[aria-label="Next month"]');
+        if (!next || next.disabled) return null;
+        await act(async () => { next.click(); });
+      }
+      return el.querySelector('[data-caldate="' + d + '"]');
+    };
+    const cell = await cellFor(firstWorkout.date);
+    expect(cell, 'the first planned day never came into view').toBeTruthy();
     const planned = (plan.weeks[0].workouts.filter(w => w.discipline !== 'rest' && w.date === firstWorkout.date)).length;
     expect(cell.querySelectorAll('.cd-dots i').length).toBe(Math.min(3, planned));
     el.remove();

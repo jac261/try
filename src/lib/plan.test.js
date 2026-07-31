@@ -324,6 +324,80 @@ describe('workout library — Tranche 1 audit fixes', () => {
   });
 });
 
+describe('a plan starts on the day the athlete started it (bug, 2026-08-01)', () => {
+  /* A mid-week start laid sessions on the days BEFORE it: undoable work the
+     athlete never had a chance at, which the coach brain then counts as
+     missed on day one. The first week now trims to the days that remain,
+     unless so little of the week is left that it would be a stub, in which
+     case the plan rolls to the following Monday. 2026-08-03 is a Monday. */
+  const at = (startDate, over = {}) => generatePlan({
+    ...profile('2026-11-14', startDate), fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70, ...over,
+  });
+  const sessions = p => p.weeks[0].workouts.filter(w => w.discipline !== 'rest');
+
+  it('emits nothing before the start date, whatever weekday it is', () => {
+    for (let i = 0; i < 7; i++) {
+      const start = iso(addDays('2026-08-03', i));
+      const p = at(start);
+      const early = p.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && w.date < start);
+      expect(early, 'sessions before ' + start).toEqual([]);
+    }
+  });
+
+  it('a Monday start is untouched: same sessions, same week count, no flag', () => {
+    const p = at('2026-08-03');
+    expect(sessions(p).length).toBe(6);
+    expect(p.firstWeekFrom).toBeUndefined();
+    expect(p.weeks[0].start).toBe('2026-08-03');
+  });
+
+  it('a Thursday start keeps the rest of its week and stamps the trim', () => {
+    const p = at('2026-08-06');
+    expect(p.firstWeekFrom).toBe('2026-08-06');
+    expect(sessions(p).every(w => w.date >= '2026-08-06')).toBe(true);
+    expect(sessions(p).length).toBeGreaterThan(0);
+    // the week grid keeps its Monday anchor: it is a date anchor for custom
+    // workouts, the calendar's back-limit and a dozen test helpers
+    expect(p.weeks[0].start).toBe('2026-08-03');
+    // trimmed days become Rest, so no week is ever short of entries
+    expect(p.weeks[0].workouts.filter(w => w.date < '2026-08-06').every(w => w.discipline === 'rest')).toBe(true);
+  });
+
+  it('a Sunday start rolls to the following Monday rather than leaving a stub week', () => {
+    const rolled = at('2026-08-09');   // Sunday: one training day left
+    expect(rolled.weeks[0].start).toBe('2026-08-10');
+    expect(rolled.firstWeekFrom).toBeUndefined();   // nothing to trim once rolled
+    expect(sessions(rolled).length).toBe(6);        // a full first week
+    // and one fewer week to train, which is the truth of starting later
+    expect(rolled.totalWeeks).toBe(at('2026-08-03').totalWeeks - 1);
+  });
+
+  it('a Saturday start trims rather than rolls: the weekend holds the long work', () => {
+    const p = at('2026-08-08');
+    expect(p.weeks[0].start).toBe('2026-08-03');
+    expect(p.firstWeekFrom).toBe('2026-08-08');
+    expect(sessions(p).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('doubles attach to a surviving host, never to a trimmed day', () => {
+    // an elite 7-day plan is the shape that generates both double types
+    const p = at('2026-08-06', { fitness: 'elite', trainingDays: [0, 1, 2, 3, 4, 5, 6], daysPerWeek: 7 });
+    const w0 = p.weeks[0].workouts.filter(x => x.discipline !== 'rest');
+    const doubles = w0.filter(x => x.second);
+    doubles.forEach(dbl => {
+      expect(dbl.date >= '2026-08-06', 'double on a trimmed day').toBe(true);
+      expect(w0.some(h => h.date === dbl.date && !h.second), 'double without a host').toBe(true);
+    });
+  });
+
+  it('the coach brain does not accuse a mid-week starter of missing anything on day one', () => {
+    const start = '2026-08-06';
+    const p = at(start);
+    const missed = p.weeks[0].workouts.filter(w => w.discipline !== 'rest' && w.date < start);
+    expect(missed).toEqual([]);   // nothing past-dated exists to be classified missed
+  });
+});
+
 describe('generatePlan', () => {
   it('produces weeks, paces and a clamped week count', () => {
     const p = generatePlan(profile('2026-09-23', '2026-07-01'));
