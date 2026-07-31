@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import * as T from '@/lib';
 import { effDate, weekRange } from '@/lib/schedule.js';
 import { paceSuggestions } from '@/lib/tuning.js';
@@ -109,7 +109,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, runFail, onFixRun, ftpRetest, onFtpRetest, startShortfall, onDecision }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, runFail, onFixRun, ftpRetest, onFtpRetest, startShortfall, onDecision, fuelLog }) {
   // Align the dismissal keys to THIS user before any lazy initialiser runs.
   // They were browser-global, so two accounts on one device shared them.
   DISMISS_NS = (storage && storage.ns) || 'try.';
@@ -118,6 +118,9 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   const all = plan.weeks.flatMap(w => w.workouts);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
   const today = all.filter(w => effDate(w, moves) === todayISO);
+  // The daily briefing (phase 5): pure selector over the plan, same fuelLog
+  // the detail sheet reads so the cue numbers agree one tap deeper.
+  const briefing = tracker ? null : T.todayBriefing({ plan, todayISO, moves, fuelLog, easedOf });
   const suggestions = paceSuggestions(plan, log);
   const [coachIdx, setCoachIdx] = useState(0);
   const [weeklyDismissed, setWeeklyDismissed] = useState(loadWeeklyDismiss);
@@ -274,6 +277,13 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   return (
     <>
       <div className="section-title">Today · {T.fmtDate(todayISO, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
+      {/* The daily briefing's context line (phase 5, spec §5.2/§24.1): where
+          the athlete is in the plan and what today is for, in two short
+          lines at most. Tracker has no plan to brief. */}
+      {briefing && <div className="tb-context">
+        <div className="tb-ctx-line">{briefing.contextLine}</div>
+        {briefing.priorityLine && <div className="tb-priority">{briefing.priorityLine}</div>}
+      </div>}
       {/* With no plan the tab's one call to action is the next-plan prompt, so
           it leads; in plan mode readiness keeps the top spot (Jon, 2026-07-16). */}
       {tracker && coachCard}
@@ -291,7 +301,23 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
           </div>
           : today.length === 0
             ? <div className="empty"><div className="big"><Icon name="rest" size={40} /></div>{tracker ? 'No plan active. Rest up.' : 'No session scheduled today.'}</div>
-            : today.map(row)}
+            : <>
+              {/* Briefing decorations around the untouched rows (phase 5):
+                  the Main session caption marks the primary ONLY on
+                  multi-session days (the selector's rule), cues render
+                  under the session they prepare, and the dependency line
+                  closes the list. All in this file on purpose: WorkoutRow
+                  is shared with WeekOverview and the calendar, and its
+                  race-row test pins its text. */}
+              {today.map(w => <Fragment key={w.id}>
+                {briefing && briefing.primaryId === w.id && <div className="tb-main">Main session</div>}
+                {row(w)}
+                {briefing && (briefing.cues[w.id] || []).map((c, i) => (
+                  <div key={i} className="tb-cue"><Icon name={c.icon} size={13} /> {c.text}</div>
+                ))}
+              </Fragment>)}
+              {briefing && briefing.dependencyLine && <div className="tb-dep">{briefing.dependencyLine}</div>}
+            </>}
         {(allDone || restDay) && next && <div className="tmrw" {...tap(() => open(next))}
           aria-label={'Next up, ' + T.fmtDate(effDate(next, moves), { weekday: 'long' }) + ': ' + easedOf(next).title + '. Open details'}>
           <Icon name="calendar" size={15} />
