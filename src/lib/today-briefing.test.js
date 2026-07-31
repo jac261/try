@@ -93,6 +93,51 @@ describe('dependency copy, gated on real co-location', () => {
     expect(b.dependencyLine).toContain('added volume, built easy on purpose');
   });
 
+  it('a double dragged onto another day fabricates NOTHING: engine pairings only', () => {
+    /* The dependency copy asserts engine intent, so an athlete-assembled
+       co-location must never earn it (gauntlet 2026-08-01: the strength
+       double moved onto an easy swim day claimed "stacked here on purpose,
+       so your easy days stay easy"). The gate is the RAW generated dates:
+       equal = the engine's own pairing, different = the athlete's. */
+    const dbl = all.find(w => w.second && w.discipline === 'strength');
+    expect(dbl).toBeTruthy();
+    const stranger = all.find(w => !w.second && w.discipline !== 'rest' && !w.race && w.date !== dbl.date);
+    expect(stranger).toBeTruthy();
+    const moves = { [dbl.id]: stranger.date };
+    const b = todayBriefing({ plan, todayISO: stranger.date, moves, fuelLog: {}, easedOf: w => w });
+    expect(b.dependencyLine).toBe(null);
+    expect(b.primaryId).toBe(stranger.id); // marking still works; only the copy stays silent
+  });
+
+  it('a pairing moved TOGETHER to an empty day keeps its line', () => {
+    /* Raw dates equal = still the engine's pairing wherever it lands. The
+       target must be an EMPTY day: landing beside resident sessions makes a
+       mixed day the engine never built, and the line correctly stays
+       silent there (the b.dependencyLine === null path below). */
+    // a 7-day plan has no empty days to move onto; a 5-day plan does
+    const p5 = generatePlan(profile({ trainingDays: [0, 1, 3, 5, 6], daysPerWeek: 5 }));
+    const all5 = p5.weeks.flatMap(w => w.workouts);
+    const dbl = all5.find(w => w.second && w.discipline === 'strength');
+    expect(dbl, 'no strength double in the 5-day plan').toBeTruthy();
+    const host = all5.find(w => w.date === dbl.date && !w.second && w.discipline !== 'rest');
+    expect(host).toBeTruthy();
+    const dates = new Set(all5.filter(w => w.discipline !== 'rest').map(w => w.date));
+    let t = null;
+    for (let i = 1; i <= 14 && !t; i++) {
+      const c = new Date(dbl.date); c.setDate(c.getDate() + i);
+      const iso = c.toISOString().slice(0, 10);
+      if (!dates.has(iso)) t = iso;
+    }
+    expect(t, 'no empty day near the pair').toBeTruthy();
+    const moves = { [dbl.id]: t, [host.id]: t };
+    const b = todayBriefing({ plan: p5, todayISO: t, moves, fuelLog: {}, easedOf: w => w });
+    expect(b.dependencyLine).toContain('Strength is stacked here on purpose');
+    // and landing beside a resident session silences it (mixed day)
+    const resident = all5.find(w => !w.second && w.discipline !== 'rest' && !w.race && w.date !== dbl.date);
+    const b2 = todayBriefing({ plan: p5, todayISO: resident.date, moves: { [dbl.id]: resident.date, [host.id]: resident.date }, fuelLog: {}, easedOf: w => w });
+    expect(b2.dependencyLine).toBe(null);
+  });
+
   it('moving the host off the day kills the line and the lone double gets no primary marking', () => {
     const d = findDay(plan, day => day.some(w => w.second) && day.length === 2);
     expect(d).toBeTruthy();
@@ -197,6 +242,53 @@ describe('context copy', () => {
   it('tracker plans get no briefing at all', () => {
     const t = buildTrackerPlan(generatePlan(profile()), '2026-07-13T10:00:00.000Z');
     expect(todayBriefing({ plan: t, todayISO: '2026-07-14', moves: {}, fuelLog: {}, easedOf: w => w })).toBe(null);
+  });
+
+  it('a tune-up day briefs the tune-up race, never "the run RACE"', () => {
+    const plan = generatePlan(profile({ bRaces: [{ date: '2026-07-18', kind: 'run5k' }] }));
+    const all = plan.weeks.flatMap(w => w.workouts);
+    const tune = all.find(w => w.bRace);
+    expect(tune, 'no tune-up injected').toBeTruthy();
+    const b = todayBriefing({ plan, todayISO: tune.date, moves: {}, fuelLog: {}, easedOf: w => w });
+    expect(b.priorityLine).toBe("Today's priority: the tune-up race");
+    expect(b.priorityLine).not.toContain('RACE');
+  });
+
+  it('adjective types read adjective-first', () => {
+    expect(sessionLabel({ discipline: 'run', type: 'Easy' })).toBe('the easy run');
+    expect(sessionLabel({ discipline: 'swim', type: 'Easy' })).toBe('the easy swim');
+    expect(sessionLabel({ discipline: 'swim', type: 'Open Water' })).toBe('the open water swim');
+  });
+
+  it('an empty day beyond the plan gets no briefing, but a session moved out there does', () => {
+    const plan = generatePlan(profile());
+    const all = plan.weeks.flatMap(w => w.workouts);
+    const last = all[all.length - 1].date;
+    const beyond = new Date(last); beyond.setDate(beyond.getDate() + 10);
+    const bISO = beyond.toISOString().slice(0, 10);
+    expect(todayBriefing({ plan, todayISO: bISO, moves: {}, fuelLog: {}, easedOf: w => w })).toBe(null);
+    // the scheduled post-race recovery week is IN range and briefs honestly
+    const lastWeek = plan.weeks[plan.weeks.length - 1];
+    if (lastWeek.isRecovery) {
+      const d = lastWeek.workouts[0].date;
+      expect(todayBriefing({ plan, todayISO: d, moves: {}, fuelLog: {}, easedOf: w => w })).not.toBe(null);
+    }
+    // a moved session out beyond the end still earns its briefing (the week
+    // context falls back to the final week, the established resolution rule)
+    const some = all.find(w => w.discipline !== 'rest' && !w.race && !w.second);
+    const b = todayBriefing({ plan, todayISO: bISO, moves: { [some.id]: bISO }, fuelLog: {}, easedOf: w => w });
+    expect(b).not.toBe(null);
+    expect(b.contextLine).toBeTruthy();
+  });
+
+  it('a logged session loses its prep cues: preparation ends when the session starts', () => {
+    const plan = generatePlan(profile());
+    const all = plan.weeks.flatMap(w => w.workouts);
+    const long = all.find(w => w.discipline === 'bike' && w.type === 'Long' && !w.race);
+    const before = todayBriefing({ plan, todayISO: long.date, moves: {}, fuelLog: {}, easedOf: w => w });
+    expect(before.cues[long.id]).toBeTruthy();
+    const after = todayBriefing({ plan, todayISO: long.date, moves: {}, fuelLog: {}, easedOf: w => w, log: { [long.id]: { completed: true } } });
+    expect(after.cues[long.id]).toBeUndefined();
   });
 });
 

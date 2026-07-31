@@ -40,20 +40,36 @@ const lowerType = s => String(s).split(' ')
 // "the swim test", "strength".
 export function sessionLabel(w) {
   if (w.race) return 'race day';
+  // Tune-ups are injected as { bRace, type: 'RACE' } with no race flag; the
+  // fallthrough read "the run RACE" (gauntlet 2026-08-01). They are a race
+  // rehearsal and the label says so, brick or run alike.
+  if (w.bRace) return 'the tune-up race';
   if (w.test) return 'the ' + ((DISCIPLINES[w.discipline] || {}).name || w.discipline).toLowerCase() + ' test';
   if (w.discipline === 'brick') return 'the brick session';
   if (w.discipline === 'strength') return 'strength';
   const d = ((DISCIPLINES[w.discipline] || {}).name || w.discipline).toLowerCase();
-  if (w.role === 'long' || w.type === 'Long') return 'the long ' + (w.discipline === 'bike' ? 'ride' : w.discipline === 'run' ? 'run' : 'swim');
+  const noun = w.discipline === 'bike' ? 'ride' : w.discipline === 'run' ? 'run' : 'swim';
+  if (w.role === 'long' || w.type === 'Long') return 'the long ' + noun;
+  // Adjective-shaped types read adjective-first: "the easy run", never
+  // "the run easy" (gauntlet 2026-08-01). Open Water names the swim it is.
+  if (w.type === 'Easy') return 'the easy ' + noun;
+  if (w.type === 'Open Water') return 'the open water swim';
   return 'the ' + d + ' ' + lowerType(w.type || w.role || 'session');
 }
 
-export function todayBriefing({ plan, todayISO, moves, fuelLog, easedOf }) {
+export function todayBriefing({ plan, todayISO, moves, fuelLog, easedOf, log }) {
   if (!plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length) return null;
   const ease = easedOf || (w => w);
   const all = plan.weeks.flatMap(wk => wk.workouts);
   const today = all.filter(w => effDate(w, moves) === todayISO).map(ease);
   const real = today.filter(w => w.discipline !== 'rest');
+  // On an empty day OUTSIDE the plan's own dates the briefing has nothing
+  // true to say: the scheduled post-race recovery week is in range and
+  // briefs honestly, but beyond it a confident "Rest day" would be the
+  // selector talking past the end of its knowledge (gauntlet 2026-08-01).
+  // The plan-edge chips own that territory. A session MOVED out there still
+  // gets its briefing: real work is real wherever it lands.
+  if (!real.length && (!all.length || todayISO < all[0].date || todayISO > all[all.length - 1].date)) return null;
 
   // The current week, by WeekOverview's exact rule; a second week-resolution
   // rule would eventually disagree with the one the athlete already sees.
@@ -84,10 +100,20 @@ export function todayBriefing({ plan, todayISO, moves, fuelLog, easedOf }) {
 
   let dependencyLine = null;
   if (multi && primary) {
-    const others = real.filter(w => w.id !== primary.id);
-    const strengthDouble = others.find(w => w.second && w.discipline === 'strength');
-    const volumeDouble = others.find(w => w.second && w.discipline === 'bike' && w.role === 'easy');
-    const easySecondary = others.find(w => w.role === 'easy');
+    /* The dependency copy asserts ENGINE intent, so it may only speak when
+       the whole day is a day the engine built: every session present shares
+       the primary's RAW generated date. A double dragged onto some other
+       session's day is an athlete-assembled co-location, and "stacked here
+       on purpose" would be a fabrication (gauntlet 2026-08-01: one ordinary
+       reschedule put that sentence on an easy swim day) — and a pairing
+       parked beside a resident session makes a mixed day the engine never
+       shaped either. A pairing moved TOGETHER to an empty day keeps its raw
+       dates equal, and the statement stays true wherever it lands. */
+    const engineDay = real.every(w => w.date === primary.date);
+    const paired = engineDay ? real.filter(w => w.id !== primary.id) : [];
+    const strengthDouble = paired.find(w => w.second && w.discipline === 'strength');
+    const volumeDouble = paired.find(w => w.second && w.discipline === 'bike' && w.role === 'easy');
+    const easySecondary = paired.find(w => w.role === 'easy');
     if (strengthDouble) {
       dependencyLine = 'Strength is stacked here on purpose: it lands on the day that is already working hardest, so your easy days stay easy.';
     } else if (volumeDouble) {
@@ -96,10 +122,10 @@ export function todayBriefing({ plan, todayISO, moves, fuelLog, easedOf }) {
       dependencyLine = 'Keep the ' + ((DISCIPLINES[easySecondary.discipline] || {}).name || easySecondary.discipline).toLowerCase()
         + ' easy. Today is shaped around ' + sessionLabel(primary) + '.';
     }
-    // Two quality sessions co-located by the athlete's own moves: the engine
-    // did not schedule that day and has nothing true to say about ordering,
-    // so no line renders. The generator encodes no intra-day order at all,
-    // which is why no branch above ever says "do X first".
+    // Sessions co-located by the athlete's own moves get no line: the engine
+    // did not build that day and has nothing true to say about it. It also
+    // encodes no intra-day order at all, which is why no branch above ever
+    // says "do X first".
   }
 
   // Preparation cues, computed with exactly the inputs DetailSheet uses for
@@ -109,6 +135,10 @@ export function todayBriefing({ plan, todayISO, moves, fuelLog, easedOf }) {
   // null, so a session that needs nothing shows nothing.
   const cues = {};
   for (const w of real) {
+    // A logged session needs no preparation: the cue's job ended when the
+    // session started (gauntlet 2026-08-01: partially-done days kept prep
+    // advice under the finished row).
+    if (log && log[w.id]) continue;
     const list = [];
     const brickFollows = w.discipline === 'brick';
     const bike = bikeFuellingPlan({ workout: w, profile: plan.profile, fuelLog, brickFollows });

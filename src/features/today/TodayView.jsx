@@ -120,7 +120,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
   const today = all.filter(w => effDate(w, moves) === todayISO);
   // The daily briefing (phase 5): pure selector over the plan, same fuelLog
   // the detail sheet reads so the cue numbers agree one tap deeper.
-  const briefing = tracker ? null : T.todayBriefing({ plan, todayISO, moves, fuelLog, easedOf });
+  const briefing = tracker ? null : T.todayBriefing({ plan, todayISO, moves, fuelLog, easedOf, log });
   const suggestions = paceSuggestions(plan, log);
   const [coachIdx, setCoachIdx] = useState(0);
   const [weeklyDismissed, setWeeklyDismissed] = useState(loadWeeklyDismiss);
