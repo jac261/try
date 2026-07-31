@@ -278,6 +278,14 @@ zero), Connections, Support, Account, then the lone destructive reset. `openSett
 in App opens Settings scrolled to a card; in-copy mentions of Settings should become
 links via a nullable `onOpenSettings` callback where cheap.
 
+**Today briefing (phase 5)** — context under the date line (`.tb-context`: muted
+phase/week line + bold priority line, two short lines max), a tiny uppercase
+`Main session` caption (`.tb-main`, key-tag blue `#9ab8ff`) above the primary row
+on multi-session days only, muted prep-cue lines under their row (`.tb-cue`,
+indented past the discipline tile), and a hairline-topped dependency line
+(`.tb-dep`) closing the list. Decorations live in TodayView around untouched
+WorkoutRows; the row component stays shared and undecorated.
+
 **Avatar (profile entry)** — 34px circle, top-left of the topbar; the Clerk photo with a
 `1.5px rgba(255,255,255,.18)` hairline, or a gradient fallback
 (`135° #4a74dc → #6d54c8`) with the athlete's initial in white 800.

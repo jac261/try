@@ -122,8 +122,33 @@ in [../EXPERIENCE_LEVELS.md](../EXPERIENCE_LEVELS.md).
 (`createdAt`) is preserved across reshapes so logged sessions and frozen coach
 decisions stay attached. See [../ARCHITECTURE.md](../ARCHITECTURE.md).
 
+## The Today briefing (phase 5)
+
+`src/lib/today-briefing.js` is a pure read over the generated plan answering
+the daily-briefing questions on the Today screen: the context line (phase and
+week, with recovery, maintenance and race-week variants), the day's priority
+(ranked strictly by the generator's own flags: race, tune-up, test, key,
+quality; a stacked double is never primary while its host is present), the
+dependency line (copy exists ONLY for relationships the generator encodes:
+the strength double, the volume double, an easy secondary beside the primary;
+athlete-assembled days get no line, and nothing ever claims an intra-day
+order because the engine encodes none), and preparation cues (fuelling and
+long-ride focus from the exact helpers the detail sheet calls, same eased
+workout and fuelLog, so the numbers one tap deeper always agree).
+
+The week label is composed from structured fields rather than shared with
+TodayView/WeeklyDigest/PlanView's three hand-built strings: those are
+differently shaped from different sources, and an options-API helper would
+save nothing (named decision, phase 5).
+
+Deferred, with reasons: a swim kit cue (equipment is flattened into segment
+prose at generation and does not survive onto workouts; a real cue needs a
+builder change); intra-day ordering advice (nothing encodes an order);
+conditions in cues (the app has no weather input).
+
 ## Key files
 
 `src/lib/plan.js`, `src/lib/domain.js`, `src/lib/start-volume.js`,
-`src/lib/schedule.js`, `src/features/onboarding/`, `src/features/settings/`,
+`src/lib/schedule.js`, `src/lib/today-briefing.js`,
+`src/features/onboarding/`, `src/features/settings/`,
 `src/features/plan/PlanView.jsx`.

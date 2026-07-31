@@ -118,14 +118,37 @@ describe('cue parity with the detail sheet', () => {
   it('a long ride cue carries exactly the numbers bikeFuellingPlan gives the sheet', () => {
     const long = all.find(w => w.discipline === 'bike' && w.type === 'Long' && !w.race);
     expect(long, 'no long ride generated').toBeTruthy();
-    const fuelLog = { a1: { level: 2, discipline: 'bike' } };
-    const b = todayBriefing({ plan, todayISO: long.date, moves: {}, fuelLog, easedOf: w => w });
-    const sheet = bikeFuellingPlan({ workout: long, profile: plan.profile, fuelLog, brickFollows: false });
+    const b = todayBriefing({ plan, todayISO: long.date, moves: {}, fuelLog: {}, easedOf: w => w });
+    const sheet = bikeFuellingPlan({ workout: long, profile: plan.profile, fuelLog: {}, brickFollows: false });
     expect(sheet).toBeTruthy();
     const cue = (b.cues[long.id] || []).find(c => c.text.includes('g carbs'));
     expect(cue, 'no fuelling cue for the long ride').toBeTruthy();
     expect(cue.text).toContain(sheet.carbsPerHour + ' g carbs an hour');
     expect(cue.text).toContain('start inside the first ' + sheet.startAfterMin + ' min');
+  });
+
+  it('a low proven tolerance CAPS the cue, in lockstep with the sheet', () => {
+    /* The cap only bites when session demand exceeds proven + one gut step.
+       Olympic-distance rides never ask more than the no-history default, so
+       the fixture is a half-distance plan whose long rides do. A wrong level
+       key here silently exercises nothing (the first version used a numeric
+       level the closed set does not contain), so the test asserts
+       capped === true before trusting the parity. */
+    const halfPlan = generatePlan(profile({ raceType: 'half' }));
+    const halfAll = halfPlan.weeks.flatMap(w => w.workouts);
+    const fuelLog = { a1: { level: 'bit', discipline: 'bike' } };
+    const target = halfAll.find(w => {
+      if (w.race || (w.discipline !== 'bike' && w.discipline !== 'brick')) return false;
+      const f = bikeFuellingPlan({ workout: w, profile: halfPlan.profile, fuelLog, brickFollows: w.discipline === 'brick' });
+      return f && f.capped;
+    });
+    expect(target, 'no session in a half plan exercises the cap').toBeTruthy();
+    const sheet = bikeFuellingPlan({ workout: target, profile: halfPlan.profile, fuelLog, brickFollows: target.discipline === 'brick' });
+    expect(sheet.capped).toBe(true);
+    const b = todayBriefing({ plan: halfPlan, todayISO: target.date, moves: {}, fuelLog, easedOf: w => w });
+    const cue = (b.cues[target.id] || []).find(c => c.text.includes('g carbs'));
+    expect(cue).toBeTruthy();
+    expect(cue.text).toContain(sheet.carbsPerHour + ' g carbs an hour');
   });
 
   it('a long run gets run numbers, not bike numbers', () => {
