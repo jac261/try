@@ -640,53 +640,21 @@ export function App({ storage, getToken, user }) {
   const [durabilityDone, setDurabilityDone] = useState(false);
   const durabilityBusy = useRef(false);
   const durabilityCandidates = () => {
-    if (!Array.isArray(activities)) return [];
     const store = durabilityRef.current;
-    const have = new Set(store.map(e => e.activityId));
-    // once the store is full, candidates older than its oldest entry would
-    // evict-and-refetch forever; they are simply out of the window now
-    const floor = store.length >= 40 ? store[0].date : null;
-    const out = [];
-    if (plan && plan.race !== 'tracker' && Array.isArray(plan.weeks) && plan.weeks.length) {
-      plan.weeks.flatMap(w => w.workouts)
-        /* Raced sessions are refused EXPLICITLY (design panel 2026-07-30):
-           the durability read measures drift under a steady intent, and a
-           raced split is pacing by choice, not fatigue resistance. The
-           planBodySteady gate below cannot make this call — race cards carry
-           no zones, so it would pass them vacuously rather than by
-           judgement. This is a PLAN-branch guarantee only: the tracker
-           branch below reads raw activities, which carry no race flag, so a
-           race ridden in tracker mode is indistinguishable there and its
-           read persists across plans (the store spans plans by design). */
-        .filter(w => !w.race && !w.bRace
-          && ((w.role === 'long' && (w.discipline === 'run' || w.discipline === 'bike')) || w.discipline === 'brick') && log[w.id])
-        .forEach(w => {
-          if (w.discipline === 'brick') {
-            // the BIKE leg only, judged by ITS OWN segments: a brick's run
-            // leg starts pre-fatigued by design and is deferred
-            if (!T.planBodySteady(w, 'bike')) return;
-            const pair = T.brickPairFor({ workout: w, activities, moves });
-            if (pair && !have.has(pair.ride.id)) out.push({ activity: pair.ride, discipline: 'bike' });
-          } else {
-            if (!T.planBodySteady(w)) return;
-            const a = T.activityFor({ workout: w, activities, moves });
-            if (a && !have.has(a.id)) out.push({ activity: a, discipline: w.discipline });
-          }
-        });
-    } else if (!plan || plan.race === 'tracker') {
-      activities.forEach(a => {
-        const d = T.DISCIPLINE[a.type];
-        if ((d === 'run' || d === 'bike') && !a.manual && !have.has(a.id)
-          && (a.movingTimeSec || 0) >= T.DURABILITY_GATES[d].minMovingSec) out.push({ activity: a, discipline: d });
-      });
-    }
-    const bounded = floor ? out.filter(c => c.activity.date >= floor) : out;
-    const wm = T.iso(T.startOfWeekMonday(new Date()));
-    const reviewed = T.reviewedWeekMonday(T.iso(new Date()), new Date().getHours());
-    const inReviewed = c => reviewed && c.activity.date >= reviewed && c.activity.date < wm;
-    return bounded.sort((a, b) =>
-      (inReviewed(b) ? 1 : 0) - (inReviewed(a) ? 1 : 0)
-      || (a.activity.date < b.activity.date ? 1 : -1));
+    const now = new Date();
+    return T.durabilityCandidates({
+      plan, activities, log, moves,
+      have: new Set(store.map(e => e.activityId)),
+      // once the store is full, candidates older than its oldest entry
+      // would evict-and-refetch forever; they are simply out of the window
+      floor: store.length >= 40 ? store[0].date : null,
+      todayISO: T.iso(now), hour: now.getHours(),
+      deps: {
+        DISCIPLINE: T.DISCIPLINE, planBodySteady: T.planBodySteady,
+        brickPairFor: T.brickPairFor, activityFor: T.activityFor,
+        reviewedWeekMonday: T.reviewedWeekMonday,
+      },
+    });
   };
   useEffect(() => {
     if (!hydrated || !fetchesSettled || durabilityBusy.current || durabilityDone) return;

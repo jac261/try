@@ -6,6 +6,8 @@ import { generatePlan } from './plan.js';
 import { isTrainingRide } from './bikeschema.js';
 import { bikePowerAnchor } from './domain.js';
 import { longRideObjective, LONG_OBJECTIVES, LONG_FOCUSES, MAX_HARD_LONG_SHARE } from './bike-long.js';
+import { durabilityCandidates, planBodySteady } from './durability.js';
+import { DISCIPLINE } from './autolog.js';
 
 /* §1's sequence property lives here rather than in the module: nothing in the
    app renders it, and a function exported only for its own test is the shape
@@ -488,17 +490,46 @@ describe('gauntlet: raced sessions stay out of the durability evidence (design p
   // enters the brick window'), with a control proving the empty result is
   // the flag and not a failed pair
 
-  it('the plan-branch candidate filter refuses raced sessions explicitly, not via the vacuous steady gate', () => {
-    /* A race card's segments carry no zones, so planBodySteady passes it
-       vacuously — the exclusion has to be written into the candidate filter
-       itself. Source-level because the filter lives inside the App
-       component. Plan branch only: the tracker branch reads raw activities,
-       which carry no race flag, and its own comment says so. */
-    const src = readFileSync(new URL('../app/App.jsx', import.meta.url), 'utf8');
-    const at = src.indexOf('const durabilityCandidates');
-    expect(at, 'App no longer declares durabilityCandidates where this test can find it').toBeGreaterThan(-1);
-    expect(src.slice(at, at + 3000).includes('!w.race && !w.bRace'),
-      'the plan-branch durability candidate filter no longer refuses raced sessions explicitly').toBe(true);
+  /* A race card's segments carry no zones, so planBodySteady passes it
+     vacuously — the exclusion has to be written into the candidate filter
+     itself. This was a source-level pin while the filter lived inside the
+     App component; the filter is a lib selector now, so it is checked by
+     calling it. Plan branch only: the tracker branch reads raw activities,
+     which carry no race flag, and its own comment says so. */
+  const DEPS = {
+    DISCIPLINE, planBodySteady,
+    brickPairFor: () => null,
+    activityFor: ({ workout, activities }) => activities.find(a => a.id === 'act-' + workout.id) || null,
+    reviewedWeekMonday: () => null,
+  };
+  const longRide = (id, date, extra = {}) => ({
+    id, date, discipline: 'bike', role: 'long', durationMin: 120,
+    segments: [{ label: 'Ride', zone: 'Z2' }], ...extra,
+  });
+  const call = (workouts, activities, log) => durabilityCandidates({
+    plan: { race: 'olympic', weeks: [{ workouts }] },
+    activities, log, moves: {}, have: new Set(), floor: null,
+    todayISO: '2026-08-10', hour: 12, deps: DEPS,
+  });
+
+  it('refuses a raced session even though its steady gate passes vacuously', () => {
+    const raced = longRide('w1', '2026-08-05', { race: true, segments: [{ label: 'Race' }] });
+    // the vacuous pass is the whole hazard: prove it first
+    expect(planBodySteady(raced)).toBe(true);
+    const acts = [{ id: 'act-w1', date: '2026-08-05', movingTimeSec: 3 * 3600 }];
+    expect(call([raced], acts, { w1: { done: true } })).toEqual([]);
+  });
+
+  it('refuses a bRace session on the same grounds', () => {
+    const b = longRide('w2', '2026-08-05', { bRace: true, segments: [{ label: 'Race' }] });
+    const acts = [{ id: 'act-w2', date: '2026-08-05', movingTimeSec: 3 * 3600 }];
+    expect(call([b], acts, { w2: { done: true } })).toEqual([]);
+  });
+
+  it('control: the same ride unraced IS a candidate, so the empty results above are the race flag', () => {
+    const ok = longRide('w3', '2026-08-05');
+    const acts = [{ id: 'act-w3', date: '2026-08-05', movingTimeSec: 3 * 3600 }];
+    expect(call([ok], acts, { w3: { done: true } }).map(c => c.activity.id)).toEqual(['act-w3']);
   });
 });
 

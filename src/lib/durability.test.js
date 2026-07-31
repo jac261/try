@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
-import { durabilityRead, durabilityTrend, planBodySteady, fadeCorroborated, longestOfWeek, DURABILITY_GATES, DURABILITY_BAND_LABELS } from './durability.js';
+import { durabilityRead, durabilityTrend, planBodySteady, fadeCorroborated, longestOfWeek, durabilityCandidates, DURABILITY_GATES, DURABILITY_BAND_LABELS } from './durability.js';
+import { DISCIPLINE } from './autolog.js';
 import { decideWeek } from './coach.js';
 import { generatePlan } from './plan.js';
 import { storageForUser } from '@/app/storage.js';
@@ -494,5 +495,93 @@ describe('longestOfWeek picks the long session where no role names it', () => {
   it('ignores rubbish rows and unknown disciplines', () => {
     expect(longestOfWeek([null, {}, mk('a', '2026-08-05', 'strength', 90)]).size).toBe(0);
     expect(longestOfWeek(null).size).toBe(0);
+  });
+});
+
+describe('durabilityCandidates: only the long ones, per discipline', () => {
+  const DEPS = {
+    DISCIPLINE, planBodySteady,
+    brickPairFor: () => null,
+    activityFor: ({ workout, activities }) => activities.find(a => a.id === 'act-' + workout.id) || null,
+    reviewedWeekMonday: () => null,
+  };
+  const call = over => durabilityCandidates({
+    moves: {}, have: new Set(), floor: null, todayISO: '2026-08-17', hour: 12, deps: DEPS, ...over,
+  });
+  const swim = (id, date, min) => ({
+    id, date, discipline: 'swim', role: 'easy', durationMin: min,
+    segments: [{ label: 'Swim', zone: 'Z2' }],
+  });
+  const act = (id, date, sec) => ({ id: 'act-' + id, date, movingTimeSec: sec });
+
+  it('plan mode: the week\'s longest swim is the long swim, since no role names one', () => {
+    const workouts = [swim('s1', '2026-08-10', 30), swim('s2', '2026-08-13', 60)];
+    const got = call({
+      plan: { race: 'olympic', weeks: [{ workouts }] },
+      activities: [act('s1', '2026-08-10', 30 * 60), act('s2', '2026-08-13', 60 * 60)],
+      log: { s1: { done: true }, s2: { done: true } },
+    });
+    expect(got.map(c => c.activity.id)).toEqual(['act-s2']);
+    expect(got[0].discipline).toBe('swim');
+  });
+
+  it('plan mode: a week whose swims are all short offers none', () => {
+    const workouts = [swim('s1', '2026-08-10', 30), swim('s2', '2026-08-13', 25)];
+    expect(call({
+      plan: { race: 'olympic', weeks: [{ workouts }] },
+      activities: [act('s1', '2026-08-10', 30 * 60), act('s2', '2026-08-13', 25 * 60)],
+      log: { s1: { done: true }, s2: { done: true } },
+    })).toEqual([]);
+  });
+
+  it('plan mode: run and bike still follow their long ROLE, not the longest-of-week rule', () => {
+    // the midweek ride is longer, but the role names the Sunday one
+    const workouts = [
+      { id: 'b1', date: '2026-08-12', discipline: 'bike', role: 'quality', durationMin: 180, segments: [{ label: 'Ride', zone: 'Z3' }] },
+      { id: 'b2', date: '2026-08-16', discipline: 'bike', role: 'long', durationMin: 120, segments: [{ label: 'Ride', zone: 'Z2' }] },
+    ];
+    const got = call({
+      plan: { race: 'olympic', weeks: [{ workouts }] },
+      activities: [act('b1', '2026-08-12', 3 * 3600), act('b2', '2026-08-16', 2 * 3600)],
+      log: { b1: { done: true }, b2: { done: true } },
+    });
+    expect(got.map(c => c.activity.id)).toEqual(['act-b2']);
+  });
+
+  it('plan mode: an unlogged long swim is not a candidate', () => {
+    const workouts = [swim('s1', '2026-08-13', 60)];
+    expect(call({
+      plan: { race: 'olympic', weeks: [{ workouts }] },
+      activities: [act('s1', '2026-08-13', 60 * 60)], log: {},
+    })).toEqual([]);
+  });
+
+  it('tracker mode: the longest of each discipline each week, and nothing else', () => {
+    const activities = [
+      { id: 'r1', date: '2026-08-10', type: 'Run', movingTimeSec: 55 * 60 },
+      { id: 'r2', date: '2026-08-15', type: 'Run', movingTimeSec: 95 * 60 },
+      { id: 'c1', date: '2026-08-16', type: 'Ride', movingTimeSec: 150 * 60 },
+      { id: 'w1', date: '2026-08-14', type: 'Swim', movingTimeSec: 45 * 60 },
+    ];
+    const got = call({ plan: { race: 'tracker' }, activities, log: {} });
+    expect(got.map(c => c.activity.id).sort()).toEqual(['c1', 'r2', 'w1']);
+  });
+
+  it('tracker mode: a week of only short sessions yields nothing', () => {
+    const activities = [
+      { id: 'r1', date: '2026-08-10', type: 'Run', movingTimeSec: 30 * 60 },
+      { id: 'r2', date: '2026-08-12', type: 'Run', movingTimeSec: 40 * 60 },
+    ];
+    expect(call({ plan: { race: 'tracker' }, activities, log: {} })).toEqual([]);
+  });
+
+  it('tracker mode: manual entries never qualify', () => {
+    const activities = [{ id: 'r1', date: '2026-08-10', type: 'Run', movingTimeSec: 95 * 60, manual: true }];
+    expect(call({ plan: { race: 'tracker' }, activities, log: {} })).toEqual([]);
+  });
+
+  it('already-read activities are not offered again', () => {
+    const activities = [{ id: 'r2', date: '2026-08-15', type: 'Run', movingTimeSec: 95 * 60 }];
+    expect(call({ plan: { race: 'tracker' }, activities, log: {}, have: new Set(['r2']) })).toEqual([]);
   });
 });
