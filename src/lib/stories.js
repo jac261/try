@@ -31,14 +31,19 @@ export function progressStories({ activities, durability, plan, log, moves, deci
   const stories = [];
   const acts = Array.isArray(activities) ? activities : [];
 
-  // S1: the last three durability reads in a discipline all held strong.
-  // Bands are the engine's own verdicts; run and bike get their own line.
+  // S1: the athlete's last three long sessions in a discipline all held
+  // strong. Bands are the engine's own verdicts, and the claim is about the
+  // SESSIONS, so the three most recent entries count whether readable or
+  // not: a newer session the reader could not certify (read null) breaks
+  // the streak rather than being skipped over (gauntlet 2026-08-01 — the
+  // story said "your last three long runs" while the actual last run had
+  // no verdict at all).
   for (const d of ['run', 'bike']) {
-    const reads = (Array.isArray(durability) ? durability : [])
-      .filter(e => e && e.discipline === d && e.read && e.read.band)
+    const entries = (Array.isArray(durability) ? durability : [])
+      .filter(e => e && e.discipline === d)
       .sort((a, b) => (a.date < b.date ? 1 : -1));
-    if (reads.length >= 3 && reads.slice(0, 3).every(e => e.read.band === 'held-strong')
-      && within(reads[0].date, todayISO)) {
+    if (entries.length >= 3 && entries.slice(0, 3).every(e => e.read && e.read.band === 'held-strong')
+      && within(entries[0].date, todayISO)) {
       stories.push({ id: 'durability-' + d, icon: 'trend', text: 'Your last three ' + LONG_NOUN[d] + ' held strong to the end.' });
     }
   }
@@ -84,6 +89,9 @@ export function progressStories({ activities, durability, plan, log, moves, deci
 
   // S5: an accepted proposal, quoted in the journal's own words. Latest
   // status per decision id wins (a later rejection retracts the story).
+  // Its window is SEVEN days, not the shared fortnight, because the copy
+  // says "this week" and a thirteen-day-old acceptance is not this week
+  // (gauntlet 2026-08-01: the words and the window must agree).
   if (Array.isArray(decisionLog) && decisionLog.length) {
     const latest = new Map();
     for (const row of decisionLog) {
@@ -91,8 +99,9 @@ export function progressStories({ activities, durability, plan, log, moves, deci
       const prev = latest.get(row.id);
       if (!prev || row.at > prev.at) latest.set(row.id, row);
     }
+    const thisWeek = d => { const n = daysBetween(d, todayISO); return n >= 0 && n <= 7; };
     const accepted = [...latest.values()]
-      .filter(r => r.status === 'accepted' && r.headline && within((r.at || '').slice(0, 10), todayISO))
+      .filter(r => r.status === 'accepted' && r.headline && thisWeek((r.at || '').slice(0, 10)))
       .sort((a, b) => (a.at < b.at ? 1 : -1));
     if (accepted.length) {
       stories.push({ id: 'accepted', icon: 'check', text: 'Accepted this week: ' + accepted[0].headline });

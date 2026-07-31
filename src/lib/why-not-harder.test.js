@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { whyNotHarder } from './why-not-harder.js';
-import { generatePlan } from './plan.js';
+import { generatePlan, easeWorkout } from './plan.js';
+import { RUN_QUALITY_TYPES } from './runschema.js';
 
 /* The why-not-harder fold: every line must be provable from the workout and
-   its plan week at render time. Fixtures are real generated plans wherever
-   the branch is reachable that way, so a generator change breaks a test
-   rather than quietly stranding the copy. */
+   its plan week at render time, keyed on CURRENT TYPE, never role alone
+   (role survives every demotion — the gauntlet class this suite now pins).
+   Fixtures are real generated plans wherever the branch is reachable that
+   way, so a generator change breaks a test rather than stranding the copy. */
 
 const profile = (over = {}) => ({
   name: 'P', raceType: 'olympic', fitness: 'intermediate',
@@ -17,13 +19,25 @@ const profile = (over = {}) => ({
 const wnh = (w, plan) => whyNotHarder({ workout: w, plan });
 
 describe('recovery and race weeks', () => {
-  it('a recovery-week session explains the step back', () => {
+  it('a recovery week says ONLY its own line: the collapse falsifies every other claim', () => {
     const plan = generatePlan(profile());
     const rec = plan.weeks.find(wk => wk.isRecovery);
     expect(rec, 'no recovery week generated').toBeTruthy();
-    const w = rec.workouts.find(x => x.discipline !== 'rest' && !x.race);
-    const out = wnh(w, plan);
-    expect(out.lines[0]).toContain('This is a recovery week');
+    for (const w of rec.workouts.filter(x => x.discipline !== 'rest' && !x.race && !x.test)) {
+      const out = wnh(w, plan);
+      expect(out.lines.length, w.id).toBe(1);
+      expect(out.lines[0]).toContain('This is a recovery week');
+    }
+  });
+
+  it('the same holds on a SOLO recovery week: no two-quality claim over collapsed Easy runs', () => {
+    const solo = generatePlan(profile({ raceType: 'runhalf' }));
+    const rec = solo.weeks.find(wk => wk.isRecovery);
+    expect(rec).toBeTruthy();
+    for (const w of rec.workouts.filter(x => x.discipline !== 'rest' && !x.race && !x.test)) {
+      const out = wnh(w, solo);
+      expect(out.lines.join(' ')).not.toContain('quality runs');
+    }
   });
 
   it('race-week demoted sessions name what they were drawn up as', () => {
@@ -41,66 +55,88 @@ describe('recovery and race weeks', () => {
   });
 });
 
-describe('solo-only lines', () => {
+describe('the two-quality solo line, counted by current type', () => {
   const solo = generatePlan(profile({ raceType: 'runhalf' }));
   const soloAll = solo.weeks.flatMap(wk => wk.workouts);
+  const isQ = w => w.discipline === 'run' && !w.test && RUN_QUALITY_TYPES.includes(w.type);
 
-  it('a quality run in a two-quality solo week gets both solo lines, capped at 2', () => {
+  it('fires only when BOTH runs wear engine quality types today', () => {
     const q = soloAll.find(w => {
-      if (w.discipline !== 'run' || w.role !== 'quality' || w.race || w.test) return false;
-      const wk = solo.weeks[w.week];
-      return wk && !wk.isRecovery && wk.workouts.filter(s => s.discipline === 'run' && s.role === 'quality').length >= 2;
+      if (!isQ(w) || w.race || solo.weeks[w.week].isRecovery) return false;
+      return solo.weeks[w.week].workouts.filter(isQ).length >= 2;
     });
-    expect(q, 'no two-quality solo week generated').toBeTruthy();
-    const out = wnh(q, solo);
-    expect(out.lines.length).toBeLessThanOrEqual(2);
-    expect(out.lines.join(' ')).toContain('a step apart in intensity');
-    expect(out.lines.join(' ')).toContain('back-to-back');
-    // direction-neutral by design: the rung can go either way when the
-    // anchor clamps, so the copy must never claim "easier"
-    expect(out.lines.join(' ')).not.toContain('easier');
+    if (q) {
+      const out = wnh(q, solo);
+      expect(out.lines.join(' ')).toContain('a step apart in intensity');
+      expect(out.lines.join(' ')).not.toContain('easier'); // direction-neutral
+    }
+    // and NEVER over a quality-role slot the ladder stepped down to Easy:
+    // that jog is not a quality run, whatever its role says
+    const demoted = soloAll.find(w => w.role === 'quality' && w.type === 'Easy'
+      && !w.race && !w.test && !solo.weeks[w.week].isRecovery && !w.raceWeek);
+    expect(demoted, 'no ladder step-down to Easy generated').toBeTruthy();
+    const out = wnh(demoted, solo);
+    expect(out ? out.lines.join(' ') : '').not.toContain('quality runs');
   });
 
-  it('the solo long run gets the spacing line without the second-quality line', () => {
-    const long = soloAll.find(w => w.role === 'long' && !w.race && solo.weeks[w.week] && !solo.weeks[w.week].isRecovery);
-    expect(long).toBeTruthy();
-    const out = wnh(long, solo);
-    expect(out.lines.join(' ')).toContain('back-to-back');
-    expect(out.lines.join(' ')).not.toContain('a step apart');
+  it('a test sibling never counts toward the pair', () => {
+    for (const w of soloAll.filter(x => isQ(x) && !x.race && !solo.weeks[x.week].isRecovery)) {
+      const wk = solo.weeks[w.week];
+      const qCount = wk.workouts.filter(isQ).length;
+      const out = wnh(w, solo);
+      const claims = out && out.lines.join(' ').includes('two quality runs');
+      if (claims) expect(qCount, w.id).toBeGreaterThanOrEqual(2);
+    }
   });
 
-  it('TRI plans never claim spacing or run-only rules: no such rule exists for them', () => {
-    const tri = generatePlan(profile());
-    const all = tri.weeks.flatMap(wk => wk.workouts);
-    for (const w of all.filter(x => !x.race && !x.test && x.discipline !== 'rest')) {
-      const out = wnh(w, tri);
-      if (!out) continue;
-      const text = out.lines.join(' ');
-      expect(text, w.id).not.toContain('back-to-back');
-      expect(text, w.id).not.toContain('run-only');
-      expect(text, w.id).not.toContain('a step apart');
+  it('the dropped spacing claim never appears anywhere on any plan', () => {
+    /* The generator only spacing-enforces the SECOND solo quality placement
+       within its week; the first can land beside the long run and weeks can
+       abut across boundaries, so any "never back-to-back" universal is
+       false in generated output (gauntlet 2026-08-01). The line is gone;
+       this pins it gone. */
+    for (const p of [solo, generatePlan(profile())]) {
+      for (const w of p.weeks.flatMap(wk => wk.workouts)) {
+        const out = wnh(w, p);
+        if (!out) continue;
+        expect(out.lines.join(' ')).not.toContain('back-to-back');
+        expect(out.lines.join(' ')).not.toContain('run-only');
+      }
     }
   });
 });
 
+describe('eased and trimmed sessions', () => {
+  it('an eased session gets NO fold: the ease note is the true answer', () => {
+    const solo = generatePlan(profile({ raceType: 'runhalf' }));
+    const q = solo.weeks.flatMap(wk => wk.workouts)
+      .find(w => w.role === 'quality' && RUN_QUALITY_TYPES.includes(w.type) && !w.race && !w.test);
+    expect(q).toBeTruthy();
+    const eased = easeWorkout(q, solo);
+    expect(eased.eased).toBe(true);
+    expect(wnh(eased, solo)).toBe(null);
+    expect(wnh({ ...q, trimmed: true }, solo)).toBe(null);
+  });
+});
+
 describe('easy-slot composition', () => {
-  it('an easy tri session names only the harder siblings that exist, deduped', () => {
+  it('names only siblings that are hard TODAY, with the right nouns, deduped', () => {
     const plan = generatePlan(profile());
     const w = plan.weeks.flatMap(wk => wk.workouts).find(x => {
-      if (x.role !== 'easy' || x.race) return false;
+      if (x.role !== 'easy' || x.race || x.raceWeek) return false;
       const wk = plan.weeks[x.week];
-      return wk && !wk.isRecovery && !x.raceWeek
+      return wk && !wk.isRecovery
         && wk.workouts.some(s => s.role === 'long' || s.role === 'quality' || s.discipline === 'brick');
     });
     expect(w, 'no easy session beside harder work').toBeTruthy();
     const out = wnh(w, plan);
     const text = out.lines.join(' ');
     expect(text).toContain('easy one by design');
-    // every named item corresponds to a real sibling shape
+    // bike reads as ride in BOTH branches (the quality-bike stutter fix)
+    expect(text).not.toContain('quality bike');
     const wk = plan.weeks[w.week];
     if (text.includes('the long ride')) expect(wk.workouts.some(s => s.discipline === 'bike' && s.role === 'long')).toBe(true);
     if (text.includes('the brick session')) expect(wk.workouts.some(s => s.discipline === 'brick')).toBe(true);
-    // no stutter from duplicate labels
     expect(text).not.toMatch(/(the quality \w+)[^.]*\1/);
   });
 });

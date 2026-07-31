@@ -8,6 +8,7 @@ import { createRoot } from 'react-dom/client';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
 import { generatePlan } from '@/lib/plan.js';
 import { swimKit } from '@/lib/swim-kit.js';
+import { RUN_QUALITY_TYPES } from '@/lib/runschema.js';
 
 const base = (over = {}) => ({
   name: 'T', raceType: 'olympic', fitness: 'intermediate',
@@ -24,7 +25,9 @@ const find = (plan, pred) => plan.weeks.flatMap(w => w.workouts).find(pred);
 
 const MODES = {
   recovery: { plan: tri, w: find(tri, w => tri.weeks[w.week] && tri.weeks[w.week].isRecovery && w.discipline !== 'rest' && !w.race && w.type) },
-  'solo-quality': { plan: solo, w: find(solo, w => w.role === 'quality' && !w.race && !w.test && solo.weeks[w.week] && !solo.weeks[w.week].isRecovery) },
+  // a genuine quality-TYPE run in a two-quality week (role alone can pick a
+  // ladder-demoted Easy jog, which correctly gets no fold)
+  'solo-quality': { plan: solo, w: find(solo, w => w.discipline === 'run' && RUN_QUALITY_TYPES.includes(w.type) && !w.race && !w.test && solo.weeks[w.week] && !solo.weeks[w.week].isRecovery && solo.weeks[w.week].workouts.filter(x => x.discipline === 'run' && !x.test && RUN_QUALITY_TYPES.includes(x.type)).length >= 2) },
   'race-week': { plan: tri, w: find(tri, w => w.raceWeek && w.raceWeekFrom) },
   'easy-tri': { plan: tri, w: find(tri, w => w.role === 'easy' && !w.race && !w.raceWeek && tri.weeks[w.week] && !tri.weeks[w.week].isRecovery) },
   'gear-swim': { plan: tri, w: find(tri, w => w.discipline === 'swim' && swimKit(w)) },

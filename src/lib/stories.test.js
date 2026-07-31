@@ -35,8 +35,12 @@ describe('S1 durability streak', () => {
     expect(ids({ durability: [read(STORY_WINDOW_DAYS + 1, 'run', 'held-strong'), read(20, 'run', 'held-strong'), read(27, 'run', 'held-strong')] })).toEqual([]);
   });
 
-  it('null reads (unreadable recordings) never count either way', () => {
-    expect(ids({ durability: [{ date: ago(1), discipline: 'run', read: null }, ...held('run')] })).toContain('durability-run');
+  it('a NEWER unreadable session breaks the streak: the claim is about the runs, not the reads', () => {
+    /* gauntlet 2026-08-01: skipping a newer read-null entry certified "your
+       last three long runs" while the actual last run had no verdict. */
+    expect(ids({ durability: [{ date: ago(1), discipline: 'run', read: null }, ...held('run')] })).toEqual([]);
+    // an OLDER unreadable entry beneath the top three changes nothing
+    expect(ids({ durability: [...held('run'), { date: ago(25), discipline: 'run', read: null }] })).toContain('durability-run');
   });
 });
 
@@ -112,6 +116,12 @@ describe('S5 accepted proposal', () => {
     expect(s.find(x => x.id === 'accepted').text).toBe('Accepted this week: Retarget your FTP to a tested number');
     expect(ids({ decisionLog: [row(5, 'accepted'), row(2, 'rejected')] })).not.toContain('accepted');
     expect(ids({ decisionLog: [row(STORY_WINDOW_DAYS + 2, 'accepted')] })).not.toContain('accepted');
+  });
+
+  it('"this week" means seven days, not the shared fortnight window', () => {
+    // gauntlet 2026-08-01: the words and the window must agree
+    expect(ids({ decisionLog: [row(7, 'accepted')] })).toContain('accepted');
+    expect(ids({ decisionLog: [row(8, 'accepted')] })).not.toContain('accepted');
   });
 });
 
