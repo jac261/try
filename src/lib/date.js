@@ -36,6 +36,10 @@ export function weeksBetween(a, b) {
 }
 
 export function daysBetween(a, b) {
+  // Both ends must already be calendar days — ISO strings or midnight-pinned
+  // Dates. A bare clock instant (`new Date()`) rounds one day short from
+  // ~noon onward (race-chip catch 2026-07-30); call sites normalise with
+  // iso() first, pinned by the guard in date-call-sites.test.js.
   return Math.round((toDate(b) - toDate(a)) / (24 * 3600 * 1000));
 }
 
