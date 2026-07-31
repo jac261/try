@@ -90,6 +90,11 @@ describe('the block review never closes on a provisional bundle', () => {
     expect(buildBlockReview(args)).toBe(null);
     const finalized = { ...weeks, [MON]: mk({}) };
     expect(buildBlockReview({ ...args, coachLog: finalized })).toBeTruthy();
+    // a STRAY provisional bundle mid-history (a device that missed its
+    // finalize) never joins the tally either: four finalized weeks are
+    // needed, and the provisional one does not count as the fourth
+    const stray = { ...finalized, '2026-06-22': mk({ weekMonday: '2026-06-22', provisional: true }) };
+    expect(buildBlockReview({ ...args, coachLog: stray })).toBe(null);
   });
 });
 

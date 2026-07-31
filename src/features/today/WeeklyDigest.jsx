@@ -31,7 +31,15 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
   if (gone || seen === weekMonday || !T.digestWindowOpen(weekMonday, todayISO)) return null;
   const d = T.buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday });
   if (!d) return null;
-  const dismiss = () => { storage.save('digestSeenWeek', { weekMonday, planCreatedAt: plan.createdAt || null }); setGone(true); };
+  // Dismissing a PROVISIONAL card hides it for the session only: the
+  // permanent stamp would bury the corrected final verdict — the only
+  // surface that ever shows it — behind a wrap the athlete read while it
+  // could still move (re-verify catch 2026-07-31).
+  const dismiss = () => {
+    const provisional = coachLog && coachLog[weekMonday] && coachLog[weekMonday].provisional;
+    if (!provisional) storage.save('digestSeenWeek', { weekMonday, planCreatedAt: plan.createdAt || null });
+    setGone(true);
+  };
   const fmtD = s => T.fmtDate(s, { month: 'short', day: 'numeric' });
   // The coach's call for the reviewed week: quoted from the store or
   // absent. Never recomputed here; a recompute presented as the original
@@ -131,7 +139,12 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
             )}
             {coach.provisional && (
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                Provisional: today still counts, and the final call comes once the week is over.
+                {/* the stamp can outlive the Sunday it was written on (the
+                    finalize needs one settled load), so the copy must not
+                    say "today still counts" about a week already over */}
+                {T.reviewedWeekFinal(weekMonday, todayISO)
+                  ? 'Provisional: finalising with the latest data.'
+                  : 'Provisional: today still counts, and the final call comes once the week is over.'}
               </div>
             )}
           </div>

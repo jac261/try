@@ -124,6 +124,15 @@ describe('the weekly decision: spec scenarios', () => {
     expect(second.progression).toEqual({ discipline: 'swim', what: 'a third swim in the week' });
   });
 
+  it('a provisional prior week never certifies the streak', () => {
+    // a Sunday-evening bundle judged its week from inside it, so its clean
+    // flag is a half-state; the finalize sweep normally replaces it and
+    // this is the decision-layer backstop
+    const prevMonday = iso(new Date(new Date(weekMonday + 'T00:00:00Z').getTime() - 7 * 864e5));
+    const d = decideWeek({ ...base, log: logAll(wk), prevWeeks: [{ weekMonday: prevMonday, tracker: false, planCreatedAt: plan.createdAt, provisional: true, disciplines: { swim: { clean: true } } }] });
+    expect(d.disciplines.swim.decision).toBe('hold');
+  });
+
   it('a dirty prior week resets the repeat rule', () => {
     const prevMonday = iso(new Date(new Date(weekMonday + 'T00:00:00Z').getTime() - 7 * 864e5));
     const d = decideWeek({ ...base, log: logAll(wk), prevWeeks: [{ weekMonday: prevMonday, tracker: false, planCreatedAt: plan.createdAt, disciplines: { swim: { clean: false } } }] });

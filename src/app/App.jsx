@@ -757,40 +757,66 @@ export function App({ storage, getToken, user }) {
     // one (re-verify catch 2026-07-20).
     const stored = weekMonday && coachLog[weekMonday];
     const planId = (plan && plan.createdAt) || null;
-    if (!weekMonday || T.coachDecisionStands(stored, planId, weekMonday, todayISO)) return;
-    // Freeze only inside the digest's own window, and only after a settle
-    // delay: the post-hydration activity and wellness fetches land on later
-    // round-trips, and a verdict frozen from a half-loaded state would be
-    // wrong forever (gauntlet catch). Any dep change re-arms the timer with
-    // fresher data.
-    if (!T.digestWindowOpen(weekMonday, todayISO)) return;
+    // Every provisional same-plan bundle whose week is truly over needs its
+    // finalize, however late the app next opens: the digest window gates the
+    // CARD and the first write, never the completion of an existing bundle.
+    // Without this, a Sunday-evening-only user strands every week
+    // provisional forever — the block review never fires and the repeat
+    // rule reads Sunday half-states (re-verify catch 2026-07-31).
+    const staleProvisional = Object.keys(coachLog).filter(k => {
+      const b = coachLog[k];
+      return b && b.provisional && (b.planCreatedAt ?? null) === planId
+        && T.reviewedWeekFinal(k, todayISO);
+    }).sort();
+    if (!weekMonday
+      || (T.coachDecisionStands(stored, planId, weekMonday, todayISO) && !staleProvisional.length)) return;
+    // The current week's own freeze stays inside the digest's window; the
+    // finalize sweep above is exempt. Both wait for settled fetches: a
+    // verdict written from a half-loaded state would be wrong forever
+    // (gauntlet catch). Any dep change re-arms the timer with fresher data.
+    const windowOpen = T.digestWindowOpen(weekMonday, todayISO);
+    if (!windowOpen && !staleProvisional.length) return;
     if (!fetchesSettled) return;
     // hold for the reviewed week's own durability read while this load's
     // backfill can still land it (it fetches that week first); once the
     // budget is spent the freeze proceeds with what exists
     if (!durabilityDone && Object.keys(durabilityFor(weekMonday)).length === 0) return;
     const t = setTimeout(() => {
-      // strictly earlier weeks only: on a provisional re-freeze the log
-      // already holds THIS week's entry, and feeding it back as prevWeeks[0]
-      // fails the repeat rule's adjacency check (gauntlet catch 2026-07-31)
-      const prevWeeks = T.prevWeeksFor(coachLog, weekMonday);
-      const decision = T.decideWeek({
+      const decideFor = (map, wk) => T.decideWeek({
         plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
-        missedReasons, todayISO, weekMonday, prevWeeks,
-        durabilityByDiscipline: durabilityFor(weekMonday),
+        missedReasons, todayISO, weekMonday: wk,
+        // strictly earlier weeks only: the log holds the decided week's own
+        // entry on a re-freeze, and feeding it back as prevWeeks[0] fails
+        // the repeat rule's adjacency check (gauntlet catch 2026-07-31)
+        prevWeeks: T.prevWeeksFor(map, wk),
+        durabilityByDiscipline: durabilityFor(wk),
       });
-      // A mid-week write wears its provisionality; the post-week write is
-      // the bare, final bundle coachDecisionStands recognises.
-      const bundle = T.reviewedWeekFinal(weekMonday, todayISO)
-        ? decision : { ...decision, provisional: true };
-      // decideWeek is deterministic, so an unchanged recomputation must not
-      // rewrite: the write bumps coachLog, which re-runs this effect, and
-      // without this bail the provisional window would rewrite every 2s.
-      // Compared bundle-to-bundle so the provisional stamp itself cannot
-      // defeat the bail (and so the finalizing write, which drops it,
-      // always goes through).
-      if (stored && (stored.planCreatedAt ?? null) === planId && T.reviewEqual(stored, bundle)) return;
-      setCoachLog(storage.saveCoachDecision(weekMonday, bundle));
+      // Finalize sweep, oldest first so a newer week's repeat rule reads
+      // already-finalized history within this same pass.
+      let map = coachLog;
+      staleProvisional.forEach(wk => {
+        map = storage.saveCoachDecision(wk, decideFor(map, wk));
+      });
+      // The current reviewed week's own write: Sunday-evening provisional,
+      // or the first freeze of a closed week, inside the window only.
+      const st = map[weekMonday];
+      if (windowOpen && !T.coachDecisionStands(st, planId, weekMonday, todayISO)) {
+        const decision = decideFor(map, weekMonday);
+        // A mid-week write wears its provisionality; the post-week write is
+        // the bare, final bundle coachDecisionStands recognises. decideWeek
+        // is deterministic, so an unchanged recomputation must not rewrite:
+        // the write bumps coachLog, which re-runs this effect, and without
+        // the bail the provisional window would rewrite every 2s. Compared
+        // bundle-to-bundle so the provisional stamp itself cannot defeat
+        // the bail (and so the finalizing write, which drops it, always
+        // goes through).
+        const bundle = T.reviewedWeekFinal(weekMonday, todayISO)
+          ? decision : { ...decision, provisional: true };
+        if (!(st && (st.planCreatedAt ?? null) === planId && T.reviewEqual(st, bundle))) {
+          map = storage.saveCoachDecision(weekMonday, bundle);
+        }
+      }
+      if (map !== coachLog) setCoachLog(map);
     }, 2000);
     return () => clearTimeout(t);
     // fuelLog is a real dependency since the lowFuel veto-disarm joined

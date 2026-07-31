@@ -80,8 +80,12 @@ export function buildBlockReview({ plan, coachLog, weekMonday, focus, lastReview
   // (gauntlet catch 2026-07-31).
   if (stored.provisional) return null;
   const tracker = !Array.isArray(plan.weeks) || !plan.weeks.length;
+  // !d.provisional twice over: the early return above keeps a provisional
+  // reviewed week from closing a block, and this filter keeps any stray
+  // provisional bundle in the middle of history out of the tallies and the
+  // boundary trigger (re-verify catch 2026-07-31).
   const decisions = Object.keys(coachLog).sort().map(k => coachLog[k])
-    .filter(d => d.planCreatedAt === ((plan && plan.createdAt) || null));
+    .filter(d => !d.provisional && d.planCreatedAt === ((plan && plan.createdAt) || null));
 
   // Everything below reads ONLY frozen decisions. The live plan's week
   // layout is untrustworthy here: an ordinary settings edit reshapes every

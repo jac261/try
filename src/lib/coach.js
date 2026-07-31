@@ -237,7 +237,9 @@ export function prevWeeksFor(coachLog, weekMonday) {
 // `prevWeeks` is an array of STRICTLY EARLIER stored decisions (newest
 // first) — build it with prevWeeksFor; the decided week's own entry in
 // slot zero silently defeats the repeat rule. Used only for the repeat
-// rule. Pure and deterministic.
+// rule. Pure and deterministic. `provisional` is a RESERVED output name:
+// the freeze stamps it on mid-week bundles, and the equality bail that
+// finalizes them relies on decideWeek never emitting the key itself.
 export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, todayISO, weekMonday, prevWeeks, durabilityByDiscipline }) {
   const tracker = !plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length;
   if (tracker) return decideTrackerWeek({ activities, wellness, plan, todayISO, weekMonday });
@@ -371,8 +373,13 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
       // SAME plan, in plan mode: a clean flag from months ago or another
       // plan must never unlock progression (gauntlet catch 2026-07-20).
       const prev = (prevWeeks || [])[0];
+      // !prev.provisional: a Sunday-evening bundle judged the week from
+      // inside it (undone sessions still read 'upcoming', answers were
+      // invisible), so its clean flag certifies nothing; the finalize sweep
+      // normally replaces it, this is the backstop (re-verify catch
+      // 2026-07-31).
       const priorClean = prev && prev.weekMonday === week(weekMonday, -7)
-        && !prev.tracker && prev.planCreatedAt === (plan.createdAt || null)
+        && !prev.tracker && !prev.provisional && prev.planCreatedAt === (plan.createdAt || null)
         && prev.disciplines && prev.disciplines[d] && prev.disciplines[d].clean;
       if (priorClean) {
         // One deferral per progression event: if the literal previous stored
