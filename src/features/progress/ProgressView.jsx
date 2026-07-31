@@ -168,6 +168,48 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
   const curveCard = <PowerCurveCard curve={powerCurve} previous={previousPowerCurve}
     ftpWatts={plan.profile && plan.profile.ftp} todayISO={todayISO} />;
 
+  /* Durability for ONE discipline: how its long sessions ended, from their
+     recorded laps. Per discipline is not just placement — durabilityTrend
+     refuses mixed input, because a shift in the mix of runs and rides would
+     otherwise masquerade as a fitness trend (gauntlet catch 2026-07-20).
+     Splitting the card by tab makes that separation structural rather than
+     a rule the caller has to remember.
+
+     Bike output is power, swim and run are pace, and the wording follows. A
+     read that saw no heart rate says so. One read is never a claim, which
+     is what the closing note is for. */
+  const durabilityCard = d => {
+    const reads = [...(durability || [])].reverse().filter(e => e.read && e.discipline === d);
+    if (!reads.length) return null;
+    const pct = v => '~' + Math.abs(v) + '%';
+    const outputBit = e => e.read.outputDropPct === 0
+      ? (d === 'bike' ? 'power level late' : 'pace level late')
+      : d === 'bike'
+        ? 'power ' + pct(e.read.outputDropPct) + (e.read.outputDropPct > 0 ? ' down late' : ' up late')
+        : pct(e.read.outputDropPct) + (e.read.outputDropPct > 0 ? ' slower late' : ' quicker late');
+    const hrBit = e => e.read.hrMissing ? 'no heart rate data'
+      : e.read.hrDriftPct === 0 ? 'HR level late'
+        : 'HR ' + pct(e.read.hrDriftPct) + (e.read.hrDriftPct > 0 ? ' up' : ' down');
+    const trend = T.durabilityTrend(reads);
+    const noun = d === 'bike' ? 'rides' : d === 'swim' ? 'swims' : 'runs';
+    const rowLabel = d === 'bike' ? 'Ride' : d === 'swim' ? 'Swim' : 'Run';
+    return <>
+      <div className="section-title">Durability <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(how the long {noun} ended)</span></div>
+      <div className="card">
+        {trend && <div className="du-trend">{'Long ' + noun + ': '}{trend}</div>}
+        {reads.slice(0, 5).map(e => (
+          <div className="du-row" key={e.activityId}>
+            <span className="du-date">{T.fmtDate(e.date, { day: 'numeric', month: 'short' })}</span>
+            <span className="du-disc">{rowLabel} · {T.fmtDuration(e.durationMin)}</span>
+            <span className={'coach-pill' + (e.read.band === 'held-strong' ? ' progress' : e.read.band === 'faded-hard' ? ' recover' : '')}>{T.DURABILITY_BAND_LABELS[e.read.band]}</span>
+            <span className="du-nums">{outputBit(e)} · {hrBit(e)}{e.read.efDropPct != null && e.read.efDropPct > 0 ? ' · efficiency ' + pct(e.read.efDropPct) + ' down' : ''}{fuelLog && fuelLog[e.activityId] ? ' · fuel: ' + T.FUEL_LEVELS[fuelLog[e.activityId].level].toLowerCase() : ''}</span>
+          </div>
+        ))}
+        <div className="du-note">Laps only tell part of it: hills, heat, wind and fuelling are invisible here, so read the pattern across weeks, never one session.</div>
+      </div>
+    </>;
+  };
+
   /* The coach brain's per-discipline lines for the OPEN week, computed
      live and labelled so: only final bundles are quoted as history (the
      digest quotes those; from Sunday 17:00 a PROVISIONAL bundle for this
@@ -268,41 +310,13 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
     {!disciplineOn('run') && runVolumeBlock}
     {!disciplineOn('bike') && curveCard}
 
-    {(() => {
-      // Durability: how the long sessions ended, from their recorded laps.
-      // Trends are strictly per discipline (a run/ride mix-shift must
-      // never masquerade as a fitness trend); a read that saw no heart
-      // rate says so; bike output is power, not pace, and the wording
-      // follows. One read is never a claim.
-      const reads = [...(durability || [])].reverse().filter(e => e.read);
-      if (!reads.length) return null;
-      const pct = v => '~' + Math.abs(v) + '%';
-      const outputBit = e => e.read.outputDropPct === 0
-        ? (e.discipline === 'bike' ? 'power level late' : 'pace level late')
-        : e.discipline === 'bike'
-          ? 'power ' + pct(e.read.outputDropPct) + (e.read.outputDropPct > 0 ? ' down late' : ' up late')
-          : pct(e.read.outputDropPct) + (e.read.outputDropPct > 0 ? ' slower late' : ' quicker late');
-      const hrBit = e => e.read.hrMissing ? 'no heart rate data'
-        : e.read.hrDriftPct === 0 ? 'HR level late'
-          : 'HR ' + pct(e.read.hrDriftPct) + (e.read.hrDriftPct > 0 ? ' up' : ' down');
-      const trends = ['run', 'bike'].map(d => ({ d, t: T.durabilityTrend(reads.filter(e => e.discipline === d)) }))
-        .filter(x => x.t);
-      return <>
-        <div className="section-title">Durability <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(how the long sessions ended)</span></div>
-        <div className="card">
-          {trends.map(x => <div className="du-trend" key={x.d}>{x.d === 'bike' ? 'Long rides: ' : 'Long runs: '}{x.t}</div>)}
-          {reads.slice(0, 5).map(e => (
-            <div className="du-row" key={e.activityId}>
-              <span className="du-date">{T.fmtDate(e.date, { day: 'numeric', month: 'short' })}</span>
-              <span className="du-disc">{e.discipline === 'bike' ? 'Ride' : 'Run'} · {T.fmtDuration(e.durationMin)}</span>
-              <span className={'coach-pill' + (e.read.band === 'held-strong' ? ' progress' : e.read.band === 'faded-hard' ? ' recover' : '')}>{T.DURABILITY_BAND_LABELS[e.read.band]}</span>
-              <span className="du-nums">{outputBit(e)} · {hrBit(e)}{e.read.efDropPct != null && e.read.efDropPct > 0 ? ' · efficiency ' + pct(e.read.efDropPct) + ' down' : ''}{fuelLog && fuelLog[e.activityId] ? ' · fuel: ' + T.FUEL_LEVELS[fuelLog[e.activityId].level].toLowerCase() : ''}</span>
-            </div>
-          ))}
-          <div className="du-note">Laps only tell part of it: hills, heat, wind and fuelling are invisible here, so read the pattern across weeks, never one session.</div>
-        </div>
-      </>;
-    })()}
+    {/* Durability lives in each discipline's own tab now. A discipline with
+        no tab (solo plans, an excluded discipline, tracker mode's tabless
+        page) keeps its card here, the same fallback the run volume and
+        power curve above already use. */}
+    {!disciplineOn('swim') && durabilityCard('swim')}
+    {!disciplineOn('bike') && durabilityCard('bike')}
+    {!disciplineOn('run') && durabilityCard('run')}
 
     {(() => {
       // Weakest link: the three sports on one experience scale, and what the
@@ -500,6 +514,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
         {!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim'
           && <SwimDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO} retest={retest} onSupport={onSupport} />}
+        {durabilityCard('swim')}
       </div>}
 
       {activeTab === 'bike' && <div {...panelProps('bike')}>
@@ -513,6 +528,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           && <BikeDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO}
             retest={ftpRetest} durabilityReads={durability}
             fuelLog={fuelLog} positionLog={positionLog} powerCurve={powerCurve} />}
+        {durabilityCard('bike')}
       </div>}
 
       {activeTab === 'run' && <div {...panelProps('run')}>
@@ -522,6 +538,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           && plan.profile.excludedDiscipline !== 'run'
           && <RunDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO} fuelLog={fuelLog} />}
         {runVolumeBlock}
+        {durabilityCard('run')}
       </div>}
     </>
   );

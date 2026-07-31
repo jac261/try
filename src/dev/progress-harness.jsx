@@ -31,10 +31,23 @@ const storyActs = [
   { id: 's5', type: 'Run', date: ago(14), movingTimeSec: 2400, distance: 11000 },
   { id: 's6', type: 'Run', date: ago(7), movingTimeSec: 2400, distance: 18000 },
 ];
-const storyDurability = [2, 9, 13].map(n => ({
-  activityId: 'sd' + n, date: ago(n), discipline: 'run', durationMin: 95,
-  read: { band: 'held-strong', outputDropPct: 1.2, hrDriftPct: 2.5, efDropPct: null, hrMissing: false },
-}));
+/* One discipline per card since the durability split: the harness has to
+   cover all three or it cannot show the thing it exists to show. Swim
+   carries hrMissing because pool heart rate usually is. */
+const storyDurability = [
+  ...[2, 9, 13].map(n => ({
+    activityId: 'sd' + n, date: ago(n), discipline: 'run', durationMin: 95,
+    read: { band: 'held-strong', outputDropPct: 1.2, hrDriftPct: 2.5, efDropPct: null, hrMissing: false },
+  })),
+  ...[3, 10].map(n => ({
+    activityId: 'sdb' + n, date: ago(n), discipline: 'bike', durationMin: 165,
+    read: { band: 'faded-a-little', outputDropPct: 5.4, hrDriftPct: 6.1, efDropPct: 4.2, hrMissing: false },
+  })),
+  ...[4, 11].map(n => ({
+    activityId: 'sds' + n, date: ago(n), discipline: 'swim', durationMin: 55,
+    read: { band: 'held-strong', outputDropPct: 0, hrDriftPct: null, efDropPct: null, hrMissing: true },
+  })),
+];
 const storyDecisions = [{
   id: 'dev-d1', at: new Date(Date.now() - 2 * 864e5).toISOString(), status: 'accepted',
   headline: 'Retarget your FTP to the tested number', why: 'accepted from the sheet', confidence: 'high',
