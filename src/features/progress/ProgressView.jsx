@@ -49,8 +49,9 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
   }, [plan, log, moves, activities, todayISO, retest, ftpRetest, durability, fuelLog, positionLog]);
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
   const done = all.filter(w => log[w.id]);
-  // todayISO, not the raw Date: daysBetween on a clock instant rounds one day
-  // short after noon (race-chip catch 2026-07-30, same fix as the App chip).
+  // todayISO, not the raw Date: call-site uniformity, per the guard in
+  // lib/date-call-sites.test.js — daysBetween now pins both ends to local
+  // midnight itself (race-chip catch 2026-07-30, same shape as the App chip).
   const daysToRace = Math.max(0, T.daysBetween(todayISO, plan.profile.raceDate));
   const pct = all.length ? Math.round(done.length / all.length * 100) : 0;
 

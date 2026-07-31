@@ -3,18 +3,19 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/* daysBetween/weeksBetween round an instant against local midnight, so a bare
-   `new Date()` end comes out one day short from ~noon onward: the race chip
-   read "0 days to go" on the eve's afternoon, and the post-race banner fired
-   mid race day (race-chip catch 2026-07-30). Pinned at the source level, like
-   the TDZ guard in app/appOrder.test.js: every call must take calendar days —
-   ISO strings, or a Date pinned to midnight via iso()/startOfWeekMonday.
+/* daysBetween/weeksBetween used to round an instant against local midnight,
+   so a bare `new Date()` end came out one day short from ~noon onward: the
+   race chip read "0 days to go" on the eve's afternoon, and the post-race
+   banner fired mid race day (race-chip catch 2026-07-30). The helpers now pin
+   both ends to local midnight internally, so a clock instant can no longer
+   miscount — this guard is belt-and-braces, kept at the source level like the
+   TDZ guard in app/appOrder.test.js: call sites stay uniform (ISO strings, or
+   a Date pinned via iso()/startOfWeekMonday), so a reader never has to know
+   which helpers normalise and which don't (addDays does NOT zero the time).
 
    A regex can only see so far: a clock instant hoisted to a variable, an
-   aliased import, or one nested inside another helper (addDays does NOT zero
-   the time) all pass this guard unseen — reviewers still own those. What it
-   does catch is the shape every real regression so far has taken: a literal
-   `new Date()` or `Date.now()` written directly into the call. */
+   aliased import, or one nested inside another helper all pass this guard
+   unseen — the internal pinning in date.js is what actually covers those. */
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const files = [];

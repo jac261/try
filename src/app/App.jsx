@@ -1580,11 +1580,11 @@ export function App({ storage, getToken, user }) {
 
   const tracker = plan.race === 'tracker';
   const race = T.RACES[plan.race];
-  // Calendar days, not clock-rounded instants: daysBetween on a raw Date
-  // rounds one short after noon — the chip read "0 days to go" on the eve's
-  // afternoon and the post-race edge fired mid race day. iso() pins the start
-  // to local midnight, the same counting rule as PR #16's race-week card
-  // (race-chip catch 2026-07-30).
+  // iso() keeps the call in calendar days — the uniform shape the guard in
+  // lib/date-call-sites.test.js pins. daysBetween itself now pins both ends
+  // to local midnight too, so a raw Date no longer rounds one short after
+  // noon; same counting rule as PR #16's race-week card (race-chip catch
+  // 2026-07-30).
   const rawDaysToRace = T.daysBetween(T.iso(new Date()), plan.profile.raceDate);
   const daysToRace = Math.max(0, rawDaysToRace);
   const maintWeeksLeft = Math.max(0, Math.ceil(rawDaysToRace / 7));
