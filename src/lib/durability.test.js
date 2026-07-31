@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
-import { durabilityRead, durabilityTrend, planBodySteady, fadeCorroborated, DURABILITY_GATES, DURABILITY_BAND_LABELS } from './durability.js';
+import { durabilityRead, durabilityTrend, planBodySteady, fadeCorroborated, longestOfWeek, DURABILITY_GATES, DURABILITY_BAND_LABELS } from './durability.js';
 import { decideWeek } from './coach.js';
 import { generatePlan } from './plan.js';
 import { storageForUser } from '@/app/storage.js';
@@ -413,5 +413,86 @@ describe('gauntlet fixes', () => {
     ] };
     expect(planBodySteady(brick)).toBe(false);        // whole card mixes zones
     expect(planBodySteady(brick, 'bike')).toBe(true); // the leg being read is steady
+  });
+});
+
+// A steady continuous swim: 10 laps of 240s, ~1.25 m/s, no HR (the pool
+// norm). Long enough to clear the swim gate at 40 minutes.
+const steadySwim = (n = 10, mut = () => ({})) => Array.from({ length: n }, (_, i) => ({
+  type: 'WORK', movingTimeSec: 240, distance: 300, averageSpeed: 1.25,
+  averageHeartrate: null, ...mut(i),
+}));
+
+describe('swim durability', () => {
+  it('the sprint tier\'s own long swim clears the gate', () => {
+    // LONG_SWIM.sprint is 40 minutes; the gate must sit under it
+    expect(DURABILITY_GATES.swim.minMovingSec).toBeLessThanOrEqual(40 * 60);
+  });
+
+  it('reads a continuous swim through the pace branch, and says HR is missing', () => {
+    const r = durabilityRead({ rows: steadySwim(), discipline: 'swim', movingTimeSec: 40 * 60 });
+    expect(r).toBeTruthy();
+    expect(r.outputDropPct).toBe(0);      // steady pace start to finish
+    expect(r.hrMissing).toBe(true);       // pool HR absent, said plainly
+    expect(r.efDropPct).toBe(null);       // efficiency stays bike-only
+  });
+
+  it('a swim that faded reads as faded, on pace alone', () => {
+    // last third ~12% slower: distance per lap drops, time per lap constant
+    const rows = steadySwim(12, i => i >= 8 ? { distance: 264, averageSpeed: 1.1 } : {});
+    const r = durabilityRead({ rows, discipline: 'swim', movingTimeSec: 48 * 60 });
+    expect(r).toBeTruthy();
+    expect(r.outputDropPct).toBeGreaterThan(0);
+    expect(r.band).not.toBe('held-strong');
+  });
+
+  it('a short swim is refused by the gate', () => {
+    expect(durabilityRead({ rows: steadySwim(), discipline: 'swim', movingTimeSec: 20 * 60 })).toBe(null);
+  });
+
+  it('a drill-heavy session fails coverage rather than guessing', () => {
+    // half the laps are drills at less than 0.6x median speed: the outlier
+    // filter drops them, and what is left cannot span minCoverage of the
+    // session, so the read is withheld instead of read off the swim bits
+    const rows = steadySwim(12, i => i % 2 ? { distance: 120, averageSpeed: 0.5 } : {});
+    expect(durabilityRead({ rows, discipline: 'swim', movingTimeSec: 48 * 60 })).toBe(null);
+  });
+});
+
+describe('longestOfWeek picks the long session where no role names it', () => {
+  const mk = (id, date, discipline, min) => ({ id, date, discipline, movingTimeSec: min * 60 });
+
+  it('keeps the longest of each discipline in each week', () => {
+    const got = longestOfWeek([
+      mk('a', '2026-08-03', 'run', 60), mk('b', '2026-08-05', 'run', 95),
+      mk('c', '2026-08-06', 'bike', 80), mk('d', '2026-08-08', 'bike', 140),
+    ]);
+    expect([...got].sort()).toEqual(['b', 'd']);
+  });
+
+  it('a week of only short sessions yields nothing, rather than promoting one', () => {
+    // this is the whole point of the gate half of the rule: without it a
+    // 30-minute jog becomes "the long run" purely by being least short
+    expect(longestOfWeek([mk('a', '2026-08-03', 'run', 30), mk('b', '2026-08-05', 'run', 35)]).size).toBe(0);
+  });
+
+  it('separate weeks each keep their own longest', () => {
+    const got = longestOfWeek([
+      mk('a', '2026-08-05', 'run', 60),   // week of Mon 3 Aug
+      mk('b', '2026-08-12', 'run', 55),   // week of Mon 10 Aug
+    ]);
+    expect([...got].sort()).toEqual(['a', 'b']);
+  });
+
+  it('ties break deterministically on date then id', () => {
+    const one = longestOfWeek([mk('z', '2026-08-05', 'run', 60), mk('a', '2026-08-03', 'run', 60)]);
+    expect([...one]).toEqual(['a']);      // earlier date wins
+    const two = longestOfWeek([mk('z', '2026-08-05', 'run', 60), mk('a', '2026-08-05', 'run', 60)]);
+    expect([...two]).toEqual(['a']);      // same date: id breaks it
+  });
+
+  it('ignores rubbish rows and unknown disciplines', () => {
+    expect(longestOfWeek([null, {}, mk('a', '2026-08-05', 'strength', 90)]).size).toBe(0);
+    expect(longestOfWeek(null).size).toBe(0);
   });
 });

@@ -30,15 +30,27 @@
  * over weeks is the product.
  */
 
+import { iso, startOfWeekMonday } from './date.js';
+
 // Bump when read logic or thresholds change: stored reads carry the version
 // they were computed under.
 export const DURABILITY_RULE_VERSION = 1;
 
 // Session gates sit UNDER the sprint tier's own prescribed longs (run 55,
-// ride 70 minutes), so every race distance's long sessions can qualify.
+// ride 70, swim 40 minutes), so every race distance's long sessions can
+// qualify.
+//
+// Swim reads flow through the same pace branch as runs, and the honesty
+// gates below do the rest of the work unaided: a drill-heavy session loses
+// its drill laps to the outlier filter and then fails minCoverage, so only
+// a genuinely continuous swim ever produces a read. That is the intent —
+// the question "how did this long swim end" is only meaningful when the
+// swim was actually swum straight through. Pool HR is usually absent, which
+// surfaces honestly as hrMissing rather than as a missing read.
 export const DURABILITY_GATES = {
   bike: { minMovingSec: 65 * 60 },
   run: { minMovingSec: 50 * 60 },
+  swim: { minMovingSec: 35 * 60 },
   minLaps: 6,
   minCoverage: 0.8,      // usable laps must span this share of the session
   outlierLo: 0.6,        // lap speed vs median lap speed
@@ -199,6 +211,43 @@ export const DURABILITY_BAND_LABELS = {
   'faded-a-little': 'faded a little',
   'faded-hard': 'faded hard',
 };
+
+/* Which sessions count as "the long one".
+ *
+ * Run and bike carry role === 'long' in every plan template, so a planned
+ * week names its own long sessions and this helper is not needed there.
+ * Two cases have no role to read: swim, whose templates carry a long slot
+ * only when swim is the athlete's weakest discipline, and tracker mode,
+ * which has no plan at all. For those, the week's longest session IS the
+ * long one.
+ *
+ * "Above the gate" is the second half of the rule and it matters: without
+ * it, a week holding nothing but short sessions would promote its least
+ * short one and call a 30-minute jog a long run. A week with no genuinely
+ * long session should yield nothing, which is what this does.
+ *
+ * items: [{ id, date, discipline, movingTimeSec }] in any order.
+ * Returns a Set of qualifying ids.
+ */
+export function longestOfWeek(items) {
+  const best = new Map();
+  for (const it of items || []) {
+    if (!it || !it.id || !it.date || !it.discipline) continue;
+    const gate = DURABILITY_GATES[it.discipline];
+    const sec = it.movingTimeSec || 0;
+    if (!gate || sec < gate.minMovingSec) continue;
+    const key = it.discipline + '@' + iso(startOfWeekMonday(it.date));
+    const prev = best.get(key);
+    // Ties break on the earlier date, then the id: two equal-length sessions
+    // in one week must not pick differently between renders.
+    if (!prev || sec > prev.movingTimeSec
+      || (sec === prev.movingTimeSec
+        && (it.date < prev.date || (it.date === prev.date && it.id < prev.id)))) {
+      best.set(key, { id: it.id, date: it.date, movingTimeSec: sec });
+    }
+  }
+  return new Set([...best.values()].map(b => b.id));
+}
 
 // Trend over a discipline's recent reads (newest first): only speaks with
 // three or more comparable reads, and only in coarse, honest strokes.
