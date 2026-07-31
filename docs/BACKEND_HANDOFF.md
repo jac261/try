@@ -719,8 +719,8 @@ only start now that the data flows.
 
 | Ask | Where | Why |
 |---|---|---|
-| `runReview` | workout log entry | **In PR: JackGilham/try-backend#24.** `swimReview` and `bikeReview` are both normalized in `WorkoutStateService`; the run has no column, so its rolling review evidence cannot fire. Mirrored site-for-site in that PR, with the migration pair. Unbuilt on our side (no dotnet/Postgres here) — CI and Jack's review are the first real check. |
-| `runmaintenance` | `PlanCatalog.RaceTypes` | **In the same PR.** The client plan shape is designed and gated on this string. |
+| `runReview` | workout log entry | **Merged (backend #24, 31 July), awaiting the migration release.** Mirrored site-for-site on `swimReview`/`bikeReview`, with the migration pair. Merged is not yet in service: the repository selects and inserts `run_review` unconditionally, so the API must not be promoted ahead of `202607300001_workout_log_run_review.sql` and its validate pair. Client-side run reviews stay device-local until that release lands. |
+| `runmaintenance` | `PlanCatalog.RaceTypes` | **Merged in the same PR**, behind the same migration release. The client plan shape is designed and gated on this string. |
 | `duathlon`, `aquathlon` | `PlanCatalog.RaceTypes` | Deliberately NOT in that PR. They need product design first: a duathlon's second run happens on bike-fatigued legs and our load guardrails model one run per session, so a catalog entry would imply plans were imminent. |
 | Anonymised percentile breakpoints | new endpoint | See the 30 July section. The only ask with no code behind it — it needs a design conversation about consent and k-anonymity more than it needs a speculative endpoint. Turns the spider rings from Try's own levels into a real population comparison. |
 
@@ -821,7 +821,7 @@ The shared-backend-handoff phase activated the delivered contract. For your
 awareness (none of this needs backend work):
 
 - **Reviews persist.** The client writes `swimReview`/`bikeReview` (and
-  `runReview`, ready for #24) to the log endpoint from both review surfaces,
+  `runReview`, merged in backend #24) to the log endpoint from both review surfaces,
   wrapped in a client-owned versioned envelope `{ schemaVersion, createdAt,
   engineVersion, review }`. The jsonb stays opaque to you — the envelope is
   the client's own concern, noted here only so a future inspection of stored
@@ -842,10 +842,10 @@ awareness (none of this needs backend work):
 
 | Ask | Where | Why |
 |---|---|---|
-| `ftpMeta`, `fivekMeta` | typed athlete profile | Same `{source, measuredAt, confidence}` envelope as the `cssMeta` you shipped. Today they are blob-only, so a fresh device loses FTP and 5 km provenance: the anchors degrade to "manual" and the review engines lose the real-vs-estimated distinction they gate on. |
-| `totalElevationGain` + `totalElevationLoss` | activity DTO (the re-filed ask 7) | The downhill-assist 5 km guard is written, tested and dormant. It needs BOTH fields — the interval-level gain you shipped cannot see a point-to-point descent. Activity-level pair preferred; metres. |
+| `ftpMeta`, `fivekMeta` | typed athlete profile | **Merged (backend #25, 31 July).** Same `{source, measuredAt, confidence}` envelope as the `cssMeta` you shipped. Today they are blob-only, so a fresh device loses FTP and 5 km provenance: the anchors degrade to "manual" and the review engines lose the real-vs-estimated distinction they gate on. |
+| `totalElevationGain` + `totalElevationLoss` | activity DTO (the re-filed ask 7) | **Merged (backend #25, 31 July)** — the guard wakes when the deployed API starts serving the pair. The downhill-assist 5 km guard is written, tested and dormant. It needs BOTH fields — the interval-level gain you shipped cannot see a point-to-point descent. Activity-level pair preferred; metres. |
 | `quality` population | power-curve endpoint | Every point serves `quality: null` today. The client deliberately reads null as usable (defaulting low would kill the rider profile), so until real values arrive, only an explicit `low` can ever protect an athlete from a bad point. Whatever heuristic you have — spike detection, sensor dropout — is more than the client can know. |
-| #24 merge | `runReview` + `runmaintenance` | The client's read AND write paths are already live; a runReview PUT 400s harmlessly until the column exists. Nothing else is waiting on it. |
+| Migration release for #24 | `runReview` + `runmaintenance` | #24 merged on 31 July, so the remaining step is the migration-only stage then the API promotion. The client's read AND write paths are already live; a runReview PUT 400s harmlessly until the column exists. Nothing else is waiting on it. |
 
 ---
 
