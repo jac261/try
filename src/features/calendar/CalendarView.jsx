@@ -53,9 +53,9 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     const m = {};
     /* Both modes since 2026-07-30 — recorded dots were tracker-only, so in
        plan mode a rest-day ride and the whole pre-plan history were
-       dot-less. The cell renders these only on days with NO planned
-       sessions, so a completed workout and its matched recording can never
-       wear two dots for one session (the reason the tracker gate existed). */
+       dot-less. Which of these a cell actually dots is decided per activity
+       by unclaimedActs below: a planned session that already speaks for a
+       recording carries the dot for it, and nothing else is hidden. */
     (activities || []).forEach(a => {
       // The exact guard RecordedActivities uses, drift check included: an
       // unmapped activity type (walk, yoga, ski) stays off the grid rather
@@ -66,6 +66,37 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     });
     return m;
   }, [activities]);
+
+  /* Which of a day's recordings the grid must dot for itself (bug, Jon
+     2026-08-01: recorded sessions showed in the day card but wore no dot).
+     The old rule dotted recordings only on days with NO planned session,
+     which suppressed every recording on any planned day, matched or not: a
+     rest-day ride beside a planned swim was dot-less while the card
+     directly beneath the grid listed it.
+     A recording earns its own dot unless a planned session already speaks
+     for it: half of a brick pair, or a ticked session that claims it under
+     the shared rule. The `used` set makes the claim one-to-one here, unlike
+     the recorded list: two rides inside one session's window must not both
+     vanish from a grid whose only job is to say what happened. */
+  const unclaimedActs = d => {
+    const acts = actByDate[d] || [];
+    if (!acts.length) return acts;
+    const sessions = byDate[d] || [];
+    if (!sessions.length) return acts;
+    const claimed = new Set();
+    const feedActs = (activities || []).filter(a => a && !a.manual);
+    sessions.filter(w => w.discipline === 'brick').forEach(w => {
+      const pair = T.brickPairFor({ workout: w, activities: feedActs, moves, used: claimed });
+      if (pair) { claimed.add(pair.ride.id); claimed.add(pair.run.id); }
+    });
+    const used = new Set();
+    return acts.filter(a => {
+      if (claimed.has(a.id)) return false;
+      const owner = T.ownerFor({ activity: a, sessions, log, used });
+      if (owner) { used.add(owner.id); return false; }
+      return true;
+    });
+  };
 
   const ym = s => s.slice(0, 7);
   const canPrev = ym(anchor) > ym(viewStart);
@@ -118,7 +149,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         <div className="cal-grid">
           {grid.cells.map((d, i) => {
             const ws = d ? (byDate[d] || []) : [];
-            const acts = d && !ws.length ? (actByDate[d] || []) : [];
+            const acts = d ? unclaimedActs(d) : [];
             const inPlan = d && d >= planStart && d <= planEnd;
             return (
               <div key={i} data-caldate={d || undefined}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchActivities, activityFor, activityUrl } from './autolog.js';
+import { matchActivities, activityFor, activityUrl, ownerFor, MATCH_WINDOW } from './autolog.js';
 
 const TODAY = '2026-07-09';
 const wk = (id, discipline, type, date, durationMin) => ({
@@ -158,6 +158,57 @@ describe('matchActivities (spotted on your watch)', () => {
     expect(matchActivities({ ...base, activities: null })).toEqual([]);
     expect(matchActivities({ ...base, activities: [] })).toEqual([]);
     expect(matchActivities({ activities: [act('a1', 'Run', TODAY, 40)], plan: null, log: {}, moves: {}, todayISO: TODAY })).toEqual([]);
+  });
+});
+
+describe('ownerFor (which planned session already speaks for a recording)', () => {
+  const ride = wk('b1', 'bike', 'Endurance', '2026-07-08', 60);
+  const sessions = [ride];
+  const done = { b1: { done: true } };
+  const rec = (over = {}) => ({ id: 'a1', type: 'Ride', date: '2026-07-08', movingTimeSec: 3600, ...over });
+
+  it('claims a ticked same-discipline session inside the window', () => {
+    expect(ownerFor({ activity: rec(), sessions, log: done })).toBe(ride);
+  });
+
+  it('an UNTICKED session claims nothing: a match is not yet a claim', () => {
+    expect(ownerFor({ activity: rec(), sessions, log: {} })).toBe(null);
+    // a log entry that exists but is not done is still not a claim
+    expect(ownerFor({ activity: rec(), sessions, log: { b1: { feel: 2 } } })).toBe(null);
+  });
+
+  it('a manual entry never claims a planned session', () => {
+    expect(ownerFor({ activity: rec({ manual: true }), sessions, log: done })).toBe(null);
+  });
+
+  it('discipline must match', () => {
+    expect(ownerFor({ activity: rec({ type: 'Run' }), sessions, log: done })).toBe(null);
+  });
+
+  it('honours the shared duration window at both edges', () => {
+    const lo = 60 * MATCH_WINDOW.lo * 60, hi = 60 * MATCH_WINDOW.hi * 60;
+    expect(ownerFor({ activity: rec({ movingTimeSec: lo }), sessions, log: done })).toBe(ride);
+    expect(ownerFor({ activity: rec({ movingTimeSec: hi }), sessions, log: done })).toBe(ride);
+    expect(ownerFor({ activity: rec({ movingTimeSec: lo - 60 }), sessions, log: done })).toBe(null);
+    expect(ownerFor({ activity: rec({ movingTimeSec: hi + 60 }), sessions, log: done })).toBe(null);
+  });
+
+  it('the used set makes claiming one-to-one for callers that need it', () => {
+    const used = new Set();
+    expect(ownerFor({ activity: rec({ id: 'a1' }), sessions, log: done, used })).toBe(ride);
+    used.add(ride.id);
+    // the second recording of the day is NOT swallowed by the same session
+    expect(ownerFor({ activity: rec({ id: 'a2' }), sessions, log: done, used })).toBe(null);
+    // and without a used set both resolve, which is what a list wants
+    expect(ownerFor({ activity: rec({ id: 'a2' }), sessions, log: done })).toBe(ride);
+  });
+
+  it('degrades to null on junk rather than throwing', () => {
+    expect(ownerFor({ activity: null, sessions, log: done })).toBe(null);
+    expect(ownerFor({ activity: rec({ type: 'Yoga' }), sessions, log: done })).toBe(null);
+    expect(ownerFor({ activity: rec({ movingTimeSec: 0 }), sessions, log: done })).toBe(null);
+    expect(ownerFor({ activity: rec(), sessions: null, log: done })).toBe(null);
+    expect(ownerFor({ activity: rec(), sessions, log: null })).toBe(null);
   });
 });
 

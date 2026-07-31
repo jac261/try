@@ -170,6 +170,37 @@ export function headlineSpot(matches) {
     || ((b.workout.durationMin || 0) - (a.workout.durationMin || 0)))[0];
 }
 
+/* The reverse direction: which planned session, if any, already SPEAKS FOR
+ * this recording. Used by surfaces that must not present one session twice —
+ * the recorded list tags a claimed recording "Matched" instead of standing it
+ * alone, and the calendar grid lets the planned dot represent it rather than
+ * adding a second.
+ *
+ * Four conjuncts, exactly as the recorded list has enforced them since it
+ * shipped. A manual entry never claims a planned session (routing it through
+ * the matched branch would lend it plan-relative verdicts it has no data
+ * for). The session must be TICKED: an unticked session that merely happens
+ * to match is not yet a claim on anything, which is why a spotted recording
+ * still shows as itself until the athlete logs it.
+ *
+ * `used` is optional one-to-one bookkeeping. Without it two recordings inside
+ * one session's window both resolve to it, which is right for a list (both
+ * rows still render, each opening its own file) and wrong for a grid, where
+ * it would silently hide the second ride of the day.
+ */
+export function ownerFor({ activity, sessions, log, used }) {
+  if (!activity || activity.manual || !Array.isArray(sessions)) return null;
+  const disc = DISCIPLINE[activity.type];
+  const min = (activity.movingTimeSec || 0) / 60;
+  if (!disc || !min) return null;
+  return sessions.find(w => w.discipline === disc
+    && !(used && used.has(w.id))
+    && (log || {})[w.id] && log[w.id].done
+    && w.durationMin
+    && min >= w.durationMin * MATCH_WINDOW.lo
+    && min <= w.durationMin * MATCH_WINDOW.hi) || null;
+}
+
 // Link-out matching for a single (typically logged) session: the same
 // discipline + effective-date + duration-window rule as matchActivities,
 // without the claimed-set bookkeeping. A view helper, not a logging proposal —
