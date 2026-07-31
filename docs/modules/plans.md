@@ -146,6 +146,34 @@ prose at generation and does not survive onto workouts; a real cue needs a
 builder change); intra-day ordering advice (nothing encodes an order);
 conditions in cues (the app has no weather input).
 
+## Why not harder (phase 6)
+
+`src/lib/why-not-harder.js` powers the detail sheet's fold for the athlete
+who feels good and wonders why the session is not bigger. It claims only
+what is provable at render time from the workout and its plan week: the
+recovery week's deliberate step back, a race-week demotion naming what the
+session was drawn up as (the raceWeek stamp), the solo plan's two quality
+runs kept a step apart (solo-gated and direction neutral: the adjacent-rung
+rule fires only on solo run plans and can step either way when the anchor
+clamps), the solo spacing rule (phrased about scheduling, so a later move
+cannot falsify it; triathlon plans have no spacing rule and never get the
+line), and the easy slot named against the week's actual harder siblings.
+
+Named non-claims: no ramp or readiness reasoning (reactive, not a workout
+property), no numeric next rung (the ladder is the generator's own), no
+demoted-adjacent-quality fact (no flag survives generation), no day or
+adjacency claims (the sheet has no moves).
+
+## Progress stories (phase 6)
+
+`src/lib/stories.js` derives short milestone sentences for the Progress
+Overview, each windowed to the last fortnight so it appears when earned and
+expires on its own; there is deliberately no seen-store, which is why no
+story says "first ever" ("longest recorded" needs no stamp). The volume
+story fires only when the run ramp signal itself sits inside the build
+guideline; the accepted-proposal story quotes the decision journal's own
+headline and re-derives nothing.
+
 ## Key files
 
 `src/lib/plan.js`, `src/lib/domain.js`, `src/lib/start-volume.js`,

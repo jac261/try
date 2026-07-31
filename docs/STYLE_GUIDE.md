@@ -278,6 +278,13 @@ zero), Connections, Support, Account, then the lone destructive reset. `openSett
 in App opens Settings scrolled to a card; in-copy mentions of Settings should become
 links via a nullable `onOpenSettings` callback where cheap.
 
+**Chevroned-question fold** — a muted bold question ending in a chevron
+(`▸`/`▾`), `role="button"` + `aria-expanded`, folding out derived reasons.
+Two consumers: the readiness card's "Why?" (`.rd-why-toggle`) and the detail
+sheet's "Why not harder?" (`.wnh-toggle`, phase 6). The folded content only
+ever states what its selector can prove; a fold that cannot prove anything
+does not render its toggle.
+
 **Today briefing (phase 5)** — context under the date line (`.tb-context`: muted
 phase/week line + bold priority line, two short lines max), a tiny uppercase
 `Main session` caption (`.tb-main`, key-tag blue `#9ab8ff`) above the primary row

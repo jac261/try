@@ -360,6 +360,26 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
       </>;
     })()}
 
+    {/* Phase 6 §9.6: milestones the data earned recently, each derived and
+        windowed in the lib so it appears and expires on its own. Sits with
+        the retrospective surfaces, and self-gates to nothing rather than
+        rendering an empty shell. */}
+    {(() => {
+      const stories = T.progressStories({ activities, durability, plan: tracker ? null : plan, log, moves, decisionLog, runLoad, todayISO });
+      if (!stories.length) return null;
+      return <>
+        <div className="section-title">Progress stories</div>
+        <div className="card">
+          {stories.map(s => (
+            <div className="seg" key={s.id}>
+              <div className="bar" style={{ background: 'var(--accent)' }} />
+              <div><div className="d">{s.text}</div></div>
+            </div>
+          ))}
+        </div>
+      </>;
+    })()}
+
     {tracker && coachWeekCard}
 
     {/* Phase 2 §9: what Try offered and what you did about it. Folded by
