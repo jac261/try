@@ -1,0 +1,46 @@
+name: CI
+
+# Validation BEFORE merge. deploy.yml already runs the suite and the build on
+# push to main, but that is after the fact: a pull request got no automated
+# check at all, so four countdown PRs (#19 #20 #21 #23) sat conflicting with
+# each other and with main until someone read them by hand (2026-07-31). This
+# runs the same gate on the merge result while it can still stop a bad merge.
+#
+# Deliberately pull_request only: main is already covered by deploy.yml, and
+# running both there would just duplicate the work on every merge.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Newer pushes to a PR supersede queued runs on the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Node 20 to match deploy.yml: the gate should run what ships, not a
+      # different runtime from the one that builds the site.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # npm run check is the repo's own gate: import-boundary lint, then the
+      # vitest suite, then the production build. Kept as one call so CI and a
+      # local `npm run check` can never drift apart.
+      - name: Lint boundaries, test, and build
+        run: npm run check
