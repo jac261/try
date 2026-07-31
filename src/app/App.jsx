@@ -731,11 +731,20 @@ export function App({ storage, getToken, user }) {
     });
     return out;
   };
-  // Freeze the coach brain's weekly decision at the digest's own boundary:
-  // the first render that sees a reviewed week with no stored decision writes
-  // it once; every later render quotes the store. Progress shows the OPEN
-  // week live and labelled as in progress; only closed weeks freeze (design
-  // panel 2026-07-20).
+  // Freeze the coach brain's weekly decision at the digest's own boundary.
+  // While the reviewed week still CONTAINS today (the Sunday-evening wrap),
+  // the stored bundle is PROVISIONAL — stamped so, recomputed on any input
+  // change, and never consumed as history (the block review waits for it).
+  // The first render after the week closes writes the FINAL bundle, with
+  // todayISO at last outside the week, so a race ticked at 21:00 AND a
+  // missed answer tapped at 18:00 both land: judged from inside the week a
+  // Sunday session reads 'upcoming' and a negative answer is invisible
+  // (gauntlet catch 2026-07-31). Before this, the 17:05 write was permanent
+  // and any Sunday key session unticked at that instant froze not-clean
+  // forever (re-verify catch 2026-07-30; design panel 2026-07-20 for the
+  // freeze itself). After the finalizing write, every render quotes the
+  // store: a tick landing later than that first post-week render is the
+  // named residual and never changes the verdict.
   useEffect(() => {
     if (!hydrated) return;
     const todayISO = T.iso(new Date());
@@ -748,26 +757,78 @@ export function App({ storage, getToken, user }) {
     // one (re-verify catch 2026-07-20).
     const stored = weekMonday && coachLog[weekMonday];
     const planId = (plan && plan.createdAt) || null;
-    if (!weekMonday || (stored && (stored.planCreatedAt ?? null) === planId)) return;
-    // Freeze only inside the digest's own window, and only after a settle
-    // delay: the post-hydration activity and wellness fetches land on later
-    // round-trips, and a verdict frozen from a half-loaded state would be
-    // wrong forever (gauntlet catch). Any dep change re-arms the timer with
-    // fresher data; the write happens at most once per week regardless.
-    if (!T.digestWindowOpen(weekMonday, todayISO)) return;
+    // Every provisional same-plan bundle whose week is truly over needs its
+    // finalize, however late the app next opens: the digest window gates the
+    // CARD and the first write, never the completion of an existing bundle.
+    // Without this, a Sunday-evening-only user strands every week
+    // provisional forever — the block review never fires and the repeat
+    // rule reads Sunday half-states (re-verify catch 2026-07-31). Named
+    // cost: a months-late finalize recomputes against today's bounded
+    // wellness and activity windows, so a very old week can finalize with
+    // thinner evidence than its provisional bundle held; log and answer
+    // data persist, so clean and the repeat rule stay honest either way.
+    const staleProvisional = Object.keys(coachLog).filter(k => {
+      const b = coachLog[k];
+      return b && b.provisional && (b.planCreatedAt ?? null) === planId
+        && T.reviewedWeekFinal(k, todayISO);
+    }).sort();
+    if (!weekMonday
+      || (T.coachDecisionStands(stored, planId, weekMonday, todayISO) && !staleProvisional.length)) return;
+    // The current week's own freeze stays inside the digest's window; the
+    // finalize sweep above is exempt. Both wait for settled fetches: a
+    // verdict written from a half-loaded state would be wrong forever
+    // (gauntlet catch). Any dep change re-arms the timer with fresher data.
+    const windowOpen = T.digestWindowOpen(weekMonday, todayISO);
+    if (!windowOpen && !staleProvisional.length) return;
     if (!fetchesSettled) return;
     // hold for the reviewed week's own durability read while this load's
     // backfill can still land it (it fetches that week first); once the
     // budget is spent the freeze proceeds with what exists
     if (!durabilityDone && Object.keys(durabilityFor(weekMonday)).length === 0) return;
     const t = setTimeout(() => {
-      const prevWeeks = Object.keys(coachLog).sort().reverse().map(k => coachLog[k]);
-      const decision = T.decideWeek({
+      const decideFor = (map, wk) => T.decideWeek({
         plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
-        missedReasons, todayISO, weekMonday, prevWeeks,
-        durabilityByDiscipline: durabilityFor(weekMonday),
+        missedReasons, todayISO, weekMonday: wk,
+        // strictly earlier weeks only: the log holds the decided week's own
+        // entry on a re-freeze, and feeding it back as prevWeeks[0] fails
+        // the repeat rule's adjacency check (gauntlet catch 2026-07-31)
+        prevWeeks: T.prevWeeksFor(map, wk),
+        durabilityByDiscipline: durabilityFor(wk),
       });
-      setCoachLog(storage.saveCoachDecision(weekMonday, decision));
+      // Finalize sweep, oldest first so a newer week's repeat rule reads
+      // already-finalized history within this same pass. The state map is
+      // accumulated HERE rather than taken from saveCoachDecision's return:
+      // that return re-reads localStorage, and a swallowed setItem failure
+      // (quota, private mode) would drop earlier sweep writes from it and
+      // oscillate this effect forever; state must carry every finalize this
+      // session even when persistence cannot (re-verify catch 2026-07-31).
+      let map = coachLog;
+      staleProvisional.forEach(wk => {
+        const fin = decideFor(map, wk);
+        storage.saveCoachDecision(wk, fin);
+        map = { ...map, [wk]: fin };
+      });
+      // The current reviewed week's own write: Sunday-evening provisional,
+      // or the first freeze of a closed week, inside the window only.
+      const st = map[weekMonday];
+      if (windowOpen && !T.coachDecisionStands(st, planId, weekMonday, todayISO)) {
+        const decision = decideFor(map, weekMonday);
+        // A mid-week write wears its provisionality; the post-week write is
+        // the bare, final bundle coachDecisionStands recognises. decideWeek
+        // is deterministic, so an unchanged recomputation must not rewrite:
+        // the write bumps coachLog, which re-runs this effect, and without
+        // the bail the provisional window would rewrite every 2s. Compared
+        // bundle-to-bundle so the provisional stamp itself cannot defeat
+        // the bail (and so the finalizing write, which drops it, always
+        // goes through).
+        const bundle = T.reviewedWeekFinal(weekMonday, todayISO)
+          ? decision : { ...decision, provisional: true };
+        if (!(st && (st.planCreatedAt ?? null) === planId && T.reviewEqual(st, bundle))) {
+          storage.saveCoachDecision(weekMonday, bundle);
+          map = { ...map, [weekMonday]: bundle }; // same rule as the sweep: state never re-read from storage
+        }
+      }
+      if (map !== coachLog) setCoachLog(map);
     }, 2000);
     return () => clearTimeout(t);
     // fuelLog is a real dependency since the lowFuel veto-disarm joined
@@ -1229,12 +1290,17 @@ export function App({ storage, getToken, user }) {
     runTest: runFresh ? runTest : null,
   });
   // The open week's decision, computed live for Progress and labelled as in
-  // progress there; never stored (only closed weeks freeze).
+  // progress there; never stored by THIS computation. (From Sunday 17:00 the
+  // freeze effect above does hold a provisional bundle for the same week —
+  // stamped provisional, superseded by the post-week finalize — so "only
+  // closed weeks freeze" is true of final bundles only, 2026-07-31.)
   const coachNow = T.decideWeek({
     plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
     missedReasons, todayISO: T.iso(new Date()),
     weekMonday: T.iso(T.startOfWeekMonday(new Date())),
-    prevWeeks: Object.keys(coachLog).sort().reverse().map(k => coachLog[k]),
+    // strictly earlier weeks: after the Sunday-evening wrap the log holds
+    // THIS week's own entry, which must not read as the "previous" week
+    prevWeeks: T.prevWeeksFor(coachLog, T.iso(T.startOfWeekMonday(new Date()))),
     durabilityByDiscipline: durabilityFor(T.iso(T.startOfWeekMonday(new Date()))),
   });
 

@@ -33,6 +33,30 @@ export function digestWindowOpen(weekMonday, todayISO) {
   return todayISO <= iso(addDays(weekMonday, 9));
 }
 
+// When the reviewed week is truly over (2026-07-31). The Sunday 17:00 rule
+// wraps a week that still CONTAINS today, so a verdict written then can be
+// wrong by 21:00 for reasons the athlete just fixed — a race ticked after
+// the write froze as an unfinished key session forever (re-verify catch
+// 2026-07-30). While the reviewed week still contains today, a stored
+// decision is PROVISIONAL; the first render after the week closes writes
+// the final one.
+export function reviewedWeekFinal(weekMonday, todayISO) {
+  return todayISO > iso(addDays(weekMonday, 6));
+}
+
+// Whether a stored weekly decision STANDS — must be quoted, never
+// recomputed. Three things have to be true: it belongs to the current
+// plan; the reviewed week is truly over; and the bundle itself is not a
+// provisional Sunday-evening write. A provisional bundle carries
+// `provisional: true` and is superseded by the finalizing recompute, whose
+// todayISO sits outside the week — which is also what lets a Sunday
+// session's missed answer count: judged from inside the week it still
+// reads 'upcoming' and the answer is invisible (gauntlet catch 2026-07-31).
+export function coachDecisionStands(stored, planId, weekMonday, todayISO) {
+  return !!(stored && (stored.planCreatedAt ?? null) === (planId ?? null)
+    && !stored.provisional && reviewedWeekFinal(weekMonday, todayISO));
+}
+
 const inRange = (d, a, b) => d >= a && d <= b;
 
 /* ---- the block review (pass 4) ----
@@ -49,9 +73,19 @@ export function buildBlockReview({ plan, coachLog, weekMonday, focus, lastReview
   if (!plan || !coachLog) return null;
   const stored = coachLog[weekMonday];
   if (!stored) return null;
+  // A provisional Sunday-evening bundle must not close a block: the review's
+  // taps are permanent (the acknowledge stamp suppresses it forever, a focus
+  // change edits the plan), and a tally that can still move tonight must not
+  // earn either. The review simply waits for the finalized verdict
+  // (gauntlet catch 2026-07-31).
+  if (stored.provisional) return null;
   const tracker = !Array.isArray(plan.weeks) || !plan.weeks.length;
+  // !d.provisional twice over: the early return above keeps a provisional
+  // reviewed week from closing a block, and this filter keeps any stray
+  // provisional bundle in the middle of history out of the tallies and the
+  // boundary trigger (re-verify catch 2026-07-31).
   const decisions = Object.keys(coachLog).sort().map(k => coachLog[k])
-    .filter(d => d.planCreatedAt === ((plan && plan.createdAt) || null));
+    .filter(d => !d.provisional && d.planCreatedAt === ((plan && plan.createdAt) || null));
 
   // Everything below reads ONLY frozen decisions. The live plan's week
   // layout is untrustworthy here: an ordinary settings edit reshapes every

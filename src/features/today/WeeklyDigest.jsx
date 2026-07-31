@@ -31,12 +31,28 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
   if (gone || seen === weekMonday || !T.digestWindowOpen(weekMonday, todayISO)) return null;
   const d = T.buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday });
   if (!d) return null;
-  const dismiss = () => { storage.save('digestSeenWeek', { weekMonday, planCreatedAt: plan.createdAt || null }); setGone(true); };
+  // The permanent dismissed stamp is earned only by a SETTLED verdict: the
+  // week over and the stored bundle not provisional. Gated on the week as
+  // well as the stamp because the card can render before the freeze has
+  // written anything at all (Sunday 17:00 to the first settled load), and
+  // a dismissal there must not bury the finalized verdict — the only
+  // surface that ever shows it (re-verify catches 2026-07-31). An
+  // unsettled dismissal hides the card until the athlete next returns to
+  // the Today view.
+  const dismiss = () => {
+    const b = coachLog && coachLog[weekMonday];
+    const settled = T.reviewedWeekFinal(weekMonday, todayISO) && !(b && b.provisional);
+    if (settled) storage.save('digestSeenWeek', { weekMonday, planCreatedAt: plan.createdAt || null });
+    setGone(true);
+  };
   const fmtD = s => T.fmtDate(s, { month: 'short', day: 'numeric' });
-  // The coach's call for the reviewed week: quoted from the frozen store or
+  // The coach's call for the reviewed week: quoted from the store or
   // absent. Never recomputed here; a recompute presented as the original
   // call would be a lie on a card whose whole job is the honest record
-  // (design panel 2026-07-20).
+  // (design panel 2026-07-20). From Sunday 17:00 the stored bundle may
+  // still be PROVISIONAL — the freeze effect rewrites it as evidence lands
+  // until the post-week finalize — and the card says so below rather than
+  // presenting a moving verdict as settled (2026-07-31).
   const stored = coachLog && coachLog[weekMonday];
   // Only the CURRENT plan's frozen decision is quotable: one from a replaced
   // plan is a record about a different reality (re-verify catch 2026-07-20).
@@ -125,6 +141,16 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
             ))}
             {coach.progression && !review && (
               <div className="coach-ev"><span className="coach-sig">next up</span>{'when the ' + coach.progression.discipline + ' stays clean: ' + coach.progression.what}</div>
+            )}
+            {coach.provisional && (
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                {/* the stamp can outlive the Sunday it was written on (the
+                    finalize needs one settled load), so the copy must not
+                    say "today still counts" about a week already over */}
+                {T.reviewedWeekFinal(weekMonday, todayISO)
+                  ? 'Provisional: finalising with the latest data.'
+                  : 'Provisional: today still counts, and the final call comes once the week is over.'}
+              </div>
             )}
           </div>
         )}

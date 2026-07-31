@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideWeek, classifyCompletion, DECISION_LABELS, COACH_RULE_VERSION, MISSED_REASONS } from './coach.js';
+import { decideWeek, classifyCompletion, prevWeeksFor, DECISION_LABELS, COACH_RULE_VERSION, MISSED_REASONS } from './coach.js';
 import { generatePlan, buildTrackerPlan } from './plan.js';
 import { iso, startOfWeekMonday } from './date.js';
 
@@ -124,6 +124,15 @@ describe('the weekly decision: spec scenarios', () => {
     expect(second.progression).toEqual({ discipline: 'swim', what: 'a third swim in the week' });
   });
 
+  it('a provisional prior week never certifies the streak', () => {
+    // a Sunday-evening bundle judged its week from inside it, so its clean
+    // flag is a half-state; the finalize sweep normally replaces it and
+    // this is the decision-layer backstop
+    const prevMonday = iso(new Date(new Date(weekMonday + 'T00:00:00Z').getTime() - 7 * 864e5));
+    const d = decideWeek({ ...base, log: logAll(wk), prevWeeks: [{ weekMonday: prevMonday, tracker: false, planCreatedAt: plan.createdAt, provisional: true, disciplines: { swim: { clean: true } } }] });
+    expect(d.disciplines.swim.decision).toBe('hold');
+  });
+
   it('a dirty prior week resets the repeat rule', () => {
     const prevMonday = iso(new Date(new Date(weekMonday + 'T00:00:00Z').getTime() - 7 * 864e5));
     const d = decideWeek({ ...base, log: logAll(wk), prevWeeks: [{ weekMonday: prevMonday, tracker: false, planCreatedAt: plan.createdAt, disciplines: { swim: { clean: false } } }] });
@@ -139,6 +148,24 @@ describe('the weekly decision: spec scenarios', () => {
       const all = [d.overall.decision].concat(Object.values(d.disciplines).map(x => x.decision));
       all.forEach(x => expect(['progress', 'hold', 'reduce-volume', 'ease-intensity', 'recover']).toContain(x));
     });
+  });
+});
+
+describe('prevWeeksFor (the stored history a decision may read)', () => {
+  it('excludes the decided week itself and anything after it, newest first', () => {
+    // On a Sunday-evening provisional freeze the log already holds THIS
+    // week's entry; feeding it back as prevWeeks[0] would fail the repeat
+    // rule's adjacency check and wrongly deny progression.
+    const coachLog = {
+      '2026-07-06': { weekMonday: '2026-07-06' },
+      '2026-07-13': { weekMonday: '2026-07-13' },
+      '2026-07-20': { weekMonday: '2026-07-20' },
+      '2026-07-27': { weekMonday: '2026-07-27' }, // later than the decided week: clock skew or import
+    };
+    expect(prevWeeksFor(coachLog, '2026-07-20').map(d => d.weekMonday)).toEqual(['2026-07-13', '2026-07-06']);
+    expect(prevWeeksFor(coachLog, '2026-08-03').map(d => d.weekMonday)).toEqual(['2026-07-27', '2026-07-20', '2026-07-13', '2026-07-06']);
+    expect(prevWeeksFor({}, '2026-07-20')).toEqual([]);
+    expect(prevWeeksFor(null, '2026-07-20')).toEqual([]);
   });
 });
 
