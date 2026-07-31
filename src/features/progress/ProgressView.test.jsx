@@ -5,7 +5,7 @@ import { act } from 'react';
 import { ProgressView } from './ProgressView.jsx';
 import { generatePlan, buildTrackerPlan } from '@/lib/plan.js';
 import { powerCurve, CURVE_DURATIONS } from '@/lib/bike-power-curve.js';
-import { iso } from '@/lib/date.js';
+import { iso, addDays } from '@/lib/date.js';
 
 /* A render smoke test for the Progress tab. It exists because the run pass
    briefly shipped JSX referencing variables a dropped write never declared:
@@ -186,6 +186,31 @@ describe('the body mass card is safety-gated', () => {
     const html = await mount({ plan, activities: null, wellness: rising });
     expect(html).toContain('settling in');
     expect(html).not.toContain('g a week');
+  });
+});
+
+describe('progress stories (phase 6)', () => {
+  // ProgressView reads the real clock, so fixtures use relative dates
+  const ago = n => iso(addDays(new Date(), -n));
+  const heldRead = n => ({ activityId: 'hr' + n, date: ago(n), discipline: 'run', durationMin: 95, read: { band: 'held-strong', outputDropPct: 1.0, hrDriftPct: 2.0, efDropPct: null, hrMissing: false } });
+
+  it('a fresh held-strong streak tells its story on the Overview', async () => {
+    const html = await mount({ plan: generatePlan(profile), activities: null, durability: [heldRead(2), heldRead(9), heldRead(13)] });
+    expect(html).toContain('Progress stories');
+    expect(html).toContain('held strong to the end');
+  });
+
+  it('a fresh longest recorded run appears, and an old one does not', async () => {
+    const longRuns = shift => [
+      { id: 'l1', type: 'Run', date: ago(shift + 30), movingTimeSec: 3600, distance: 10000 },
+      { id: 'l2', type: 'Run', date: ago(shift + 20), movingTimeSec: 4500, distance: 12000 },
+      { id: 'l3', type: 'Run', date: ago(shift + 3), movingTimeSec: 5700, distance: 15000 },
+    ];
+    const fresh = await mount({ plan: generatePlan(profile), activities: longRuns(0) });
+    expect(fresh).toContain('longest recorded run');
+    const stale = await mount({ plan: generatePlan(profile), activities: longRuns(20) });
+    expect(stale).not.toContain('longest recorded run');
+    expect(stale).not.toContain('Progress stories'); // no shell without stories
   });
 });
 
