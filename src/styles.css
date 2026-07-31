@@ -729,6 +729,24 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .coach-d { flex: 0 0 38px; font-weight: 700; }
 .coach-why { color: var(--muted); font-size: 12px; }
 
+/* ---------- race-week countdown (Today, final 7 days) ---------- */
+.rw-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.rw-phase { font-size: 11px; color: var(--faint); font-weight: 700; text-transform: uppercase; letter-spacing: .6px; }
+.rw-hero { display: flex; gap: 16px; align-items: center; }
+.rw-days { display: flex; align-items: baseline; gap: 7px; flex: none; }
+.rw-num { font-size: 46px; font-weight: 800; letter-spacing: -1.6px; line-height: 1; font-variant-numeric: tabular-nums; }
+.rw-lab { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); line-height: 1.3; }
+/* race-day flag wears the calendar's race-day gold, one meaning per colour */
+.rw-go { color: #facc15; align-self: center; }
+.rw-name { font-size: 17px; font-weight: 800; letter-spacing: -.4px; }
+.rw-date { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.rw-bar { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; margin: 14px 0 2px; }
+.rw-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--blue); }
+.rw-prep-head { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 4px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--muted); font-weight: 700; }
+.rw-prep-head .rw-count { text-transform: none; letter-spacing: 0; font-size: 11.5px; font-weight: 600; color: var(--faint); }
+/* keyboard users get a real ring on the checklist rows; no .wk rule defines one */
+.rw-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 /* Four missed-session chips wrap two-up so long labels stay readable */
 .feel-row.missed { flex-wrap: wrap; }
 .feel-row.missed .feelbtn { flex: 1 1 45%; }

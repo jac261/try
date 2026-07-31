@@ -8,6 +8,7 @@ import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { ReadinessCard } from '@/features/wellness/ReadinessCard.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 import { WeeklyDigest } from '@/features/today/WeeklyDigest.jsx';
+import { RaceWeekCard } from '@/features/today/RaceWeekCard.jsx';
 const D = T.DISCIPLINES;
 
 // A rejected weekly proposal stays rejected while its SIGNATURE (kind, week,
@@ -291,6 +292,9 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
         onEdit={onEditWellness} onFeel={onFeel} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} onSupport={onSupport} recovery={recovery}
         storage={storage} onDecision={onDecision} />
       {!tracker && coachCard}
+      {/* The countdown self-gates to the final week (and hides for noRace
+          blocks), so mounting is unconditional in plan mode. */}
+      {!tracker && <RaceWeekCard plan={plan} storage={storage} />}
       <div className="card">
         {allDone && !reviewToday
           ? <div className="today-done">
