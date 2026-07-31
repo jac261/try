@@ -153,16 +153,6 @@ export function classifyCompletion({ workout, entry, adjustEntry, missedReason, 
 
 const week = (weekMonday, d) => iso(addDays(weekMonday, d));
 
-// The stored history a decision for weekMonday may read: strictly earlier
-// weeks, newest first. Strictly earlier matters — on a Sunday-evening
-// provisional freeze the log already holds the decided week's own entry,
-// and feeding it back as prevWeeks[0] fails the repeat rule's adjacency
-// check and wrongly denies progression (2026-07-31).
-export function prevWeeksFor(coachLog, weekMonday) {
-  return Object.keys(coachLog || {}).filter(k => k < weekMonday)
-    .sort().reverse().map(k => coachLog[k]);
-}
-
 // Sessions of the reviewed week with their classifications, by discipline.
 function weekSessions({ plan, log, moves, adjust, missedReasons, weekMonday, todayISO }) {
   const weekEnd = week(weekMonday, 6);
@@ -230,11 +220,24 @@ function runScoped(proposal, sessions) {
   return proposal.targets.every(id => runIds.has(id));
 }
 
+// The stored history a decision for weekMonday may read: strictly earlier
+// weeks, newest first. Strictly earlier is a hard precondition — on a
+// Sunday-evening provisional freeze the log already holds the decided
+// week's own entry, and feeding it back as prevWeeks[0] fails the repeat
+// rule's adjacency check and wrongly denies progression (gauntlet catch
+// 2026-07-31). This is the canonical builder; both call sites use it.
+export function prevWeeksFor(coachLog, weekMonday) {
+  return Object.keys(coachLog || {}).filter(k => k < weekMonday)
+    .sort().reverse().map(k => coachLog[k]);
+}
+
 // decideWeek: the whole week → { weekMonday, ruleVersion, overall,
 // disciplines: {run, bike, swim}, progression }. Every decision is
 // { decision, headline, evidence: [{signal, reading}], conflicting: [] }.
-// `prevWeeks` is an array of earlier stored decisions (newest first), used
-// only for the repeat rule. Pure and deterministic.
+// `prevWeeks` is an array of STRICTLY EARLIER stored decisions (newest
+// first) — build it with prevWeeksFor; the decided week's own entry in
+// slot zero silently defeats the repeat rule. Used only for the repeat
+// rule. Pure and deterministic.
 export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, todayISO, weekMonday, prevWeeks, durabilityByDiscipline }) {
   const tracker = !plan || plan.race === 'tracker' || !Array.isArray(plan.weeks) || !plan.weeks.length;
   if (tracker) return decideTrackerWeek({ activities, wellness, plan, todayISO, weekMonday });
@@ -381,7 +384,9 @@ export function decideWeek({ plan, log, moves, adjust, adjustLog, wellness, acti
           // is certified by its OBSERVED key work (the some-doneish clause
           // above), so the app's blindness to one race never gates a LATER
           // week — the permanent gate was the defect this change removes.
-          // The athlete can end this wait with one tap before the freeze.
+          // The athlete can end this wait with one tap any time before the
+          // week's FINAL freeze (the first render after the week closes;
+          // Sunday-evening bundles stay provisional, 2026-07-31).
           headline = 'Landing well. Mark the tune-up complete and progression opens';
           ev.push({ signal: 'repeatability', reading: 'your clean weeks all count and nothing here resets them; only the progression call waits' });
         } else if (fadeBlock && !capSpent && LONG_SESSION[d]) {

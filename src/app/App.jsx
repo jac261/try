@@ -733,13 +733,18 @@ export function App({ storage, getToken, user }) {
   };
   // Freeze the coach brain's weekly decision at the digest's own boundary.
   // While the reviewed week still CONTAINS today (the Sunday-evening wrap),
-  // the stored decision is provisional: it recomputes on any input change,
-  // so a race ticked at 21:00 corrects the verdict written at 17:05. From
-  // the Monday after, every render quotes the store — a verdict frozen at
-  // that Sunday wrap used to be permanent, and any Sunday key session
-  // unticked at 17:00 froze 'upcoming'/not-clean forever (tracked catch
-  // 2026-07-31; design panel 2026-07-20 for the freeze itself). Progress
-  // shows the OPEN week live and labelled as in progress.
+  // the stored bundle is PROVISIONAL — stamped so, recomputed on any input
+  // change, and never consumed as history (the block review waits for it).
+  // The first render after the week closes writes the FINAL bundle, with
+  // todayISO at last outside the week, so a race ticked at 21:00 AND a
+  // missed answer tapped at 18:00 both land: judged from inside the week a
+  // Sunday session reads 'upcoming' and a negative answer is invisible
+  // (gauntlet catch 2026-07-31). Before this, the 17:05 write was permanent
+  // and any Sunday key session unticked at that instant froze not-clean
+  // forever (re-verify catch 2026-07-30; design panel 2026-07-20 for the
+  // freeze itself). After the finalizing write, every render quotes the
+  // store: a tick landing later than that first post-week render is the
+  // named residual and never changes the verdict.
   useEffect(() => {
     if (!hydrated) return;
     const todayISO = T.iso(new Date());
@@ -752,8 +757,7 @@ export function App({ storage, getToken, user }) {
     // one (re-verify catch 2026-07-20).
     const stored = weekMonday && coachLog[weekMonday];
     const planId = (plan && plan.createdAt) || null;
-    const storedStands = stored && (stored.planCreatedAt ?? null) === planId;
-    if (!weekMonday || (storedStands && T.reviewedWeekFinal(weekMonday, todayISO))) return;
+    if (!weekMonday || T.coachDecisionStands(stored, planId, weekMonday, todayISO)) return;
     // Freeze only inside the digest's own window, and only after a settle
     // delay: the post-hydration activity and wellness fetches land on later
     // round-trips, and a verdict frozen from a half-loaded state would be
@@ -768,18 +772,25 @@ export function App({ storage, getToken, user }) {
     const t = setTimeout(() => {
       // strictly earlier weeks only: on a provisional re-freeze the log
       // already holds THIS week's entry, and feeding it back as prevWeeks[0]
-      // fails the repeat rule's adjacency check (2026-07-31)
+      // fails the repeat rule's adjacency check (gauntlet catch 2026-07-31)
       const prevWeeks = T.prevWeeksFor(coachLog, weekMonday);
       const decision = T.decideWeek({
         plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
         missedReasons, todayISO, weekMonday, prevWeeks,
         durabilityByDiscipline: durabilityFor(weekMonday),
       });
+      // A mid-week write wears its provisionality; the post-week write is
+      // the bare, final bundle coachDecisionStands recognises.
+      const bundle = T.reviewedWeekFinal(weekMonday, todayISO)
+        ? decision : { ...decision, provisional: true };
       // decideWeek is deterministic, so an unchanged recomputation must not
       // rewrite: the write bumps coachLog, which re-runs this effect, and
       // without this bail the provisional window would rewrite every 2s.
-      if (storedStands && T.reviewEqual(stored, decision)) return;
-      setCoachLog(storage.saveCoachDecision(weekMonday, decision));
+      // Compared bundle-to-bundle so the provisional stamp itself cannot
+      // defeat the bail (and so the finalizing write, which drops it,
+      // always goes through).
+      if (stored && (stored.planCreatedAt ?? null) === planId && T.reviewEqual(stored, bundle)) return;
+      setCoachLog(storage.saveCoachDecision(weekMonday, bundle));
     }, 2000);
     return () => clearTimeout(t);
     // fuelLog is a real dependency since the lowFuel veto-disarm joined
@@ -1241,7 +1252,10 @@ export function App({ storage, getToken, user }) {
     runTest: runFresh ? runTest : null,
   });
   // The open week's decision, computed live for Progress and labelled as in
-  // progress there; never stored (only closed weeks freeze).
+  // progress there; never stored by THIS computation. (From Sunday 17:00 the
+  // freeze effect above does hold a provisional bundle for the same week —
+  // stamped provisional, superseded by the post-week finalize — so "only
+  // closed weeks freeze" is true of final bundles only, 2026-07-31.)
   const coachNow = T.decideWeek({
     plan, log, moves, adjust, adjustLog, wellness: recs, activities: displayActivities,
     missedReasons, todayISO: T.iso(new Date()),

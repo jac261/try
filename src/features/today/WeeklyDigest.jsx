@@ -33,10 +33,13 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
   if (!d) return null;
   const dismiss = () => { storage.save('digestSeenWeek', { weekMonday, planCreatedAt: plan.createdAt || null }); setGone(true); };
   const fmtD = s => T.fmtDate(s, { month: 'short', day: 'numeric' });
-  // The coach's call for the reviewed week: quoted from the frozen store or
+  // The coach's call for the reviewed week: quoted from the store or
   // absent. Never recomputed here; a recompute presented as the original
   // call would be a lie on a card whose whole job is the honest record
-  // (design panel 2026-07-20).
+  // (design panel 2026-07-20). From Sunday 17:00 the stored bundle may
+  // still be PROVISIONAL — the freeze effect rewrites it as evidence lands
+  // until the post-week finalize — and the card says so below rather than
+  // presenting a moving verdict as settled (2026-07-31).
   const stored = coachLog && coachLog[weekMonday];
   // Only the CURRENT plan's frozen decision is quotable: one from a replaced
   // plan is a record about a different reality (re-verify catch 2026-07-20).
@@ -125,6 +128,11 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
             ))}
             {coach.progression && !review && (
               <div className="coach-ev"><span className="coach-sig">next up</span>{'when the ' + coach.progression.discipline + ' stays clean: ' + coach.progression.what}</div>
+            )}
+            {coach.provisional && (
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                Provisional: today still counts, and the final call comes once the week is over.
+              </div>
             )}
           </div>
         )}

@@ -142,6 +142,24 @@ describe('the weekly decision: spec scenarios', () => {
   });
 });
 
+describe('prevWeeksFor (the stored history a decision may read)', () => {
+  it('excludes the decided week itself and anything after it, newest first', () => {
+    // On a Sunday-evening provisional freeze the log already holds THIS
+    // week's entry; feeding it back as prevWeeks[0] would fail the repeat
+    // rule's adjacency check and wrongly deny progression.
+    const coachLog = {
+      '2026-07-06': { weekMonday: '2026-07-06' },
+      '2026-07-13': { weekMonday: '2026-07-13' },
+      '2026-07-20': { weekMonday: '2026-07-20' },
+      '2026-07-27': { weekMonday: '2026-07-27' }, // later than the decided week: clock skew or import
+    };
+    expect(prevWeeksFor(coachLog, '2026-07-20').map(d => d.weekMonday)).toEqual(['2026-07-13', '2026-07-06']);
+    expect(prevWeeksFor(coachLog, '2026-08-03').map(d => d.weekMonday)).toEqual(['2026-07-27', '2026-07-20', '2026-07-13', '2026-07-06']);
+    expect(prevWeeksFor({}, '2026-07-20')).toEqual([]);
+    expect(prevWeeksFor(null, '2026-07-20')).toEqual([]);
+  });
+});
+
 describe('tune-up races are judged as races, not workouts', () => {
   // A synthetic bRace slot, shaped like the plan builder's tune-up output.
   const tuneup = { id: 'bx', date: weekMonday, discipline: 'run', type: 'RACE', bRace: true, key: true, durationMin: 30 };
@@ -289,23 +307,6 @@ describe('tune-up races are judged as races, not workouts', () => {
     expect(d.overall.headline).toBe('Room to build soon, not yet');
     expect(d.overall.conflicting.some(c => /tune-up race has no result marked yet/.test(c))).toBe(true);
     expect(d.overall.conflicting.some(c => /not clean enough/.test(c))).toBe(false);
-  });
-});
-
-describe('prevWeeksFor (the stored history a decision may read)', () => {
-  it('excludes the decided week itself and anything after it, newest first', () => {
-    // On a Sunday-evening provisional freeze the log already holds THIS
-    // week's entry; feeding it back as prevWeeks[0] would fail the repeat
-    // rule's adjacency check and wrongly deny progression.
-    const coachLog = {
-      '2026-07-06': { weekMonday: '2026-07-06' },
-      '2026-07-13': { weekMonday: '2026-07-13' },
-      '2026-07-20': { weekMonday: '2026-07-20' },
-    };
-    expect(prevWeeksFor(coachLog, '2026-07-20').map(d => d.weekMonday)).toEqual(['2026-07-13', '2026-07-06']);
-    expect(prevWeeksFor(coachLog, '2026-07-27').map(d => d.weekMonday)).toEqual(['2026-07-20', '2026-07-13', '2026-07-06']);
-    expect(prevWeeksFor({}, '2026-07-20')).toEqual([]);
-    expect(prevWeeksFor(null, '2026-07-20')).toEqual([]);
   });
 });
 

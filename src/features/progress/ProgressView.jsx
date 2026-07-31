@@ -154,8 +154,10 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
     ftpWatts={plan.profile && plan.profile.ftp} todayISO={todayISO} />;
 
   /* The coach brain's per-discipline lines for the OPEN week, computed
-     live and labelled so: only closed weeks freeze (the digest quotes
-     those). Its OWN card since phase 3: it used to nest inside the
+     live and labelled so: only final bundles are quoted as history (the
+     digest quotes those; from Sunday 17:00 a PROVISIONAL bundle for this
+     same week exists in the store until the post-week finalize,
+     2026-07-31). Its OWN card since phase 3: it used to nest inside the
      weakest-link card, whose solo early-return silently hid the coach's
      whole weekly verdict on every solo run plan — orchestration must not
      die with a bar chart that has nothing to compare. On a plan it renders

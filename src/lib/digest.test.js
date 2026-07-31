@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reviewedWeekMonday, digestWindowOpen, reviewedWeekFinal, buildWeeklyDigest } from './digest.js';
+import { reviewedWeekMonday, digestWindowOpen, reviewedWeekFinal, coachDecisionStands, buildBlockReview, buildWeeklyDigest } from './digest.js';
 import { estimateTss } from './adapt.js';
 
 // 2026-07-06 is a Monday; 2026-07-12 the Sunday closing that week.
@@ -36,15 +36,60 @@ describe('reviewedWeekMonday (which week wraps)', () => {
   });
 });
 
-describe('reviewedWeekFinal (when a stored decision stops being provisional)', () => {
+describe('reviewedWeekFinal (when the reviewed week is truly over)', () => {
   it('the reviewed week is not final while it still contains today', () => {
     // Sunday evening: the week wraps for review, but a session ticked at
     // 21:00 must still be able to correct the verdict written at 17:05
     expect(reviewedWeekFinal(MON, SUN)).toBe(false);
   });
-  it('from the Monday after, the decision is frozen for good', () => {
+  it('from the Monday after, the week is history', () => {
     expect(reviewedWeekFinal(MON, NEXT_MON)).toBe(true);
     expect(reviewedWeekFinal(MON, '2026-07-15')).toBe(true); // Wednesday, digest window still open
+  });
+});
+
+describe('coachDecisionStands (quote it, or recompute it)', () => {
+  const final = { planCreatedAt: 'p1', overall: {} };
+  const provisional = { ...final, provisional: true };
+  it('a final same-plan bundle stands once the week is over', () => {
+    expect(coachDecisionStands(final, 'p1', MON, NEXT_MON)).toBe(true);
+  });
+  it('nothing stands while the reviewed week still contains today', () => {
+    // the Sunday-evening window: even a bundle without the stamp recomputes
+    expect(coachDecisionStands(final, 'p1', MON, SUN)).toBe(false);
+    expect(coachDecisionStands(provisional, 'p1', MON, SUN)).toBe(false);
+  });
+  it('a provisional bundle never stands: the post-week render finalizes it', () => {
+    // this is what lets a Sunday missed answer count — the finalize runs
+    // with todayISO outside the week, where the session is no longer
+    // 'upcoming' and the athlete's answer is visible
+    expect(coachDecisionStands(provisional, 'p1', MON, NEXT_MON)).toBe(false);
+  });
+  it('no bundle, or another plan\'s bundle, never stands', () => {
+    expect(coachDecisionStands(null, 'p1', MON, NEXT_MON)).toBe(false);
+    expect(coachDecisionStands(final, 'p2', MON, NEXT_MON)).toBe(false);
+    expect(coachDecisionStands({ ...final, planCreatedAt: undefined }, null, MON, NEXT_MON)).toBe(true); // legacy null-plan match
+  });
+});
+
+describe('the block review never closes on a provisional bundle', () => {
+  it('a provisional reviewed week returns no review; the finalized one may', () => {
+    // permanent taps (acknowledge, focus change) must not be earned by a
+    // tally that can still move tonight
+    const mk = over => ({
+      weekMonday: MON, planCreatedAt: null, phase: 'Maintain', tracker: false,
+      overall: { decision: 'hold' }, disciplines: {}, ...over,
+    });
+    const weeks = {
+      '2026-06-15': mk({ weekMonday: '2026-06-15' }),
+      '2026-06-22': mk({ weekMonday: '2026-06-22' }),
+      '2026-06-29': mk({ weekMonday: '2026-06-29' }),
+      [MON]: mk({ provisional: true }),
+    };
+    const args = { plan: { createdAt: null, weeks: [{}] }, coachLog: weeks, weekMonday: MON, focus: null, lastReviewedMonday: null };
+    expect(buildBlockReview(args)).toBe(null);
+    const finalized = { ...weeks, [MON]: mk({}) };
+    expect(buildBlockReview({ ...args, coachLog: finalized })).toBeTruthy();
   });
 });
 
