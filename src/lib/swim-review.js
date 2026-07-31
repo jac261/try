@@ -120,8 +120,11 @@ export function matchSwimIntervals({ workout, intervals, paces }) {
 const mean = xs => xs.reduce((t, x) => t + x, 0) / xs.length;
 const pct1 = x => Math.round(x * 10) / 10;
 
-/* §1/§3/§4: the review itself. feel is the athlete's own word for the
-   session ('easy' | 'right' | 'hard'); evidence, when provided, is
+/* §1/§3/§4: the review itself. feel is the app's log feel for the session
+   ('easy' | 'right' | 'hard') — the athlete's own tap, or on auto-logged
+   sessions the band derived from their recorded RPE (autolog feelFromRpe);
+   the log carries no provenance yet, so this function cannot tell the two
+   apart. evidence, when provided, is
    swimReviewEvidence over PRIOR sessions — without it this function never
    answers retest-css, because one swim is not a pattern (§5). */
 export function swimReview({ workout, activity, intervals, paces, feel, evidence }) {

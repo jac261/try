@@ -2,9 +2,10 @@ import { useState } from 'react';
 import * as T from '@/lib';
 import { Icon } from '@/components/Icon.jsx';
 import { useSheetFocus } from '@/utils/useSheetFocus.js';
+import { tap } from '@/utils/a11y.js';
 const D = T.DISCIPLINES;
 
-export function WellnessEditor({ onClose, onSave, existing, lastWeightKg }) {
+export function WellnessEditor({ onClose, onSave, existing, lastWeightKg, onOpenSettings }) {
   // Prefilled from today's existing record, and saved as a MERGE onto it:
   // the store and the backend both replace whole rows per date, so a bare
   // object here silently wiped every synced field the sheet does not show
@@ -44,7 +45,12 @@ export function WellnessEditor({ onClose, onSave, existing, lastWeightKg }) {
             && !confirm('That weight is quite a jump from your last one (' + lastWeightKg + ' kg). Save it anyway?')) return;
           onSave({ ...e0, date: T.iso(new Date()), hrv: num(f.hrv), sleepH: num(f.sleepH), rhr: num(f.rhr), tsb: num(f.tsb), weightKg: w });
         }}>Save readiness</button>
-        <div className="fithint">Connect your watch data in Settings and this fills itself each morning. Until then, pop in this morning's numbers.</div>
+        {/* Deep link (phase 4): the hint names Settings, so where a handler
+            is wired the words become the way there. Nullable, the house
+            capability idiom: unwired call sites keep the plain sentence. */}
+        <div className="fithint">{onOpenSettings
+          ? <>Connect your <span {...tap(() => { onClose(); onOpenSettings('connections'); })} style={{ textDecoration: 'underline', cursor: 'pointer' }}>watch data in Settings</span> and this fills itself each morning. Until then, pop in this morning's numbers.</>
+          : <>Connect your watch data in Settings and this fills itself each morning. Until then, pop in this morning's numbers.</>}</div>
       </div>
     </div>
   );
