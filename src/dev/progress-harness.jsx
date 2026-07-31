@@ -66,9 +66,13 @@ const coach = {
   progression: null,
 };
 const MODES = {
-  tri: { plan: generatePlan(profile), coach },
+  // durability rides on tri too: it is the only mode with all three tabs,
+  // so it is the one that can show the per-discipline split at all
+  tri: { plan: generatePlan(profile), coach, durability: storyDurability },
   solo: { plan: generatePlan({ ...profile, raceType: 'runhalf' }), coach },
-  tracker: { plan: buildTrackerPlan(generatePlan(profile), '2026-07-27T10:00:00.000Z'), coach: null },
+  // tracker has no tabs at all, so it is the mode that exercises the
+  // Overview fallback: all three cards must appear there or they vanish
+  tracker: { plan: buildTrackerPlan(generatePlan(profile), '2026-07-27T10:00:00.000Z'), coach: null, durability: storyDurability },
   stories: {
     plan: generatePlan(profile), coach,
     activities: storyActs, durability: storyDurability,
