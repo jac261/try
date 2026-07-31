@@ -103,9 +103,11 @@ so nothing is built client-side: a plan that generates correctly and then
 fails to save is worse than no plan. `runpass9.test.js` pins their absence
 with the reason.
 
-**`runmaintenance` is in flight** as of 2026-07-30: JackGilham/try-backend#24
-adds the catalog entry, so the client plan shape becomes buildable the moment
-it merges. Duathlon and aquathlon are deliberately NOT in that PR — they need
+**`runmaintenance` merged** on 2026-07-31 in JackGilham/try-backend#24, which
+adds the catalog entry. The client plan shape becomes buildable once that
+release ships rather than at merge: the same PR carries the `run_review`
+migration pair, and the API cannot be promoted ahead of it.
+Duathlon and aquathlon are deliberately NOT in that PR — they need
 product design first, because a second run on bike-fatigued legs is not an
 ordinary run and the load guardrails model one run per session.
 
