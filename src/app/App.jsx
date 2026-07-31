@@ -762,7 +762,11 @@ export function App({ storage, getToken, user }) {
     // CARD and the first write, never the completion of an existing bundle.
     // Without this, a Sunday-evening-only user strands every week
     // provisional forever — the block review never fires and the repeat
-    // rule reads Sunday half-states (re-verify catch 2026-07-31).
+    // rule reads Sunday half-states (re-verify catch 2026-07-31). Named
+    // cost: a months-late finalize recomputes against today's bounded
+    // wellness and activity windows, so a very old week can finalize with
+    // thinner evidence than its provisional bundle held; log and answer
+    // data persist, so clean and the repeat rule stay honest either way.
     const staleProvisional = Object.keys(coachLog).filter(k => {
       const b = coachLog[k];
       return b && b.provisional && (b.planCreatedAt ?? null) === planId
@@ -792,10 +796,17 @@ export function App({ storage, getToken, user }) {
         durabilityByDiscipline: durabilityFor(wk),
       });
       // Finalize sweep, oldest first so a newer week's repeat rule reads
-      // already-finalized history within this same pass.
+      // already-finalized history within this same pass. The state map is
+      // accumulated HERE rather than taken from saveCoachDecision's return:
+      // that return re-reads localStorage, and a swallowed setItem failure
+      // (quota, private mode) would drop earlier sweep writes from it and
+      // oscillate this effect forever; state must carry every finalize this
+      // session even when persistence cannot (re-verify catch 2026-07-31).
       let map = coachLog;
       staleProvisional.forEach(wk => {
-        map = storage.saveCoachDecision(wk, decideFor(map, wk));
+        const fin = decideFor(map, wk);
+        storage.saveCoachDecision(wk, fin);
+        map = { ...map, [wk]: fin };
       });
       // The current reviewed week's own write: Sunday-evening provisional,
       // or the first freeze of a closed week, inside the window only.
@@ -813,7 +824,8 @@ export function App({ storage, getToken, user }) {
         const bundle = T.reviewedWeekFinal(weekMonday, todayISO)
           ? decision : { ...decision, provisional: true };
         if (!(st && (st.planCreatedAt ?? null) === planId && T.reviewEqual(st, bundle))) {
-          map = storage.saveCoachDecision(weekMonday, bundle);
+          storage.saveCoachDecision(weekMonday, bundle);
+          map = { ...map, [weekMonday]: bundle }; // same rule as the sweep: state never re-read from storage
         }
       }
       if (map !== coachLog) setCoachLog(map);

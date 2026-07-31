@@ -31,13 +31,18 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
   if (gone || seen === weekMonday || !T.digestWindowOpen(weekMonday, todayISO)) return null;
   const d = T.buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday });
   if (!d) return null;
-  // Dismissing a PROVISIONAL card hides it for the session only: the
-  // permanent stamp would bury the corrected final verdict — the only
-  // surface that ever shows it — behind a wrap the athlete read while it
-  // could still move (re-verify catch 2026-07-31).
+  // The permanent dismissed stamp is earned only by a SETTLED verdict: the
+  // week over and the stored bundle not provisional. Gated on the week as
+  // well as the stamp because the card can render before the freeze has
+  // written anything at all (Sunday 17:00 to the first settled load), and
+  // a dismissal there must not bury the finalized verdict — the only
+  // surface that ever shows it (re-verify catches 2026-07-31). An
+  // unsettled dismissal hides the card until the athlete next returns to
+  // the Today view.
   const dismiss = () => {
-    const provisional = coachLog && coachLog[weekMonday] && coachLog[weekMonday].provisional;
-    if (!provisional) storage.save('digestSeenWeek', { weekMonday, planCreatedAt: plan.createdAt || null });
+    const b = coachLog && coachLog[weekMonday];
+    const settled = T.reviewedWeekFinal(weekMonday, todayISO) && !(b && b.provisional);
+    if (settled) storage.save('digestSeenWeek', { weekMonday, planCreatedAt: plan.createdAt || null });
     setGone(true);
   };
   const fmtD = s => T.fmtDate(s, { month: 'short', day: 'numeric' });
