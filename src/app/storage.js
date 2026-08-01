@@ -136,6 +136,23 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'durability', JSON.stringify(capped)); } catch (e) {}
       return capped;
     },
+    /* The shape label's own history, so it can show what it changed FROM.
+       Append-on-change only: a label that has not moved writes nothing, so
+       the list is a record of transitions rather than of renders. Spans
+       plans and stays out of clear(), like durability and the fuel diary —
+       a history that reset with the plan would defeat the point, which is
+       that the athlete watches the reading move rather than receiving it as
+       a fixed fact about themselves. */
+    loadShapeLabels() { try { return JSON.parse(localStorage.getItem(ns + 'shapeLabels') || '[]'); } catch (e) { return []; } },
+    saveShapeLabel(text, at) {
+      const list = this.loadShapeLabels();
+      const last = list.length ? list[list.length - 1] : null;
+      if (!text || (last && last.text === text)) return list;   // nothing moved
+      list.push({ text, at });
+      const capped = list.slice(-10);
+      try { localStorage.setItem(ns + 'shapeLabels', JSON.stringify(capped)); } catch (e) {}
+      return capped;
+    },
     // One-tap fuel answers for long sessions, keyed by ACTIVITY id only:
     // activity ids are the sync provider's and stable, so this store, like
     // durability and the calibration diary, spans plans and must NOT join

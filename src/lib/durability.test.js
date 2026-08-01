@@ -585,3 +585,46 @@ describe('durabilityCandidates: only the long ones, per discipline', () => {
     expect(call({ plan: { race: 'tracker' }, activities, log: {}, have: new Set(['r2']) })).toEqual([]);
   });
 });
+
+describe('the shape-label history store', () => {
+  it('records transitions, not renders', () => {
+    const st = storageForUser('shape-label-test-' + Math.random().toString(36).slice(2));
+    expect(st.loadShapeLabels()).toEqual([]);
+
+    st.saveShapeLabel('This curve is even across the range', '2026-06-01');
+    // the same reading again writes nothing: the list is a record of MOVES,
+    // so a stable rider never accumulates entries however often they look
+    st.saveShapeLabel('This curve is even across the range', '2026-06-08');
+    expect(st.loadShapeLabels().length).toBe(1);
+
+    st.saveShapeLabel('This curve leans toward vo2', '2026-07-01');
+    const list = st.loadShapeLabels();
+    expect(list.length).toBe(2);
+    expect(list[1]).toEqual({ text: 'This curve leans toward vo2', at: '2026-07-01' });
+  });
+
+  it('ignores an empty label rather than storing a blank transition', () => {
+    const st = storageForUser('shape-label-empty-' + Math.random().toString(36).slice(2));
+    st.saveShapeLabel(null, '2026-06-01');
+    st.saveShapeLabel('', '2026-06-02');
+    expect(st.loadShapeLabels()).toEqual([]);
+  });
+
+  it('caps, keeping the most recent transitions', () => {
+    const st = storageForUser('shape-label-cap-' + Math.random().toString(36).slice(2));
+    for (let i = 0; i < 14; i++) st.saveShapeLabel('reading ' + i, '2026-06-' + String(i + 1).padStart(2, '0'));
+    const list = st.loadShapeLabels();
+    expect(list.length).toBe(10);
+    expect(list[list.length - 1].text).toBe('reading 13');
+  });
+
+  it('survives clear(), because a history that reset with the plan defeats its purpose', () => {
+    /* The point of the history is that the athlete watches the reading move.
+       A label that forgot every time a plan changed would read as a fixed
+       fact about them again, which is the failure the rules exist to avoid. */
+    const st = storageForUser('shape-label-clear-' + Math.random().toString(36).slice(2));
+    st.saveShapeLabel('This curve leans toward sprint', '2026-06-01');
+    st.clear();
+    expect(st.loadShapeLabels().length).toBe(1);
+  });
+});
