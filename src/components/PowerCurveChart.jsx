@@ -129,8 +129,13 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
           above it is a relative strength and every gap below a relative
           limiter, which is the whole read the profile puts into words. */}
       {shapePts.length > 1 && (
-        <path d={path(shapePts)} fill="none" stroke="var(--line)" strokeWidth="1.5"
-          strokeDasharray="4 3" strokeLinejoin="round" />
+        /* var(--muted), not var(--line): the gridline colour is right for a
+           gridline and disappears against the card for a line carrying
+           meaning (measured on device, rgb(42,49,64) on this background).
+           Dashed and full strength distinguishes it from the previous curve,
+           which is solid and half strength. */
+        <path d={path(shapePts)} fill="none" stroke="var(--muted)" strokeWidth="1.5"
+          strokeDasharray="4 3" strokeLinejoin="round" opacity="0.85" />
       )}
 
       {/* the previous curve, behind, only where it may be compared */}
@@ -193,7 +198,7 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
       {shapePts.length > 1 && (
         <g>
           <line x1={W - padR - 62} y1={padT - 6} x2={W - padR - 52} y2={padT - 6}
-            stroke="var(--line)" strokeWidth="1.5" strokeDasharray="4 3" />
+            stroke="var(--muted)" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.85" />
           <text x={W - padR - 49} y={padT - 3.5} fontSize="7.5" fill="var(--muted)">expected shape</text>
         </g>
       )}

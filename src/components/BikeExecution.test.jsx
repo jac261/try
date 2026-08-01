@@ -177,8 +177,14 @@ describe('PowerCurveCard: gated now, correct when it opens', () => {
        gained a second legitimate line (the expected-shape reference), and a
        proxy that fails on an unrelated change was never testing what it
        claimed to. */
-    expect(html).not.toContain('stroke="var(--muted)"');   // the previous curve's line
+    /* The previous curve's signature is solid muted at half strength. Not
+       the stroke alone: the expected-shape reference shares var(--muted),
+       and distinguishing them by colour would be a test asserting something
+       the chart does not actually rely on. Opacity 0.5 belongs to the
+       previous curve and nothing else. */
+    expect(html).not.toMatch(/<path[^>]*opacity="0\.5"/);      // the previous curve's line
     expect(html).toContain('stroke="var(--bike, var(--run))"'); // the rider's own, still drawn
+    expect(html).toContain('stroke-dasharray="4 3"');           // the reference, unaffected
     // and the same caveat is repeated for the profile, which is measured
     // against a threshold set on the old meter
     expect(html).toMatch(/previous power meter/);

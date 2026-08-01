@@ -53,12 +53,23 @@ const storyDecisions = [{
   headline: 'Retarget your FTP to the tested number', why: 'accepted from the sheet', confidence: 'high',
 }];
 const storyRunLoad = { acute7d: 150, baselineWeekly: 140, rampPct: 0.07 };
-// a populated curve so the Bike tab and its no-tab Overview fallback both show
+/* Two curves, because one of them cannot show the thing the chart is for.
+   RATIO is the shape table itself, so that rider sits exactly on the expected
+   line: the right fixture for proving the two coincide, and useless for
+   seeing a shape. REAL is a real 365-day curve (Jon's, via intervals.icu),
+   which diverges. The 3, 12 and 40 minute bests are interpolated because the
+   intervals summary endpoint does not carry them; they are marked medium
+   quality so nothing reads them as measured bests. */
 const RATIO = { 5: 4.0, 15: 3.0, 30: 2.4, 60: 1.8, 180: 1.38, 300: 1.25, 720: 1.10, 1200: 1 / 0.95, 2400: 1.0, 3600: 0.97 };
-const curve = powerCurve(CURVE_DURATIONS.map(d => ({
-  durationSec: d, watts: Math.round(250 * RATIO[d]),
-  date: '2026-07-01', source: 'Assioma', bike: 'road', indoor: false, quality: 'high',
+const REAL = { 5: 682, 15: 617, 30: 483, 60: 372, 180: 300, 300: 265, 720: 218, 1200: 201, 2400: 188, 3600: 182 };
+const INTERPOLATED = new Set([180, 720, 2400]);
+const mkCurve = (watts, q = () => 'high') => powerCurve(CURVE_DURATIONS.map(d => ({
+  durationSec: d, watts: watts(d),
+  date: '2026-07-01', source: 'Assioma', bike: 'road', indoor: false, quality: q(d),
 })));
+const curve = mkCurve(d => Math.round(250 * RATIO[d]));
+const withFtp = (plan, ftp) => ({ ...plan, profile: { ...plan.profile, ftp } });
+const shapedCurve = mkCurve(d => REAL[d], d => (INTERPOLATED.has(d) ? 'medium' : 'high'));
 const coach = {
   weekMonday: '2026-07-27', ruleVersion: 2, tracker: false,
   overall: { decision: 'hold', headline: 'Hold steady. This workload is doing its job', evidence: [{ signal: 'the week', reading: 'Two of five sessions in so far.' }], conflicting: [] },
@@ -69,6 +80,13 @@ const MODES = {
   // durability rides on tri too: it is the only mode with all three tabs,
   // so it is the one that can show the per-discipline split at all
   tri: { plan: generatePlan(profile), coach, durability: storyDurability },
+  // a real rider's curve, so the expected-shape line has something to diverge
+  // from and the profile reads something other than "even"
+  /* FTP 191 is what this curve's own 20-minute best implies (0.95 x 201), so
+     the shape reads against a threshold the rides support rather than a
+     stale one. The profile is patched rather than regenerated: an ftp change
+     would move plan generation too, and this mode exists to look at a chart. */
+  shape: { plan: withFtp(generatePlan(profile), 191), coach, durability: storyDurability, powerCurve: shapedCurve },
   solo: { plan: generatePlan({ ...profile, raceType: 'runhalf' }), coach },
   // tracker has no tabs at all, so it is the mode that exercises the
   // Overview fallback: all three cards must appear there or they vanish
@@ -94,7 +112,7 @@ function Harness() {
       <ProgressView key={mode} plan={m.plan} log={{}} moves={{}} activities={m.activities || runs} coach={m.coach}
         durability={m.durability || null} fuelLog={{}} wellness={[]} runLoad={m.runLoad || null} recovery={null}
         onSupport={() => {}} onWhatIf={null} retest={null} ftpRetest={null}
-        powerCurve={curve} previousPowerCurve={null} positionLog={{}} decisionLog={m.decisionLog || []} />
+        powerCurve={m.powerCurve || curve} previousPowerCurve={m.previousPowerCurve || null} positionLog={{}} decisionLog={m.decisionLog || []} />
     </div>
   );
 }
