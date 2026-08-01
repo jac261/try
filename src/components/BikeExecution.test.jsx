@@ -152,9 +152,13 @@ describe('PowerCurveCard: gated now, correct when it opens', () => {
     expect(html).toContain('20 min');
     expect(html).toContain('Assioma');          // §7: source metadata is visible
     expect(html).toContain('% of threshold');
-    expect(html).toContain('The shape of your riding');
-    // §4: it says out loud that it changes nothing
-    expect(html).toMatch(/changes your plan on its own/);
+    /* The rider profile moved to the Power shape card (2026-08-01): this
+       card is the measurement, that one is the reading of it. Its
+       assertions moved with it to BikeDashboard.test.jsx rather than being
+       dropped. What this card must still carry is the expected-shape
+       reference, which is the measurement's own context. */
+    expect(html).not.toContain('The shape of your riding');
+    expect(html).toContain('expected shape');
   });
 
   it('leads with the device change rather than with an apparent gain', () => {
@@ -170,12 +174,27 @@ describe('PowerCurveCard: gated now, correct when it opens', () => {
        (Jon, 2026-07-30) and the watts live on the chart's axis. The intent
        they protected — that no per-duration gain is claimed off a device
        change — now holds by a stronger mechanism: the previous curve's line
-       is WITHHELD, so the chart draws one path rather than two. Counting
-       paths asserts that directly instead of counting a phrase. */
-    expect((html.match(/<path/g) || []).length).toBe(1);
+       is WITHHELD.
+
+       Asserted on the previous curve's OWN stroke rather than by counting
+       every path. The count was a proxy that broke the moment the chart
+       gained a second legitimate line (the expected-shape reference), and a
+       proxy that fails on an unrelated change was never testing what it
+       claimed to. */
+    /* The previous curve's signature is solid muted at half strength. Not
+       the stroke alone: the expected-shape reference shares var(--muted),
+       and distinguishing them by colour would be a test asserting something
+       the chart does not actually rely on. Opacity 0.5 belongs to the
+       previous curve and nothing else. */
+    expect(html).not.toMatch(/<path[^>]*opacity="0\.5"/);      // the previous curve's line
+    expect(html).toContain('stroke="var(--bike, var(--run))"'); // the rider's own, still drawn
+    expect(html).toContain('stroke-dasharray="4 3"');           // the reference, unaffected
     // and the same caveat is repeated for the profile, which is measured
     // against a threshold set on the old meter
-    expect(html).toMatch(/previous power meter/);
+    /* The profile's own device caveat moved with the profile; what stays
+       here is the CURVE's, which is a different sentence about a different
+       thing (the points, not the shape read off them). */
+    expect(html).toMatch(/different power meter/);
   });
 
   it('never renders a phenotype label', () => {

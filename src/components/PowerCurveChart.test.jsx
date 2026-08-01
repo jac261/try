@@ -191,3 +191,39 @@ describe('the card puts the data on the chart, not in rows', () => {
     expect(renderToString(<PowerCurveCard curve={null} ftpWatts={260} todayISO={TODAY} />)).toBe('');
   });
 });
+
+describe('the expected-shape reference line', () => {
+  /* Parse every path's y coordinates so the assertions are about where the
+     line actually lands, not about whether a string appears. */
+  /* The minus sign in the y group is the whole point: a point drawn ABOVE
+     the viewBox has a negative y, and a pattern that cannot match one would
+     quietly exclude exactly the failure this test exists to catch. (It did,
+     on the first draft: the test passed with the axis bug still in.) */
+  const ys = html => (html.match(/ d="([^"]+)"/g) || [])
+    .flatMap(d => [...d.matchAll(/[ML]\s*[-\d.]+\s+(-?[\d.]+)/g)].map(m => parseFloat(m[1])));
+
+  it('is drawn, dashed, when a threshold is known', () => {
+    const h = render({ curve: FULL, ftpWatts: 250 });
+    expect(h).toContain('stroke-dasharray="4 3"');
+    expect(h).toContain('expected shape');
+  });
+
+  it('is absent without a threshold, rather than guessed', () => {
+    const h = render({ curve: FULL });
+    expect(h).not.toContain('stroke-dasharray="4 3"');
+    expect(h).not.toContain('expected shape');
+  });
+
+  it('STAYS INSIDE THE CHART for a rider well under shape at the short end', () => {
+    /* The trap: the y axis was sized from the rider's own points plus FTP, so
+       a rider whose sprint is far below their threshold's implied shape would
+       have the reference line drawn off the top. A weak sprint with a strong
+       hour is exactly that rider. */
+    const weakSprint = powerCurve(CURVE_DURATIONS.map(d =>
+      pt(d, d <= 60 ? 300 : Math.round(250 * (d >= 2400 ? 0.97 : 1.1)))));
+    const h = render({ curve: weakSprint, ftpWatts: 250 });
+    const top = Math.min(...ys(h));
+    expect(ys(h).length).toBeGreaterThan(0);
+    expect(top).toBeGreaterThanOrEqual(0);   // nothing above the viewBox
+  });
+});

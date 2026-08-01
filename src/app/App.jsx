@@ -562,6 +562,7 @@ export function App({ storage, getToken, user }) {
      hardware-versus-fitness protection is unreachable however good the data
      gets. Kept in the same local store the fuel and position answers use. */
   const [prevPowerCurve] = useState(() => storage.loadPowerCurve());
+  const [shapeLabelLog, setShapeLabelLog] = useState(() => storage.loadShapeLabels());
   /* Fetch the curve once the athlete is hydrated. Its own effect, placed
      BELOW the state it writes: folding it into the activities round trip put
      a closure over setPowerCurveRaw ninety lines above the declaration, which
@@ -587,6 +588,23 @@ export function App({ storage, getToken, user }) {
     const cur = T.powerCurve(powerCurveRaw);
     if (cur && JSON.stringify(cur) !== JSON.stringify(prevPowerCurve)) storage.savePowerCurve(cur);
   }, [powerCurveRaw, prevPowerCurve, storage]);
+
+  /* Stamp the shape label when it MOVES, so the card can say what it changed
+     from. In an effect rather than in the render that shows it: a store write
+     during render would make the label's own history depend on how often the
+     Progress tab was opened. The store itself refuses a repeat, so this is
+     idempotent and a rider whose shape is stable writes nothing, ever. */
+  useEffect(() => {
+    if (!hydrated || !plan) return;
+    const anchor = T.bikePowerAnchor((plan.profile) || {});
+    if (!anchor || anchor.kind !== 'real') return;
+    const label = T.shapeLabel(T.riderProfile({ curve: T.powerCurve(powerCurveRaw), ftpWatts: anchor.ftpWatts }),
+      { ftpWatts: anchor.ftpWatts, history: shapeLabelLog });
+    if (!label) return;
+    const last = shapeLabelLog.length ? shapeLabelLog[shapeLabelLog.length - 1] : null;
+    if (last && last.text === label.text) return;
+    setShapeLabelLog(storage.saveShapeLabel(label.text, T.iso(new Date())));
+  }, [hydrated, plan, powerCurveRaw, shapeLabelLog, storage]);
   /* The under-built warning: only when anchors exist and the gap is material.
      Memoized because it generates the plan twice to compare — and declared UP
      HERE with every other hook, above the no-plan early return. The first
@@ -1631,7 +1649,7 @@ export function App({ storage, getToken, user }) {
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} runFail={runFail} onFixRun={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} recovery={recovery} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} onDecision={journalDecision} fuelLog={fuelLog} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} />}
       {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
-      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} decisionLog={decisionLog} onOpenSettings={openSettings} />}
+      {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} shapeLabelLog={shapeLabelLog} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} decisionLog={decisionLog} onOpenSettings={openSettings} />}
       {view === 'settings' && <SettingsView plan={plan} focus={settingsFocus} onFocusDone={() => setSettingsFocus(null)}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
           && plan.profile.excludedDiscipline !== 'swim' ? () => setEditTechnique(true) : null}

@@ -19,7 +19,7 @@
  * applied. Nothing here writes to a plan, and the one function that produces
  * training suggestions returns text for a human to accept or ignore.
  */
-import { CURVE_LABELS, POWER_CURVE_RULES, QUALITY_ORDER, FTP_FROM_20MIN } from './bike-power-curve.js';
+import { CURVE_DURATIONS, CURVE_LABELS, POWER_CURVE_RULES, QUALITY_ORDER, FTP_FROM_20MIN } from './bike-power-curve.js';
 
 /* What a rider whose curve is unremarkable relative to their OWN threshold
    holds at each duration, as a fraction of FTP. These are shape references,
@@ -40,13 +40,28 @@ const SHAPE = {
   3600: 0.97,
 };
 
+/* The same reference as a curve, so the chart can draw it beside the rider's
+   own. Exported instead of SHAPE itself: the table is a model detail, and a
+   caller that reaches into it can start treating a shape reference as a
+   target, which is exactly what these numbers are not. */
+export function expectedShapeCurve(ftpWatts) {
+  if (!ftpWatts) return [];
+  return CURVE_DURATIONS
+    .filter(d => SHAPE[d] != null)
+    .map(d => ({ durationSec: d, watts: Math.round(SHAPE[d] * ftpWatts) }));
+}
+
 /* §3's five categories, each reading the durations that actually train it. */
+/* `short` is for places where the full label does not fit or does not read:
+   the spider's axis ring, where "Long-duration durability" ran off both
+   edges of the chart, and the shape label, where the sentence is about a
+   curve rather than a capability being formally named. */
 export const CAPABILITIES = {
-  sprint: { label: 'Sprint strength', durations: [5, 15], why: 'what you can produce in a few seconds' },
-  anaerobic: { label: 'Anaerobic capacity', durations: [30, 60], why: 'how much you can spend above threshold before it costs you' },
-  vo2: { label: 'VO2 power', durations: [180, 300], why: 'the ceiling your hardest intervals work against' },
-  threshold: { label: 'Threshold strength', durations: [720, 1200], why: 'the effort you can hold when it stops being fun' },
-  durability: { label: 'Long-duration durability', durations: [2400, 3600], why: 'whether the number still holds when the ride is long' },
+  sprint: { label: 'Sprint strength', short: 'Sprint', durations: [5, 15], why: 'what you can produce in a few seconds' },
+  anaerobic: { label: 'Anaerobic capacity', short: 'Anaerobic', durations: [30, 60], why: 'how much you can spend above threshold before it costs you' },
+  vo2: { label: 'VO2 power', short: 'VO2', durations: [180, 300], why: 'the ceiling your hardest intervals work against' },
+  threshold: { label: 'Threshold strength', short: 'Threshold', durations: [720, 1200], why: 'the effort you can hold when it stops being fun' },
+  durability: { label: 'Long-duration durability', short: 'Endurance', durations: [2400, 3600], why: 'whether the number still holds when the ride is long' },
 };
 
 export const PROFILE_RULES = {
@@ -95,7 +110,12 @@ export function riderProfile({ curve, ftpWatts }) {
       key,
       label: cap.label,
       why: cap.why,
-      // relative to the rider's own average, so the FTP level cancels
+      /* Relative to the rider's own average, so the FTP's OFFSET cancels.
+         Its SCALE does not: substituting k x ftp multiplies every score by
+         1/k, so a stale high threshold flattens the shape toward even and a
+         low one exaggerates it. Ordering is preserved either way, which is
+         why the shape survives a wrong threshold and the magnitudes do not.
+         This is why shapeLabel carries the threshold it used. */
       pct: Math.round((raw[key].mean - level) * 10) / 10,
       durations: have,
       // a capability read from one duration is a weaker claim than one read
@@ -132,6 +152,104 @@ export function riderProfile({ curve, ftpWatts }) {
   };
 }
 
+/* §3 REVISITED (Jon, 2026-08-01). Phase 7 shipped five scores and refused a
+ * label, on the argument that "an athlete told they are a diesel stops
+ * sprinting, and the label makes itself true". That reasoning is about a
+ * particular KIND of label, and this is the other kind.
+ *
+ * The eight rules below are what separate them, and each one has a test:
+ *
+ *  1. The subject is the CURVE, never the rider. A state description does not
+ *     become an identity the way "you are a sprinter" does.
+ *  2. It carries its own coverage, so it never reads as more than it saw.
+ *  3. It never renders without the five scores beside it (enforced at the
+ *     render site, asserted here by the card's test).
+ *  4. It states the margin that would change it, so it arrives with its exit.
+ *  5. It says what it changed from, so the athlete watches it move.
+ *  6. It returns null below the coverage floor.
+ *  7. Nothing keys on it. No plan write, no coach input, no prescription.
+ *  8. It names thin evidence rather than hiding it.
+ *
+ * The vocabulary is deliberately shape-descriptive and never a race
+ * archetype. A capability here is measured against the rider's OWN
+ * threshold, so "sprinter" would import a competitive meaning the data
+ * cannot support: a 180 W rider with a relatively good sprint is not a
+ * sprinter in any race. Those archetypes are also the stickiest words
+ * available, which is the other half of the reason.
+ *
+ * ftpUsed rides along because the normalisation removes the FTP OFFSET but
+ * not its SCALE: substituting k*ftp multiplies every score by 1/k, so a
+ * stale high threshold flattens the shape toward even and a low one
+ * exaggerates it. A label without its threshold is not reproducible.
+ */
+export const LABEL_RULES = {
+  minCovered: 4,          // of five capabilities, before anything is named
+};
+
+/* Lowercased for mid-sentence use, except where the short name is an
+   acronym: "leans toward vo2" reads like a typo. */
+export function capabilityShort(key) {
+  const short = CAPABILITIES[key] ? CAPABILITIES[key].short : key;
+  return /\d/.test(short) ? short : short.toLowerCase();
+}
+const capShort = capabilityShort;
+
+export function shapeLabel(profile, opts = {}) {
+  if (!profile || !profile.scores) return null;
+  const { ftpWatts = null, history = [] } = opts;
+  if (profile.covered < LABEL_RULES.minCovered) return null;   // rule 6
+
+  const strong = profile.ranked.filter(s => s.pct >= PROFILE_RULES.strongPct);
+  const weak = profile.ranked.filter(s => s.pct <= PROFILE_RULES.limiterPct);
+
+  /* The decider is what the sentence is ABOUT, and rule 4's margin is that
+     capability's distance from the band it just cleared. An even curve has
+     no decider, so its margin is the nearest approach from either side. */
+  let text, decider = null, margin = null;
+  if (strong.length) {
+    decider = strong[0];
+    text = strong.length > 1
+      ? 'This curve leans toward ' + strong.slice(0, 2).map(s => capShort(s.key)).join(' and ')
+      : 'This curve leans toward ' + capShort(decider.key);
+    margin = Math.round((decider.pct - PROFILE_RULES.strongPct) * 10) / 10;
+  } else if (weak.length) {
+    decider = weak[weak.length - 1];
+    text = 'This curve is held back at ' + capShort(decider.key);
+    margin = Math.round((PROFILE_RULES.limiterPct - decider.pct) * 10) / 10;
+  } else {
+    text = 'This curve is even across the range';
+    const nearest = profile.ranked.reduce((best, s) => {
+      const d = Math.min(PROFILE_RULES.strongPct - s.pct, s.pct - PROFILE_RULES.limiterPct);
+      return best && best.d <= d ? best : { s, d };
+    }, null);
+    if (nearest) { decider = nearest.s; margin = Math.round(nearest.d * 10) / 10; }
+  }
+
+  /* Rule 5. history is append-on-change, oldest first. If the newest entry
+     matches, it records when this reading began and the one before it is
+     what it replaced. If it does not match, the label has just moved and the
+     newest entry IS what it moved from; the caller stamps the new one. */
+  const last = history.length ? history[history.length - 1] : null;
+  const changedFrom = !last ? null : (last.text === text
+    ? (history.length > 1 ? history[history.length - 2].text : null)
+    : last.text);
+  const changedOn = last && last.text === text ? last.at : null;
+
+  return {
+    text,
+    decider: decider ? decider.key : null,
+    // rule 8: thin evidence is named, not hidden, and never silently averaged
+    // in with a capability read from both its durations
+    confidence: decider ? decider.confidence : null,
+    marginToChange: margin,
+    covered: profile.covered,
+    capabilities: profile.capabilities,
+    ftpUsed: ftpWatts,
+    changedFrom,
+    changedOn,
+  };
+}
+
 function profileText(ranked, covered, total) {
   const strong = ranked.filter(s => s.pct >= PROFILE_RULES.strongPct);
   const weak = ranked.filter(s => s.pct <= PROFILE_RULES.limiterPct);
@@ -142,10 +260,15 @@ function profileText(ranked, covered, total) {
       : 'Nothing stands out in the part of your range you have bests for, but ' + (total - covered)
         + ' of the ' + total + ' areas have no recent best to read, so this is a partial picture.');
   } else {
-    if (strong.length) bits.push('Relative to your own threshold you are strongest at '
-      + strong.map(s => s.label.toLowerCase()).join(' and ') + '.');
-    if (weak.length) bits.push('There is more room at ' + weak.map(s => s.label.toLowerCase()).join(' and ')
-      + ' than elsewhere in your range.');
+    /* The subject is the CURVE here too (2026-08-01). "You are strongest at
+       vo2 power" sat directly above a label reading "this curve leans toward
+       VO2", which is two voices for one fact, and the second-person one is
+       the sticky formulation the label rules exist to avoid. Also fixes the
+       acronym: the old copy lowercased the whole label and produced "vo2". */
+    if (strong.length) bits.push('Against your own threshold this curve is strongest at '
+      + strong.map(s => capabilityShort(s.key)).join(' and ') + '.');
+    if (weak.length) bits.push('There is more room at ' + weak.map(s => capabilityShort(s.key)).join(' and ')
+      + ' than elsewhere in the range.');
   }
   // said every time, because it is the only thing that makes the numbers mean
   // what they appear to mean

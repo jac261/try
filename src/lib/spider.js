@@ -238,7 +238,11 @@ export function bikeSpider(profile, powerCurve) {
   const axes = Object.keys(CAPABILITIES).map(k => {
     const s = prof.scores[k];
     return {
-      key: k, label: CAPABILITIES[k].label,
+      /* The SHORT name on the chart: "Long-duration durability" ran off both
+         edges of a 240px radar (labels sit at 1.26 x radius, so the left and
+         right axes centre their text at x ~= 12 and ~= 228). The full names
+         still carry the definitions wherever they are listed. */
+      key: k, label: CAPABILITIES[k].short || CAPABILITIES[k].label,
       value: s ? s.pct : null, unit: 'vs own shape', lowerIsBetter: false,
       measured: !!s,
       position: s ? bikeRadius(s.pct) : null,
