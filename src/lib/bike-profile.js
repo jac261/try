@@ -181,7 +181,13 @@ export const LABEL_RULES = {
   minCovered: 4,          // of five capabilities, before anything is named
 };
 
-const capShort = key => (CAPABILITIES[key] ? CAPABILITIES[key].short : key);
+/* Lowercased for mid-sentence use, except where the short name is an
+   acronym: "leans toward vo2" reads like a typo. */
+export function capabilityShort(key) {
+  const short = CAPABILITIES[key] ? CAPABILITIES[key].short : key;
+  return /\d/.test(short) ? short : short.toLowerCase();
+}
+const capShort = capabilityShort;
 
 export function shapeLabel(profile, opts = {}) {
   if (!profile || !profile.scores) return null;
@@ -198,12 +204,12 @@ export function shapeLabel(profile, opts = {}) {
   if (strong.length) {
     decider = strong[0];
     text = strong.length > 1
-      ? 'This curve leans toward ' + strong.slice(0, 2).map(s => capShort(s.key).toLowerCase()).join(' and ')
-      : 'This curve leans toward ' + capShort(decider.key).toLowerCase();
+      ? 'This curve leans toward ' + strong.slice(0, 2).map(s => capShort(s.key)).join(' and ')
+      : 'This curve leans toward ' + capShort(decider.key);
     margin = Math.round((decider.pct - PROFILE_RULES.strongPct) * 10) / 10;
   } else if (weak.length) {
     decider = weak[weak.length - 1];
-    text = 'This curve is held back at ' + capShort(decider.key).toLowerCase();
+    text = 'This curve is held back at ' + capShort(decider.key);
     margin = Math.round((PROFILE_RULES.limiterPct - decider.pct) * 10) / 10;
   } else {
     text = 'This curve is even across the range';
@@ -249,10 +255,15 @@ function profileText(ranked, covered, total) {
       : 'Nothing stands out in the part of your range you have bests for, but ' + (total - covered)
         + ' of the ' + total + ' areas have no recent best to read, so this is a partial picture.');
   } else {
-    if (strong.length) bits.push('Relative to your own threshold you are strongest at '
-      + strong.map(s => s.label.toLowerCase()).join(' and ') + '.');
-    if (weak.length) bits.push('There is more room at ' + weak.map(s => s.label.toLowerCase()).join(' and ')
-      + ' than elsewhere in your range.');
+    /* The subject is the CURVE here too (2026-08-01). "You are strongest at
+       vo2 power" sat directly above a label reading "this curve leans toward
+       VO2", which is two voices for one fact, and the second-person one is
+       the sticky formulation the label rules exist to avoid. Also fixes the
+       acronym: the old copy lowercased the whole label and produced "vo2". */
+    if (strong.length) bits.push('Against your own threshold this curve is strongest at '
+      + strong.map(s => capabilityShort(s.key)).join(' and ') + '.');
+    if (weak.length) bits.push('There is more room at ' + weak.map(s => capabilityShort(s.key)).join(' and ')
+      + ' than elsewhere in the range.');
   }
   // said every time, because it is the only thing that makes the numbers mean
   // what they appear to mean

@@ -15,6 +15,9 @@ import * as T from '@/lib';
  * a dormant axis is a visible gap rather than a fabricated zero.
  */
 
+// room outside the plotted square for the axis labels, in viewBox units
+const LABEL_PAD = 34;
+
 const polar = (cx, cy, r, i, n) => {
   const a = (Math.PI * 2 * i) / n - Math.PI / 2;
   return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
@@ -39,7 +42,15 @@ export function SpiderChart({ spider, color = 'var(--accent)', fmtValue, size = 
 
   return (
     <div className="center" style={{ margin: '4px 0' }}>
-      <svg width={size} height={size} viewBox={'0 0 ' + size + ' ' + size} role="img"
+      {/* The viewBox carries horizontal padding the box itself does not.
+          Axis labels sit at 1.26 x radius, so on a pentagon the left and
+          right spokes centre their text near the edges and anything longer
+          than about eight characters ran off both sides. Short labels helped
+          and were not enough (Endurance, Anaerobic still clipped), because
+          the cause is geometric rather than lexical: the text needs room
+          OUTSIDE the plotted square. Padding the viewBox gives it that and
+          scales with the chart instead of being tuned per label. */}
+      <svg width={size} height={size} viewBox={-LABEL_PAD + ' 0 ' + (size + LABEL_PAD * 2) + ' ' + size} role="img"
         aria-label={'Performance chart, ' + (T.SPIDER_SOURCES[spider.source] ? T.SPIDER_SOURCES[spider.source].label : spider.source)}>
         {/* rings, labelled on the vertical axis */}
         {(spider.rings || []).map(ring => (

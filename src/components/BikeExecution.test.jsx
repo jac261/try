@@ -152,9 +152,13 @@ describe('PowerCurveCard: gated now, correct when it opens', () => {
     expect(html).toContain('20 min');
     expect(html).toContain('Assioma');          // §7: source metadata is visible
     expect(html).toContain('% of threshold');
-    expect(html).toContain('The shape of your riding');
-    // §4: it says out loud that it changes nothing
-    expect(html).toMatch(/changes your plan on its own/);
+    /* The rider profile moved to the Power shape card (2026-08-01): this
+       card is the measurement, that one is the reading of it. Its
+       assertions moved with it to BikeDashboard.test.jsx rather than being
+       dropped. What this card must still carry is the expected-shape
+       reference, which is the measurement's own context. */
+    expect(html).not.toContain('The shape of your riding');
+    expect(html).toContain('expected shape');
   });
 
   it('leads with the device change rather than with an apparent gain', () => {
@@ -187,7 +191,10 @@ describe('PowerCurveCard: gated now, correct when it opens', () => {
     expect(html).toContain('stroke-dasharray="4 3"');           // the reference, unaffected
     // and the same caveat is repeated for the profile, which is measured
     // against a threshold set on the old meter
-    expect(html).toMatch(/previous power meter/);
+    /* The profile's own device caveat moved with the profile; what stays
+       here is the CURVE's, which is a different sentence about a different
+       thing (the points, not the shape read off them). */
+    expect(html).toMatch(/different power meter/);
   });
 
   it('never renders a phenotype label', () => {

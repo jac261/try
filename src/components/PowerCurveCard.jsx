@@ -13,9 +13,11 @@ import { PowerCurveChart } from '@/components/PowerCurveChart.jsx';
  *
  * §6 asks for seven things and this renders six of them: the current curve,
  * a historical comparison, recent improvements, stale durations, source
- * changes, and confidence. The seventh, training implication, comes from
- * bike-profile.js and is rendered underneath, because an implication with no
- * curve above it is an assertion the athlete cannot check. */
+ * changes, and confidence. The seventh, training implication, moved to the
+ * Power shape card (2026-08-01) along with the rider profile it belongs to:
+ * this card is the measurement and that one is the reading of it. The curve
+ * now carries the expected-shape reference, so the implication still has a
+ * chart above it, one tab-section up rather than immediately above. */
 export function PowerCurveCard({ curve, previous, ftpWatts, todayISO }) {
   /* The deltas toggle (Jon, 2026-07-30). Hook before the early return, the
      TDZ/hook-order lesson this codebase keeps re-learning: a conditional
@@ -24,8 +26,6 @@ export function PowerCurveCard({ curve, previous, ftpWatts, todayISO }) {
   if (!curve || !curve.points || !curve.points.length) return null;
   const stale = T.staleDurations(curve, todayISO);
   const comparison = previous ? T.curveComparison({ current: curve, previous }) : null;
-  const profile = T.riderProfile({ curve, ftpWatts });
-  const implications = T.trainingImplications(profile);
   // The toggle exists only when there is at least one comparable delta to
   // show. On an all-incomparable comparison (a meter change) it would toggle
   // between the curve and an emptier curve, which reads as a bug.
@@ -137,43 +137,6 @@ export function PowerCurveCard({ curve, previous, ftpWatts, todayISO }) {
         )}
       </div>
 
-      {profile && <>
-        <div className="section-title" style={{ marginTop: 16 }}>The shape of your riding</div>
-        <div className="card">
-          {/* §3: five scores and no label. There is deliberately no sentence
-              anywhere here of the form "you are a X rider". */}
-          {profile.ranked.map(s => (
-            <div className="seg" key={s.key} style={{ padding: '5px 0' }}>
-              <div className="bar" style={{ background: 'var(--chip)' }} />
-              <div>
-                <div className="l">{s.label} · {s.pct > 0 ? '+' : ''}{s.pct}%</div>
-                <div className="d">{s.why}{s.confidence === 'low' ? ' · read from one duration only' : ''}</div>
-              </div>
-            </div>
-          ))}
-          <div className="lead" style={{ margin: '8px 0 0', fontSize: 13 }}>{profile.text}</div>
-          {comparison && comparison.sourceChanged && (
-            /* The shape is measured against a threshold, and the threshold
-               was measured on the OLD meter. So a device change moves the
-               whole profile too, not just the comparison above — the same
-               caveat one level down, and the athlete cannot see it from the
-               numbers. */
-            <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>
-              These are measured against a threshold set on your previous power meter,
-              so the whole shape shifts with it. A fresh test on the new one puts them
-              back on the same footing.
-            </div>
-          )}
-          {implications.map((im, i) => (
-            <div className="lead" key={i} style={{ margin: '6px 0 0', fontSize: 12 }}>{im.text}</div>
-          ))}
-          {/* §4: suggestions, never applied. Said out loud so nobody expects
-              their plan to have changed underneath them. */}
-          <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
-            Nothing here changes your plan on its own. It is here so you can decide whether it should.
-          </div>
-        </div>
-      </>}
     </>
   );
 }

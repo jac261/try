@@ -332,3 +332,49 @@ describe('the Progress tabs (phase 3)', () => {
     expect(bike).toContain('Power curve');
   });
 });
+
+describe('the rider profile now lives on the Power shape card', () => {
+  /* Moved from BikeExecution.test.jsx (2026-08-01) with the content itself.
+     Assertions that follow their subject keep meaning something; assertions
+     left behind on the old card quietly stop testing anything. */
+  const shapedCurve = () => {
+    const RATIO = { 5: 4.0, 15: 3.0, 30: 2.4, 60: 1.8, 180: 1.38, 300: 1.25, 720: 1.10, 1200: 1 / 0.95, 2400: 1.0, 3600: 0.97 };
+    return powerCurve(CURVE_DURATIONS.map(d => ({
+      durationSec: d,
+      // VO2 clear of the band, sprint below it: a real shape, not flat zeroes
+      watts: Math.round(250 * RATIO[d] * ((d === 180 || d === 300) ? 1.12 : (d === 5 || d === 15) ? 0.94 : 1)),
+      date: '2026-07-01', source: 'Assioma', bike: 'road', indoor: false, quality: 'high',
+    })));
+  };
+
+  it('carries the profile, its promise, and a label that names its own evidence', async () => {
+    const plan = generatePlan({ ...profile, ftp: 250 });
+    const html = await mount({ plan, activities: null, powerCurve: shapedCurve() }, 'Bike');
+    expect(html).toContain('Power shape');
+    // the verdict and the never-applied promise came with it
+    // the self-relative caveat, which is the sentence that makes the numbers
+    // mean what they appear to mean. Asserted on the claim rather than on its
+    // opening words, which moved when the verdict's voice was aligned.
+    expect(html).toMatch(/measured against your own threshold/i);
+    expect(html).toMatch(/this curve is strongest at VO2/);
+    expect(html).toMatch(/changes your plan on its own/);
+    // the label: about the curve, carrying its coverage and its threshold
+    expect(html).toMatch(/This curve leans toward/);
+    expect(html).toMatch(/would read differently/);
+    expect(html).toMatch(/against a threshold of 250 W/);
+  });
+
+  it('never says the rider IS anything', async () => {
+    const plan = generatePlan({ ...profile, ftp: 250 });
+    const html = await mount({ plan, activities: null, powerCurve: shapedCurve() }, 'Bike');
+    expect(html).not.toMatch(/you are an? /i);
+    expect(html).not.toMatch(/sprinter|climber|puncheur|rouleur|diesel/i);
+  });
+
+  it('shows no label at all without a curve, rather than an empty one', async () => {
+    const plan = generatePlan({ ...profile, ftp: 250 });
+    const html = await mount({ plan, activities: null }, 'Bike');
+    expect(html).not.toMatch(/This curve leans toward/);
+    expect(html).not.toMatch(/This curve is even/);
+  });
+});

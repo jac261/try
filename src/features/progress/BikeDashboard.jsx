@@ -53,7 +53,7 @@ function NoteOnly({ m }) {
   return <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{m.note}</div>;
 }
 
-export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog, powerCurve, shapeLabelLog }) {
+export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog, powerCurve, previousPowerCurve, shapeLabelLog }) {
   const d = T.bikeDashboard({
     plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog,
   });
@@ -65,14 +65,64 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
   /* Rule 7 in practice: the label is computed HERE, for display, from the
      same profile the spider draws. Nothing upstream reads it, and no plan or
      coach path can, because it does not exist outside this render. */
-  const riderProf = T.riderProfile({ curve: powerCurve, ftpWatts: (T.bikePowerAnchor(plan.profile || {}) || {}).ftpWatts });
-  const label = T.shapeLabel(riderProf, {
-    ftpWatts: (T.bikePowerAnchor(plan.profile || {}) || {}).ftpWatts,
-    history: shapeLabelLog || [],
-  });
+  const bikeFtp = (T.bikePowerAnchor(plan.profile || {}) || {}).ftpWatts;
+  const riderProf = T.riderProfile({ curve: powerCurve, ftpWatts: bikeFtp });
+  const label = T.shapeLabel(riderProf, { ftpWatts: bikeFtp, history: shapeLabelLog || [] });
+  const implications = riderProf ? T.trainingImplications(riderProf) : [];
+  /* The device-change caveat belongs to the PROFILE, not to the curve: the
+     shape is measured against a threshold that was itself set on the old
+     meter, so a meter change moves the whole reading and the athlete cannot
+     see that from the numbers. It moved here with the profile. */
+  const curveComp = (powerCurve && previousPowerCurve)
+    ? T.curveComparison({ current: powerCurve, previous: previousPowerCurve }) : null;
 
   return (
     <>
+      <div className="section-title" style={{ marginTop: 16 }}>Power shape</div>
+      <div className="card">
+        <SpiderChart spider={T.bikeSpider(plan.profile, powerCurve)} color="var(--bike)"
+          fmtValue={ax => (ax.value > 0 ? '+' : '') + ax.value + '%'} />
+        {/* The label sits UNDER the chart on purpose (rule 3): it summarises
+            what is drawn above it and never replaces it, so the evidence is
+            read first and the sentence second. */}
+        {riderProf && <div className="lead" style={{ margin: '8px 0 0', fontSize: 13 }}>{riderProf.text}</div>}
+        {curveComp && curveComp.sourceChanged && (
+          <div className="lead" style={{ margin: '6px 0 0', fontSize: 12 }}>
+            These are measured against a threshold set on your previous power meter,
+            so the whole shape shifts with it. A fresh test on the new one puts them
+            back on the same footing.
+          </div>
+        )}
+        {implications.map((im, i) => (
+          <div className="lead" key={i} style={{ margin: '6px 0 0', fontSize: 12 }}>{im.text}</div>
+        ))}
+        {/* Suggestions, never applied. Said out loud so nobody expects their
+            plan to have changed underneath them. */}
+        {riderProf && (
+          <div className="lead" style={{ margin: '8px 0 0', fontSize: 12 }}>
+            Nothing here changes your plan on its own. It is here so you can decide whether it should.
+          </div>
+        )}
+        {label && (
+          <div className="du-note" style={{ marginTop: 8 }}>
+            <b style={{ fontWeight: 600 }}>{label.text}</b>
+            {label.confidence === 'low' && ', read from one duration'}
+            {'. '}
+            {label.marginToChange != null && (
+              label.decider === null ? null
+                : 'A ' + label.marginToChange + ' point move at '
+                  + T.capabilityShort(label.decider) + ' would read differently. '
+            )}
+            {'Measured across ' + label.covered + ' of ' + label.capabilities + ' areas'}
+            {label.ftpUsed ? ', against a threshold of ' + label.ftpUsed + ' W' : ''}
+            {'. '}
+            {label.changedFrom
+              ? 'It previously read: ' + label.changedFrom.toLowerCase().replace(/^this curve /, '') + '.'
+              : ''}
+          </div>
+        )}
+      </div>
+
       <div className="section-title" style={{ marginTop: 18 }}>
         Bike <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>
           (last {d.windowWeeks} weeks)
@@ -166,34 +216,6 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
           rider's own shape rings, dormant until the power-curve endpoint
           lands — the SpiderChart renders the reason instead of improvising
           axes from FTP alone (Jon's call). */}
-      <div className="section-title" style={{ marginTop: 16 }}>Power shape</div>
-      <div className="card">
-        <SpiderChart spider={T.bikeSpider(plan.profile, powerCurve)} color="var(--bike)"
-          fmtValue={ax => (ax.value > 0 ? '+' : '') + ax.value + '%'} />
-        {/* The label sits UNDER the chart on purpose (rule 3): it summarises
-            what is drawn above it and never replaces it, so the evidence is
-            read first and the sentence second. */}
-        {label && (
-          <div className="du-note" style={{ marginTop: 8 }}>
-            <b style={{ fontWeight: 600 }}>{label.text}</b>
-            {label.confidence === 'low' && ', read from one duration'}
-            {'. '}
-            {label.marginToChange != null && (
-              label.decider === null ? null
-                : 'A ' + label.marginToChange + ' point move at '
-                  + (T.CAPABILITIES[label.decider] ? T.CAPABILITIES[label.decider].short.toLowerCase() : label.decider)
-                  + ' would read differently. '
-            )}
-            {'Measured across ' + label.covered + ' of ' + label.capabilities + ' areas'}
-            {label.ftpUsed ? ', against a threshold of ' + label.ftpUsed + ' W' : ''}
-            {'. '}
-            {label.changedFrom
-              ? 'It previously read: ' + label.changedFrom.toLowerCase().replace(/^this curve /, '') + '.'
-              : ''}
-          </div>
-        )}
-      </div>
-
       <div className="section-title" style={{ marginTop: 16 }}>Can you do the work?</div>
       <div className="card">
         <div className="rd-pmc" style={{ marginTop: 0, flexWrap: 'wrap' }}>

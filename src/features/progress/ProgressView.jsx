@@ -528,7 +528,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           && <BikeDashboard plan={plan} log={log} moves={moves} activities={activities} todayISO={todayISO}
             retest={ftpRetest} durabilityReads={durability}
             fuelLog={fuelLog} positionLog={positionLog} powerCurve={powerCurve}
-            shapeLabelLog={shapeLabelLog} />}
+            previousPowerCurve={previousPowerCurve} shapeLabelLog={shapeLabelLog} />}
         {durabilityCard('bike')}
       </div>}
 
