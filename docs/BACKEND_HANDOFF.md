@@ -692,17 +692,27 @@ subset is safe and shipping none breaks nothing.
 | 6 | `weeklyHours`, `longestSwimM`, `longestRideMin`, `longestRunMin` | athlete profile | Start anchors surviving a fresh-device recovery; without them a reinstalled athlete silently reverts to race-sized first weeks |
 | 7 | `totalElevationGain`, `totalElevationLoss` (metres) | activity | Rejecting a downhill-assisted 5 km before it becomes the benchmark race projections extrapolate from |
 
-**STATUS, 30 July 2026: asks 1-6 are LANDED on `try-backend` main; ask 7 is
-NOT.** Jack shipped them directly rather than through PRs — `startedAt`,
+**STATUS, 1 August 2026: asks 1-7 are all LANDED on `try-backend` main.**
+Asks 1-6 Jack shipped directly rather than through PRs — `startedAt`,
 `elapsedTimeSec`, `normalizedWatts`, the four start-anchor profile columns,
 the `swimReview` and `bikeReview` log columns, the power-curve endpoint, and
-the swim stroke fields on both activities and intervals.
+the swim stroke fields on both activities and intervals. Ask 7 (elevation)
+merged on 1 August in backend #25.
 
-**Correction (30 July, verified against `origin/main`):** an earlier version
-of this section counted ask 7 as landed. The activity DTO carries NO
-elevation fields; `total_elevation_gain` landed on the INTERVAL DTO only, and
-gain alone cannot tell a point-to-point descent from rolling terrain — the
-downhill guard needs LOSS. Ask 7 is re-filed below.
+Landed is not the same as live for ask 7. It merged alongside #24, whose
+`run_review` migration pair is still unapplied, and the repository selects
+that column unconditionally, so the API cannot be promoted ahead of the
+migration-only stage. The downhill-assist guard below stays dormant until
+that release runs, not merely until the field exists.
+
+**How ask 7 was got wrong once, since the shape of the mistake is worth
+keeping.** An earlier version of this section counted it as landed because
+`total_elevation_gain` existed — on the INTERVAL DTO only, not the activity,
+and gain alone cannot tell a point-to-point descent from rolling terrain,
+because the downhill guard needs LOSS. A field with the right name in the
+wrong place reads as done to anyone grepping for it. Backend #25 put both
+`totalElevationGain` and `totalElevationLoss` on the activity DTO, which is
+what the guard actually needed.
 
 The client had a gap of its own: the power-curve endpoint existed with no
 caller at all (`powerCurveRaw` was a hardcoded `useState(null)`), so the rider

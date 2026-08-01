@@ -203,22 +203,33 @@ model is in `domain.js`.
 UI: `PoolControl`, `CssProposalSheet`, `CssRetestSheet`, `TechniqueEditor`,
 `SwimDashboard`, plus the swim sections of `DetailSheet` and `SettingsView`.
 
-## Waiting on the backend
+## What the backend gives it, and what is still missing
 
-Three things are written, read defensively, and dormant until fields exist.
-The client sends nothing for any of them, so no current request can fail.
+This section listed three pending asks. All three have since been answered in
+whole or in part, so it described the swim as blocked on fields it has been
+using for a week. [BACKEND_HANDOFF.md](BACKEND_HANDOFF.md) stays the
+authoritative list.
 
-- **`swimReview` and `techniqueCue` on the workout log.** Without these the
-  dashboard's quality card and the technique feedback question stay dark, and
-  two limiters cannot fire. Needs a migration, so it is Jack's schema call.
-- **Stroke and pool fields on the activity feed.** Pushed as
-  `feat/swim-stroke-passthrough` on the backend repo. Unblocks phase 8 and
-  the pool-mismatch check.
-- **Typed profile passthrough** for `pool`, `cssMeta` and `technique`. These
-  already round-trip on the plan blob; the ask is so a fresh device keeps
-  them.
+**Landed and in service.** `swimReview` and `techniqueCue` on the workout log
+are what let the dashboard's quality card and the technique question light up,
+and they are what two of the limiters fire on. Stroke and pool fields arrive
+on the activity feed, and `poolLengthM` is what the pool-mismatch check reads.
+`cssMeta` carries the threshold's provenance on the typed profile, so a fresh
+device knows whether CSS was measured or estimated.
 
-Details and exact field names are in [BACKEND_HANDOFF.md](BACKEND_HANDOFF.md).
+**Landed but deliberately switched off.** The stroke-rate analysis built on
+cadence and stride stays behind `STROKE_METRICS_FLAG = false` even though the
+fields arrive. The module's own validation found `distance / stride` and
+`cadence x time` disagreeing by exactly two on a real lap, because one counts
+arm strokes and the other full cycles, and which is which is a device
+convention. Turning it on needs per-device validation, which could only begin
+once the data flowed. The gate is the honest position, not an unfinished one.
+
+**Still missing.** The typed profile subset does not carry `pool` or
+`technique`. Both ride the opaque blob, so nothing fails today and the client
+falls back to 25 m, but a fresh device still loses the athlete's own pool and
+their technique focus. It is the smallest remaining swim ask and the one whose
+absence is invisible until someone reinstalls.
 
 ## Deliberately not built
 
