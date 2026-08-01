@@ -236,14 +236,33 @@ what actually comes out.
 Tests: `runpass1` through `runpass9`, plus the pre-existing `runpass`,
 `solopass` and `runload` suites.
 
-## Waiting on the backend
+## What the backend gives it, and what is still missing
 
-| Ask | Unblocks |
-|---|---|
-| `elapsedTimeSec` | rejecting a heavily interrupted 5 km test |
-| `totalElevationGain` / `Loss` | rejecting a downhill-assisted 5 km test |
-| `runmaintenance` race type | run-only maintenance blocks, a real gap today |
-| `duathlon` / `aquathlon` race types | the multisport extensions, which also need product design |
+This section listed four asks as pending. Three have landed since, and the
+distinction that matters for two of them is that landed is not the same as
+live. [BACKEND_HANDOFF.md](BACKEND_HANDOFF.md) stays the authoritative list.
+
+**Landed and in service.** `elapsedTimeSec` arrived on 30 July, which is what
+`run5kInterrupted` reads to refuse a heavily interrupted 5 km before it can
+become the benchmark every race projection is extrapolated from.
+
+**Merged but not yet live.** `totalElevationGain` and `totalElevationLoss`
+merged in backend #25, and the `runmaintenance` race type in backend #24. Both
+releases carry the `run_review` migration pair, which is unapplied, and the
+repository selects that column unconditionally — so the API cannot be promoted
+until the migration-only stage runs. Until then `run5kDownhillAssisted` stays
+dormant, because it fires only when gain and loss are both present, and a
+point-to-point downhill 5 km can still set the benchmark. The proposal shown
+to the athlete is more confident than the evidence deserves; the anchor is
+athlete-controlled, so nothing is applied without a tap, but that is a
+mitigation rather than a fix.
+
+**Still missing, and not only from the backend.** `duathlon` and `aquathlon`
+need catalog entries, but the catalog is the smaller half. A duathlon's second
+run happens on bike-fatigued legs and the run-load guardrails model one run
+per session; an aquathlon's run follows a swim, which is not the brick model
+and for which no data exists. Adding the strings without the product design
+would imply plans were imminent.
 
 ## Deliberately not built
 
