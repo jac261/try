@@ -4,7 +4,7 @@ import {
   powerCurve, curvePoint, curveAvailable, curveComparison, comparable,
   staleDurations, staleFtpSignal, CURVE_DURATIONS, CURVE_LABELS, POWER_CURVE_RULES, FTP_FROM_20MIN,
 } from './bike-power-curve.js';
-import { riderProfile, trainingImplications, durationSummary, expectedShapeCurve, CAPABILITIES, PROFILE_RULES } from './bike-profile.js';
+import { riderProfile, trainingImplications, durationSummary, expectedShapeCurve, shapeLabel, CAPABILITIES, PROFILE_RULES, LABEL_RULES } from './bike-profile.js';
 import { ftpRetestRecommendation } from './ftp-retest.js';
 import { generatePlan } from './plan.js';
 
@@ -179,14 +179,14 @@ describe('§3: the athlete is never reduced to one phenotype', () => {
     profile.ranked.forEach(s => expect(typeof s.pct).toBe('number'));
   });
 
-  it('EXPOSES NO FIELD THAT COULD BE USED AS A PHENOTYPE', () => {
-    /* §3's one instruction, asserted structurally rather than trusted to
-       copy. Labels like "sprinter" or "diesel" are sticky in a way numbers
-       are not: an athlete told they are a diesel stops sprinting, and the
-       label makes itself true. If a future change adds one, this fails. */
-    ['phenotype', 'type', 'category', 'archetype', 'riderType', 'label', 'primary'].forEach(k =>
+  it('riderProfile itself still exposes no label field', () => {
+    /* Narrowed, not dropped (Jon, 2026-08-01). §3 originally refused any
+       label anywhere; a label now exists, but it is shapeLabel's business
+       and it is governed by the contract below. riderProfile stays a
+       spectrum: anything reaching for a one-word answer must go through the
+       rules rather than pick a field off the scores. */
+    ['phenotype', 'type', 'category', 'archetype', 'riderType', 'primary'].forEach(k =>
       expect(k in profile, 'riderProfile exposes a "' + k + '" field, which will be used as a label').toBe(false));
-    // and the copy never says "you are a"
     expect(profile.text).not.toMatch(/you are an? \w+ rider/i);
   });
 
@@ -530,5 +530,115 @@ describe('expectedShapeCurve: the reference the chart draws', () => {
 
   it('covers every duration the chart plots, so the line never stops short', () => {
     expect(expectedShapeCurve(FTP).map(p => p.durationSec)).toEqual(CURVE_DURATIONS);
+  });
+});
+
+describe('shapeLabel: the eight rules that make a label safe to show', () => {
+  const prof = over => riderProfile({ curve: powerCurve(balanced(over)), ftpWatts: FTP });
+  // a real shape: VO2 well clear of the band, sprint below it
+  const shapedPoints = () => balanced().map(p => {
+    if (p.durationSec === 180 || p.durationSec === 300) return { ...p, watts: Math.round(p.watts * 1.12) };
+    if (p.durationSec === 5 || p.durationSec === 15) return { ...p, watts: Math.round(p.watts * 0.94) };
+    return p;
+  });
+  const shaped = () => riderProfile({ curve: powerCurve(shapedPoints()), ftpWatts: FTP });
+
+  it('RULE 1: the subject is the curve, never the rider', () => {
+    [shapeLabel(shaped()), shapeLabel(prof())].forEach(l => {
+      expect(l.text).toMatch(/^This curve /);
+      expect(l.text).not.toMatch(/\byou\b/i);
+      expect(l.text).not.toMatch(/you are/i);
+    });
+  });
+
+  it('RULE 1b: never a race archetype, which would import a meaning the data lacks', () => {
+    /* A capability here is relative to the rider's OWN threshold, so a low
+       FTP with a relatively good sprint is not a sprinter in any race.
+       These are also the stickiest words available. */
+    const banned = /sprinter|climber|puncheur|rouleur|diesel|time.?trial|all.?rounder|engine/i;
+    expect(shapeLabel(shaped()).text).not.toMatch(banned);
+    expect(shapeLabel(prof()).text).not.toMatch(banned);
+  });
+
+  it('RULE 2: it carries its coverage', () => {
+    const l = shapeLabel(shaped());
+    expect(l.covered).toBe(5);
+    expect(l.capabilities).toBe(Object.keys(CAPABILITIES).length);
+  });
+
+  it('RULE 4: it states the margin that would change it', () => {
+    const l = shapeLabel(shaped());
+    expect(typeof l.marginToChange).toBe('number');
+    expect(l.marginToChange).toBeGreaterThanOrEqual(0);
+    expect(l.decider).toBe('vo2');
+    // an even curve reports how close the nearest capability came instead
+    const even = shapeLabel(prof());
+    expect(even.text).toMatch(/even across the range/);
+    expect(typeof even.marginToChange).toBe('number');
+  });
+
+  it('RULE 5: it says what it changed from, and when the current reading began', () => {
+    const cur = shapeLabel(shaped());
+    const held = shapeLabel(shaped(), { history: [
+      { text: 'This curve is even across the range', at: '2026-06-01' },
+      { text: cur.text, at: '2026-07-01' },
+    ] });
+    expect(held.changedFrom).toMatch(/even across the range/);
+    expect(held.changedOn).toBe('2026-07-01');
+
+    // just moved: the newest stored entry IS what it moved from
+    const moved = shapeLabel(shaped(), { history: [{ text: 'This curve is even across the range', at: '2026-06-01' }] });
+    expect(moved.changedFrom).toMatch(/even across the range/);
+    expect(moved.changedOn).toBe(null);
+  });
+
+  it('RULE 6: it returns null below the coverage floor rather than naming a partial curve', () => {
+    /* Six points covering three capabilities: enough for riderProfile to
+       return something (fewer and it returns null for its own reasons, which
+       would test nothing about the floor) and short of the label's floor. */
+    const short = riderProfile({ curve: powerCurve(balanced().filter(p => p.durationSec <= 300)), ftpWatts: FTP });
+    expect(short).not.toBe(null);
+    expect(short.covered).toBe(3);
+    expect(short.covered).toBeLessThan(LABEL_RULES.minCovered);
+    expect(shapeLabel(short)).toBe(null);
+    expect(shapeLabel(null)).toBe(null);
+  });
+
+  it('RULE 8: thin evidence is named rather than hidden or refused', () => {
+    // drop one of VO2's two durations, keeping coverage above the floor
+    const thin = riderProfile({ curve: powerCurve(balanced().filter(p => p.durationSec !== 180)
+      .map(p => (p.durationSec === 300 ? { ...p, watts: Math.round(p.watts * 1.12) } : p))), ftpWatts: FTP });
+    const l = shapeLabel(thin);
+    expect(l).not.toBe(null);              // not refused
+    expect(l.decider).toBe('vo2');
+    expect(l.confidence).toBe('low');      // but said out loud
+  });
+
+  it('carries the threshold it used, because the FTP scale does not cancel', () => {
+    /* The normalisation removes the FTP OFFSET, not its SCALE: k x ftp
+       multiplies every score by 1/k. A label without its threshold cannot
+       be reproduced or argued with. */
+    const a = shapeLabel(shaped(), { ftpWatts: FTP });
+    expect(a.ftpUsed).toBe(FTP);
+
+    /* Ordering is preserved and the spread scales: pct' = pct / k exactly.
+       Tested on a SHAPED curve, not the balanced one — balanced sits at zero
+       on every axis, so its ordering is rounding noise and would flip for
+       reasons that have nothing to do with the claim. */
+    const pts = shapedPoints();
+    const low = riderProfile({ curve: powerCurve(pts), ftpWatts: FTP * 0.8 });
+    const high = riderProfile({ curve: powerCurve(pts), ftpWatts: FTP * 1.2 });
+    expect(low.ranked.map(s => s.key)).toEqual(high.ranked.map(s => s.key));
+    // the lower threshold exaggerates the same shape
+    expect(Math.abs(low.ranked[0].pct)).toBeGreaterThan(Math.abs(high.ranked[0].pct));
+  });
+
+  it('RULE 7: nothing outside the render reads it', () => {
+    /* The behaviour-change path runs through prescription. If no plan or
+       coach code can see the label, it cannot become one. */
+    ['plan.js', 'coach.js', 'adapt.js', 'weakest.js'].forEach(f => {
+      const src = readFileSync(new URL('./' + f, import.meta.url), 'utf8');
+      expect(src.includes('shapeLabel'), f + ' reads the shape label').toBe(false);
+    });
   });
 });

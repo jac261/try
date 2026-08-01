@@ -53,7 +53,7 @@ function NoteOnly({ m }) {
   return <div className="lead" style={{ margin: '4px 0 0', fontSize: 12 }}>{m.note}</div>;
 }
 
-export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog, powerCurve }) {
+export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog, powerCurve, shapeLabelLog }) {
   const d = T.bikeDashboard({
     plan, log, moves, activities, todayISO, retest, durabilityReads, fuelLog, positionLog,
   });
@@ -62,6 +62,14 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
   const s = d.status;
   const q = d.quality;
   const du = d.durability;
+  /* Rule 7 in practice: the label is computed HERE, for display, from the
+     same profile the spider draws. Nothing upstream reads it, and no plan or
+     coach path can, because it does not exist outside this render. */
+  const riderProf = T.riderProfile({ curve: powerCurve, ftpWatts: (T.bikePowerAnchor(plan.profile || {}) || {}).ftpWatts });
+  const label = T.shapeLabel(riderProf, {
+    ftpWatts: (T.bikePowerAnchor(plan.profile || {}) || {}).ftpWatts,
+    history: shapeLabelLog || [],
+  });
 
   return (
     <>
@@ -162,6 +170,28 @@ export function BikeDashboard({ plan, log, moves, activities, todayISO, retest, 
       <div className="card">
         <SpiderChart spider={T.bikeSpider(plan.profile, powerCurve)} color="var(--bike)"
           fmtValue={ax => (ax.value > 0 ? '+' : '') + ax.value + '%'} />
+        {/* The label sits UNDER the chart on purpose (rule 3): it summarises
+            what is drawn above it and never replaces it, so the evidence is
+            read first and the sentence second. */}
+        {label && (
+          <div className="du-note" style={{ marginTop: 8 }}>
+            <b style={{ fontWeight: 600 }}>{label.text}</b>
+            {label.confidence === 'low' && ', read from one duration'}
+            {'. '}
+            {label.marginToChange != null && (
+              label.decider === null ? null
+                : 'A ' + label.marginToChange + ' point move at '
+                  + (T.CAPABILITIES[label.decider] ? T.CAPABILITIES[label.decider].short.toLowerCase() : label.decider)
+                  + ' would read differently. '
+            )}
+            {'Measured across ' + label.covered + ' of ' + label.capabilities + ' areas'}
+            {label.ftpUsed ? ', against a threshold of ' + label.ftpUsed + ' W' : ''}
+            {'. '}
+            {label.changedFrom
+              ? 'It previously read: ' + label.changedFrom.toLowerCase().replace(/^this curve /, '') + '.'
+              : ''}
+          </div>
+        )}
       </div>
 
       <div className="section-title" style={{ marginTop: 16 }}>Can you do the work?</div>
