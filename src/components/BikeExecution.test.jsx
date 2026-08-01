@@ -170,9 +170,15 @@ describe('PowerCurveCard: gated now, correct when it opens', () => {
        (Jon, 2026-07-30) and the watts live on the chart's axis. The intent
        they protected — that no per-duration gain is claimed off a device
        change — now holds by a stronger mechanism: the previous curve's line
-       is WITHHELD, so the chart draws one path rather than two. Counting
-       paths asserts that directly instead of counting a phrase. */
-    expect((html.match(/<path/g) || []).length).toBe(1);
+       is WITHHELD.
+
+       Asserted on the previous curve's OWN stroke rather than by counting
+       every path. The count was a proxy that broke the moment the chart
+       gained a second legitimate line (the expected-shape reference), and a
+       proxy that fails on an unrelated change was never testing what it
+       claimed to. */
+    expect(html).not.toContain('stroke="var(--muted)"');   // the previous curve's line
+    expect(html).toContain('stroke="var(--bike, var(--run))"'); // the rider's own, still drawn
     // and the same caveat is repeated for the profile, which is measured
     // against a threshold set on the old meter
     expect(html).toMatch(/previous power meter/);

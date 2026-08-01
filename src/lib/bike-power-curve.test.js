@@ -4,7 +4,7 @@ import {
   powerCurve, curvePoint, curveAvailable, curveComparison, comparable,
   staleDurations, staleFtpSignal, CURVE_DURATIONS, CURVE_LABELS, POWER_CURVE_RULES, FTP_FROM_20MIN,
 } from './bike-power-curve.js';
-import { riderProfile, trainingImplications, durationSummary, CAPABILITIES, PROFILE_RULES } from './bike-profile.js';
+import { riderProfile, trainingImplications, durationSummary, expectedShapeCurve, CAPABILITIES, PROFILE_RULES } from './bike-profile.js';
 import { ftpRetestRecommendation } from './ftp-retest.js';
 import { generatePlan } from './plan.js';
 
@@ -500,5 +500,35 @@ describe('gauntlet: the WIRING is asserted, not just the function', () => {
     const app = readFileSync(new URL('../app/App.jsx', import.meta.url), 'utf8');
     expect(app).toMatch(/previousPowerCurve=\{prevPowerCurve\}/);
     expect(app).toMatch(/loadPowerCurve/);
+  });
+});
+
+describe('expectedShapeCurve: the reference the chart draws', () => {
+  it('is the shape a balanced rider already matches, so the two lines coincide', () => {
+    const ref = expectedShapeCurve(FTP);
+    const mine = balanced();
+    expect(ref.length).toBe(CURVE_DURATIONS.length);
+    ref.forEach(r => {
+      const own = mine.find(p => p.durationSec === r.durationSec);
+      // the fixture IS the shape table, so every point should land on it
+      expect(Math.abs(r.watts - own.watts)).toBeLessThanOrEqual(1);
+    });
+  });
+
+  it('scales with the threshold it is given', () => {
+    // watts are rounded to integers, so doubling the threshold doubles each
+    // point to within the rounding, not exactly: 1/0.95 x 200 rounds up and
+    // x 400 does not, and asserting equality would be testing the rounding
+    const a = expectedShapeCurve(200), b = expectedShapeCurve(400);
+    a.forEach((p, i) => expect(Math.abs(b[i].watts - p.watts * 2)).toBeLessThanOrEqual(1));
+  });
+
+  it('says nothing without a threshold, rather than inventing one', () => {
+    expect(expectedShapeCurve(null)).toEqual([]);
+    expect(expectedShapeCurve(0)).toEqual([]);
+  });
+
+  it('covers every duration the chart plots, so the line never stops short', () => {
+    expect(expectedShapeCurve(FTP).map(p => p.durationSec)).toEqual(CURVE_DURATIONS);
   });
 });

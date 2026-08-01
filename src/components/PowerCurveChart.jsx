@@ -43,7 +43,14 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
 
   // Zero-based y: the drop from a sprint to an hour is the story, and a
   // cropped axis exaggerates it into a cliff.
-  const wattVals = pts.map(p => p.watts).concat(ftpWatts ? [ftpWatts] : []);
+  /* The expected-shape reference, drawn so a rider can SEE where they sit
+     against their own threshold rather than read it as five percentages. Its
+     watts join the axis domain below: a rider under shape at the short end
+     would otherwise send the reference line off the top of the chart. */
+  const shapePts = T.expectedShapeCurve(ftpWatts);
+  const wattVals = pts.map(p => p.watts)
+    .concat(shapePts.map(p => p.watts))
+    .concat(ftpWatts ? [ftpWatts] : []);
   const top = Math.max(...wattVals) * 1.08;
   const Y = w => H - padB - (w / top) * (H - padT - padB);
 
@@ -117,6 +124,15 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
         </>
       )}
 
+      {/* The expected shape at this threshold. Beneath the rider's own line
+          and dashed, because it is a reference and not a result: every gap
+          above it is a relative strength and every gap below a relative
+          limiter, which is the whole read the profile puts into words. */}
+      {shapePts.length > 1 && (
+        <path d={path(shapePts)} fill="none" stroke="var(--line)" strokeWidth="1.5"
+          strokeDasharray="4 3" strokeLinejoin="round" />
+      )}
+
       {/* the previous curve, behind, only where it may be compared */}
       {prevSegs.map((seg, i) => (
         <path key={'p' + i} d={path(seg)} fill="none" stroke="var(--muted)"
@@ -171,6 +187,16 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
         <text key={d} x={X(d)} y={H - 6} fontSize="8" fill="var(--muted)"
           textAnchor={d === D[0] ? 'start' : d === D[D.length - 1] ? 'end' : 'middle'}>{tick(d)}</text>
       ))}
+
+      {/* Two lines need a key. Drawn top-right, where the curve has already
+          fallen away, so it sits over empty chart rather than over the data. */}
+      {shapePts.length > 1 && (
+        <g>
+          <line x1={W - padR - 62} y1={padT - 6} x2={W - padR - 52} y2={padT - 6}
+            stroke="var(--line)" strokeWidth="1.5" strokeDasharray="4 3" />
+          <text x={W - padR - 49} y={padT - 3.5} fontSize="7.5" fill="var(--muted)">expected shape</text>
+        </g>
+      )}
     </svg>
   );
 }

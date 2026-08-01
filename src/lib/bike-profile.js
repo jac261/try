@@ -19,7 +19,7 @@
  * applied. Nothing here writes to a plan, and the one function that produces
  * training suggestions returns text for a human to accept or ignore.
  */
-import { CURVE_LABELS, POWER_CURVE_RULES, QUALITY_ORDER, FTP_FROM_20MIN } from './bike-power-curve.js';
+import { CURVE_DURATIONS, CURVE_LABELS, POWER_CURVE_RULES, QUALITY_ORDER, FTP_FROM_20MIN } from './bike-power-curve.js';
 
 /* What a rider whose curve is unremarkable relative to their OWN threshold
    holds at each duration, as a fraction of FTP. These are shape references,
@@ -39,6 +39,17 @@ const SHAPE = {
   2400: 1.00,
   3600: 0.97,
 };
+
+/* The same reference as a curve, so the chart can draw it beside the rider's
+   own. Exported instead of SHAPE itself: the table is a model detail, and a
+   caller that reaches into it can start treating a shape reference as a
+   target, which is exactly what these numbers are not. */
+export function expectedShapeCurve(ftpWatts) {
+  if (!ftpWatts) return [];
+  return CURVE_DURATIONS
+    .filter(d => SHAPE[d] != null)
+    .map(d => ({ durationSec: d, watts: Math.round(SHAPE[d] * ftpWatts) }));
+}
 
 /* §3's five categories, each reading the durations that actually train it. */
 export const CAPABILITIES = {
