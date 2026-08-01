@@ -296,14 +296,53 @@ A power *stream* would have subsumed elapsed time, normalized watts and the
 curve together, and still would, if it is ever easier to expose than the
 separate computed fields.
 
+## The label, and the rules that let it exist
+
+Phase 7 refused a phenotype label. The reasoning was that "an athlete told
+they are a diesel stops sprinting, and the label makes itself true" — the
+label changes behaviour, and the changed behaviour then validates it. A test
+enforced the absence.
+
+Jon reversed that on 1 August 2026, asking for labels built so they do not
+stick. `shapeLabel` is the result, and eight rules are what separate it from
+the kind phase 7 refused. Each one has a test.
+
+1. **The subject is the curve, never the rider.** "This curve leans toward
+   VO2", never "you are". A state description does not become an identity the
+   way a noun does. The profile's own verdict was rewritten to match, because
+   two voices for one fact left the sticky formulation on the card anyway.
+2. **It carries its coverage**, so it never reads as more than it saw.
+3. **It never renders without the five scores**, and sits beneath them, so
+   the evidence is read before the summary.
+4. **It states the margin that would change it.** The label arrives with its
+   own exit rather than as a verdict.
+5. **It says what it changed from.** A label the athlete has watched move is
+   far harder to internalise than one that has always been there. This is the
+   strongest of the eight and the only one needing a store.
+6. **It returns null below a coverage floor.**
+7. **Nothing keys on it.** No plan write, no coach input, no prescription,
+   guarded by a test over `plan.js`, `coach.js`, `adapt.js` and `weakest.js`.
+   The behaviour-change path runs through prescription; cutting that cuts the
+   mechanism.
+8. **It names thin evidence rather than refusing on it.** A capability read
+   from one duration says so.
+
+The vocabulary is shape-descriptive and never a race archetype. A capability
+here is measured against the rider's own threshold, so a 180 W rider with a
+relatively good sprint is not a sprinter in any race, and "sprinter" would
+import a meaning the data cannot support. Those words are also the stickiest
+available, so the honest choice and the non-sticky one coincide.
+
+**What the label must carry, and why.** The normalisation removes the FTP's
+offset but not its scale: substituting k times FTP multiplies every score by
+1/k. Ordering survives a wrong threshold; magnitudes do not, so a stale high
+FTP flattens the shape toward even. The label states the threshold it used.
+
 ## Deliberately not built
 
 **A single race-readiness score.** Section 7 of the phase 8 spec forbids it
 and the reasoning holds: whatever single number exists is the only thing
 anybody reads.
-
-**A rider phenotype label.** Same reasoning one level down, and a test
-enforces the absence.
 
 **Normalized power approximated from interval averages.** A wrong number with
 a right name is worse than a missing one, because nothing downstream can tell.

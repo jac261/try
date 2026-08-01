@@ -110,7 +110,12 @@ export function riderProfile({ curve, ftpWatts }) {
       key,
       label: cap.label,
       why: cap.why,
-      // relative to the rider's own average, so the FTP level cancels
+      /* Relative to the rider's own average, so the FTP's OFFSET cancels.
+         Its SCALE does not: substituting k x ftp multiplies every score by
+         1/k, so a stale high threshold flattens the shape toward even and a
+         low one exaggerates it. Ordering is preserved either way, which is
+         why the shape survives a wrong threshold and the magnitudes do not.
+         This is why shapeLabel carries the threshold it used. */
       pct: Math.round((raw[key].mean - level) * 10) / 10,
       durations: have,
       // a capability read from one duration is a weaker claim than one read

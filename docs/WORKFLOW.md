@@ -70,6 +70,16 @@ one pass):
   fact gets calendar language (the post-race chip catch, 2026-07-30: "race
   completed" derived from the date alone, for a race the app structurally
   cannot log — a DNS athlete would have been congratulated on finishing).
+- **Sticky-label:** does any copy hand the athlete an identity rather than a
+  reading. A label changes behaviour and the changed behaviour then validates
+  it, so "you are a sprinter" makes itself true in a way "+8% at VO2" does
+  not. Any summary that names what an athlete IS has to earn it against the
+  eight rules in BIKE_MODULE.md: the subject is the data and not the person,
+  it carries its coverage and its inputs, it never replaces the evidence, it
+  states what would change it, it says what it changed from, it stays silent
+  below a coverage floor, nothing downstream reads it, and thin evidence is
+  named rather than hidden. The rules generalise beyond the bike; the failure
+  they guard against is any place the app summarises a person.
 
 **4. Adversarial verification.** Every finding from stage 3 gets an
 independent skeptic trying to refute it before it reaches Jon or becomes a
