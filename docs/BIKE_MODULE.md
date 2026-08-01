@@ -254,24 +254,47 @@ See [modules/plans.md](modules/plans.md).
 | `src/components/PowerCurveCard.jsx` | The curve, silent until data exists |
 | `src/features/progress/BikeDashboard.jsx` | The dashboard |
 
-## Waiting on the backend
+## What the backend gives it, and what is still missing
 
-Recorded in [BACKEND_HANDOFF.md](BACKEND_HANDOFF.md), cheapest first. Each is
-additive, read defensively, and gated so its absence renders nothing rather
-than guessing.
+The five fields this module was built to wait for have all landed. The list
+that used to sit here described them as pending, which stopped being true on
+30 July 2026 and misread the module's own state for anyone who read it after.
+[BACKEND_HANDOFF.md](BACKEND_HANDOFF.md) stays the authoritative list; this is
+what the bike in particular got, and what it still wants.
 
-1. **`startedAt`** on the activity — orders bricks and measures transitions.
-2. **`bikeReview`** on the log entry — pairs with the existing `swimReview`
-   ask. Without it the dashboard's whole quality section, the rolling FTP
-   evidence and the outcome history read "not enough data yet" for every
-   athlete however much they ride.
-3. **`elapsedTimeSec`** — separates a stop from a bad day, so outdoor rides
-   can be judged on what the rider did.
-4. **`normalizedWatts`** — unblocks intensity factor, power TSS and
-   variability index.
-5. **A power-curve endpoint** — unblocks the rider profile entirely.
+**Landed and in service.** `startedAt` orders bricks and measures transitions.
+`elapsedTimeSec` separates a stop from a bad day, so an outdoor ride is judged
+on what the rider did. `normalizedWatts` unblocked intensity factor, power TSS
+and variability index. `bikeReview` gave per-session reviews somewhere to
+live, which is what turned the dashboard's quality section from "not enough
+data yet" into an actual answer. The power-curve endpoint unblocked the rider
+profile.
 
-A power *stream* would subsume 3, 4 and 5.
+**Landed but not yet in service.** `totalElevationGain` and
+`totalElevationLoss` merged in JackGilham/try-backend#25. They are the run's
+ask rather than the bike's, but they matter here because the same release
+carries the `run_review` migration: nothing from that merge reaches an athlete
+until the migration-only stage runs and the API is promoted behind it.
+
+**Still missing, and it is a judgement rather than a field.** The power-curve
+endpoint serves `quality: null` on every point. The client reads absent as
+usable on purpose, because defaulting an unknown to `low` would empty the
+rider profile for everyone, so only an explicit `low` can protect an athlete
+from a bad point. That leaves the one error an athlete cannot catch for
+themselves wide open: a dropout, a spike or a new power meter reads as a
+sudden fitness gain at every duration at once, and the curve is exactly the
+surface where that looks like progress. `source` is the field that makes it
+detectable, and it is already there; what is missing is anyone's verdict on
+whether a point is trustworthy.
+
+The other open bike-adjacent ask is the anonymised percentile breakpoints,
+which would turn the rider profile's spider rings from a comparison against
+Try's own level table into one against other athletes. It needs a conversation
+about consent and k-anonymity more than it needs an endpoint.
+
+A power *stream* would have subsumed elapsed time, normalized watts and the
+curve together, and still would, if it is ever easier to expose than the
+separate computed fields.
 
 ## Deliberately not built
 
