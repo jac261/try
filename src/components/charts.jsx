@@ -258,9 +258,18 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
               <circle cx={x} cy={Y(m.value)} r={m.big ? 4 : 3} fill={c} />
               {m.big && <circle cx={x} cy={Y(m.value)} r="7" fill="none" stroke={c} strokeWidth="1.4" opacity="0.4" />}
             </>}
-            {m.label && <text x={Math.min(Math.max(x, pad + 12), W - pad - 12)} y={pad + 2}
-              textAnchor="middle" fontSize="6" fontWeight="800" letterSpacing="0.7" fill={c}>
-              {m.label}</text>}
+            {/* Two collisions to dodge, both seen rather than guessed. Kept
+                clear of the axis gutter, because a marker in the season's
+                first week lands exactly on the y-axis numbers. And dropped
+                below the plot when the line is high there, because otherwise
+                the label is printed straight through its own marker. */}
+            {m.label && (() => {
+              const high = m.value != null && Y(m.value) < pad + 14;
+              return <text x={Math.min(Math.max(x, pad + (axis ? 30 : 12)), W - pad - 12)}
+                y={high ? PB - 3 : pad + 2}
+                textAnchor="middle" fontSize="6" fontWeight="800" letterSpacing="0.7" fill={c}>
+                {m.label}</text>;
+            })()}
           </g>
         );
       })}

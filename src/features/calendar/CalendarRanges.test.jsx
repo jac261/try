@@ -49,9 +49,9 @@ const title = el => el.querySelector('.cal-head .ttl').textContent;
 beforeEach(() => { document.body.innerHTML = ''; });
 
 describe('the range control', () => {
-  it('offers Week and Month, marks one selected, and keeps the date across a switch', async () => {
+  it('offers the three ranges, marks one selected, and keeps the date across a switch', async () => {
     const { el, root } = await mount(generatePlan(profile()));
-    expect([...el.querySelectorAll('.segbar button')].map(b => b.textContent)).toEqual(['Week', 'Month']);
+    expect([...el.querySelectorAll('.segbar button')].map(b => b.textContent)).toEqual(['Week', 'Month', 'Season']);
     const on = () => [...el.querySelectorAll('.segbar button')].filter(b => b.getAttribute('aria-selected') === 'true');
     expect(on()).toHaveLength(1);
     expect(on()[0].textContent).toBe('Month');
@@ -173,6 +173,61 @@ describe('the week range', () => {
     await act(async () => { navs(el)[0].click(); });
     expect(el.textContent).toContain('Before this plan began.');
     expect(el.textContent).not.toContain('Rest day');
+    root.unmount(); el.remove();
+  }, 20000);
+});
+
+describe('the season range', () => {
+  const history = plan => {
+    const out = [];
+    let ctl = 38;
+    for (let d = plan.weeks[0].start; d <= todayISO; d = iso(addDays(d, 1))) {
+      ctl += 0.16;
+      out.push({ date: d, ctl, atl: ctl + 4, tsb: -4 });
+    }
+    return out;
+  };
+  const toSeason = async el => { await act(async () => { seg(el, 'Season').click(); }); };
+
+  it('charts the plan, names the block, and pins the milestones', async () => {
+    const plan = generatePlan(profile());
+    const { el, root } = await mount(plan, { wellness: history(plan), adjust: {} });
+    await toSeason(el);
+
+    expect(el.querySelector('.season-ramp')).toBeTruthy();
+    expect(el.querySelector('.season-blocks')).toBeTruthy();
+    // one block is current, and it is the only one
+    expect(el.querySelectorAll('.sb-row.now')).toHaveLength(1);
+    // the race is on the list and wears its own treatment
+    expect(el.querySelector('.season-miles .sm-row.race')).toBeTruthy();
+    root.unmount(); el.remove();
+  }, 20000);
+
+  it('steps nowhere: there is only one plan, so there is only one season', async () => {
+    const plan = generatePlan(profile());
+    const { el, root } = await mount(plan, { wellness: history(plan), adjust: {} });
+    // the month range can move...
+    expect(navs(el).some(b => !b.disabled)).toBe(true);
+    await toSeason(el);
+    // ...and the season cannot
+    expect(navs(el).every(b => b.disabled)).toBe(true);
+    root.unmount(); el.remove();
+  }, 20000);
+
+  it('offers no add-a-session row, having no day to add to', async () => {
+    const plan = generatePlan(profile());
+    const { el, root } = await mount(plan, { wellness: history(plan), adjust: {} });
+    expect(el.querySelectorAll('.cal-add-card')).toHaveLength(4);
+    await toSeason(el);
+    expect(el.querySelectorAll('.cal-add-card')).toHaveLength(0);
+    root.unmount(); el.remove();
+  }, 20000);
+
+  it('says there is no plan rather than drawing an empty axis', async () => {
+    const { el, root } = await mount(buildTrackerPlan(generatePlan(profile()), todayISO), { wellness: [], adjust: {} });
+    await toSeason(el);
+    expect(el.querySelector('.sr-plot')).toBeNull();
+    expect(el.textContent).toContain('No plan active');
     root.unmount(); el.remove();
   }, 20000);
 });

@@ -150,6 +150,9 @@ describe('seasonMilestones', () => {
     const race = m.filter(x => x.kind === 'race');
     expect(race).toHaveLength(1);
     expect(m[m.length - 1].kind).toBe('race');
+    // named as the calendar's pin names it, not by the workout's heading
+    expect(race[0].label).toBe('Olympic Triathlon');
+    expect(race[0].label).not.toMatch(/RACE DAY/);
   });
 
   it('names a benchmark test by what it measures, not by its workout title', () => {

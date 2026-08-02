@@ -36,6 +36,7 @@
 import { iso, addDays, daysBetween, startOfWeekMonday } from './date.js';
 import { estimateTss } from './adapt.js';
 import { phaseGroups } from './plan.js';
+import { RACES } from './domain.js';
 
 const round1 = x => Math.round(x * 10) / 10;
 
@@ -153,11 +154,15 @@ const TEST_LABEL = {
 export function seasonMilestones({ plan, moves, todayISO, limit }) {
   if (!plan || !Array.isArray(plan.weeks) || !plan.weeks.length) return [];
   const today = todayISO || iso(new Date());
+  const race = RACES[plan.race] || {};
+  // The race is named the way the calendar's pin names it, not by its workout
+  // title: "RACE DAY — Olympic" is a heading for a day, and this is a list.
+  const raceName = race.name ? race.name + (race.solo ? '' : ' Triathlon') : null;
   const out = [];
   plan.weeks.flatMap(w => w.workouts).forEach(w => {
     const date = (moves || {})[w.id] || w.date;
     if (date < today) return;
-    if (w.race) out.push({ id: w.id, date, kind: 'race', icon: 'trophy', label: w.title });
+    if (w.race) out.push({ id: w.id, date, kind: 'race', icon: 'trophy', label: raceName || w.title });
     else if (w.bRace) out.push({ id: w.id, date, kind: 'tuneup', icon: 'flag', label: w.title });
     else if (w.test) out.push({
       id: w.id, date, kind: 'test', icon: 'stopwatch',
