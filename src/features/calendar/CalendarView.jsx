@@ -122,6 +122,25 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     return T.fmtDate(week[0], sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'long' })
       + ' – ' + T.fmtDate(week[6], { day: 'numeric', month: 'long' });
   })();
+  /* "Week 2 of 4 · 9h 40m · 512 TSS, estimated".
+     Position is within the PHASE GROUP, not the plan: phaseGroups returns the
+     week index each group starts at, so it is week.index - group.start + 1,
+     and it is simply absent when the shown week is outside the plan.
+     Load is estimateTss over the sessions AS SHOWN — easedOf applies the
+     trim/boost/ease overlay, so the total can never disagree with the rows
+     under it. "Estimated" is said once, because it is: duration times
+     intensity-factor squared, not a measurement. */
+  const weekHeader = useMemo(() => {
+    const shown = week.flatMap(d => (byDate[d] || [])).filter(w => !w.race);
+    if (!shown.length) return null;
+    const min = shown.reduce((s, w) => s + (easedOf(w).durationMin || 0), 0);
+    const tss = Math.round(shown.reduce((s, w) => s + T.estimateTss(easedOf(w)), 0));
+    const pw = plan.weeks.find(w => w.start === week[0]);
+    const grp = pw && T.phaseGroups(plan).find(g => pw.index >= g.start && pw.index < g.start + g.weeks);
+    const where = grp ? 'Week ' + (pw.index - grp.start + 1) + ' of ' + grp.weeks + ' · ' : '';
+    return where + T.fmtDuration(min) + ' · ' + tss + ' TSS, estimated';
+  }, [week, byDate, plan, easedOf]);
+
   const ym = s => s.slice(0, 7);
   const step = n => (range === 'week' ? T.iso(T.addDays(anchor, n * 7)) : addMonths(anchor, n));
   /* Month compares months, week compares the days it would land on, so the
@@ -225,6 +244,39 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         </div>}
       </div>}
 
+      {range === 'week' && <>
+        {weekHeader && <div className="wk-head">{weekHeader}</div>}
+        {week.map(d => {
+          const ws = (byDate[d] || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
+          const hasActs = (actByDate[d] || []).length > 0;
+          return (
+            <div className={'card wk-day' + (d < todayISO ? ' past' : '') + (d === todayISO ? ' today' : '')} key={d}>
+              <div className="wd-when">
+                <div className="wd-dow">{T.fmtDate(d, { weekday: 'short' }).toUpperCase()}</div>
+                <div className="wd-num">{Number(d.slice(8))}</div>
+              </div>
+              <div className="wd-rows">
+                {ws.map(w => {
+                  const shown = easedOf(w);
+                  return <WorkoutRow key={w.id} w={shown} done={!!log[w.id]} eff={effDate(w, moves)}
+                    moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)}
+                    /* The A race's durationMin is a placeholder — WorkoutRow
+                       suppresses its duration for the same reason — so a load
+                       estimated off it would be invented. Tune-ups keep
+                       theirs; they have real durations. */
+                    right={w.race ? null : <><b>{Math.round(T.estimateTss(shown))}</b><span>TSS</span></>} />;
+                })}
+                <RecordedActivities bare activities={activities} date={d} plan={plan} log={log} moves={moves}
+                  onOpen={onOpenRecording} />
+                {!ws.length && !hasActs && <div className="wd-none">{tracker ? 'Nothing recorded.'
+                  : d < planStart ? 'Before this plan began.'
+                    : d > planEnd ? 'After this plan ends.' : 'Rest day'}</div>}
+              </div>
+            </div>
+          );
+        })}
+      </>}
+
       {range === 'month' && selected && <>
         <div className="section-title">{T.fmtDate(selected, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
         {!((tracker || selected < planStart) && dayActs.length > 0) && <div className="card">
@@ -259,7 +311,14 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         // off-plan days, and addCustomWorkout files any out-of-window date
         // under the LAST week (gauntlet 2026-07-16). Tracker's browse window
         // already covers any day worth logging.
-        const addTarget = tracker ? (selected || todayISO) : clampDay(selected || todayISO);
+        /* The week range has no selected day, and falling back to today
+           would file a session onto a day that is not on screen whenever the
+           athlete has browsed away. So it targets today when today is in the
+           shown week, and that week's Monday otherwise. */
+        const want = range === 'week'
+          ? (todayISO >= week[0] && todayISO <= week[6] ? todayISO : week[0])
+          : (selected || todayISO);
+        const addTarget = tracker ? want : clampDay(want);
         return <>
           <div className="section-title">Add a session</div>
           <div className="cal-add">

@@ -58,7 +58,7 @@ function Row({ disc, name, stat, tag, onOpen, manual, indoor }) {
   );
 }
 
-export function RecordedActivities({ activities, date, plan, log, moves, onOpen, noHeading }) {
+export function RecordedActivities({ activities, date, plan, log, moves, onOpen, noHeading, bare }) {
   // The DISCIPLINES guard keeps a future drift between the activity-type map
   // and the disciplines table from crashing the row render.
   const day = (activities || []).filter(a => a && a.date === date && DISC[a.type] && T.DISCIPLINES[DISC[a.type]] && a.movingTimeSec);
@@ -113,15 +113,21 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
   });
 
   if (!rows.length) return null;
+  const body = rows.map(({ key, open, ...r }) => <Row key={key} {...r} onOpen={() => onOpen && onOpen(open)} />);
+  /* bare: the rows with no card and no heading, for a caller that already has
+     both — the calendar's week range, where each day is its own card. The
+     matching rule has to come from HERE rather than from the grid's
+     unclaimedActs: the week is a list like the day card, so a recording that
+     a planned session already claims still earns a row (tagged Matched),
+     where on the grid it would only be a duplicate dot. */
+  if (bare) return <>{body}</>;
   return (
     <>
       {/* noHeading: when this card is a day's only content (calendar tab with
           no plan), the date heading directly above already owns it, and two
           stacked section-titles read as a layout glitch */}
       {!noHeading && <div className="section-title" style={{ marginTop: 14 }}>Recorded</div>}
-      <div className="card">
-        {rows.map(({ key, open, ...r }) => <Row key={key} {...r} onOpen={() => onOpen && onOpen(open)} />)}
-      </div>
+      <div className="card">{body}</div>
     </>
   );
 }

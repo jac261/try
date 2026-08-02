@@ -886,6 +886,25 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* Deliberately NOT raised: one extruded cell at a time, and a drag already
    has a ghost following the pointer. It only has to beat the press. */
 .cal-day.drop { border-color: var(--run); background: rgba(52, 211, 153, .22); box-shadow: none; }
+/* ---------- week range ----------
+   One card per day, the weekday in a fixed gutter so the dates line up down
+   the column whatever the rows beside them are doing. */
+.wk-head { font-size: 12.5px; font-weight: 700; color: #b3bdcd; margin: 0 4px 12px; }
+.wk-day { display: flex; gap: 10px; padding: 12px 14px; align-items: flex-start; }
+/* Days already gone step back rather than disappearing — they are still where
+   a missed session is, and moving one is the point of this range. */
+.wk-day.past { opacity: .62; }
+.wk-day.today { border-color: var(--blue); }
+.wk-day .wd-when { width: 34px; flex: none; padding-top: 10px; }
+.wk-day .wd-dow { font-size: 10px; font-weight: 800; color: #98a3b5; letter-spacing: .4px; }
+.wk-day .wd-num { font-size: 15px; font-weight: 800; letter-spacing: -.4px; }
+.wk-day .wd-rows { flex: 1; min-width: 0; }
+.wk-day .wd-none { color: var(--faint); font-size: 12.5px; font-weight: 600; padding: 14px 4px; }
+/* The load, where the weekday would otherwise repeat the heading beside it. */
+.wk-day .wk .right { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.wk-day .wk .right b { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -.3px; }
+.wk-day .wk .right span { font-size: 9.5px; font-weight: 800; color: var(--faint); letter-spacing: .5px; }
+
 /* Amber, opaque and glowing: rule 4, the race is status and never haze. */
 .cal-race-pin { display: flex; align-items: center; gap: 9px; margin-top: 14px; padding: 11px 13px; border-radius: 14px; background: rgba(250, 204, 21, .14); box-shadow: var(--raise-sm); font-size: 12.5px; font-weight: 700; color: #fde68a; }
 .cal-race-pin .rp-dot { width: 9px; height: 9px; border-radius: 50%; background: #facc15; box-shadow: 0 0 10px rgba(250, 204, 21, .7); flex: none; }

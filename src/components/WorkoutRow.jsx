@@ -6,7 +6,12 @@ import { ProfileStrip } from '@/components/WorkoutProfile.jsx';
 const D = T.DISCIPLINES;
 
 /* ---------------- workout row + detail ---------------- */
-export function WorkoutRow({ w, done, onClick, eff, moved, profile, onToggle }) {
+/* `right` replaces the weekday in the right-hand column. The calendar's week
+   range puts the session's load there, where the weekday would be repeating
+   the day heading it already sits under. Absent, the row is unchanged, which
+   is the point: this row carries the Key/Test/Race/2nd/Added/Eased/Trimmed/
+   Moved tags, and a hand-rolled week row would have quietly dropped them. */
+export function WorkoutRow({ w, done, onClick, eff, moved, profile, onToggle, right }) {
   if (w.discipline === 'rest') return (
     <div className="wk" style={{ opacity: .6, cursor: 'default' }}>
       <div className="dot" style={{ background: 'var(--rest)' }}><Icon name="rest" size={22} /></div>
@@ -28,7 +33,7 @@ export function WorkoutRow({ w, done, onClick, eff, moved, profile, onToggle }) 
         <div className="s">{w.type}{w.distance ? ' · ' + (w.distEst ? '~' : '') + w.distance + ' ' + w.unit : ''}{w.race ? '' : ' · ' + T.fmtDuration(w.durationMin || 0)}</div>
         {profile && <ProfileStrip w={w} />}
       </div>
-      <div className="right">{T.fmtDate(eff || w.date, { weekday: 'short' })}</div>
+      <div className="right">{right !== undefined ? right : T.fmtDate(eff || w.date, { weekday: 'short' })}</div>
       {/* pointer-only quick-complete: kept out of the accessibility tree so the
           row is not a button-inside-a-button; keyboard and screen-reader users
           complete sessions via the detail sheet's button. */}
