@@ -66,6 +66,13 @@
   --raise-sm: 3px 4px 9px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .25);
   --well: rgba(255, 255, 255, .04);
   --lift: rgba(255, 255, 255, .06);
+  /* Chrome that floats over scrolling content needs more than --pane behind
+     it. At the pane's 14%/5% white the header's white text disappeared
+     completely over a white card, and the tab bar's inactive labels went with
+     it — seen in nav.html, which is what it is for. So the two chrome
+     surfaces keep the blur and the moulded highlight and put this
+     underneath, which is the difference between glass and a window. */
+  --chrome-base: linear-gradient(180deg, rgba(13, 17, 24, .82), rgba(13, 17, 24, .7));
   color-scheme: dark;
   font-synthesis: none;
 }
@@ -156,23 +163,35 @@ body {
    The kit's Navigation doc draws the day-and-block block as a raised slab
    inside a pane. Here the header IS the outermost thing, so it has to be the
    pane as well: it is sticky over scrolling content, and text on a
-   translucent sticky surface is the classic way this material fails. The
-   tint below is the doc's, not --pane's, because a wide short bar reads
-   better lit straight down than at 150 degrees. */
+   translucent sticky surface is the classic way this material fails. It
+   duly failed, so --chrome-base sits under the doc's highlight; the white
+   gradient is lit straight down rather than at --pane's 150 degrees because
+   a wide short bar reads better that way.
+
+   The royal-blue glow survives, and not out of sentiment: the header needed
+   a darker base to hold its text at all, and the app's own glow is a better
+   one than flat navy. */
 .topbar {
   position: sticky; top: 0; z-index: 20;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .04));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .04)),
+    radial-gradient(135% 130% at 50% -25%, rgba(74, 116, 220, .42) 0%, rgba(74, 116, 220, 0) 56%),
+    var(--chrome-base);
   backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur);
   color: #fff; margin: 0 -16px 18px; padding: 20px 22px 20px;
   border-radius: 0 0 26px 26px; box-shadow: var(--raise);
   border-bottom: 1px solid rgba(255, 255, 255, .18);
 }
 .topbar h1 { margin: 0; font-size: 23px; font-weight: 800; letter-spacing: -.6px; display: flex; align-items: center; gap: 8px; }
-.topbar .sub { color: #c3ccdb; opacity: .8; font-size: 13px; margin-top: 5px; }
+/* Same reason as the tab labels: #c3ccdb at 80% was fine on an opaque navy
+   header and reads about 3:1 once a white card can scroll under it. The
+   opacity goes rather than being compensated for, because a translucent
+   colour on a translucent surface is two unknowns. */
+.topbar .sub { color: #dbe3ee; font-size: 13px; margin-top: 5px; }
 .topbar .race-chip {
   margin-top: 14px; display: inline-flex; gap: 12px; align-items: center;
   background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .12);
-  padding: 9px 16px; border-radius: 40px; font-size: 13px; color: #c3ccdb;
+  padding: 9px 16px; border-radius: 40px; font-size: 13px; color: #dbe3ee;
 }
 .topbar .race-chip b { font-size: 21px; font-weight: 800; color: #fff; letter-spacing: -.5px; }
 
@@ -190,18 +209,28 @@ body {
    both say trough, so the trough presses in here. */
 .nav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
-  background: var(--pane); backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur);
+  background: var(--pane), var(--chrome-base);
+  backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur);
   border-top: 1px solid rgba(255, 255, 255, .18);
   padding: 9px 8px calc(9px + env(safe-area-inset-bottom));
 }
+/* --well is 4% white, which is invisible against a pane this light. The
+   trough has to be darker than what it is cut into or it is not a trough. */
 .nav .tabs {
   display: flex; justify-content: center; gap: 6px;
   padding: 7px; border-radius: 22px;
-  background: var(--well); box-shadow: var(--press-sm);
+  background: rgba(0, 0, 0, .24); box-shadow: var(--press-sm);
 }
+/* The doc's inactive-tab grey rather than --muted, and it earns the literal:
+   --muted on a bar that is now lighter than the old near-opaque one left the
+   inactive labels around 3.5:1 over a white card, which is worse than the
+   4.9:1 the old near-opaque bar gave them. Brightening the label rather than
+   darkening the bar keeps the material: the active tab is told apart by
+   being extruded, not by being the brighter text, so the inactive ones can
+   afford to be legible. */
 .nav button {
   flex: 1; max-width: 130px; border: 0; background: none; cursor: pointer;
-  color: var(--muted); font-size: 11px; font-weight: 700; padding: 7px 4px; border-radius: 16px;
+  color: #dbe3ee; font-size: 11px; font-weight: 700; padding: 7px 4px; border-radius: 16px;
   display: flex; flex-direction: column; align-items: center; gap: 4px; font-family: inherit;
 }
 .nav button .ic { display: grid; place-items: center; height: 22px; opacity: .9; }
