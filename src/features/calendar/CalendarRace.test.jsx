@@ -86,3 +86,43 @@ describe('the gold race ring', () => {
     root.unmount(); el.remove();
   }, 20000);
 });
+
+/* The pin carries the DATE, which is the one thing about the race that no
+   other surface shows — the top bar counts days — and it stays put while the
+   athlete browses to a month the race is not in. It deliberately says nothing
+   about how far away the race is. */
+describe('the pinned race', () => {
+  it('names the date and the race, and survives browsing away from its month', async () => {
+    const raceDate = iso(addDays(mon, 12 * 7));
+    const { el, root } = await mount(generatePlan(base({ raceType: 'olympic', raceDate })));
+
+    const pin = () => el.querySelector('.cal-race-pin');
+    expect(pin()).not.toBeNull();
+    expect(pin().textContent).toContain('Olympic Triathlon');
+    // the day-of-month, in whatever order the locale writes it
+    expect(pin().textContent).toContain(String(Number(raceDate.slice(8))));
+    // no countdown language: the top bar owns that, and two of them drift
+    expect(pin().textContent).not.toMatch(/to go|days|day\b/i);
+
+    const before = pin().textContent;
+    await act(async () => { [...el.querySelectorAll('.cal-nav')][1].click(); });
+    expect(el.querySelector('.cal-day.race')).toBeNull();   // race month left behind
+    expect(pin().textContent).toBe(before);                 // the pin did not
+
+    root.unmount(); el.remove();
+  }, 20000);
+
+  it('is absent with no race to pin, and once the date has passed', async () => {
+    const maint = await mount(generatePlan(base({
+      raceType: 'maintenance', horizonWeeks: 12, raceDate: iso(addDays(mon, 12 * 7 - 1)),
+    })));
+    expect(maint.el.querySelector('.cal-race-pin')).toBeNull();
+    maint.root.unmount(); maint.el.remove();
+
+    const past = await mount(generatePlan(base({
+      startDate: iso(addDays(mon, -12 * 7)), raceType: 'olympic', raceDate: iso(addDays(today, -2)),
+    })));
+    expect(past.el.querySelector('.cal-race-pin')).toBeNull();
+    past.root.unmount(); past.el.remove();
+  }, 20000);
+});

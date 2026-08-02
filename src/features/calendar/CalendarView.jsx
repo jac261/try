@@ -180,6 +180,16 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
             );
           })}
         </div>
+        {/* The race, pinned. It carries the DATE, which no other surface does
+            — the top bar counts days — and it survives browsing to a month
+            the race is not in, which is when you most want to know. No
+            countdown here: the top bar owns that language, and two places
+            computing the same countdown is how PRs #19 to #23 went wrong.
+            raceISO is already null for tracker and maintenance. */}
+        {raceISO && raceISO >= todayISO && <div className="cal-race-pin">
+          <span className="rp-dot" />
+          <span>{T.fmtDate(raceISO, { day: 'numeric', month: 'short' })} · {race.name}{race.solo ? '' : ' Triathlon'}</span>
+        </div>}
       </div>
 
       {selected && <>

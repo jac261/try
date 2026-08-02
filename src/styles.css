@@ -866,6 +866,9 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* Deliberately NOT raised: one extruded cell at a time, and a drag already
    has a ghost following the pointer. It only has to beat the press. */
 .cal-day.drop { border-color: var(--run); background: rgba(52, 211, 153, .22); box-shadow: none; }
+/* Amber, opaque and glowing: rule 4, the race is status and never haze. */
+.cal-race-pin { display: flex; align-items: center; gap: 9px; margin-top: 14px; padding: 11px 13px; border-radius: 14px; background: rgba(250, 204, 21, .14); box-shadow: var(--raise-sm); font-size: 12.5px; font-weight: 700; color: #fde68a; }
+.cal-race-pin .rp-dot { width: 9px; height: 9px; border-radius: 50%; background: #facc15; box-shadow: 0 0 10px rgba(250, 204, 21, .7); flex: none; }
 .cd-dots { display: flex; gap: 3px; min-height: 7px; flex-wrap: wrap; justify-content: center; }
 .cd-dots i { width: 7px; height: 7px; border-radius: 50%; display: block; }
 .cd-dots i.done { opacity: .55; }
