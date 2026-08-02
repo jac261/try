@@ -63,7 +63,10 @@ export function athleteState({ wellness, runLoad, recovery, excludedDiscipline }
 
   // Recovery timeline enrichment: only while form sits in high risk and a
   // projection exists, phrased exactly as the readiness card phrases it.
-  // Mirror ReadinessCard's four branches exactly (ReadinessCard.jsx:209-213).
+  // Mirror ReadinessCard's four recovery branches exactly (search that file
+  // for 'Following your plan as scheduled'). Named rather than line-numbered:
+  // the old citation pointed at 209-213, which drifted onto an unrelated block
+  // and then onto the chips that card 1f deleted.
   // days == null is the beyond-horizon case: recovery was NOT seen inside the
   // projection window, so it is an unbounded floor ("at least"), never a
   // bounded "a week or two". Only 2..7 days earns a day count; past that the

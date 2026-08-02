@@ -315,6 +315,31 @@ header's radial glow (`.authgate`). Account/integration rows use `.authbox` (ins
 
 ---
 
+## 7b. The one glass exception
+
+**The readiness card is the only surface in Try wearing moulded glass**, and
+that is deliberate rather than the start of a migration. It was ported from the
+"Try Design System Glassmorphism" project's card 1f on 2026-08-02, on Jon's
+explicit call after being shown that it would look unlike its neighbours.
+
+Everything is scoped to `.rd-glass`, never to `.card`. If you are styling
+anything else, section 4 above is still the house style.
+
+Three things to know if you touch it:
+
+- **The card carries its own light.** The kit is explicit that without
+  something lit behind it the blur has nothing to refract and the pane reads as
+  a flat grey fill. Try's body is flat, so `.rd-glass::before` supplies two
+  contained orbs. Delete them and the pane goes grey.
+- **Blur exactly once.** The kit's rule 2: only the pane gets
+  `backdrop-filter`. Nested blurs cost frames and flatten the depth. There is
+  currently one blurred element on the whole page, and it should stay that way.
+- **Status keeps its saturation.** The band rail and the bar fills stay opaque
+  (rule 4), so a red morning never reads as haze.
+
+The palette needed no mapping: the kit's `--run`, `--bike`, `--swim` and
+`--ink` are already byte-identical to this app's.
+
 ## 8. Motion
 
 - **Micro-interactions:** `.12–.15s` transitions on hover/press; primary button presses down `translateY(1px)`.
