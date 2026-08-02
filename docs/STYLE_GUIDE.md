@@ -340,6 +340,18 @@ this app share one vocabulary: `--pane`, `--pane-blur`, `--pane-border`,
 4. **Status keeps its saturation.** Discipline colours, readiness green and
    warning amber stay opaque, so state never reads as haze.
 
+### Chrome is a special case
+
+`.topbar` and `.nav` float over content the athlete chooses by scrolling, so
+they are the only surfaces whose backdrop can be anything at all — including a
+white card. `--pane` alone is not enough there: at 14%/5% white the header's
+own text disappeared over a white card. Both take `--chrome-base` under the
+moulded highlight, and their secondary text is `#dbe3ee` at full opacity
+rather than `--muted`, which fell to about 3.5:1 in that same case.
+
+If you add a fixed or sticky surface, check it against `nav.html` before
+trusting it. Contrast on glass is a property of the pair, not of the colour.
+
 ### Two things that break it
 
 **The lit field is load-bearing.** `body::before` carries four blurred orbs.
@@ -354,18 +366,28 @@ was opaque and matched. On a pane it became a solid slab. Hollow means
 
 ### What the blur actually costs, measured
 
-Counted on real screens rather than estimated from the source, because the
-source count badly overstates it — ~65 `card` occurrences in the tree, but far
-fewer render at once, and the dense grids are not cards at all:
+Counted in the DOM rather than estimated from the source, because the source
+count badly overstates it — ~65 `card` occurrences in the tree, but far fewer
+render at once, and the dense grids are not cards at all.
 
-| Screen | Panes blurred |
-|---|---|
-| Today | 3 |
-| Calendar | 7 (its 58 day cells are **not** cards, so they do not blur) |
-| Progress, Bike tab | 8 |
-| Progress, Overview | 13 (the worst in the app) |
+**The first version of this table was two short on every row**, and the reason
+is worth keeping. It was counted in the dev harnesses, and a harness mounts one
+view without the app shell, so `.topbar` and `.nav` were missing from every
+figure. Counting where it is convenient is not the same as counting where the
+athlete is.
 
-Thirteen concurrent `backdrop-filter` layers is an ordinary number for a glass
+| Screen | In its harness | On the real screen |
+|---|---|---|
+| Today | 3 | 5 |
+| Calendar | 7 (its 58 day cells are **not** cards, so they do not blur) | 9 |
+| Progress, Bike tab | 8 | 10 |
+| Progress, Overview | 13 | 15 (the worst in the app) |
+
+The shell adds two everywhere: the sticky header and the fixed tab bar. The
+tab bar has blurred since long before the glass; the header joined it with the
+Navigation component.
+
+Fifteen concurrent `backdrop-filter` layers is an ordinary number for a glass
 UI, not the ~65 the source count implied. **Frame timing is still unmeasured**:
 `requestAnimationFrame` is throttled in a hidden browser pane, so any number
 from the dev harness would be fiction. Scroll smoothness needs a real device,
