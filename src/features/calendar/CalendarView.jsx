@@ -142,6 +142,19 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   }, [week, byDate, plan, easedOf]);
 
   const ym = s => s.slice(0, 7);
+  /* "Build · 38 h planned" under the month name. The design writes numbered
+     blocks ("Build 3"); Try does not have those, so it uses the phase label
+     the plan itself carries. Hours are the sessions whose EFFECTIVE date
+     lands in the shown month, so a moved session counts where it now is. */
+  const monthSub = useMemo(() => {
+    const inMonth = Object.entries(byDate).filter(([d]) => ym(d) === ym(anchor));
+    const min = inMonth.reduce((s, [, ws]) =>
+      s + ws.filter(w => !w.race).reduce((t, w) => t + (easedOf(w).durationMin || 0), 0), 0);
+    if (!min) return null;
+    const phases = [...new Set(plan.weeks.filter(w => ym(w.start) === ym(anchor)).map(w => T.weekPhaseLabel(plan, w)))];
+    return (phases.length === 1 ? phases[0] + ' · ' : '') + Math.round(min / 60) + ' h planned';
+  }, [byDate, anchor, plan, easedOf]);
+
   const step = n => (range === 'week' ? T.iso(T.addDays(anchor, n * 7)) : addMonths(anchor, n));
   /* Month compares months, week compares the days it would land on, so the
      arrows stop exactly where there is nothing left to show in EITHER range
@@ -191,7 +204,8 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         <button className="cal-nav" type="button" disabled={!canPrev}
           aria-label={range === 'week' ? 'Previous week' : 'Previous month'}
           onClick={() => { setAnchor(step(-1)); setSelected(null); }}>‹</button>
-        <div className="ttl">{range === 'week' ? weekLabel : grid.label}</div>
+        <div className="ttl">{range === 'week' ? weekLabel : grid.label}
+          {range === 'month' && monthSub && <div className="sub">{monthSub}</div>}</div>
         <button className="cal-nav" type="button" disabled={!canNext}
           aria-label={range === 'week' ? 'Next week' : 'Next month'}
           onClick={() => { setAnchor(step(1)); setSelected(null); }}>›</button>

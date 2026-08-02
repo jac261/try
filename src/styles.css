@@ -840,6 +840,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
    ranges that are not a grid have no card to sit in. */
 .cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .cal-head .ttl { flex: 1; text-align: center; font-weight: 800; font-size: 16px; letter-spacing: -.2px; }
+.cal-head .ttl .sub { font-size: 11.5px; font-weight: 700; color: #98a3b5; letter-spacing: 0; margin-top: 2px; }
 /* Lifted, and pressed when there is no month to go to — rule 3, and what
    .btn:disabled already does rather than fading out. 38px stays: the doc
    draws 36 and a thumb does not care what the doc draws. */
