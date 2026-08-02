@@ -172,7 +172,10 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
         return (
           <g key={p.durationSec}>
             <circle cx={x} cy={y} r="3"
-              fill={staleSet.has(p.durationSec) ? 'var(--card)' : 'var(--bike, var(--run))'}
+              /* transparent for a stale point: it reads as hollow against
+                 whatever is behind, which var(--card) stopped doing when the
+                 pane went translucent. */
+              fill={staleSet.has(p.durationSec) ? 'transparent' : 'var(--bike, var(--run))'}
               stroke="var(--bike, var(--run))" strokeWidth="1.5">
               <title>{tick(p.durationSec) + ': ' + p.watts + ' W'
                 + (ftpWatts ? ' (' + Math.round(p.watts / ftpWatts * 100) + '% of threshold)' : '')

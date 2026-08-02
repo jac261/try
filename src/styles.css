@@ -38,13 +38,63 @@
   --danger: #f87171;
 
   --shadow: 0 16px 44px rgba(0, 0, 0, .5);
-  --radius: 20px;
+  --radius: 20px;                      /* unchanged: used well beyond panes */
+
+  /* ---- moulded glass, from the kit's materials foundation ----
+     The house material as of 2026-08-02. Names match the design docs so the
+     two vocabularies stay one vocabulary. The palette above needed no mapping
+     at all: the kit's --run/--bike/--swim/--ink were already identical.
+
+     The kit's four rules, which the rest of this file has to obey:
+       1. One light source: highlights top-left, shadows bottom-right.
+       2. Blur once. Only a pane gets backdrop-filter; nested blurs cost
+          frames and flatten the depth. See the .card .card rule below.
+       3. In means inert, out means actionable. Tracks, wells and disabled
+          controls press IN; buttons and tiles swell OUT.
+       4. Status keeps its saturation. Discipline colours, readiness green and
+          warning amber stay opaque, so state never reads as haze. */
+  --pane: linear-gradient(150deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .05));
+  --pane-blur: blur(24px) saturate(160%);
+  --pane-border: 1px solid rgba(255, 255, 255, .18);
+  --pane-shadow: 0 20px 44px rgba(4, 7, 12, .5),
+                 inset 0 1px 0 rgba(255, 255, 255, .4),
+                 inset 0 -1px 0 rgba(0, 0, 0, .25);
+  --pane-radius: 24px;
+  --press: inset 4px 4px 10px rgba(0, 0, 0, .5), inset -3px -3px 9px rgba(255, 255, 255, .14);
+  --press-sm: inset 3px 3px 8px rgba(0, 0, 0, .45), inset -2px -2px 7px rgba(255, 255, 255, .12);
+  --raise: 5px 6px 14px rgba(0, 0, 0, .42), -4px -4px 12px rgba(255, 255, 255, .07), inset 0 1px 0 rgba(255, 255, 255, .3);
+  --raise-sm: 3px 4px 9px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .25);
+  --well: rgba(255, 255, 255, .04);
+  --lift: rgba(255, 255, 255, .06);
   color-scheme: dark;
   font-synthesis: none;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+/* The field the panes are lit against. Without something lit behind it the
+   blur has nothing to refract and every pane reads as a flat grey fill — the
+   kit says so outright, and the readiness card proved it before this went
+   app-wide. Fixed, behind everything, and CSS-only so no view has to know.
+   Four orbs at the kit's colours and drift. */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(640px 640px at -10% -14%, rgba(74, 116, 220, .55), rgba(74, 116, 220, 0) 68%),
+    radial-gradient(560px 560px at 112% 44%, rgba(251, 146, 60, .28), rgba(251, 146, 60, 0) 70%),
+    radial-gradient(600px 600px at -8% 108%, rgba(56, 189, 248, .3), rgba(56, 189, 248, 0) 70%),
+    radial-gradient(520px 520px at 88% 82%, rgba(52, 211, 153, .22), rgba(52, 211, 153, 0) 70%),
+    linear-gradient(165deg, #101725, #0b0e13 60%);
+  animation: field-drift 24s ease-in-out infinite;
+}
+@keyframes field-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(14px, -18px, 0) scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
 body {
   background: var(--bg);
   color: var(--ink);
@@ -138,7 +188,12 @@ body {
 .nav button.active .ic { opacity: 1; }
 
 /* ---------- cards ---------- */
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-bottom: 14px; }
+.card { background: var(--pane); backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur); border: var(--pane-border); border-radius: var(--pane-radius); box-shadow: var(--pane-shadow); padding: 18px; margin-bottom: 14px; }
+/* Rule 2, made structural. Cards genuinely nest here (SettingsView twice, the
+   swim dashboard once), and a blur inside a blur is what the kit warns costs
+   frames and flattens the depth. A nested pane keeps the tint, border and
+   shadow and drops only the blur. */
+.card .card { backdrop-filter: none; -webkit-backdrop-filter: none; }
 .card h2 { margin: 0 0 4px; font-size: 17px; font-weight: 800; letter-spacing: -.4px; }
 .card .lead { color: var(--muted); font-size: 13px; margin: 0 0 14px; line-height: 1.45; }
 .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--muted); font-weight: 700; margin: 22px 4px 10px; }
@@ -257,11 +312,16 @@ body {
 
 /* ---------- buttons / forms ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer; font-weight: 800; font-size: 15px; padding: 15px 18px; border-radius: 40px; width: 100%; font-family: inherit; letter-spacing: -.2px; transition: transform .08s, filter .15s; }
-.btn:disabled { opacity: .45; cursor: default; pointer-events: none; }
-.btn.primary { background: var(--accent); color: var(--accent-ink); }
+/* Rule 3: disabled presses IN rather than dimming. The kit is explicit that
+   inert things are pressed and actionable things swell, so a flat opacity
+   drop would have said the wrong thing in the new material's language. */
+.btn:disabled { background: var(--well); color: var(--faint); box-shadow: var(--press); cursor: default; pointer-events: none; }
+/* The one opaque surface in the system. Primary stays solid white so the
+   single real action on a screen can never read as chrome (Buttons.dc.html). */
+.btn.primary { background: linear-gradient(180deg, #ffffff, #dfe6f2); color: var(--accent-ink); box-shadow: 5px 6px 14px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .95); }
 .btn.primary:hover { filter: brightness(.94); }
 .btn.primary:active { transform: translateY(1px); }
-.btn.ghost { background: var(--chip); color: var(--ink); }
+.btn.ghost { background: var(--lift); color: var(--ink); box-shadow: var(--raise); }
 .btn.done { background: var(--chip); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line); }
 .btn.sm { width: auto; padding: 9px 16px; font-size: 13px; }
 .fithint { color: var(--muted); font-size: 11.5px; line-height: 1.45; margin: 8px 4px 0; text-align: center; }
@@ -557,7 +617,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 
 /* ---------- KPI ---------- */
 .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+.kpi { background: var(--pane); backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur); border: var(--pane-border); border-radius: var(--pane-radius); box-shadow: var(--pane-shadow); padding: 16px; }
 .kpi .v { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
 .kpi .k { color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 500; }
 .kpi .v small { font-size: 14px; color: var(--muted); font-weight: 700; }
