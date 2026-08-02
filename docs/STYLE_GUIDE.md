@@ -359,6 +359,12 @@ Delete it and every pane goes flat grey, because a blur with nothing lit behind
 it has nothing to refract. The kit says so outright and the readiness card
 proved it before this went app-wide.
 
+**An opaque fill over a `backdrop-filter` is work nobody sees.** The four
+add-a-session cards are `.card` with an inline discipline gradient, so `--pane`
+never showed and the blur underneath was invisible — four wasted layers on one
+tab. If a card overrides its background with something opaque, it drops the
+blur. Rule 4 keeps the saturation; only the blur goes.
+
 **Do not paint anything with `var(--card)` to fake a hole.** Two charts used to
 fill "hollow" markers with the card colour, which only worked while the card
 was opaque and matched. On a pane it became a solid slab. Hollow means
@@ -370,22 +376,31 @@ Counted in the DOM rather than estimated from the source, because the source
 count badly overstates it — ~65 `card` occurrences in the tree, but far fewer
 render at once, and the dense grids are not cards at all.
 
-**The first version of this table was two short on every row**, and the reason
-is worth keeping. It was counted in the dev harnesses, and a harness mounts one
-view without the app shell, so `.topbar` and `.nav` were missing from every
-figure. Counting where it is convenient is not the same as counting where the
-athlete is.
+This table has been wrong twice, both times for the same reason, and both are
+worth keeping because the reason keeps coming back.
+
+**It was two short on every row.** Counted in the dev harnesses, and a harness
+mounts one view without the app shell, so `.topbar` and `.nav` were missing
+everywhere. **Then the Calendar row was one too high on top of that**, because
+the calendar harness's own debug panel was a `.card`, so the instrument counted
+itself. (It no longer is one.) Count in the DOM, name every element, and check
+that each one is part of the app.
 
 | Screen | In its harness | On the real screen |
 |---|---|---|
 | Today | 3 | 5 |
-| Calendar | 7 (its 58 day cells are **not** cards, so they do not blur) | 9 |
+| Calendar, a day selected | 2 (its 58 day cells are **not** cards, so they do not blur) | 4 |
 | Progress, Bike tab | 8 | 10 |
 | Progress, Overview | 13 | 15 (the worst in the app) |
 
 The shell adds two everywhere: the sticky header and the fixed tab bar. The
 tab bar has blurred since long before the glass; the header joined it with the
 Navigation component.
+
+Calendar says **"a day selected"** because the day card and the recorded list
+only exist then; a number without its state is the same mistake in a third
+costume. It fell from 6 to 2 when the four add-a-session cards stopped
+blurring — see the rule below.
 
 Fifteen concurrent `backdrop-filter` layers is an ordinary number for a glass
 UI, not the ~65 the source count implied. **Frame timing is still unmeasured**:
