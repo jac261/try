@@ -59,8 +59,18 @@ describe('PowerCurveChart', () => {
   it('draws stale points hollow and fresh points filled', () => {
     const stale = [3600];
     const html = render({ curve: FULL, stale, ftpWatts: 260 });
-    // the hollow one uses the card colour as its fill
-    expect(html).toMatch(/<circle[^>]*fill="var\(--card\)"/);
+    /* Hollow means hollow. This asserted fill="var(--card)" — the MECHANISM,
+       which only ever produced a hole because the card was opaque and the
+       marker matched it. When the card became a glass pane that stopped being
+       true and the same fill painted a solid slab, while this test went on
+       passing. It now asserts the property the name claims. */
+    const circles = [...html.matchAll(/<circle[^>]*>/g)].map(m => m[0]);
+    const hollow = circles.filter(c => /fill="transparent"/.test(c));
+    const filled = circles.filter(c => /fill="var\(--bike/.test(c));
+    expect(hollow.length).toBe(1);                 // exactly the stale one
+    expect(filled.length).toBe(CURVE_DURATIONS.length - 1);
+    // and a hollow point still has its outline, or it would just be missing
+    expect(hollow[0]).toMatch(/stroke="var\(--bike/);
   });
 
   it('refuses to draw a previous curve through incomparable points', () => {

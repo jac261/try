@@ -86,7 +86,10 @@ export function SpiderChart({ spider, color = 'var(--accent)', fmtValue, size = 
         )}
         {poly.map(d => (
           <circle key={d.ax.key} cx={d.p[0]} cy={d.p[1]} r="3.5"
-            fill={d.ax.measured ? color : 'var(--card)'} stroke={color} strokeWidth="2" />
+            /* transparent, not the card colour: an unmeasured point is a HOLE.
+               Painting it var(--card) only ever worked because the card was
+               opaque and matched — on a glass pane it became a solid slab. */
+            fill={d.ax.measured ? color : 'transparent'} stroke={color} strokeWidth="2" />
         ))}
       </svg>
       <div className="hint" style={{ marginTop: 2 }}>

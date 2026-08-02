@@ -188,7 +188,12 @@ body {
 .nav button.active .ic { opacity: 1; }
 
 /* ---------- cards ---------- */
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-bottom: 14px; }
+.card { background: var(--pane); backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur); border: var(--pane-border); border-radius: var(--pane-radius); box-shadow: var(--pane-shadow); padding: 18px; margin-bottom: 14px; }
+/* Rule 2, made structural. Cards genuinely nest here (SettingsView twice, the
+   swim dashboard once), and a blur inside a blur is what the kit warns costs
+   frames and flattens the depth. A nested pane keeps the tint, border and
+   shadow and drops only the blur. */
+.card .card { backdrop-filter: none; -webkit-backdrop-filter: none; }
 .card h2 { margin: 0 0 4px; font-size: 17px; font-weight: 800; letter-spacing: -.4px; }
 .card .lead { color: var(--muted); font-size: 13px; margin: 0 0 14px; line-height: 1.45; }
 .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--muted); font-weight: 700; margin: 22px 4px 10px; }
@@ -307,11 +312,16 @@ body {
 
 /* ---------- buttons / forms ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer; font-weight: 800; font-size: 15px; padding: 15px 18px; border-radius: 40px; width: 100%; font-family: inherit; letter-spacing: -.2px; transition: transform .08s, filter .15s; }
-.btn:disabled { opacity: .45; cursor: default; pointer-events: none; }
-.btn.primary { background: var(--accent); color: var(--accent-ink); }
+/* Rule 3: disabled presses IN rather than dimming. The kit is explicit that
+   inert things are pressed and actionable things swell, so a flat opacity
+   drop would have said the wrong thing in the new material's language. */
+.btn:disabled { background: var(--well); color: var(--faint); box-shadow: var(--press); cursor: default; pointer-events: none; }
+/* The one opaque surface in the system. Primary stays solid white so the
+   single real action on a screen can never read as chrome (Buttons.dc.html). */
+.btn.primary { background: linear-gradient(180deg, #ffffff, #dfe6f2); color: var(--accent-ink); box-shadow: 5px 6px 14px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .95); }
 .btn.primary:hover { filter: brightness(.94); }
 .btn.primary:active { transform: translateY(1px); }
-.btn.ghost { background: var(--chip); color: var(--ink); }
+.btn.ghost { background: var(--lift); color: var(--ink); box-shadow: var(--raise); }
 .btn.done { background: var(--chip); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line); }
 .btn.sm { width: auto; padding: 9px 16px; font-size: 13px; }
 .fithint { color: var(--muted); font-size: 11.5px; line-height: 1.45; margin: 8px 4px 0; text-align: center; }
@@ -607,7 +617,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 
 /* ---------- KPI ---------- */
 .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+.kpi { background: var(--pane); backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur); border: var(--pane-border); border-radius: var(--pane-radius); box-shadow: var(--pane-shadow); padding: 16px; }
 .kpi .v { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
 .kpi .k { color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 500; }
 .kpi .v small { font-size: 14px; color: var(--muted); font-weight: 700; }
