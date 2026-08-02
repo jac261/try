@@ -1759,12 +1759,19 @@ export function App({ storage, getToken, user }) {
         onDelete={() => removeManual(manualDetail.id)}
         onClose={() => setManualDetail(null)} />}
 
-      <div className="nav">
-        {tabs.map(([k, ic, label]) => (
-          <button key={k} className={view === k ? 'active' : ''} onClick={() => setView(k)}>
-            <span className="ic"><Icon name={ic} size={22} /></span>{label}</button>
-        ))}
-      </div>
+      {/* A landmark and aria-current, because until now the active tab was
+          announced to nobody: the only marker was a text colour. The trough
+          needs an element of its own to press into, so the bar became the
+          pane and the row inside it became the trough. */}
+      <nav className="nav" aria-label="Main">
+        <div className="tabs">
+          {tabs.map(([k, ic, label]) => (
+            <button key={k} className={view === k ? 'active' : ''} onClick={() => setView(k)}
+              aria-current={view === k ? 'page' : undefined}>
+              <span className="ic"><Icon name={ic} size={22} /></span>{label}</button>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }
