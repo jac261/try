@@ -853,8 +853,16 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .cal-day { -webkit-touch-callout: none; min-height: 52px; border-radius: 13px; background: var(--well); box-shadow: var(--press-sm); padding: 6px 3px 5px; display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer; border: 1.5px solid transparent; user-select: none; }
 /* No well where there is no day, so the month's shape still reads. */
 .cal-day.blank { background: transparent; box-shadow: none; cursor: default; }
-.cal-day.off { opacity: .35; }
+/* Outside the plan window, but not out of reach: these cells are tappable and
+   they are how the pre-plan diary is read, so they carry recorded dots too.
+   At .35 the number came out near 1.4:1 on a well and the diary dots went
+   with it. Dim enough to read as inert, legible enough to use. */
+.cal-day.off { opacity: .55; }
 .cal-day .cd-num { font-size: 11.5px; font-weight: 700; color: #98a3b5; line-height: 1; }
+/* The browser's own ring here is orange, a shade off the gold that means race
+   day, and on a grid of 42 cells that is a bad place to guess. White is the
+   app's accent and cannot be read as a state — same rule as .avatar-btn. */
+.cal-day:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cal-day.today { border-color: var(--blue); }
 .cal-day.today .cd-num { color: var(--ink); }
 /* The extruded cell. Selection stops being blue: which day you are looking at

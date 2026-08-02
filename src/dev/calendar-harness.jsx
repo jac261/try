@@ -28,6 +28,21 @@ const firstBike = p => p.weeks.flatMap(w => w.workouts).find(w => w.discipline =
 const bike = firstBike(startsToday);
 const rideOn = (d, min, id) => ({ id, type: 'Ride', date: d, movingTimeSec: min * 60, distance: 30000 });
 
+/* A block with no race. It had no mode here, which is how the gold race ring
+   survived on the horizon day of every maintenance plan: the bug was only
+   visible in a shape the harness could not make. */
+const mondayOf = startOfWeekMonday(today);
+const maintenance = generatePlan(base({
+  raceType: 'maintenance', horizonWeeks: 12,
+  startDate: iso(mondayOf), raceDate: iso(addDays(mondayOf, 12 * 7 - 1)),
+}));
+
+/* Every cell state the grid can be in, in one month where possible: days
+   before the plan began (off, and still tappable — that is the pre-plan
+   diary), today, the day you have selected, and race day. */
+const shortStart = iso(addDays(today, -28));
+const states = generatePlan(base({ startDate: shortStart, raceDate: iso(addDays(today, 12)) }));
+
 const MODES = {
   'starts-today': { plan: startsToday, activities: [], log: {} },
   'starts-thursday': { plan: startsThursday, activities: [], log: {} },
@@ -40,6 +55,10 @@ const MODES = {
     plan: startsToday, log: { [bike.id]: { done: true } },
     activities: [rideOn(bike.date, bike.durationMin, 'r-a'), rideOn(bike.date, bike.durationMin, 'r-b')],
   },
+  // no race: no gold ring anywhere, and no pin
+  maintenance: { plan: maintenance, activities: [], log: {} },
+  // off-plan, today, selected and race day together
+  states: { plan: states, activities: [], log: {} },
 };
 
 const noop = () => {};
@@ -56,7 +75,14 @@ function Harness() {
             onClick={() => setMode(k)}>{k}</button>
         ))}
       </div>
-      <div className="card" style={{ fontSize: 12 }}>
+      {/* Deliberately NOT a .card. It used to be, and it blurred, so it
+          counted itself into the app's measured blur total and the style
+          guide carried a Calendar figure one too high. The instrument must
+          not show up in the reading. */}
+      <div style={{
+        fontSize: 12, padding: 14, marginBottom: 14, borderRadius: 14,
+        background: 'rgba(0,0,0,.3)', border: '1px dashed rgba(255,255,255,.2)',
+      }}>
         plan starts <b>{m.plan.weeks[0].start}</b> · trimmed from <b>{m.plan.firstWeekFrom || 'not trimmed'}</b> ·
         week 1 sessions <b>{m.plan.weeks[0].workouts.filter(w => w.discipline !== 'rest').length}</b> ·
         sessions before the start: <b style={{ color: early.length ? 'var(--danger)' : 'var(--run)' }}>{early.length}</b>
