@@ -315,30 +315,61 @@ header's radial glow (`.authgate`). Account/integration rows use `.authbox` (ins
 
 ---
 
-## 7b. The one glass exception
+## 7b. Moulded glass, the house material
 
-**The readiness card is the only surface in Try wearing moulded glass**, and
-that is deliberate rather than the start of a migration. It was ported from the
-"Try Design System Glassmorphism" project's card 1f on 2026-08-02, on Jon's
-explicit call after being shown that it would look unlike its neighbours.
+**As of 2026-08-02 glass is the house style, not an exception.** It arrived one
+card at a time (the readiness card, 1 August) and went app-wide the next day
+from the design project's Moulded Glass Kit. If you are adding a surface, this
+section is the material; section 4 above still governs spacing and shape.
 
-Everything is scoped to `.rd-glass`, never to `.card`. If you are styling
-anything else, section 4 above is still the house style.
+The tokens live in `:root` under the kit's own names, so the design docs and
+this app share one vocabulary: `--pane`, `--pane-blur`, `--pane-border`,
+`--pane-shadow`, `--pane-radius`, `--press`, `--press-sm`, `--raise`,
+`--raise-sm`, `--well`, `--lift`. The palette is unchanged — the kit's
+`--run`, `--bike`, `--swim` and `--ink` were already identical to ours.
 
-Three things to know if you touch it:
+### The four rules
 
-- **The card carries its own light.** The kit is explicit that without
-  something lit behind it the blur has nothing to refract and the pane reads as
-  a flat grey fill. Try's body is flat, so `.rd-glass::before` supplies two
-  contained orbs. Delete them and the pane goes grey.
-- **Blur exactly once.** The kit's rule 2: only the pane gets
-  `backdrop-filter`. Nested blurs cost frames and flatten the depth. There is
-  currently one blurred element on the whole page, and it should stay that way.
-- **Status keeps its saturation.** The band rail and the bar fills stay opaque
-  (rule 4), so a red morning never reads as haze.
+1. **One light source.** Highlights top-left, shadows bottom-right.
+2. **Blur once.** Only a pane gets `backdrop-filter`. Nested blurs cost frames
+   and flatten the depth. **Cards nest in this app**, so `.card .card` drops
+   the blur and keeps the tint — verified by construction, not assumed.
+3. **In means inert, out means actionable.** Tracks, wells and disabled
+   controls press in; buttons and tiles swell out. `.btn:disabled` presses
+   rather than dimming for exactly this reason.
+4. **Status keeps its saturation.** Discipline colours, readiness green and
+   warning amber stay opaque, so state never reads as haze.
 
-The palette needed no mapping: the kit's `--run`, `--bike`, `--swim` and
-`--ink` are already byte-identical to this app's.
+### Two things that break it
+
+**The lit field is load-bearing.** `body::before` carries four blurred orbs.
+Delete it and every pane goes flat grey, because a blur with nothing lit behind
+it has nothing to refract. The kit says so outright and the readiness card
+proved it before this went app-wide.
+
+**Do not paint anything with `var(--card)` to fake a hole.** Two charts used to
+fill "hollow" markers with the card colour, which only worked while the card
+was opaque and matched. On a pane it became a solid slab. Hollow means
+`transparent`.
+
+### What the blur actually costs, measured
+
+Counted on real screens rather than estimated from the source, because the
+source count badly overstates it — ~65 `card` occurrences in the tree, but far
+fewer render at once, and the dense grids are not cards at all:
+
+| Screen | Panes blurred |
+|---|---|
+| Today | 3 |
+| Calendar | 7 (its 58 day cells are **not** cards, so they do not blur) |
+| Progress, Bike tab | 8 |
+| Progress, Overview | 13 (the worst in the app) |
+
+Thirteen concurrent `backdrop-filter` layers is an ordinary number for a glass
+UI, not the ~65 the source count implied. **Frame timing is still unmeasured**:
+`requestAnimationFrame` is throttled in a hidden browser pane, so any number
+from the dev harness would be fiction. Scroll smoothness needs a real device,
+and the Progress overview is the screen to test.
 
 ## 8. Motion
 
