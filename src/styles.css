@@ -837,20 +837,46 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* ---------- month calendar (Calendar tab) ---------- */
 .cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .cal-head .ttl { flex: 1; text-align: center; font-weight: 800; font-size: 16px; letter-spacing: -.2px; }
-.cal-nav { width: 38px; height: 38px; border-radius: 10px; background: var(--chip); border: 0; color: var(--ink); font-size: 17px; cursor: pointer; font-family: inherit; font-weight: 700; }
-.cal-nav:disabled { opacity: .3; cursor: default; }
-.cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
-.cal-dow span { text-align: center; font-size: 10px; font-weight: 700; color: var(--faint); }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.cal-day { -webkit-touch-callout: none; min-height: 52px; border-radius: 10px; background: var(--chip); padding: 6px 3px 5px; display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer; border: 1.5px solid transparent; user-select: none; }
-.cal-day.blank { background: transparent; cursor: default; }
-.cal-day.off { opacity: .35; }
-.cal-day .cd-num { font-size: 11.5px; font-weight: 700; color: var(--muted); line-height: 1; }
+/* Lifted, and pressed when there is no month to go to — rule 3, and what
+   .btn:disabled already does rather than fading out. 38px stays: the doc
+   draws 36 and a thumb does not care what the doc draws. */
+.cal-nav { width: 38px; height: 38px; border-radius: 12px; background: var(--lift); box-shadow: var(--raise-sm); border: 0; color: #dbe3ee; font-size: 17px; cursor: pointer; font-family: inherit; font-weight: 700; }
+.cal-nav:disabled { background: var(--well); box-shadow: var(--press-sm); color: var(--faint); cursor: default; }
+/* gap matches .cal-grid, or the letters stop sitting over their columns */
+.cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 6px; }
+.cal-dow span { text-align: center; font-size: 10px; font-weight: 700; color: #98a3b5; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+/* The tab bar's thesis at 42 times the scale: the month is a field of pressed
+   wells and the day you are looking at is the only thing standing out of it.
+   Rule 3 argues the other way here, since every cell is tappable, but a grid
+   where everything is raised carries no selection at all. */
+.cal-day { -webkit-touch-callout: none; min-height: 52px; border-radius: 13px; background: var(--well); box-shadow: var(--press-sm); padding: 6px 3px 5px; display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer; border: 1.5px solid transparent; user-select: none; }
+/* No well where there is no day, so the month's shape still reads. */
+.cal-day.blank { background: transparent; box-shadow: none; cursor: default; }
+/* Outside the plan window, but not out of reach: these cells are tappable and
+   they are how the pre-plan diary is read, so they carry recorded dots too.
+   At .35 the number came out near 1.4:1 on a well and the diary dots went
+   with it. Dim enough to read as inert, legible enough to use. */
+.cal-day.off { opacity: .55; }
+.cal-day .cd-num { font-size: 11.5px; font-weight: 700; color: #98a3b5; line-height: 1; }
+/* The browser's own ring here is orange, a shade off the gold that means race
+   day, and on a grid of 42 cells that is a bad place to guess. White is the
+   app's accent and cannot be read as a state — same rule as .avatar-btn. */
+.cal-day:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cal-day.today { border-color: var(--blue); }
 .cal-day.today .cd-num { color: var(--ink); }
-.cal-day.sel { background: var(--blue-soft); }
+/* The extruded cell. Selection stops being blue: which day you are looking at
+   is a position, not a status, and blue is what marks today. The two were
+   competing for one signal. */
+.cal-day.sel { background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .06)); box-shadow: var(--raise); }
+.cal-day.sel .cd-num { color: var(--ink); font-weight: 800; }
 .cal-day.race { border-color: #facc15; }
-.cal-day.drop { border-color: var(--run); background: rgba(52, 211, 153, .14); }
+/* Deliberately NOT raised: one extruded cell at a time, and a drag already
+   has a ghost following the pointer. It only has to beat the press. */
+.cal-day.drop { border-color: var(--run); background: rgba(52, 211, 153, .22); box-shadow: none; }
+/* Amber, opaque and glowing: rule 4, the race is status and never haze. */
+.cal-race-pin { display: flex; align-items: center; gap: 9px; margin-top: 14px; padding: 11px 13px; border-radius: 14px; background: rgba(250, 204, 21, .14); box-shadow: var(--raise-sm); font-size: 12.5px; font-weight: 700; color: #fde68a; }
+.cal-race-pin .rp-dot { width: 9px; height: 9px; border-radius: 50%; background: #facc15; box-shadow: 0 0 10px rgba(250, 204, 21, .7); flex: none; }
 .cd-dots { display: flex; gap: 3px; min-height: 7px; flex-wrap: wrap; justify-content: center; }
 .cd-dots i { width: 7px; height: 7px; border-radius: 50%; display: block; }
 .cd-dots i.done { opacity: .55; }
@@ -880,8 +906,11 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 
 /* the three add-a-session cards at the foot of the calendar tab */
 .cal-add { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-/* full discipline colour, icon large and centred (Jon, 2026-07-17) */
-.cal-add-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 18px 8px 15px; margin: 0; cursor: pointer; color: #fff; border: none; }
+/* full discipline colour, icon large and centred (Jon, 2026-07-17).
+   The inline discipline gradient is opaque, so --pane never shows and the
+   .card blur underneath is invisible work — four wasted layers on this tab.
+   Rule 4 keeps the saturation; the blur goes. */
+.cal-add-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 18px 8px 15px; margin: 0; cursor: pointer; color: #fff; border: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .cal-add-card:active { transform: scale(.97); }
 .cal-add-name { font-size: 13px; font-weight: 700; }
 
