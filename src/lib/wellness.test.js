@@ -399,3 +399,68 @@ describe('wellness.rampHistory & rampZone', () => {
     for (let i = 1; i < z.length; i++) expect(z[i].hi).toBe(z[i - 1].lo);
   });
 });
+
+describe('readinessSignals: the receipts block', () => {
+  const base = { hrvMean: 60, hrvSd: 8, rhrMean: 50 };
+  const sig = (rec, k) => wellness.readinessSignals(rec, base).find(s => s.key === k);
+
+  it('WORSE IS ALWAYS LEFT, on both of the inverted scales', () => {
+    /* The two that can invert an athlete's morning if the sign is wrong:
+       resting HR counts UP into trouble, sleep counts DOWN. A bar drawn the
+       wrong way says "you are fine" on the day someone is not. */
+    expect(sig({ rhr: 58 }, 'rhr').pos).toBeLessThan(0);      // 8 above baseline
+    expect(sig({ rhr: 45 }, 'rhr').pos).toBeGreaterThan(0);   // 5 below
+    expect(sig({ sleepH: 4.5 }, 'sleep').pos).toBeLessThan(0);
+    expect(sig({ sleepH: 9 }, 'sleep').pos).toBeGreaterThan(0);
+    // and the ones that are not inverted, as a control
+    expect(sig({ hrv: 40 }, 'hrv').pos).toBeLessThan(0);
+    expect(sig({ hrv: 76 }, 'hrv').pos).toBeGreaterThan(0);
+  });
+
+  it('a good and a bad morning draw comparable magnitudes', () => {
+    /* The defect that made bars-from-points wrong: BONUS_FRACTION caps the
+       good side at ~15% of a factor's weight, so points-driven bars overstate
+       bad news roughly seven to one. Equal deviations must draw equal bars. */
+    const up = sig({ hrv: 60 + 8 }, 'hrv').pos;      // +1 sd
+    const down = sig({ hrv: 60 - 8 }, 'hrv').pos;    // -1 sd
+    expect(Math.abs(up)).toBeCloseTo(Math.abs(down), 3);
+  });
+
+  it('marks what the model actually used, and what it merely shows', () => {
+    /* Sleep and RHR have no bonusAt: nine hours scores exactly what seven
+       does. Those bars are real but unscored, which is why they render as a
+       ghost rather than as evidence. */
+    expect(sig({ sleepH: 9 }, 'sleep').scored).toBe(false);   // no credit above 7h
+    expect(sig({ sleepH: 5 }, 'sleep').scored).toBe(true);    // but a penalty below
+    expect(sig({ rhr: 44 }, 'rhr').scored).toBe(false);       // no credit below baseline
+    expect(sig({ rhr: 58 }, 'rhr').scored).toBe(true);
+    expect(sig({ hrv: 76 }, 'hrv').scored).toBe(true);        // HRV does earn a bonus
+  });
+
+  it('stays inside the track however extreme the morning', () => {
+    expect(sig({ hrv: 5 }, 'hrv').pos).toBe(-1);
+    expect(sig({ sleepH: 14 }, 'sleep').pos).toBe(1);
+    expect(sig({ rhr: 120 }, 'rhr').pos).toBe(-1);
+  });
+
+  it('a signal with no data draws no bar, rather than a zero one', () => {
+    const rows = wellness.readinessSignals({ hrv: 62 }, base);
+    expect(rows.map(r => r.key)).toEqual(['hrv']);
+    expect(wellness.readinessSignals(null, base)).toEqual([]);
+  });
+
+  it('carries a value the athlete can read, with its delta', () => {
+    expect(sig({ hrv: 68 }, 'hrv').text).toBe('68 +8');
+    expect(sig({ rhr: 53 }, 'rhr').text).toBe('53 +3');
+    expect(sig({ tsb: -7 }, 'form').text).toBe('−7');
+    expect(sig({ feel: 'fresh' }, 'feel').text).toBe('Fresh');
+  });
+
+  it('leaves the score, band and why output untouched', () => {
+    /* The receipts are a new read of the same model, never a change to it. */
+    const rec = { hrv: 52, sleepH: 6, rhr: 54, tsb: -12, feel: 'okay' };
+    const r = wellness.readiness(rec, base);
+    expect(r.score).toBe(wellness.readiness(rec, base).score);
+    expect(r.why.every(w => 'points' in w && 't' in w)).toBe(true);
+  });
+});

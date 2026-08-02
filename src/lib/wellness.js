@@ -93,7 +93,7 @@ const FACTORS = [
   {
     key: 'hrv', label: 'HRV', importance: 4,
     value: (rec, base) => (rec.hrv != null && base.hrvMean) ? (rec.hrv - base.hrvMean) / (base.hrvSd || 4) : null,
-    neutral: -0.5, worst: -2.5, curve: 1, bonusAt: 0.7,
+    neutral: -0.5, worst: -2.5, curve: 1, bonusAt: 0.7, displayBase: 0,
     driver: (rec, base, p) => {
       const bm = Math.round(base.hrvMean);
       if (p <= -12) return { bad: 1, t: `HRV ${rec.hrv} — well below your ${bm} baseline` };
@@ -107,7 +107,7 @@ const FACTORS = [
   {
     key: 'sleep', label: 'Sleep', importance: 3,
     value: (rec) => (rec.sleepH != null ? rec.sleepH : null),
-    neutral: 7, worst: 4, curve: 1.7,
+    neutral: 7, worst: 4, curve: 1.7, displayBase: 7,
     driver: (rec, _base, p) => {
       const s = rec.sleepH;
       if (p <= -8) return { bad: 1, t: `Only ${fmtH(s)} sleep` };
@@ -121,7 +121,7 @@ const FACTORS = [
   {
     key: 'feel', label: 'How you feel', importance: 3,
     value: (rec) => feelValue(rec.feel),
-    neutral: 0, worst: -1, curve: 1, bonusAt: 1,
+    neutral: 0, worst: -1, curve: 1, bonusAt: 1, displayBase: 0,
     driver: (_rec, _base, p) => {
       if (p < 0) return { bad: 1, t: 'You said you feel rough' };
       if (p > 0) return { bad: 0, t: 'You said you feel fresh' };
@@ -133,7 +133,7 @@ const FACTORS = [
   {
     key: 'rhr', label: 'Resting HR', importance: 2,
     value: (rec, base) => (rec.rhr != null && base.rhrMean) ? rec.rhr - base.rhrMean : null,
-    neutral: 2, worst: 8, curve: 1,
+    neutral: 2, worst: 8, curve: 1, displayBase: 0,
     driver: (rec, _base, p) => {
       if (p <= -10) return { bad: 1, t: `Resting HR ${rec.rhr} — well above baseline` };
       if (p <= -1) return { bad: 1, t: `Resting HR ${rec.rhr} — slightly raised` };
@@ -145,7 +145,7 @@ const FACTORS = [
   {
     key: 'form', label: 'Form', importance: 2,
     value: (rec) => (rec.tsb != null ? rec.tsb : null),
-    neutral: 0, worst: -25, curve: 1, bonusAt: 12,
+    neutral: 0, worst: -25, curve: 1, bonusAt: 12, displayBase: 0,
     driver: (rec, _base, p) => {
       const t = signed(rec.tsb);
       const zone = formZone(rec.tsb);
@@ -209,6 +209,74 @@ function pointsFor(f, x) {
   }
   const badness = Math.pow(clamp01((x - f.neutral) / (f.worst - f.neutral)), f.curve || 1);
   return -Math.round(badness * f.max);
+}
+
+/* The morning's signals as bars, for the readiness card's receipts block.
+ *
+ * NOT the score's contributions. Two reasons, both of which would have shown
+ * on screen (design decision, Jon, 2026-08-02):
+ *
+ * - `points` is asymmetric by design: BONUS_FRACTION caps a factor's good side
+ *   at ~15% of its weight while the bad side reaches 100%, so bars drawn from
+ *   points overstate bad news about seven to one.
+ * - Sleep and resting HR have no `bonusAt` at all. Nine hours scores exactly
+ *   what seven does. A bar of "what moved the score" could never fill right
+ *   for two of the five signals, and a good morning would render empty.
+ *
+ * So a bar shows the SIGNAL against its own baseline, and `scored` says
+ * whether the model actually credited or penalised it. Both claims stay true:
+ * this is your morning, and this is the part the number used.
+ *
+ * `pos` is -1..+1, negative always meaning worse. One span per factor, the
+ * distance from its baseline to `worst`, used in BOTH directions — so bar
+ * length is linear in the factor's own units and half a bar means the same
+ * thing either side. (Scaling the good side to `bonusAt` instead would make
+ * +0.7 sd of HRV fill the track completely while -0.7 filled a quarter of it.)
+ */
+export function readinessSignals(rec, base) {
+  if (!rec) return [];
+  const out = [];
+  for (const f of FACTORS) {
+    const x = f.value(rec, base || {});
+    if (x == null) continue;
+    const b = f.displayBase != null ? f.displayBase : 0;
+    // Which way is worse on THIS factor's scale: resting HR counts UP into
+    // trouble, everything else counts down. Getting this wrong inverts the
+    // athlete's morning, so it is derived rather than assumed per factor.
+    const worseUp = f.worst > b;
+    const span = Math.abs(f.worst - b) || 1;
+    const dev = (x - b) / span;                    // in span units, signed
+    const pos = Math.max(-1, Math.min(1, worseUp ? -dev : dev));
+    out.push({
+      key: f.key,
+      label: SIGNAL_LABELS[f.key] || f.label,
+      pos: Math.round(pos * 1000) / 1000,
+      // non-zero points means the model actually used it; anything else is
+      // shown for context and drawn as a ghost so it cannot read as evidence
+      scored: pointsFor(f, x) !== 0,
+      text: signalText(f.key, rec, base || {}),
+    });
+  }
+  return out;
+}
+
+// Short enough for the bar's label column; the full names stay on the
+// support page, which is where a definition belongs.
+const SIGNAL_LABELS = { hrv: 'HRV', sleep: 'Sleep', feel: 'Feel', rhr: 'RHR', form: 'Form' };
+
+function signalText(key, rec, base) {
+  if (key === 'hrv') {
+    const d = base.hrvMean != null ? ' ' + signed(rec.hrv - base.hrvMean) : '';
+    return rec.hrv + d;
+  }
+  if (key === 'sleep') return fmtH(rec.sleepH);
+  if (key === 'rhr') {
+    const d = base.rhrMean != null ? ' ' + signed(rec.rhr - base.rhrMean) : '';
+    return rec.rhr + d;
+  }
+  if (key === 'form') return signed(rec.tsb);
+  if (key === 'feel') return rec.feel === 'fresh' ? 'Fresh' : rec.feel === 'rough' ? 'Rough' : 'Okay';
+  return '';
 }
 
 // Readiness score (0-100) + band + the drivers behind it. Each factor only
@@ -423,4 +491,4 @@ const MODEL = {
   })),
 };
 
-export const wellness = { load, save, upsert, latest, baseline, readiness, advice, snapshot, history, mergeFeel, formZone, rampRate, rampHistory, rampZone, weeklyRamps, coachLine, shallowHistory, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };
+export const wellness = { load, save, upsert, latest, baseline, readiness, readinessSignals, advice, snapshot, history, mergeFeel, formZone, rampRate, rampHistory, rampZone, weeklyRamps, coachLine, shallowHistory, FORM_ZONES, RAMP_ZONES, fmtH, signed, MODEL, ENGINE_VERSION };
