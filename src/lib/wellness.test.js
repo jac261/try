@@ -443,6 +443,26 @@ describe('readinessSignals: the receipts block', () => {
     expect(sig({ rhr: 120 }, 'rhr').pos).toBe(-1);
   });
 
+  it('covers EVERY factor the model scores, with a label and a value', () => {
+    /* Found in the browser, not here: the first cut named five factors and the
+       model has seven, so `debt` rendered as a bar with no value at all. A
+       receipt that omits a contributor is not a receipt, and the two
+       cumulative factors (stacked sleep shortfall, acute-load rise) both move
+       the score. */
+    const rec = { hrv: 62, sleepH: 7, rhr: 50, tsb: 0, feel: 'okay', atl: 60, ctl: 50 };
+    const full = { ...base, sleepPrior: [5, 6, 6.5], atlWeekAgo: 45 };
+    const rows = wellness.readinessSignals(rec, full);
+    expect(rows.map(r => r.key).sort()).toEqual(['debt', 'feel', 'form', 'hrv', 'rhr', 'sleep', 'spike']);
+    rows.forEach(r => {
+      expect(r.label, r.key + ' has no short label').toBeTruthy();
+      expect(r.label.length, r.key + ' label too long for the column').toBeLessThanOrEqual(6);
+      expect(r.text, r.key + ' has no value text').toBeTruthy();
+    });
+    // both cumulative factors count UP into trouble
+    expect(rows.find(r => r.key === 'debt').pos).toBeLessThan(0);   // 2.5h short
+    expect(rows.find(r => r.key === 'spike').pos).toBeLessThan(0);  // load jumped
+  });
+
   it('a signal with no data draws no bar, rather than a zero one', () => {
     const rows = wellness.readinessSignals({ hrv: 62 }, base);
     expect(rows.map(r => r.key)).toEqual(['hrv']);

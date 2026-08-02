@@ -254,7 +254,7 @@ export function readinessSignals(rec, base) {
       // non-zero points means the model actually used it; anything else is
       // shown for context and drawn as a ghost so it cannot read as evidence
       scored: pointsFor(f, x) !== 0,
-      text: signalText(f.key, rec, base || {}),
+      text: signalText(f, x, rec, base || {}),
     });
   }
   return out;
@@ -262,21 +262,27 @@ export function readinessSignals(rec, base) {
 
 // Short enough for the bar's label column; the full names stay on the
 // support page, which is where a definition belongs.
-const SIGNAL_LABELS = { hrv: 'HRV', sleep: 'Sleep', feel: 'Feel', rhr: 'RHR', form: 'Form' };
+const SIGNAL_LABELS = {
+  hrv: 'HRV', sleep: 'Sleep', feel: 'Feel', rhr: 'RHR', form: 'Form',
+  // the two cumulative factors: a stacked sleep shortfall, and how sharply
+  // acute load has risen. Both count UP into trouble, which the direction
+  // derivation already handles — they need names that fit the column.
+  debt: 'Debt', spike: 'Load',
+};
 
-function signalText(key, rec, base) {
-  if (key === 'hrv') {
-    const d = base.hrvMean != null ? ' ' + signed(rec.hrv - base.hrvMean) : '';
-    return rec.hrv + d;
+function signalText(f, x, rec, base) {
+  switch (f.key) {
+    case 'hrv': return rec.hrv + (base.hrvMean != null ? ' ' + signed(rec.hrv - base.hrvMean) : '');
+    case 'rhr': return rec.rhr + (base.rhrMean != null ? ' ' + signed(rec.rhr - base.rhrMean) : '');
+    case 'sleep': return fmtH(rec.sleepH);
+    case 'form': return signed(rec.tsb);
+    case 'feel': return rec.feel === 'fresh' ? 'Fresh' : rec.feel === 'rough' ? 'Rough' : 'Okay';
+    // x IS the shortfall in hours; "none" beats "0h 00m" for the common case
+    case 'debt': return x > 0.05 ? fmtH(x) : 'None';
+    // x is the acute-load rise as a fraction of fitness
+    case 'spike': return signed(x * 100) + '%';
+    default: return '';
   }
-  if (key === 'sleep') return fmtH(rec.sleepH);
-  if (key === 'rhr') {
-    const d = base.rhrMean != null ? ' ' + signed(rec.rhr - base.rhrMean) : '';
-    return rec.rhr + d;
-  }
-  if (key === 'form') return signed(rec.tsb);
-  if (key === 'feel') return rec.feel === 'fresh' ? 'Fresh' : rec.feel === 'rough' ? 'Rough' : 'Okay';
-  return '';
 }
 
 // Readiness score (0-100) + band + the drivers behind it. Each factor only
