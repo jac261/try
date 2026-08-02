@@ -29,7 +29,14 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
      if that is older. Moves and add-targets stay clamped to the PLAN window
      below — you can look at last month, not schedule into it. */
   const viewStart = tracker ? planStart : (d => (d < planStart ? d : planStart))(addMonths(todayISO, -6));
-  const raceISO = tracker ? null : T.iso(plan.profile.raceDate);
+  /* noRace, not tracker. A maintenance block has no race, but it still has a
+     raceDate — "just the block's horizon" (domain.js) — and rollMaintenance
+     sets it to the Monday plus twelve weeks less a day, which is exactly
+     planEnd. So the gold race ring landed on the last browsable day of every
+     maintenance block, marking the horizon as a race. tracker is noRace too,
+     so one condition covers both. */
+  const race = T.RACES[plan.race] || {};
+  const raceISO = race.noRace ? null : T.iso(plan.profile.raceDate);
   const clampDay = d => (d < planStart ? planStart : d > planEnd ? planEnd : d);
 
   const [anchor, setAnchor] = useState(() => clampDay(todayISO));
