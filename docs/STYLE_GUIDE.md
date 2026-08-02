@@ -337,6 +337,13 @@ this app share one vocabulary: `--pane`, `--pane-blur`, `--pane-border`,
 3. **In means inert, out means actionable.** Tracks, wells and disabled
    controls press in; buttons and tiles swell out. `.btn:disabled` presses
    rather than dimming for exactly this reason.
+
+   **One place uses depth for ORDER rather than state**: the season's blocks
+   card, where the block you are in is raised and wears its phase colour, the
+   next one is raised and plain, and everything beyond presses in. A spent
+   block presses in too but reads back at half opacity — otherwise the block
+   you have just left looks exactly like one still ahead of you, and "nearer is
+   more raised" stops being true in the one direction that matters.
 4. **Status keeps its saturation.** Discipline colours, readiness green and
    warning amber stay opaque, so state never reads as haze.
 
@@ -407,6 +414,7 @@ that each one is part of the app.
 | Today | 3 | 5 |
 | Calendar / Month, a day selected | 2 (its 58 day cells are **not** cards, so they do not blur) | 4 |
 | Calendar / Week | 7 (one card per day, and nothing else) | 9 |
+| Calendar / Season | 3 (ramp, blocks, milestones) | 5 |
 | Progress, Bike tab | 8 | 10 |
 | Progress, Overview | 13 | 15 (the worst in the app) |
 

@@ -906,6 +906,42 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .wk-day .wk .right b { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -.3px; }
 .wk-day .wk .right span { font-size: 9.5px; font-weight: 800; color: var(--faint); letter-spacing: .5px; }
 
+/* ---------- season range ---------- */
+.section-sub { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.1px; color: #b3bdcd; margin-bottom: 10px; }
+.season-ramp .sr-head { display: flex; align-items: baseline; gap: 10px; font-size: 13px; font-weight: 800; letter-spacing: -.2px; margin-bottom: 10px; }
+.season-ramp .sr-block { margin-left: auto; font-size: 11.5px; font-weight: 700; color: #98a3b5; white-space: nowrap; }
+/* The plot presses in: the chart is a reading, not a control. */
+.season-ramp .sr-plot { border-radius: 18px; padding: 10px 8px 6px; background: var(--well); box-shadow: var(--press-sm); }
+.season-ramp .sr-note { font-size: 11.5px; line-height: 1.45; color: var(--faint); margin: 10px 2px 0; }
+
+/* Depth as ORDER, not state: the block you are in is raised and wears its
+   phase colour, the next is raised and plain, everything past it presses in.
+   The only place in the app where three elevations mean near, next and far. */
+.season-blocks .sb-row { display: flex; gap: 12px; align-items: center; padding: 9px 13px; border-radius: 16px; }
+.season-blocks .sb-row + .sb-row { margin-top: 8px; }
+.season-blocks .sb-row.now { background: color-mix(in srgb, var(--ph) 22%, transparent); border: 1px solid color-mix(in srgb, var(--ph) 45%, transparent); box-shadow: var(--raise-sm); }
+.season-blocks .sb-row.next { background: var(--lift); box-shadow: var(--raise-sm); }
+.season-blocks .sb-row.far { background: var(--well); box-shadow: var(--press-sm); }
+/* Spent, not merely distant: both press in, but a block you have finished
+   reads back so the block behind you cannot be mistaken for one ahead. */
+.season-blocks .sb-row.done { opacity: .5; }
+.season-blocks .sb-name { flex: 1; font-size: 13px; font-weight: 800; letter-spacing: -.2px; }
+.season-blocks .sb-row.far .sb-name { color: #b3bdcd; }
+.season-blocks .sb-when { font-size: 11px; font-weight: 700; color: var(--faint); }
+.season-blocks .sb-bar { width: 52px; height: 5px; border-radius: 3px; background: rgba(0, 0, 0, .35); box-shadow: inset 2px 2px 4px rgba(0, 0, 0, .6); flex: none; overflow: hidden; }
+.season-blocks .sb-bar i { display: block; height: 100%; border-radius: 3px; background: var(--ph, var(--accent)); }
+
+.season-miles .sm-row { display: flex; gap: 11px; align-items: center; padding: 5px 0; }
+.season-miles .sm-row.race { padding: 9px 12px; margin: 3px -3px 0; border-radius: 14px; background: rgba(250, 204, 21, .14); box-shadow: var(--raise-sm); }
+.season-miles .sm-ic { width: 30px; height: 30px; border-radius: 11px; flex: none; display: grid; place-items: center; box-shadow: var(--raise-sm); }
+.season-miles .sm-test { color: #fde68a; background: rgba(250, 204, 21, .16); }
+.season-miles .sm-tuneup { color: #9adcf8; background: rgba(56, 189, 248, .16); }
+/* The A race keeps full saturation: rule 4, status never reads as haze. */
+.season-miles .sm-race { color: var(--accent-ink); background: #facc15; }
+.season-miles .sm-label { flex: 1; font-size: 12.5px; font-weight: 700; color: #dbe3ee; min-width: 0; }
+.season-miles .sm-date { font-size: 11.5px; font-weight: 800; color: #b3bdcd; white-space: nowrap; }
+.season-miles .sm-row.race .sm-label, .season-miles .sm-row.race .sm-date { color: #fde68a; font-weight: 800; }
+
 /* Amber, opaque and glowing: rule 4, the race is status and never haze. */
 .cal-race-pin { display: flex; align-items: center; gap: 9px; margin-top: 14px; padding: 11px 13px; border-radius: 14px; background: rgba(250, 204, 21, .14); box-shadow: var(--raise-sm); font-size: 12.5px; font-weight: 700; color: #fde68a; }
 .cal-race-pin .rp-dot { width: 9px; height: 9px; border-radius: 50%; background: #facc15; box-shadow: 0 0 10px rgba(250, 204, 21, .7); flex: none; }

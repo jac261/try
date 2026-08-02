@@ -5,11 +5,9 @@ import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
+import { SeasonPanel } from '@/features/calendar/SeasonPanel.jsx';
 const D = T.DISCIPLINES;
-/* Season is deliberately absent: it is the one panel of the screen doc that
-   could not be read (the file is past the design API's size cap), and a range
-   nobody has seen is a range nobody can implement. */
-const RANGES = [['week', 'Week'], ['month', 'Month']];
+const RANGES = [['week', 'Week'], ['month', 'Month'], ['season', 'Season']];
 
 /* A real calendar: one month at a time as a grid of days, sessions shown as
    discipline dots on their EFFECTIVE dates. Tap a day to see its sessions
@@ -17,7 +15,7 @@ const RANGES = [['week', 'Week'], ['month', 'Month']];
    (writes the existing moves overlay, so it syncs and tags exactly like the
    detail sheet's reschedule — which remains the keyboard/screen-reader path).
    The week-by-week programme listing lives on the Plan tab now. */
-export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove, activities, onOpenRecording, onAddWorkout }) {
+export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove, activities, onOpenRecording, onAddWorkout, wellness, adjust }) {
   const todayISO = T.iso(new Date());
   // Tracker mode has no plan weeks: browse a rolling window around today so the
   // month grid still works and detected activities land on their days.
@@ -142,6 +140,20 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   }, [week, byDate, plan, easedOf]);
 
   const ym = s => s.slice(0, 7);
+  /* "2026 season" / "Mar – Oct · week 22 of 34". Two years when the plan
+     straddles New Year, because "2026 season" would be wrong for half of it. */
+  const season = useMemo(() => T.seasonCurve({ plan, wellness, log, moves, adjust, todayISO }),
+    [plan, wellness, log, moves, adjust, todayISO]);
+  const seasonLabel = season
+    ? (season.from.slice(0, 4) === season.to.slice(0, 4)
+      ? season.from.slice(0, 4) + ' season'
+      : season.from.slice(0, 4) + '–' + season.to.slice(2, 4) + ' season')
+    : 'Season';
+  const seasonSub = season
+    ? T.fmtDate(season.from, { month: 'short' }) + ' – ' + T.fmtDate(season.to, { month: 'short' })
+      + (season.weekOfSeason ? ' · week ' + season.weekOfSeason + ' of ' + season.weeks : '')
+    : null;
+
   /* "Build · 38 h planned" under the month name. The design writes numbered
      blocks ("Build 3"); Try does not have those, so it uses the phase label
      the plan itself carries. Hours are the sessions whose EFFECTIVE date
@@ -159,8 +171,11 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   /* Month compares months, week compares the days it would land on, so the
      arrows stop exactly where there is nothing left to show in EITHER range
      rather than at whichever boundary the month happened to own. */
-  const canPrev = range === 'week' ? week[0] > viewStart : ym(anchor) > ym(viewStart);
-  const canNext = range === 'week' ? week[6] < planEnd : ym(anchor) < ym(planEnd);
+  /* Season steps nowhere. The design draws arrows either side of "2026
+     season", but Try has exactly one plan at a time — there is no previous
+     season to reach. Disabled says so; arrows that do nothing would not. */
+  const canPrev = range === 'season' ? false : range === 'week' ? week[0] > viewStart : ym(anchor) > ym(viewStart);
+  const canNext = range === 'season' ? false : range === 'week' ? week[6] < planEnd : ym(anchor) < ym(planEnd);
 
   // Pointer-based drag (touch and mouse): the grip captures the pointer, a
   // ghost chip follows it, and elementFromPoint hit-tests the day cells.
@@ -204,8 +219,9 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         <button className="cal-nav" type="button" disabled={!canPrev}
           aria-label={range === 'week' ? 'Previous week' : 'Previous month'}
           onClick={() => { setAnchor(step(-1)); setSelected(null); }}>‹</button>
-        <div className="ttl">{range === 'week' ? weekLabel : grid.label}
-          {range === 'month' && monthSub && <div className="sub">{monthSub}</div>}</div>
+        <div className="ttl">{range === 'season' ? seasonLabel : range === 'week' ? weekLabel : grid.label}
+          {range === 'month' && monthSub && <div className="sub">{monthSub}</div>}
+          {range === 'season' && seasonSub && <div className="sub">{seasonSub}</div>}</div>
         <button className="cal-nav" type="button" disabled={!canNext}
           aria-label={range === 'week' ? 'Next week' : 'Next month'}
           onClick={() => { setAnchor(step(1)); setSelected(null); }}>›</button>
@@ -257,6 +273,9 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
           <span>{T.fmtDate(raceISO, { day: 'numeric', month: 'short' })} · {race.name}{race.solo ? '' : ' Triathlon'}</span>
         </div>}
       </div>}
+
+      {range === 'season' && <SeasonPanel plan={plan} wellness={wellness} log={log}
+        moves={moves} adjust={adjust} todayISO={todayISO} />}
 
       {range === 'week' && <>
         {weekHeader && <div className="wk-head">{weekHeader}</div>}
@@ -320,7 +339,9 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
           preselected and the selected day as the target; the sheet's library
           list carries the type choice. In plan mode this schedules a custom
           workout; in tracker mode App routes it to the manual-log flavour. */}
-      {onAddWorkout && (() => {
+      {/* Season has no add-a-session row: the design does not draw one, and
+          with no day on screen there is no honest target for it. */}
+      {onAddWorkout && range !== 'season' && (() => {
         // Plan mode clamps into the plan window: edge months show tappable
         // off-plan days, and addCustomWorkout files any out-of-window date
         // under the LAST week (gauntlet 2026-07-16). Tracker's browse window

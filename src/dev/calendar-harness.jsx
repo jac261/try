@@ -43,6 +43,14 @@ const maintenance = generatePlan(base({
 const shortStart = iso(addDays(today, -28));
 const states = generatePlan(base({ startDate: shortStart, raceDate: iso(addDays(today, 12)) }));
 
+/* Ten weeks in with eight to go: the shape the season range needs and none of
+   the other modes has. Every other plan here starts at or near today, so the
+   ramp would be one solid point and seventeen dashed ones — a chart whose
+   whole point is the join between done and planned, with nothing to join. */
+const midSeason = generatePlan(base({
+  startDate: iso(addDays(mondayOf, -10 * 7)), raceDate: iso(addDays(mondayOf, 8 * 7 + 2)),
+}));
+
 /* No plan at all, which is where the week range would be at its most wrong:
    plan.weeks is [] in tracker mode, so seven days of nothing must not come
    back as seven rest days for an athlete whose training is all recordings. */
@@ -70,6 +78,23 @@ const MODES = {
   states: { plan: states, activities: [], log: {} },
   // no plan, recordings only: the week range must say "Nothing recorded."
   tracker: { plan: trackerPlan, activities: trackerActs, log: {} },
+  // ten weeks done, eight to go: the season's solid half meeting its dashed one
+  'mid-season': { plan: midSeason, activities: [], log: {} },
+};
+
+/* A fitness history for the season ramp: a rising CTL from the plan's start to
+   today, so the solid half has a shape and the dashed half has somewhere to
+   start from. Deliberately NOT flat — a flat line hides a projection that
+   fails to join the measured one. */
+const historyFor = plan => {
+  if (!plan.weeks.length) return [];
+  const out = [];
+  let ctl = 38;
+  for (let d = plan.weeks[0].start; d <= todayISO; d = iso(addDays(d, 1))) {
+    ctl += 0.16;
+    out.push({ date: d, ctl: Math.round(ctl * 10) / 10, atl: Math.round((ctl + 4) * 10) / 10, tsb: -4 });
+  }
+  return out;
 };
 
 const noop = () => {};
@@ -103,7 +128,8 @@ function Harness() {
       </div>
       <CalendarView key={mode} plan={m.plan} log={m.log} moves={{}} open={noop} easedOf={w => w}
         onToggleWorkout={noop} onMove={noop} activities={m.activities}
-        onOpenRecording={noop} onAddWorkout={noop} />
+        onOpenRecording={noop} onAddWorkout={noop}
+        wellness={m.wellness || historyFor(m.plan)} adjust={{}} />
     </div>
   );
 }

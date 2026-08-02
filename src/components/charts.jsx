@@ -72,9 +72,20 @@ export function Sparkline({ values, betterDown, color }) {
 // and coloured background `zones` [{lo, hi, color}] (e.g. the Form training
 // zones) — zones are clamped to the data range so open-ended ones (±Infinity)
 // render as far as the data reaches without distorting the scale.
-export function TrendChart({ series, height, band, zones, domain, axis, bars, refLines }) {
+/* `marks` and `ribbon` are the season's additions, and both default off so the
+   five charts already using this render byte-identically.
+     marks:  vertical markers at a FRACTIONAL index — {i, label, color, dot,
+             value} — because today and race day fall mid-week on a weekly
+             series and the line saying "exactly here" must not round to Monday.
+     ribbon: spans under the plot, {from, to, color, label} in the same index
+             space, so the phase bars line up with the data instead of
+             approximating it. It reserves its own height below the plot.
+   A series may also carry `dash` (a projection, drawn as one) and `noDot`
+   (its endpoint belongs to a mark, not to the line). */
+export function TrendChart({ series, height, band, zones, domain, axis, bars, refLines, marks, ribbon }) {
   const uid = useId();
   series = series || [];
+  const ribH = ribbon && ribbon.length ? 22 : 0;
   const H = height || 100, W = 320, pad = 8;
   // `domain` extends the y-range beyond the data (union, never crop) — e.g. the
   // Form chart always frames every training zone in true proportion.
@@ -86,7 +97,10 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
   const min = Math.min(...vals), max = Math.max(...vals), range = (max - min) || 1;
   const maxN = Math.max(1, ...series.map(s => s.values.length));
   const X = i => (maxN <= 1 ? W / 2 : pad + (i / (maxN - 1)) * (W - 2 * pad));
-  const Y = v => H - pad - ((v - min) / range) * (H - 2 * pad);
+  // The ribbon takes its band off the BOTTOM of the box; with no ribbon both
+  // of these are exactly what they were, so nothing else moves by a pixel.
+  const PB = H - ribH - pad;
+  const Y = v => PB - ((v - min) / range) * (H - ribH - 2 * pad);
   // Null-aware: a null value breaks the path instead of feeding NaN into
   // the SVG. Sparse series (weekly body-mass means) render their gaps as
   // gaps rather than smoothly bridging silence (design panel 2026-07-21).
@@ -102,7 +116,7 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
   const area = vs => {
     const solid = vs.filter(v => v != null);
     if (solid.length !== vs.length) return null; // sparse series draw no area fill
-    return line(vs) + ' L' + X(vs.length - 1).toFixed(1) + ' ' + (H - pad) + ' L' + X(0).toFixed(1) + ' ' + (H - pad) + ' Z';
+    return line(vs) + ' L' + X(vs.length - 1).toFixed(1) + ' ' + PB + ' L' + X(0).toFixed(1) + ' ' + PB + ' Z';
   };
   const zoneRects = (zones || [])
     .map(z => ({ ...z, lo: Math.max(z.lo, min), hi: Math.min(z.hi, max) }))
@@ -179,7 +193,7 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
                 <g key={'b' + i}>
                   <rect x={x} y={Math.min(y0, y1)} width={bw} height={Math.max(1.5, Math.abs(y0 - y1))}
                     fill={b.color} opacity="0.85" rx="1.5" />
-                  {b.label && <text x={x + bw / 2} y={H - 1.5} textAnchor="middle" fontSize="5.5"
+                  {b.label && <text x={x + bw / 2} y={H - ribH - 1.5} textAnchor="middle" fontSize="5.5"
                     fill="#8b95a7" opacity="0.8">{b.label}</text>}
                 </g>
               );
@@ -204,10 +218,15 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
           {/* one solid colour for the whole line — the form line is coloured by
               the zone its CURRENT value sits in (Jon, 2026-07-17), passed as
               s.color from the caller, not per segment */}
-          <path d={line(s.values)} fill="none" stroke={s.color} strokeWidth={s.width || 2.2} strokeLinecap="round" strokeLinejoin="round" />
+          {/* dash: a projection is drawn as one. The athlete should be able to
+              tell what has happened from what is still a plan without reading
+              a legend. */}
+          <path d={line(s.values)} fill="none" stroke={s.color} strokeWidth={s.width || 2.2}
+            strokeDasharray={s.dash || undefined} strokeLinecap="round" strokeLinejoin="round" />
           {(() => {
             // the endpoint dot sits on the last REAL point: trailing nulls in
             // a sparse series otherwise paint it at NaN (gauntlet 2026-07-21)
+            if (s.noDot) return null;
             let li = s.values.length - 1;
             while (li >= 0 && s.values[li] == null) li--;
             return li >= 0 ? <circle cx={X(li)} cy={Y(s.values[li])} r="3" fill={s.color} /> : null;
@@ -219,13 +238,66 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
       {zoneRects.filter(z => z.label && z.active).map((z, i) => {
         const top = Y(z.hi), h = Math.max(1, Y(z.lo) - Y(z.hi));
         const fs = h >= 12 ? 7 : 5.8;
-        const ty = Math.min(Math.max(top + h / 2 + fs * 0.38, fs + 1.5), H - 3);
+        const ty = Math.min(Math.max(top + h / 2 + fs * 0.38, fs + 1.5), H - ribH - 3);
         return (
           <text key={'zl' + i} x={W - pad - 4} y={ty} textAnchor="end" fontSize={fs}
             fontWeight="700" letterSpacing="0.6" fill={z.color}>
             {z.label.toUpperCase()}</text>
         );
       })}
+      {/* Vertical markers, above the lines so a crossing line cannot hide the
+          one thing on the chart that says where you are. */}
+      {(marks || []).map((m, i) => {
+        const x = X(m.i);
+        const c = m.color || '#ffffff';
+        return (
+          <g key={'m' + i}>
+            <line x1={x} x2={x} y1={pad + (m.label ? 6 : 0)} y2={PB} stroke={c}
+              strokeWidth="1" strokeDasharray="3 3" opacity="0.55" />
+            {m.value != null && <>
+              <circle cx={x} cy={Y(m.value)} r={m.big ? 4 : 3} fill={c} />
+              {m.big && <circle cx={x} cy={Y(m.value)} r="7" fill="none" stroke={c} strokeWidth="1.4" opacity="0.4" />}
+            </>}
+            {/* Two collisions to dodge, both seen rather than guessed. Kept
+                clear of the axis gutter, because a marker in the season's
+                first week lands exactly on the y-axis numbers. And dropped
+                below the plot when the line is high there, because otherwise
+                the label is printed straight through its own marker. */}
+            {m.label && (() => {
+              const high = m.value != null && Y(m.value) < pad + 14;
+              return <text x={Math.min(Math.max(x, pad + (axis ? 30 : 12)), W - pad - 12)}
+                y={high ? PB - 3 : pad + 2}
+                textAnchor="middle" fontSize="6" fontWeight="800" letterSpacing="0.7" fill={c}>
+                {m.label}</text>;
+            })()}
+          </g>
+        );
+      })}
+      {/* The phase ribbon, in the band reserved below the plot. Spans are in
+          the data's own index space, so a block boundary sits exactly under
+          the week it starts. */}
+      {ribH > 0 && (
+        <g>
+          {ribbon.map((r, i) => {
+            // A span covers its weeks' full width, so it reaches half a step
+            // past the first and last point rather than stopping on their
+            // centres. Both ends are clamped BEFORE the width is taken: clamp
+            // one and compute the width from the unclamped value and the first
+            // span overruns the second by exactly the amount it was clipped.
+            const half = maxN > 1 ? (W - 2 * pad) / (maxN - 1) / 2 : 0;
+            const x0 = Math.max(pad - 4, X(Math.max(0, r.from)) - half);
+            const x1 = Math.min(W - pad + 4, X(Math.min(maxN - 1, r.to)) + half);
+            const w = Math.max(2, x1 - x0);
+            return (
+              <g key={'rb' + i}>
+                <rect x={x0} y={H - ribH + 2} width={w} height="7" rx="3.5" fill={r.color} opacity="0.55" />
+                {w > 22 && <text x={x0 + w / 2} y={H - 1.5} textAnchor="middle" fontSize="6"
+                  fontWeight="700" fill="#98a3b5">{r.label}</text>}
+              </g>
+            );
+          })}
+        </g>
+      )}
     </svg>
   );
 }
