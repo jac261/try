@@ -35,6 +35,8 @@ const loadPropDismiss = () => cGet('todayProposalDismissed');
 const savePropDismiss = v => cSet('todayProposalDismissed', v);
 
 const BAND_COLOR = { green: 'var(--run)', amber: 'var(--bike)', red: 'var(--danger)' };
+// the disc's glow: the band colour at low alpha, opaque per the kit's rule 4
+const GLOW = { green: 'rgba(52,211,153,.25)', amber: 'rgba(251,146,60,.25)', red: 'rgba(248,113,113,.25)' };
 
 // The morning check-in: one tap, three answers, skippable, gone once answered.
 // The answer scores immediately (the "How you feel" factor) and becomes the
@@ -53,26 +55,54 @@ function FeelCheckin({ onFeel }) {
   );
 }
 
-function ReadinessRing({ score, band }) {
-  const r = 26, c = 2 * Math.PI * r;
-  const col = BAND_COLOR[band];
+/* Card 1f's score disc: the number pressed into the pane, lit from the
+   top-left, with the band's own colour glowing out of it. It replaces the
+   progress ring, which encoded the score as an arc as well as a figure — the
+   arc is the thing lost in this trade, and it is worth a look in review. */
+function ScoreDisc({ score, band }) {
   return (
-    <svg width="74" height="74" viewBox="0 0 72 72" style={{ flex: 'none' }}>
-      <circle cx="36" cy="36" r={r} fill="none" stroke="var(--track)" strokeWidth="6" />
-      <circle cx="36" cy="36" r={r} fill="none" stroke={col} strokeWidth="6" strokeLinecap="round"
-        strokeDasharray={(score / 100 * c) + ' ' + c} transform="rotate(-90 36 36)" />
-      {/* dominantBaseline centres vertically at any digit count; 100 gets a
-          slightly smaller size so three digits sit comfortably in the ring */}
-      <text x="36" y="36" textAnchor="middle" dominantBaseline="central"
-        fontSize={score >= 100 ? 17 : 20} fontWeight="800" fill="var(--ink)">{score}</text>
-    </svg>
+    <div className="rd-disc" style={{ '--rd-glow': GLOW[band], color: BAND_COLOR[band] }}>{score}</div>
+  );
+}
+
+/* The receipts: each morning signal against its own baseline. Scored signals
+   read as evidence; the rest are real deviations the model gave no credit for
+   (sleep above 7h, resting HR below baseline) and render hollow so they cannot
+   be mistaken for evidence. See wellness.readinessSignals. */
+function SignalBars({ signals }) {
+  if (!signals.length) return null;
+  return (
+    <div className="rd-signals">
+      <div className="rd-signals-head"><span>WORSE</span><span>BASELINE</span><span>BETTER</span></div>
+      {signals.map(sig => {
+        const pct = Math.abs(sig.pos) * 50;
+        const better = sig.pos >= 0;
+        return (
+          <div className="rd-sig" key={sig.key}>
+            <div className="rd-sig-label">{sig.label}</div>
+            <div className="rd-sig-track">
+              <div className="rd-sig-tick" />
+              <div className={'rd-sig-fill' + (sig.scored ? '' : ' ghost')}
+                style={{
+                  [better ? 'left' : 'right']: '50%',
+                  width: pct + '%',
+                  background: better
+                    ? 'linear-gradient(90deg, rgba(52,211,153,.5), var(--run))'
+                    : 'linear-gradient(270deg, rgba(251,146,60,.5), var(--bike))',
+                }}
+                aria-hidden="true" />
+            </div>
+            <div className="rd-sig-val">{sig.text}</div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
 export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport, recovery, noPlan, storage, onDecision }) {
   if (storage && storage.ns) CARD_NS = storage.ns;
   const [loadChoice, setLoadChoice] = useState(loadPref);
-  const [whyOpen, setWhyOpen] = useState(false);
   // Declared with the other hooks, ABOVE the !rec early return: a hook below
   // it changes the mounted instance's hook count the moment the first
   // readiness entry lands (the splash-hold crash class, 2026-07-15).
@@ -136,14 +166,18 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
   const toggle = () => { saveLoadPref(!open); setLoadChoice(open ? '0' : '1'); };
 
   return (
-    <div className={'card rd rd-' + rd.band}>
+    <div className={'card rd rd-glass rd-' + rd.band}>
       <div className="rd-top">
-        <ReadinessRing score={rd.score} band={rd.band} />
+        <ScoreDisc score={rd.score} band={rd.band} />
         <div className="rd-main">
           <div className="rd-headline">{rd.headline}</div>
           <div className="rd-advice">{adv}</div>
         </div>
       </div>
+      {/* Card 1f: the score's receipts, always visible. They were two taps
+          deep before (Details, then Why?), which is what 1f is arguing
+          against — a number nobody can check. */}
+      <SignalBars signals={T.wellness.readinessSignals(rec, T.wellness.baseline(wellness, rec.date))} />
       {onFeel && !(rec.date === todayISO && rec.feel) && <FeelCheckin onFeel={onFeel} />}
       {/* The adaptive engine (Phase 1): at most one reasoned proposal for today,
           from this morning's band — rules & thresholds in docs/ADAPTIVE_ENGINE.md.
@@ -196,24 +230,6 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
         <span className="rlt-chev">{open ? '▾' : '▸'}</span>
       </div>
       {open && <>
-        <div className="rd-why">
-          {(() => {
-            // Only the signals that actually moved the score; a chip that says
-            // "everything is normal" three different ways is noise. And with the
-            // cumulative factors there can be five movers on a rough morning, so
-            // the chips themselves sit behind one more tap.
-            const movers = rd.why.filter(w => Math.abs(w.points || 0) >= 1)
-              .sort((a, b) => Math.abs(b.points) - Math.abs(a.points)); // biggest impact first
-            if (!movers.length) return <span className="rd-chip">All signals around your baseline</span>;
-            return <>
-              <a className="rd-why-toggle" {...tap(() => setWhyOpen(o => !o))} role="button" aria-expanded={whyOpen}>
-                Why? · {movers.length} signal{movers.length > 1 ? 's' : ''} moved this score
-                <span aria-hidden="true">{whyOpen ? '▾' : '▸'}</span>
-              </a>
-              {whyOpen && movers.map((w, i) => <span key={i} className={'rd-chip' + (w.bad ? ' bad' : '')}>{w.t}</span>)}
-            </>;
-          })()}
-        </div>
         {hist.length >= 3 && (() => {
           // Readiness over the recent days, each scored against its own rolling
           // baseline; the shaded band is the amber zone (55-75), so where the line

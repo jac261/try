@@ -67,10 +67,34 @@ const MODES = {
   tracker: () => ({ plan: buildTrackerPlan(generatePlan(base()), new Date().toISOString()), moves: {} }),
 };
 
+/* Readiness fixtures. Three mornings that exercise the receipts block: one
+   where every signal is fine, one where several are against you, and one whose
+   deviations the MODEL GIVES NO CREDIT FOR (sleep above the 7h need, resting
+   HR below baseline) — the ghost-fill case, which is the whole reason the bars
+   distinguish shown-from-scored. 21 days of history so the baseline is real. */
+const rdHistory = (mut = () => ({})) => Array.from({ length: 21 }, (_, i) => ({
+  date: iso(addDays(today, -(21 - i))),
+  hrv: 60 + ((i * 7) % 9) - 4, rhr: 50 + ((i * 3) % 5) - 2, sleepH: 7.2,
+  /* ctl/atl as well as tsb: without them hasLoad is false and the Details
+     drawer renders only the readiness trend, so the Fitness & Fatigue, Form
+     and Ramp charts cannot be checked at all. A fixture that cannot show a
+     regression is not a fixture. */
+  ctl: 52 + i * 0.6, atl: 56 + ((i * 5) % 11) - 5, tsb: -4,
+  ...mut(i),
+}));
+const RD = {
+  none: [],
+  good: [...rdHistory(), { date: todayISO, hrv: 70, rhr: 47, sleepH: 8.2, tsb: 6, feel: 'fresh' }],
+  rough: [...rdHistory(), { date: todayISO, hrv: 44, rhr: 57, sleepH: 5.1, tsb: -18, feel: 'rough' }],
+  // every deviation here is real and none of it moves the score
+  uncredited: [...rdHistory(), { date: todayISO, hrv: 61, rhr: 44, sleepH: 9.4, tsb: 1, feel: 'okay' }],
+};
+
 const noop = () => {};
 function Harness() {
   const [mode, setMode] = useState('double');
   const [proven, setProven] = useState(false);
+  const [rd, setRd] = useState('good');
   const { plan, moves } = MODES[mode]();
   // With no history everything sits on the novice default, so the visible
   // demo is a proven tolerance RAISING the ceiling: 'solid' (60 g/h held)
@@ -86,9 +110,13 @@ function Harness() {
         ))}
         <button className={'btn sm ' + (proven ? 'primary' : 'ghost')} style={{ width: 'auto' }}
           onClick={() => setProven(v => !v)}>proven fuel</button>
+        {Object.keys(RD).map(k => (
+          <button key={k} className={'btn sm ' + (rd === k ? 'primary' : 'ghost')} style={{ width: 'auto' }}
+            onClick={() => setRd(k)}>rd:{k}</button>
+        ))}
       </div>
-      <TodayView key={mode + proven} plan={plan} log={{}} moves={moves} open={noop} onTune={noop}
-        wellness={[]} onFeel={noop} onEditWellness={noop} easedOf={w => w} onEaseToday={noop}
+      <TodayView key={mode + proven + rd} plan={plan} log={{}} moves={moves} open={noop} onTune={noop}
+        wellness={RD[rd]} onFeel={noop} onEditWellness={noop} easedOf={w => w} onEaseToday={noop}
         onRestoreToday={noop} weekly={null} onWeekly={noop} spotted={null} onLogSpotted={noop}
         onAddWorkout={noop} eftp={null} onEftp={noop} onToggleWorkout={noop} planEdge={null}
         onSupport={noop} activities={[]} displayActivities={[]} recovery={null}

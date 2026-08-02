@@ -269,6 +269,89 @@ body {
 .crash-detail { white-space: pre-wrap; word-break: break-word; font-size: 11px; line-height: 1.55; color: var(--muted); background: var(--chip); border-radius: 10px; padding: 10px 12px; margin: 0 0 14px; max-height: 180px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 /* readiness card */
+/* ---------- moulded glass, readiness card ONLY ----------
+   Ported from the "Try Design System Glassmorphism" project's materials
+   foundation (Jon, 2026-08-02), card 1f. Deliberately scoped to .rd-glass and
+   never to .card: this is one surface in a flat app, which Jon chose knowing
+   it would look unlike its neighbours.
+
+   The four rules the kit states, all of which this obeys:
+     1. One light source — highlights top-left, shadows bottom-right.
+     2. Blur once — only the pane gets backdrop-filter. Nested blurs cost
+        frames and flatten the depth just built.
+     3. In means inert, out means actionable — tracks and wells press IN,
+        buttons and tiles swell OUT.
+     4. Status keeps its saturation — the band rail and the bar fills stay
+        opaque, so state never reads as haze.
+
+   The palette is unchanged: the kit's --run/--bike/--swim/--ink are already
+   byte-identical to this file's. */
+.rd-glass {
+  --pane: linear-gradient(150deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .05));
+  --pane-blur: blur(24px) saturate(160%);
+  --press: inset 4px 4px 10px rgba(0, 0, 0, .5), inset -3px -3px 9px rgba(255, 255, 255, .14);
+  --press-sm: inset 3px 3px 8px rgba(0, 0, 0, .45), inset -2px -2px 7px rgba(255, 255, 255, .12);
+  --raise-sm: 3px 4px 9px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .25);
+  --well: rgba(255, 255, 255, .04);
+
+  position: relative;
+  isolation: isolate;                 /* the orbs stay this card's business */
+  overflow: hidden;                   /* and are clipped to its radius */
+  background: var(--pane);
+  backdrop-filter: var(--pane-blur);
+  -webkit-backdrop-filter: var(--pane-blur);
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-left: 3px solid var(--muted);  /* the band rail survives the skin */
+  border-radius: 24px;
+  box-shadow: 0 20px 44px rgba(4, 7, 12, .5),
+              inset 0 1px 0 rgba(255, 255, 255, .4),
+              inset 0 -1px 0 rgba(0, 0, 0, .25);
+}
+/* Without something lit behind it the blur has nothing to refract and the
+   pane reads as a flat grey fill — the kit says so outright. The app's body
+   is flat, so the card carries its own light. Two orbs, not the canvas's
+   three: this is a card, not a page. */
+.rd-glass::before {
+  content: ''; position: absolute; inset: -40% -20%; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(74, 116, 220, .55), rgba(74, 116, 220, 0) 60%),
+    radial-gradient(circle at 88% 82%, rgba(52, 211, 153, .22), rgba(52, 211, 153, 0) 62%);
+  filter: blur(50px);
+  animation: rd-orb 24s ease-in-out infinite;
+}
+@keyframes rd-orb {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(18px, -22px, 0) scale(1.08); }
+}
+/* The score disc: pressed into the pane, lit from top-left, with the band's
+   own colour glowing out of it (rule 4 — status stays saturated). */
+.rd-disc {
+  width: 64px; height: 64px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  font-size: 22px; font-weight: 800; letter-spacing: -.5px;
+  background: rgba(255, 255, 255, .05);
+  box-shadow: inset 4px 4px 10px rgba(0, 0, 0, .5),
+              inset -4px -4px 10px rgba(255, 255, 255, .22),
+              0 0 22px var(--rd-glow, transparent);
+}
+/* The receipts. The block presses in (inert), and so does every track. */
+.rd-signals { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: rgba(255, 255, 255, .03); box-shadow: var(--press); margin-top: 15px; }
+.rd-signals-head { display: flex; justify-content: space-between; font-size: 9.5px; font-weight: 800; letter-spacing: .8px; color: var(--faint); }
+.rd-sig { display: flex; align-items: center; gap: 10px; }
+.rd-sig-label { width: 44px; flex: none; font-size: 11px; font-weight: 800; color: var(--muted); }
+.rd-sig-track { flex: 1; height: 16px; border-radius: 999px; background: rgba(0, 0, 0, .3); box-shadow: inset 2px 2px 5px rgba(0, 0, 0, .6); position: relative; }
+.rd-sig-tick { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1.5px; background: rgba(255, 255, 255, .35); }
+.rd-sig-fill { position: absolute; top: 3px; bottom: 3px; border-radius: 999px; }
+/* Scored: the model used this signal, so it reads as evidence. Unscored: a
+   real deviation the model gave no credit for (sleep above 7h, RHR below
+   baseline), drawn hollow so it cannot be mistaken for one. */
+.rd-sig-fill.ghost { opacity: .38; }
+.rd-sig-val { width: 58px; flex: none; text-align: right; font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rd-glass::before { animation: none; }
+}
+
 .rd { border-left: 3px solid var(--muted); }
 .rd.rd-green { border-left-color: var(--run); }
 .rd.rd-amber { border-left-color: var(--bike); }
