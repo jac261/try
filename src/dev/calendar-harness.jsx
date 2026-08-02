@@ -5,7 +5,7 @@ import '@/styles.css';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CalendarView } from '@/features/calendar/CalendarView.jsx';
-import { generatePlan } from '@/lib/plan.js';
+import { generatePlan, buildTrackerPlan } from '@/lib/plan.js';
 import { iso, addDays, startOfWeekMonday } from '@/lib/date.js';
 
 const today = new Date();
@@ -43,6 +43,15 @@ const maintenance = generatePlan(base({
 const shortStart = iso(addDays(today, -28));
 const states = generatePlan(base({ startDate: shortStart, raceDate: iso(addDays(today, 12)) }));
 
+/* No plan at all, which is where the week range would be at its most wrong:
+   plan.weeks is [] in tracker mode, so seven days of nothing must not come
+   back as seven rest days for an athlete whose training is all recordings. */
+const trackerPlan = buildTrackerPlan(generatePlan(base()), todayISO);
+const trackerActs = [-1, -3, -4].map((n, i) => ({
+  id: 'tr' + i, type: i === 1 ? 'Run' : 'Ride', name: i === 1 ? 'Evening run' : 'Commute',
+  date: iso(addDays(today, n)), movingTimeSec: (40 + i * 15) * 60, distance: 15000 + i * 5000,
+}));
+
 const MODES = {
   'starts-today': { plan: startsToday, activities: [], log: {} },
   'starts-thursday': { plan: startsThursday, activities: [], log: {} },
@@ -59,14 +68,19 @@ const MODES = {
   maintenance: { plan: maintenance, activities: [], log: {} },
   // off-plan, today, selected and race day together
   states: { plan: states, activities: [], log: {} },
+  // no plan, recordings only: the week range must say "Nothing recorded."
+  tracker: { plan: trackerPlan, activities: trackerActs, log: {} },
 };
 
 const noop = () => {};
 function Harness() {
   const [mode, setMode] = useState('starts-thursday');
   const m = MODES[mode];
-  const early = m.plan.weeks.flatMap(w => w.workouts)
-    .filter(w => w.discipline !== 'rest' && w.date < (m.plan.firstWeekFrom || m.plan.weeks[0].start));
+  // A tracker plan has no weeks at all, which is the whole point of that mode
+  // and is what this panel used to crash on.
+  const wk0 = m.plan.weeks[0];
+  const early = !wk0 ? [] : m.plan.weeks.flatMap(w => w.workouts)
+    .filter(w => w.discipline !== 'rest' && w.date < (m.plan.firstWeekFrom || wk0.start));
   return (
     <div className="app">
       <div style={{ display: 'flex', gap: 8, padding: '10px 0', flexWrap: 'wrap' }}>
@@ -83,8 +97,8 @@ function Harness() {
         fontSize: 12, padding: 14, marginBottom: 14, borderRadius: 14,
         background: 'rgba(0,0,0,.3)', border: '1px dashed rgba(255,255,255,.2)',
       }}>
-        plan starts <b>{m.plan.weeks[0].start}</b> · trimmed from <b>{m.plan.firstWeekFrom || 'not trimmed'}</b> ·
-        week 1 sessions <b>{m.plan.weeks[0].workouts.filter(w => w.discipline !== 'rest').length}</b> ·
+        plan starts <b>{wk0 ? wk0.start : 'no plan (tracker)'}</b> · trimmed from <b>{m.plan.firstWeekFrom || 'not trimmed'}</b> ·
+        week 1 sessions <b>{wk0 ? wk0.workouts.filter(w => w.discipline !== 'rest').length : 0}</b> ·
         sessions before the start: <b style={{ color: early.length ? 'var(--danger)' : 'var(--run)' }}>{early.length}</b>
       </div>
       <CalendarView key={mode} plan={m.plan} log={m.log} moves={{}} open={noop} easedOf={w => w}

@@ -340,6 +340,22 @@ this app share one vocabulary: `--pane`, `--pane-blur`, `--pane-border`,
 4. **Status keeps its saturation.** Discipline colours, readiness green and
    warning amber stay opaque, so state never reads as haze.
 
+### Segmented controls: one idiom, three implementations
+
+The house pattern is a **pill trough with the chosen segment as the only
+extruded thing in it** — rule 3 doing the work colour alone cannot. `.segbar`
+(the calendar's range) is the general form; `.nav .tabs` is the fixed-bar
+variant, differing only in shape.
+
+**`.prog-tabs` is still a row of `.btn`s from before the glass.** That is a
+real inconsistency and it is recorded here rather than fixed, because
+rewriting a tab bar in a PR that does not otherwise touch that screen is how a
+calendar change breaks Progress. It belongs to the Progress component.
+
+New segmented controls take `.segbar`. Use real `<button>`s with
+`role="tab"` and `aria-selected`, so activation is the platform's and the
+selected one is announced.
+
 ### Chrome is a special case
 
 `.topbar` and `.nav` float over content the athlete chooses by scrolling, so
@@ -389,7 +405,8 @@ that each one is part of the app.
 | Screen | In its harness | On the real screen |
 |---|---|---|
 | Today | 3 | 5 |
-| Calendar, a day selected | 2 (its 58 day cells are **not** cards, so they do not blur) | 4 |
+| Calendar / Month, a day selected | 2 (its 58 day cells are **not** cards, so they do not blur) | 4 |
+| Calendar / Week | 7 (one card per day, and nothing else) | 9 |
 | Progress, Bike tab | 8 | 10 |
 | Progress, Overview | 13 | 15 (the worst in the app) |
 

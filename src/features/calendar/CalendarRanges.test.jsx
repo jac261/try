@@ -1,0 +1,191 @@
+// @vitest-environment happy-dom
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createRoot } from 'react-dom/client';
+import { act } from 'react';
+import { CalendarView } from '@/features/calendar/CalendarView.jsx';
+import { WorkoutRow } from '@/components/WorkoutRow.jsx';
+import { renderToString } from 'react-dom/server';
+import { generatePlan, buildTrackerPlan } from '@/lib/plan.js';
+import { estimateTss } from '@/lib/adapt.js';
+import { iso, addDays, startOfWeekMonday } from '@/lib/date.js';
+import { weekRange } from '@/lib/schedule.js';
+
+/* The calendar's ranges (design: "three ranges of the same plan, one set of
+   chrome"). Season is not here — its panel could not be read.
+ *
+ * The two shapes worth naming: TRACKER, where plan.weeks is empty and a
+ * plan-only week range would answer seven days of nothing with seven rest
+ * days; and the days BEFORE a plan began, which have the same problem inside
+ * a race plan. A race-plan fixture alone catches neither. */
+
+const today = new Date();
+const todayISO = iso(today);
+const mon = startOfWeekMonday(today);
+
+const profile = (over = {}) => ({
+  name: 'T', raceType: 'olympic', fitness: 'intermediate',
+  fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70,
+  trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5,
+  startDate: iso(addDays(mon, -28)), raceDate: iso(addDays(today, 84)), ...over,
+});
+
+const noop = () => {};
+const mount = async (plan, extra = {}) => {
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  const root = createRoot(el);
+  await act(async () => {
+    root.render(<CalendarView plan={plan} log={{}} moves={{}} open={noop} easedOf={w => w}
+      onToggleWorkout={noop} onMove={noop} activities={null} onOpenRecording={noop}
+      onAddWorkout={noop} {...extra} />);
+  });
+  return { el, root };
+};
+const seg = (el, label) => [...el.querySelectorAll('.segbar button')].find(b => b.textContent === label);
+const toWeek = async el => { await act(async () => { seg(el, 'Week').click(); }); };
+const navs = el => [...el.querySelectorAll('.cal-nav')];
+const title = el => el.querySelector('.cal-head .ttl').textContent;
+
+beforeEach(() => { document.body.innerHTML = ''; });
+
+describe('the range control', () => {
+  it('offers Week and Month, marks one selected, and keeps the date across a switch', async () => {
+    const { el, root } = await mount(generatePlan(profile()));
+    expect([...el.querySelectorAll('.segbar button')].map(b => b.textContent)).toEqual(['Week', 'Month']);
+    const on = () => [...el.querySelectorAll('.segbar button')].filter(b => b.getAttribute('aria-selected') === 'true');
+    expect(on()).toHaveLength(1);
+    expect(on()[0].textContent).toBe('Month');
+
+    // step a month back, switch to week: the week shown must be inside that
+    // month, not back at today — the chrome is shared, so the date persists
+    await act(async () => { navs(el)[0].click(); });
+    const monthShown = title(el);
+    await toWeek(el);
+    expect(on()[0].textContent).toBe('Week');
+    const days = [...el.querySelectorAll('.wk-day .wd-num')].map(n => n.textContent);
+    expect(days).toHaveLength(7);
+    expect(monthShown).not.toContain(String(new Date().getFullYear() + 1));
+
+    root.unmount(); el.remove();
+  }, 20000);
+
+  it('steps a week in Week and a month in Month, off the same anchor', async () => {
+    const { el, root } = await mount(generatePlan(profile()));
+    const monthA = title(el);
+    await act(async () => { navs(el)[1].click(); });
+    expect(title(el)).not.toBe(monthA);          // month moved
+
+    await toWeek(el);
+    const weekA = title(el);
+    await act(async () => { navs(el)[1].click(); });
+    const weekB = title(el);
+    expect(weekB).not.toBe(weekA);
+    // a week step, not a month step: back once and we are where we were
+    await act(async () => { navs(el)[0].click(); });
+    expect(title(el)).toBe(weekA);
+
+    root.unmount(); el.remove();
+  }, 20000);
+});
+
+describe('the week range', () => {
+  it('shows all seven days, and totals the load of the sessions it shows', async () => {
+    const plan = generatePlan(profile());
+    const { el, root } = await mount(plan);
+    await toWeek(el);
+
+    expect(el.querySelectorAll('.wk-day')).toHaveLength(7);
+
+    const week = weekRange(todayISO);
+    const shown = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline !== 'rest' && !w.race && week.includes(w.date));
+    const want = Math.round(shown.reduce((s, w) => s + estimateTss(w), 0));
+    expect(el.querySelector('.wk-head').textContent).toContain(want + ' TSS, estimated');
+    // and the rows are really there, one per session
+    expect(el.querySelectorAll('.wk-day .wk')).toHaveLength(shown.length);
+
+    root.unmount(); el.remove();
+  }, 20000);
+
+  it('puts a moved session on the day it moved to', async () => {
+    const plan = generatePlan(profile());
+    const week = weekRange(todayISO);
+    // take a session from this week and push it to a day in the same week
+    // that has none, so it can only be found by its effective date
+    const inWeek = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && week.includes(w.date));
+    const busy = new Set(inWeek.map(w => w.date));
+    const empty = week.find(d => !busy.has(d));
+    const moving = inWeek.find(w => !w.race);
+    expect(empty).toBeTruthy(); expect(moving).toBeTruthy();
+
+    const { el, root } = await mount(plan, { moves: { [moving.id]: empty } });
+    await toWeek(el);
+    const dayOf = n => [...el.querySelectorAll('.wk-day')]
+      .find(d => d.querySelector('.wd-num').textContent === String(Number(n.slice(8))));
+    expect(dayOf(empty).textContent).toContain(moving.title);
+    expect(dayOf(moving.date).textContent).not.toContain(moving.title);
+
+    root.unmount(); el.remove();
+  }, 20000);
+
+  it('gives race day no load number, and leaves it out of the total', async () => {
+    // a plan whose race falls in the week we open on
+    const raceDate = iso(addDays(mon, 3));
+    const plan = generatePlan(profile({ startDate: iso(addDays(mon, -12 * 7)), raceDate }));
+    const { el, root } = await mount(plan);
+    await toWeek(el);
+
+    const raceRow = [...el.querySelectorAll('.wk-day .wk')].find(r => /RACE DAY/i.test(r.textContent));
+    expect(raceRow).toBeTruthy();
+    expect(raceRow.querySelector('.right').textContent).toBe('');
+    expect(el.querySelectorAll('.wk-day .wk .right b').length)
+      .toBe(el.querySelectorAll('.wk-day .wk').length - 1);
+
+    root.unmount(); el.remove();
+  }, 20000);
+
+  it('never says "rest day" where there is no plan to rest from', async () => {
+    const acts = [{ id: 'a1', type: 'Ride', name: 'Commute', date: iso(addDays(today, -1)),
+      movingTimeSec: 40 * 60, distance: 15000 }];
+    const { el, root } = await mount(buildTrackerPlan(generatePlan(profile()), todayISO), { activities: acts });
+    await toWeek(el);
+
+    expect(el.querySelectorAll('.wk-day')).toHaveLength(7);
+    expect(el.textContent).not.toContain('Rest day');
+    expect(el.querySelectorAll('.wd-none')).toHaveLength(6);   // the six without the ride
+    expect(el.textContent).toContain('Nothing recorded.');
+    expect(el.textContent).toContain('Commute');
+    // no planned sessions, so nothing to total
+    expect(el.querySelector('.wk-head')).toBeNull();
+
+    root.unmount(); el.remove();
+  }, 20000);
+
+  it('says "before this plan began" rather than "rest day" on pre-plan days', async () => {
+    /* The plan starts next Monday, and the calendar opens clamped to the plan
+       start, so the pre-plan days are one step BACK — which is the whole
+       reason browsing reaches behind the plan at all (field report
+       2026-07-30: the diary must survive a new plan). A race plan hitting the
+       same trap as tracker. */
+    const plan = generatePlan(profile({ startDate: iso(addDays(mon, 7)), raceDate: iso(addDays(today, 84)) }));
+    const { el, root } = await mount(plan);
+    await toWeek(el);
+    await act(async () => { navs(el)[0].click(); });
+    expect(el.textContent).toContain('Before this plan began.');
+    expect(el.textContent).not.toContain('Rest day');
+    root.unmount(); el.remove();
+  }, 20000);
+});
+
+describe('WorkoutRow keeps its old shape', () => {
+  it('renders the weekday on the right when given no right-hand slot', () => {
+    const w = { id: 'x', discipline: 'run', type: 'Easy', title: 'Easy Run', durationMin: 40, date: '2026-08-05' };
+    const plain = renderToString(<WorkoutRow w={w} eff="2026-08-05" />);
+    expect(plain).toContain('Wed');
+    // and the slot replaces exactly that, nothing else
+    const withSlot = renderToString(<WorkoutRow w={w} eff="2026-08-05" right={<b>42</b>} />);
+    expect(withSlot).not.toContain('Wed');
+    expect(withSlot).toContain('42');
+    expect(withSlot).toContain('Easy Run');
+  });
+});

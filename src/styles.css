@@ -834,14 +834,27 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* signed values: lift +/− to the optical centre of lining digits */
 .sgn { display: inline-block; transform: translateY(-0.05em); } /* Figtree: signs sit 5% of the em low (measured); Jakarta needed 11% */
 
-/* ---------- month calendar (Calendar tab) ---------- */
+/* ---------- calendar (Calendar tab) ----------
+   The head and the range bar are SHARED chrome and sit on the field rather
+   than inside the panel, because the panel changes with the range and the
+   ranges that are not a grid have no card to sit in. */
 .cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .cal-head .ttl { flex: 1; text-align: center; font-weight: 800; font-size: 16px; letter-spacing: -.2px; }
+.cal-head .ttl .sub { font-size: 11.5px; font-weight: 700; color: #98a3b5; letter-spacing: 0; margin-top: 2px; }
 /* Lifted, and pressed when there is no month to go to — rule 3, and what
    .btn:disabled already does rather than fading out. 38px stays: the doc
    draws 36 and a thumb does not care what the doc draws. */
 .cal-nav { width: 38px; height: 38px; border-radius: 12px; background: var(--lift); box-shadow: var(--raise-sm); border: 0; color: #dbe3ee; font-size: 17px; cursor: pointer; font-family: inherit; font-weight: 700; }
 .cal-nav:disabled { background: var(--well); box-shadow: var(--press-sm); color: var(--faint); cursor: default; }
+/* The house segmented control: a pill trough with the chosen segment as the
+   only extruded thing in it. Third instance of that idiom — .nav .tabs is the
+   fixed-bar variant, and .prog-tabs is still a row of .btn from before the
+   glass. Reconciling the three belongs to the Progress component, not here. */
+.segbar { display: flex; gap: 6px; padding: 5px; border-radius: 999px; background: rgba(0, 0, 0, .24); box-shadow: var(--press-sm); margin-bottom: 14px; }
+.segbar button { flex: 1; border: 0; background: none; cursor: pointer; font-family: inherit; padding: 9px; border-radius: 999px; font-size: 12.5px; font-weight: 800; color: #dbe3ee; }
+.segbar button.on { color: var(--accent-ink); background: linear-gradient(180deg, #ffffff, #e2e9f4); box-shadow: var(--raise-sm); }
+.segbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* gap matches .cal-grid, or the letters stop sitting over their columns */
 .cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 6px; }
 .cal-dow span { text-align: center; font-size: 10px; font-weight: 700; color: #98a3b5; }
@@ -874,6 +887,25 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* Deliberately NOT raised: one extruded cell at a time, and a drag already
    has a ghost following the pointer. It only has to beat the press. */
 .cal-day.drop { border-color: var(--run); background: rgba(52, 211, 153, .22); box-shadow: none; }
+/* ---------- week range ----------
+   One card per day, the weekday in a fixed gutter so the dates line up down
+   the column whatever the rows beside them are doing. */
+.wk-head { font-size: 12.5px; font-weight: 700; color: #b3bdcd; margin: 0 4px 12px; }
+.wk-day { display: flex; gap: 10px; padding: 12px 14px; align-items: flex-start; }
+/* Days already gone step back rather than disappearing — they are still where
+   a missed session is, and moving one is the point of this range. */
+.wk-day.past { opacity: .62; }
+.wk-day.today { border-color: var(--blue); }
+.wk-day .wd-when { width: 34px; flex: none; padding-top: 10px; }
+.wk-day .wd-dow { font-size: 10px; font-weight: 800; color: #98a3b5; letter-spacing: .4px; }
+.wk-day .wd-num { font-size: 15px; font-weight: 800; letter-spacing: -.4px; }
+.wk-day .wd-rows { flex: 1; min-width: 0; }
+.wk-day .wd-none { color: var(--faint); font-size: 12.5px; font-weight: 600; padding: 14px 4px; }
+/* The load, where the weekday would otherwise repeat the heading beside it. */
+.wk-day .wk .right { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.wk-day .wk .right b { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -.3px; }
+.wk-day .wk .right span { font-size: 9.5px; font-weight: 800; color: var(--faint); letter-spacing: .5px; }
+
 /* Amber, opaque and glowing: rule 4, the race is status and never haze. */
 .cal-race-pin { display: flex; align-items: center; gap: 9px; margin-top: 14px; padding: 11px 13px; border-radius: 14px; background: rgba(250, 204, 21, .14); box-shadow: var(--raise-sm); font-size: 12.5px; font-weight: 700; color: #fde68a; }
 .cal-race-pin .rp-dot { width: 9px; height: 9px; border-radius: 50%; background: #facc15; box-shadow: 0 0 10px rgba(250, 204, 21, .7); flex: none; }

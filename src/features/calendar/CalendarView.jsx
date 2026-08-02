@@ -1,11 +1,15 @@
 import { useMemo, useRef, useState } from 'react';
 import * as T from '@/lib';
-import { effDate, monthGrid, addMonths } from '@/lib/schedule.js';
+import { effDate, monthGrid, addMonths, weekRange } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 const D = T.DISCIPLINES;
+/* Season is deliberately absent: it is the one panel of the screen doc that
+   could not be read (the file is past the design API's size cap), and a range
+   nobody has seen is a range nobody can implement. */
+const RANGES = [['week', 'Week'], ['month', 'Month']];
 
 /* A real calendar: one month at a time as a grid of days, sessions shown as
    discipline dots on their EFFECTIVE dates. Tap a day to see its sessions
@@ -105,9 +109,58 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     });
   };
 
+  /* One anchor date, two step sizes (the screen doc: "three ranges of the
+     same plan, one set of chrome"). Switching range keeps the athlete on the
+     date they were looking at rather than resetting them, which is the whole
+     point of sharing the chrome. Season is not here yet: its panel is the one
+     part of the design doc that could not be read. */
+  const [range, setRange] = useState('month');
+  const week = useMemo(() => weekRange(anchor), [anchor]);
+  // "3 – 9 August", or "31 July – 6 August" when the week straddles two
+  const weekLabel = (() => {
+    const sameMonth = week[0].slice(0, 7) === week[6].slice(0, 7);
+    return T.fmtDate(week[0], sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'long' })
+      + ' – ' + T.fmtDate(week[6], { day: 'numeric', month: 'long' });
+  })();
+  /* "Week 2 of 4 · 9h 40m · 512 TSS, estimated".
+     Position is within the PHASE GROUP, not the plan: phaseGroups returns the
+     week index each group starts at, so it is week.index - group.start + 1,
+     and it is simply absent when the shown week is outside the plan.
+     Load is estimateTss over the sessions AS SHOWN — easedOf applies the
+     trim/boost/ease overlay, so the total can never disagree with the rows
+     under it. "Estimated" is said once, because it is: duration times
+     intensity-factor squared, not a measurement. */
+  const weekHeader = useMemo(() => {
+    const shown = week.flatMap(d => (byDate[d] || [])).filter(w => !w.race);
+    if (!shown.length) return null;
+    const min = shown.reduce((s, w) => s + (easedOf(w).durationMin || 0), 0);
+    const tss = Math.round(shown.reduce((s, w) => s + T.estimateTss(easedOf(w)), 0));
+    const pw = plan.weeks.find(w => w.start === week[0]);
+    const grp = pw && T.phaseGroups(plan).find(g => pw.index >= g.start && pw.index < g.start + g.weeks);
+    const where = grp ? 'Week ' + (pw.index - grp.start + 1) + ' of ' + grp.weeks + ' · ' : '';
+    return where + T.fmtDuration(min) + ' · ' + tss + ' TSS, estimated';
+  }, [week, byDate, plan, easedOf]);
+
   const ym = s => s.slice(0, 7);
-  const canPrev = ym(anchor) > ym(viewStart);
-  const canNext = ym(anchor) < ym(planEnd);
+  /* "Build · 38 h planned" under the month name. The design writes numbered
+     blocks ("Build 3"); Try does not have those, so it uses the phase label
+     the plan itself carries. Hours are the sessions whose EFFECTIVE date
+     lands in the shown month, so a moved session counts where it now is. */
+  const monthSub = useMemo(() => {
+    const inMonth = Object.entries(byDate).filter(([d]) => ym(d) === ym(anchor));
+    const min = inMonth.reduce((s, [, ws]) =>
+      s + ws.filter(w => !w.race).reduce((t, w) => t + (easedOf(w).durationMin || 0), 0), 0);
+    if (!min) return null;
+    const phases = [...new Set(plan.weeks.filter(w => ym(w.start) === ym(anchor)).map(w => T.weekPhaseLabel(plan, w)))];
+    return (phases.length === 1 ? phases[0] + ' · ' : '') + Math.round(min / 60) + ' h planned';
+  }, [byDate, anchor, plan, easedOf]);
+
+  const step = n => (range === 'week' ? T.iso(T.addDays(anchor, n * 7)) : addMonths(anchor, n));
+  /* Month compares months, week compares the days it would land on, so the
+     arrows stop exactly where there is nothing left to show in EITHER range
+     rather than at whichever boundary the month happened to own. */
+  const canPrev = range === 'week' ? week[0] > viewStart : ym(anchor) > ym(viewStart);
+  const canNext = range === 'week' ? week[6] < planEnd : ym(anchor) < ym(planEnd);
 
   // Pointer-based drag (touch and mouse): the grip captures the pointer, a
   // ghost chip follows it, and elementFromPoint hit-tests the day cells.
@@ -144,14 +197,27 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   return (
     <>
       <div className="section-title">Calendar</div>
-      <div className="card">
-        <div className="cal-head">
-          <button className="cal-nav" type="button" disabled={!canPrev} aria-label="Previous month"
-            onClick={() => { setAnchor(a => addMonths(a, -1)); setSelected(null); }}>‹</button>
-          <div className="ttl">{grid.label}</div>
-          <button className="cal-nav" type="button" disabled={!canNext} aria-label="Next month"
-            onClick={() => { setAnchor(a => addMonths(a, 1)); setSelected(null); }}>›</button>
-        </div>
+      {/* The chrome sits ON the field, not on the pane, because it is shared:
+          the month grid is one panel under it, and the ranges that are not a
+          grid have no card for it to sit inside. */}
+      <div className="cal-head">
+        <button className="cal-nav" type="button" disabled={!canPrev}
+          aria-label={range === 'week' ? 'Previous week' : 'Previous month'}
+          onClick={() => { setAnchor(step(-1)); setSelected(null); }}>‹</button>
+        <div className="ttl">{range === 'week' ? weekLabel : grid.label}
+          {range === 'month' && monthSub && <div className="sub">{monthSub}</div>}</div>
+        <button className="cal-nav" type="button" disabled={!canNext}
+          aria-label={range === 'week' ? 'Next week' : 'Next month'}
+          onClick={() => { setAnchor(step(1)); setSelected(null); }}>›</button>
+      </div>
+      <div className="segbar" role="tablist" aria-label="Calendar range">
+        {RANGES.map(([k, label]) => (
+          <button key={k} type="button" role="tab" aria-selected={range === k}
+            className={range === k ? 'on' : ''} onClick={() => setRange(k)}>{label}</button>
+        ))}
+      </div>
+
+      {range === 'month' && <div className="card">
         <div className="cal-dow">{['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i}>{d}</span>)}</div>
         <div className="cal-grid">
           {grid.cells.map((d, i) => {
@@ -190,9 +256,42 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
           <span className="rp-dot" />
           <span>{T.fmtDate(raceISO, { day: 'numeric', month: 'short' })} · {race.name}{race.solo ? '' : ' Triathlon'}</span>
         </div>}
-      </div>
+      </div>}
 
-      {selected && <>
+      {range === 'week' && <>
+        {weekHeader && <div className="wk-head">{weekHeader}</div>}
+        {week.map(d => {
+          const ws = (byDate[d] || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
+          const hasActs = (actByDate[d] || []).length > 0;
+          return (
+            <div className={'card wk-day' + (d < todayISO ? ' past' : '') + (d === todayISO ? ' today' : '')} key={d}>
+              <div className="wd-when">
+                <div className="wd-dow">{T.fmtDate(d, { weekday: 'short' }).toUpperCase()}</div>
+                <div className="wd-num">{Number(d.slice(8))}</div>
+              </div>
+              <div className="wd-rows">
+                {ws.map(w => {
+                  const shown = easedOf(w);
+                  return <WorkoutRow key={w.id} w={shown} done={!!log[w.id]} eff={effDate(w, moves)}
+                    moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)}
+                    /* The A race's durationMin is a placeholder — WorkoutRow
+                       suppresses its duration for the same reason — so a load
+                       estimated off it would be invented. Tune-ups keep
+                       theirs; they have real durations. */
+                    right={w.race ? null : <><b>{Math.round(T.estimateTss(shown))}</b><span>TSS</span></>} />;
+                })}
+                <RecordedActivities bare activities={activities} date={d} plan={plan} log={log} moves={moves}
+                  onOpen={onOpenRecording} />
+                {!ws.length && !hasActs && <div className="wd-none">{tracker ? 'Nothing recorded.'
+                  : d < planStart ? 'Before this plan began.'
+                    : d > planEnd ? 'After this plan ends.' : 'Rest day'}</div>}
+              </div>
+            </div>
+          );
+        })}
+      </>}
+
+      {range === 'month' && selected && <>
         <div className="section-title">{T.fmtDate(selected, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
         {!((tracker || selected < planStart) && dayActs.length > 0) && <div className="card">
           {daySessions.length === 0
@@ -226,7 +325,14 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         // off-plan days, and addCustomWorkout files any out-of-window date
         // under the LAST week (gauntlet 2026-07-16). Tracker's browse window
         // already covers any day worth logging.
-        const addTarget = tracker ? (selected || todayISO) : clampDay(selected || todayISO);
+        /* The week range has no selected day, and falling back to today
+           would file a session onto a day that is not on screen whenever the
+           athlete has browsed away. So it targets today when today is in the
+           shown week, and that week's Monday otherwise. */
+        const want = range === 'week'
+          ? (todayISO >= week[0] && todayISO <= week[6] ? todayISO : week[0])
+          : (selected || todayISO);
+        const addTarget = tracker ? want : clampDay(want);
         return <>
           <div className="section-title">Add a session</div>
           <div className="cal-add">
