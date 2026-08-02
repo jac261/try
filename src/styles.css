@@ -152,15 +152,20 @@ body {
   .splash > *, .splash > svg, .splash-msg { animation: none; }
 }
 
-/* ---------- header (navy + royal-blue glow) ---------- */
+/* ---------- header (a raised pane, sticky) ----------
+   The kit's Navigation doc draws the day-and-block block as a raised slab
+   inside a pane. Here the header IS the outermost thing, so it has to be the
+   pane as well: it is sticky over scrolling content, and text on a
+   translucent sticky surface is the classic way this material fails. The
+   tint below is the doc's, not --pane's, because a wide short bar reads
+   better lit straight down than at 150 degrees. */
 .topbar {
   position: sticky; top: 0; z-index: 20;
-  background:
-    radial-gradient(135% 130% at 50% -25%, rgba(74, 116, 220, .42) 0%, rgba(74, 116, 220, 0) 56%),
-    linear-gradient(180deg, #151c2b 0%, #0e1217 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .04));
+  backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur);
   color: #fff; margin: 0 -16px 18px; padding: 20px 22px 20px;
-  border-radius: 0 0 26px 26px; box-shadow: var(--shadow);
-  border-bottom: 1px solid var(--line);
+  border-radius: 0 0 26px 26px; box-shadow: var(--raise);
+  border-bottom: 1px solid rgba(255, 255, 255, .18);
 }
 .topbar h1 { margin: 0; font-size: 23px; font-weight: 800; letter-spacing: -.6px; display: flex; align-items: center; gap: 8px; }
 .topbar .sub { color: #c3ccdb; opacity: .8; font-size: 13px; margin-top: 5px; }
