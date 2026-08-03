@@ -19,9 +19,14 @@ export function WorkoutRow({ w, done, onClick, eff, moved, profile, onToggle, ri
     </div>
   );
   const disc = D[w.discipline];
+  // The key glow wants the discipline's own colour; race day is excluded
+  // because it is an event, not a training emphasis — its gold ring already
+  // says everything.
+  const key = !!w.key && !w.race && !w.bRace;
   return (
     <div className={'wk' + (done ? ' done' : '')} {...tap(onClick)}>
-      <div className="dot" style={{ background: disc.grad }}><Icon name={disc.icon} size={22} /></div>
+      <div className={'dot' + (key ? ' key' : '')}
+        style={{ background: disc.grad, '--tile-c': disc.color }}><Icon name={disc.icon} size={22} /></div>
       <div className="meta">
         <div className="t">{w.title} {w.bRace ? <span className="tag test">Race</span> : w.test ? <span className="tag test">Test</span> : (w.key && !w.race && <span className="tag key">Key</span>)}{w.second && <span className="tag second">2nd</span>}{w.custom && <span className="tag added">Added</span>}{w.eased && <span className="tag eased">Eased</span>}{w.trimmed && <span className="tag trimmed">Trimmed</span>}{w.boosted && <span className="tag boosted">Boosted</span>}{moved && <span className="tag moved">Moved</span>}</div>
         {/* Race day's durationMin is a placeholder, and '0 min' next to the

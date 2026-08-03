@@ -373,17 +373,32 @@ body {
 /* ---------- workout row ---------- */
 .wk { display: flex; gap: 14px; align-items: center; cursor: pointer; padding: 12px 6px; border-radius: 14px; transition: background .15s; }
 .wk:hover { background: rgba(255, 255, 255, .03); }
-.wk + .wk { border-top: 1px solid var(--line); }
-.wk .dot { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 22px; flex: none; color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
+/* rgba, not --line: the moulded --line is opaque navy from before the glass
+   and vanishes into a pane; a white hairline at 10% reads on BOTH materials
+   (checked in each) and needs no theme split. */
+.wk + .wk { border-top: 1px solid rgba(255, 255, 255, .1); }
+/* The discipline tile, moulded: lit top rim, soft drop, the hairline ring it
+   always had. A KEY session's tile glows faintly in its own colour (set as
+   --tile-c inline by the row) — in moulded only. Smoked drops the glow below:
+   one glow per screen belongs to the primary action, and the smoked screen
+   docs' own tiles carry none. First deliberate per-theme behaviour split. */
+.wk .dot { width: 46px; height: 46px; border-radius: 16px; display: grid; place-items: center; font-size: 22px; flex: none; color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), inset 0 1px 0 rgba(255, 255, 255, .45), 4px 6px 14px rgba(0, 0, 0, .4); }
+.wk .dot.key { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), inset 0 1px 0 rgba(255, 255, 255, .45), 4px 6px 14px rgba(0, 0, 0, .4), 0 0 18px color-mix(in srgb, var(--tile-c, transparent) 22%, transparent); }
+:root[data-theme='smoked'] .wk .dot.key { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), inset 0 1px 0 rgba(255, 255, 255, .45), 4px 6px 14px rgba(0, 0, 0, .4); }
 .wk .meta { flex: 1; min-width: 0; }
 .wk .meta .t { font-weight: 800; font-size: 14.5px; letter-spacing: -.2px; }
 .wk .meta .s { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 .wk .right { text-align: right; font-size: 12px; color: var(--faint); white-space: nowrap; font-weight: 700; }
 .wk.done .meta .t { text-decoration: line-through; color: var(--muted); }
-.wk .check { width: 25px; height: 25px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 13px; color: transparent; transition: all .15s; }
-.wk.done .check { background: var(--tick-bg); border-color: var(--tick-bg); color: var(--tick-ink); }
+/* Rule 3 on the completion circle itself: not-yet is a hollow pressed WELL
+   (in means inert), done pops OUT of the row as a raised tick. The tick
+   tokens theme it — white in moulded, mint in smoked. */
+.wk .check { width: 26px; height: 26px; border-radius: 50%; background: var(--well); box-shadow: var(--press-sm); display: grid; place-items: center; font-size: 13px; font-weight: 800; color: transparent; transition: all .15s; }
+.wk.done .check { background: var(--tick-bg); box-shadow: var(--raise-sm); color: var(--tick-ink); }
 
-.tag { display: inline-block; font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .6px; vertical-align: middle; }
+/* One rim seats every tag variant on its surface; the colours underneath are
+   status and stay exactly as they were, in both themes. */
+.tag { display: inline-block; font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .6px; vertical-align: middle; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3); }
 .tag.key { background: var(--blue-soft); color: #9ab8ff; }
 .tag.recovery { background: rgba(56, 189, 248, .15); color: var(--swim); }
 .tag.moved { background: rgba(192, 132, 252, .16); color: var(--brick); }
@@ -944,7 +959,8 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* quick-complete: the check circle is its own tap target with a padded hit area */
 .wk .check { cursor: pointer; position: relative; flex: none; }
 .wk .check::before { content: ''; position: absolute; inset: -10px; border-radius: 50%; }
-.wk:not(.done) .check:hover { border-color: var(--accent); color: var(--line); }
+/* hover hints the tick without committing it: the well stays pressed */
+.wk:not(.done) .check:hover { color: var(--faint); }
 
 /* signed values: lift +/− to the optical centre of lining digits */
 .sgn { display: inline-block; transform: translateY(-0.05em); } /* Figtree: signs sit 5% of the em low (measured); Jakarta needed 11% */
