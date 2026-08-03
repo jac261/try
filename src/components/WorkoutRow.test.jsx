@@ -25,3 +25,25 @@ describe('WorkoutRow (UI sim catch 2026-07-17)', () => {
     expect(html).toContain('min');
   });
 });
+
+/* The completion circle is rule 3 made personal: a hollow pressed well until
+   the session is done, then a raised tick. The tick colour is a THEME token
+   (white in moulded, mint in smoked), so the markup must lean on the class
+   and never re-state a colour inline — these pin that contract. */
+describe('the completion circle', () => {
+  const w = { id: 'x', discipline: 'run', type: 'Easy', title: 'Easy Run', durationMin: 40, date: '2026-08-05' };
+
+  it('done rows carry the tick through the .done class, nothing inline', () => {
+    const html = renderToString(<WorkoutRow w={w} done eff={w.date} onClick={() => {}} onToggle={() => {}} />);
+    expect(html).toContain('wk done');
+    expect(html).toContain('✓');
+    // the states are CSS's business: no inline background on the check
+    expect(html).not.toMatch(/check[^>]*style=/);
+  });
+
+  it('undone rows render the same glyph, hidden by the pressed state', () => {
+    const html = renderToString(<WorkoutRow w={w} done={false} eff={w.date} onClick={() => {}} onToggle={() => {}} />);
+    expect(html).not.toContain('wk done');
+    expect(html).toContain('check');
+  });
+});
