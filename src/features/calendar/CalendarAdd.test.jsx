@@ -35,7 +35,9 @@ describe('the add-a-session cards', () => {
     // gradient background inlined on each card, icon at the large size
     expect((html.match(/cal-add-card/g) || []).length).toBe(4);
     expect(html).toContain('Strength');
-    expect((html.match(/linear-gradient/g) || []).length).toBeGreaterThanOrEqual(4);
+    // the gradient itself lives in styles.css as --grad-<discipline> now, so
+    // the theme can rebind it; the card still inlines the reference
+    expect((html.match(/var\(--grad-/g) || []).length).toBeGreaterThanOrEqual(4);
     expect(html).toContain('width="32"');
   });
 
