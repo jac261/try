@@ -373,7 +373,10 @@ body {
 /* ---------- workout row ---------- */
 .wk { display: flex; gap: 14px; align-items: center; cursor: pointer; padding: 12px 6px; border-radius: 14px; transition: background .15s; }
 .wk:hover { background: rgba(255, 255, 255, .03); }
-.wk + .wk { border-top: 1px solid var(--line); }
+/* rgba, not --line: the moulded --line is opaque navy from before the glass
+   and vanishes into a pane; a white hairline at 10% reads on BOTH materials
+   (checked in each) and needs no theme split. */
+.wk + .wk { border-top: 1px solid rgba(255, 255, 255, .1); }
 /* The discipline tile, moulded: lit top rim, soft drop, the hairline ring it
    always had. A KEY session's tile glows faintly in its own colour (set as
    --tile-c inline by the row) — in moulded only. Smoked drops the glow below:
@@ -393,7 +396,9 @@ body {
 .wk .check { width: 26px; height: 26px; border-radius: 50%; background: var(--well); box-shadow: var(--press-sm); display: grid; place-items: center; font-size: 13px; font-weight: 800; color: transparent; transition: all .15s; }
 .wk.done .check { background: var(--tick-bg); box-shadow: var(--raise-sm); color: var(--tick-ink); }
 
-.tag { display: inline-block; font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .6px; vertical-align: middle; }
+/* One rim seats every tag variant on its surface; the colours underneath are
+   status and stay exactly as they were, in both themes. */
+.tag { display: inline-block; font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .6px; vertical-align: middle; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3); }
 .tag.key { background: var(--blue-soft); color: #9ab8ff; }
 .tag.recovery { background: rgba(56, 189, 248, .15); color: var(--swim); }
 .tag.moved { background: rgba(192, 132, 252, .16); color: var(--brick); }
