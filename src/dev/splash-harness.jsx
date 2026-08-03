@@ -4,6 +4,7 @@
    2. Plan work: after 1.5s of "app", a messages splash appears. It must
       START a fresh tumble (new episode) and cycle its one-liners. */
 import '@/styles.css';
+import { initHarnessTheme } from '@/dev/harness-theme.js';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Splash, PLAN_WORK_MESSAGES } from '@/components/Splash.jsx';
@@ -30,4 +31,5 @@ function Harness() {
   return <div style={{ padding: 40, fontSize: 14 }} data-scene={scene}>the app ({scene})</div>;
 }
 
+initHarnessTheme();
 createRoot(document.getElementById('root')).render(<Harness />);

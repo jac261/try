@@ -3,6 +3,7 @@
    canary: it mirrors the openRecording SSR fixture (no type, no week, no
    segments) and must render without a why-not-harder fold or a kit line. */
 import '@/styles.css';
+import { initHarnessTheme } from '@/dev/harness-theme.js';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { DetailSheet } from '@/components/DetailSheet.jsx';
@@ -57,4 +58,5 @@ function Harness() {
     </div>
   );
 }
+initHarnessTheme();
 createRoot(document.getElementById('root')).render(<Harness />);

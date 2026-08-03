@@ -2,6 +2,7 @@
    on the shapes the two 2026-08-01 bug fixes touch. Dates are relative to the
    real clock, because both bugs are about how a plan meets today. */
 import '@/styles.css';
+import { initHarnessTheme } from '@/dev/harness-theme.js';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CalendarView } from '@/features/calendar/CalendarView.jsx';
@@ -133,4 +134,5 @@ function Harness() {
     </div>
   );
 }
+initHarnessTheme();
 createRoot(document.getElementById('root')).render(<Harness />);

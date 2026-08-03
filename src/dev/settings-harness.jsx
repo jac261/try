@@ -2,6 +2,7 @@
    across the anchor archetypes phase 4's Assumption Center distinguishes.
    noAuth swaps the Clerk-dependent cards for placeholders. */
 import '@/styles.css';
+import { initHarnessTheme } from '@/dev/harness-theme.js';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SettingsView } from '@/features/settings/SettingsView.jsx';
@@ -51,4 +52,5 @@ function Harness() {
     </div>
   );
 }
+initHarnessTheme();
 createRoot(document.getElementById('root')).render(<Harness />);

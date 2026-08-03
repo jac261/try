@@ -17,6 +17,7 @@
  * aria-current) is asserted against the real App in src/app/nav.test.jsx.
  */
 import '@/styles.css';
+import { initHarnessTheme } from '@/dev/harness-theme.js';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Icon } from '@/components/Icon.jsx';
@@ -76,4 +77,5 @@ function Harness() {
   );
 }
 
+initHarnessTheme();
 createRoot(document.getElementById('root')).render(<Harness />);

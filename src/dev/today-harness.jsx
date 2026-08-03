@@ -3,6 +3,7 @@
    REAL clock, so each mode scans startDate offsets until real-today lands on
    the wanted day shape, rather than pretending to inject a date. */
 import '@/styles.css';
+import { initHarnessTheme } from '@/dev/harness-theme.js';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TodayView } from '@/features/today/TodayView.jsx';
@@ -128,4 +129,5 @@ function Harness() {
     </div>
   );
 }
+initHarnessTheme();
 createRoot(document.getElementById('root')).render(<Harness />);
