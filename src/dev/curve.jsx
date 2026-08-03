@@ -7,6 +7,7 @@
  * bypassing main.jsx and therefore Clerk. No credentials, no backend.
  */
 import '@/styles.css';
+import { initHarnessTheme } from '@/dev/harness-theme.js';
 import { createRoot } from 'react-dom/client';
 import { PowerCurveCard } from '@/components/PowerCurveCard.jsx';
 import { powerCurve } from '@/lib/bike-power-curve.js';
@@ -29,6 +30,7 @@ const CASES = [
   ['No threshold known', { curve: raw(), ftpWatts: null }],
 ];
 
+initHarnessTheme();
 createRoot(document.getElementById('root')).render(
   <div className="wrap" style={{ maxWidth: 460, margin: '0 auto', padding: 16 }}>
     <h1 style={{ fontSize: 18, marginBottom: 4 }}>Power curve harness</h1>

@@ -66,6 +66,35 @@
   --raise-sm: 3px 4px 9px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .25);
   --well: rgba(255, 255, 255, .04);
   --lift: rgba(255, 255, 255, .06);
+
+  /* ---- theme-varying bindings ----
+     Everything below exists so [data-theme="smoked"] can rebind it. The bare
+     :root is the MOULDED material; a new surface uses these tokens or styles
+     both themes explicitly — there is no third option. */
+  --btn-primary-bg: linear-gradient(180deg, #ffffff, #dfe6f2);
+  --btn-primary-ink: var(--accent-ink);
+  --btn-primary-shadow: 5px 6px 14px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .95);
+  /* the raised active pill (tab bar, range control): the one extruded thing
+     in its trough, in whichever material */
+  --pill-on-bg: linear-gradient(180deg, #ffffff, #e2e9f4);
+  --pill-on-ink: var(--accent-ink);
+  --pill-on-shadow: var(--raise-sm);
+  /* the calendar's selected day: white-tinted lift in BOTH themes, unlike
+     the blue-tinted control pills */
+  --cell-on-bg: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .06));
+  --cell-on-ink: var(--ink);
+  --tick-bg: var(--accent);
+  --tick-ink: var(--accent-ink);
+  --chrome-text: #dbe3ee;      /* secondary text on the two floating bars */
+  --label: #98a3b5;            /* 10-12px labels on lit wells (day numbers, dow) */
+  --sub: #b3bdcd;              /* card sub-headings, week gutters */
+  /* discipline tile gradients; smoked drops these to ~30% translucent fills */
+  --grad-swim: linear-gradient(135deg, #38bdf8, #2563eb);
+  --grad-bike: linear-gradient(135deg, #fbbf24, #f97316);
+  --grad-run: linear-gradient(135deg, #4ade80, #10b981);
+  --grad-brick: linear-gradient(135deg, #c084fc, #8b5cf6);
+  --grad-strength: linear-gradient(135deg, #94a3b8, #64748b);
+  --grad-rest: linear-gradient(135deg, #3a3f4a, #2a2f38);
   /* Chrome that floats over scrolling content needs more than --pane behind
      it. At the pane's 14%/5% white the header's white text disappeared
      completely over a white card, and the tab bar's inactive labels went with
@@ -73,8 +102,74 @@
      surfaces keep the blur and the moulded highlight and put this
      underneath, which is the difference between glass and a window. */
   --chrome-base: linear-gradient(180deg, rgba(13, 17, 24, .82), rgba(13, 17, 24, .7));
+  --pane-edge: rgba(255, 255, 255, .18);
   color-scheme: dark;
   font-synthesis: none;
+}
+
+/* ---- smoked glass: the night build (Smoked Glass Kit + Moulded Glass Dark) ----
+   Same vocabulary, rebound. The physics that changes: on a near-black page a
+   drop shadow is invisible, so EDGE LIGHT carries the form instead — the 40%
+   top rim drops to 14%, the outer shadow becomes atmosphere, and pressed
+   surfaces darken PAST the page (a real black floor) instead of tinting
+   lighter. Colour is rationed: tiles run ~30% fills, and one action per
+   screen is allowed to glow. Status colours do not move — rule 4 holds at
+   night, and the smoked screen docs keep every discipline solid. */
+:root[data-theme='smoked'] {
+  --bg: #05070a;
+  --card: #0a0d12;           /* the opaque surfaces: sheets, live screens */
+  --card-2: #0d1118;
+  --chip: rgba(0, 0, 0, .32);
+  --ink: #e8edf5;
+  --muted: #98a3b5;
+  --faint: #6f7b8d;
+  --line: rgba(255, 255, 255, .07);
+  --track: rgba(255, 255, 255, .08);
+  --blue: #7f9dff;
+  --blue-soft: rgba(127, 157, 255, .14);
+  --shadow: 0 16px 44px rgba(0, 0, 0, .7);
+
+  --pane: linear-gradient(150deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .02));
+  --pane-blur: blur(28px) saturate(130%);
+  --pane-border: 1px solid rgba(255, 255, 255, .09);
+  --pane-shadow: 0 22px 52px rgba(0, 0, 0, .66), inset 0 1px 0 rgba(255, 255, 255, .14);
+  /* every neumorphic double-inset collapses: one black inner shadow plus a
+     single bottom hairline where the wall catches the light */
+  --press: inset 0 2px 7px rgba(0, 0, 0, .8), inset 0 -1px 0 rgba(255, 255, 255, .07);
+  --press-sm: inset 0 2px 5px rgba(0, 0, 0, .75), inset 0 -1px 0 rgba(255, 255, 255, .07);
+  --raise: 0 10px 24px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .22);
+  --raise-sm: 0 6px 14px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .18);
+  --well: rgba(0, 0, 0, .32);
+  --lift: rgba(255, 255, 255, .07);
+  --chrome-base: linear-gradient(180deg, rgba(5, 7, 10, .85), rgba(5, 7, 10, .7));
+  --pane-edge: rgba(255, 255, 255, .09);
+
+  /* the one glow per screen */
+  --btn-primary-bg: linear-gradient(160deg, #4a74dc, #2c4bad);
+  --btn-primary-ink: #ffffff;
+  --btn-primary-shadow: 0 0 22px rgba(74, 116, 220, .42), inset 0 1px 0 rgba(255, 255, 255, .4), inset 0 -2px 4px rgba(0, 0, 0, .3);
+  /* selection survives the dark the same way it survived the blur: the
+     active pill is still the only raised thing in its trough, tinted blue
+     rather than opaque white */
+  --pill-on-bg: rgba(111, 143, 245, .16);
+  --pill-on-ink: #a8bcff;
+  --pill-on-shadow: 3px 4px 9px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .13);
+  --cell-on-bg: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .07));
+  --cell-on-ink: #e8edf5;
+  /* ticks go mint (Post Session Smoked): a white tick is a glow at night */
+  --tick-bg: #4fd1a5;
+  --tick-ink: #052e20;
+  --chrome-text: #c2cad8;
+  --label: #98a3b5;
+  --sub: #98a3b5;
+  /* discipline tiles at ~30% translucent fill, each from its own gradient
+     stops; dots and strokes keep the solid colours */
+  --grad-swim: linear-gradient(150deg, rgba(56, 189, 248, .32), rgba(37, 99, 235, .18));
+  --grad-bike: linear-gradient(150deg, rgba(251, 191, 36, .32), rgba(249, 115, 22, .18));
+  --grad-run: linear-gradient(150deg, rgba(74, 222, 128, .32), rgba(16, 185, 129, .18));
+  --grad-brick: linear-gradient(150deg, rgba(192, 132, 252, .32), rgba(139, 92, 246, .18));
+  --grad-strength: linear-gradient(150deg, rgba(148, 163, 184, .3), rgba(100, 116, 139, .18));
+  --grad-rest: linear-gradient(150deg, rgba(58, 63, 74, .5), rgba(42, 47, 56, .3));
 }
 
 * { box-sizing: border-box; }
@@ -101,6 +196,17 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   body::before { animation: none; }
 }
+/* Smoked: ambient light halves. Three orbs at 10-20%, the ORANGE orb cut
+   entirely so amber still reads as a warning, slower drift, and the page
+   itself falls to near-black. */
+:root[data-theme='smoked'] body::before {
+  background:
+    radial-gradient(720px 720px at -12% -16%, rgba(74, 116, 220, .2), rgba(74, 116, 220, 0) 68%),
+    radial-gradient(620px 620px at 114% 46%, rgba(56, 189, 248, .12), rgba(56, 189, 248, 0) 70%),
+    radial-gradient(600px 600px at -10% 110%, rgba(52, 211, 153, .1), rgba(52, 211, 153, 0) 70%),
+    radial-gradient(120% 90% at 20% 0%, #0c1119, #05070a 62%);
+  animation-duration: 30s;
+}
 
 body {
   background: var(--bg);
@@ -120,6 +226,7 @@ body {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
   color: var(--text);
 }
+:root[data-theme='smoked'] .splash { background: radial-gradient(120% 80% at 25% 0%, #0b1017, #04060a 60%); }
 .splash h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.8px; }
 /* The mark tumbles one face of the triangle at a time (Jon, 2026-07-17):
    a slow 120 degree rotation brings a new side to the bottom, a pulse on
@@ -182,16 +289,24 @@ body {
   border-radius: 0 0 26px 26px; box-shadow: var(--raise);
   border-bottom: 1px solid rgba(255, 255, 255, .18);
 }
+/* Smoked drops the royal-blue radial: ambient light is rationed, and the
+   near-black chrome-base already holds the text the glow was keeping. */
+:root[data-theme='smoked'] .topbar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .015)),
+    var(--chrome-base);
+  border-bottom: 1px solid rgba(255, 255, 255, .09);
+}
 .topbar h1 { margin: 0; font-size: 23px; font-weight: 800; letter-spacing: -.6px; display: flex; align-items: center; gap: 8px; }
 /* Same reason as the tab labels: #c3ccdb at 80% was fine on an opaque navy
    header and reads about 3:1 once a white card can scroll under it. The
    opacity goes rather than being compensated for, because a translucent
    colour on a translucent surface is two unknowns. */
-.topbar .sub { color: #dbe3ee; font-size: 13px; margin-top: 5px; }
+.topbar .sub { color: var(--chrome-text); font-size: 13px; margin-top: 5px; }
 .topbar .race-chip {
   margin-top: 14px; display: inline-flex; gap: 12px; align-items: center;
   background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .12);
-  padding: 9px 16px; border-radius: 40px; font-size: 13px; color: #dbe3ee;
+  padding: 9px 16px; border-radius: 40px; font-size: 13px; color: var(--chrome-text);
 }
 .topbar .race-chip b { font-size: 21px; font-weight: 800; color: #fff; letter-spacing: -.5px; }
 
@@ -211,7 +326,7 @@ body {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
   background: var(--pane), var(--chrome-base);
   backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur);
-  border-top: 1px solid rgba(255, 255, 255, .18);
+  border-top: 1px solid var(--pane-edge);
   padding: 9px 8px calc(9px + env(safe-area-inset-bottom));
 }
 /* --well is 4% white, which is invisible against a pane this light. The
@@ -230,7 +345,7 @@ body {
    afford to be legible. */
 .nav button {
   flex: 1; max-width: 130px; border: 0; background: none; cursor: pointer;
-  color: #dbe3ee; font-size: 11px; font-weight: 700; padding: 7px 4px; border-radius: 16px;
+  color: var(--chrome-text); font-size: 11px; font-weight: 700; padding: 7px 4px; border-radius: 16px;
   display: flex; flex-direction: column; align-items: center; gap: 4px; font-family: inherit;
 }
 .nav button .ic { display: grid; place-items: center; height: 22px; opacity: .9; }
@@ -238,9 +353,9 @@ body {
    pane is blurring behind it, and raised, so selection is not carried by
    colour alone. */
 .nav button.active {
-  color: var(--accent-ink); font-weight: 800;
-  background: linear-gradient(180deg, #ffffff, #e2e9f4);
-  box-shadow: var(--raise-sm);
+  color: var(--pill-on-ink); font-weight: 800;
+  background: var(--pill-on-bg);
+  box-shadow: var(--pill-on-shadow);
 }
 .nav button.active .ic { opacity: 1; }
 
@@ -266,7 +381,7 @@ body {
 .wk .right { text-align: right; font-size: 12px; color: var(--faint); white-space: nowrap; font-weight: 700; }
 .wk.done .meta .t { text-decoration: line-through; color: var(--muted); }
 .wk .check { width: 25px; height: 25px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 13px; color: transparent; transition: all .15s; }
-.wk.done .check { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.wk.done .check { background: var(--tick-bg); border-color: var(--tick-bg); color: var(--tick-ink); }
 
 .tag { display: inline-block; font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .6px; vertical-align: middle; }
 .tag.key { background: var(--blue-soft); color: #9ab8ff; }
@@ -375,7 +490,7 @@ body {
 .btn:disabled { background: var(--well); color: var(--faint); box-shadow: var(--press); cursor: default; pointer-events: none; }
 /* The one opaque surface in the system. Primary stays solid white so the
    single real action on a screen can never read as chrome (Buttons.dc.html). */
-.btn.primary { background: linear-gradient(180deg, #ffffff, #dfe6f2); color: var(--accent-ink); box-shadow: 5px 6px 14px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .95); }
+.btn.primary { background: var(--btn-primary-bg); color: var(--btn-primary-ink); box-shadow: var(--btn-primary-shadow); }
 .btn.primary:hover { filter: brightness(.94); }
 .btn.primary:active { transform: translateY(1px); }
 .btn.ghost { background: var(--lift); color: var(--ink); box-shadow: var(--raise); }
@@ -840,24 +955,24 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
    ranges that are not a grid have no card to sit in. */
 .cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .cal-head .ttl { flex: 1; text-align: center; font-weight: 800; font-size: 16px; letter-spacing: -.2px; }
-.cal-head .ttl .sub { font-size: 11.5px; font-weight: 700; color: #98a3b5; letter-spacing: 0; margin-top: 2px; }
+.cal-head .ttl .sub { font-size: 11.5px; font-weight: 700; color: var(--label); letter-spacing: 0; margin-top: 2px; }
 /* Lifted, and pressed when there is no month to go to — rule 3, and what
    .btn:disabled already does rather than fading out. 38px stays: the doc
    draws 36 and a thumb does not care what the doc draws. */
-.cal-nav { width: 38px; height: 38px; border-radius: 12px; background: var(--lift); box-shadow: var(--raise-sm); border: 0; color: #dbe3ee; font-size: 17px; cursor: pointer; font-family: inherit; font-weight: 700; }
+.cal-nav { width: 38px; height: 38px; border-radius: 12px; background: var(--lift); box-shadow: var(--raise-sm); border: 0; color: var(--chrome-text); font-size: 17px; cursor: pointer; font-family: inherit; font-weight: 700; }
 .cal-nav:disabled { background: var(--well); box-shadow: var(--press-sm); color: var(--faint); cursor: default; }
 /* The house segmented control: a pill trough with the chosen segment as the
    only extruded thing in it. Third instance of that idiom — .nav .tabs is the
    fixed-bar variant, and .prog-tabs is still a row of .btn from before the
    glass. Reconciling the three belongs to the Progress component, not here. */
 .segbar { display: flex; gap: 6px; padding: 5px; border-radius: 999px; background: rgba(0, 0, 0, .24); box-shadow: var(--press-sm); margin-bottom: 14px; }
-.segbar button { flex: 1; border: 0; background: none; cursor: pointer; font-family: inherit; padding: 9px; border-radius: 999px; font-size: 12.5px; font-weight: 800; color: #dbe3ee; }
-.segbar button.on { color: var(--accent-ink); background: linear-gradient(180deg, #ffffff, #e2e9f4); box-shadow: var(--raise-sm); }
+.segbar button { flex: 1; border: 0; background: none; cursor: pointer; font-family: inherit; padding: 9px; border-radius: 999px; font-size: 12.5px; font-weight: 800; color: var(--chrome-text); }
+.segbar button.on { color: var(--pill-on-ink); background: var(--pill-on-bg); box-shadow: var(--pill-on-shadow); }
 .segbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* gap matches .cal-grid, or the letters stop sitting over their columns */
 .cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 6px; }
-.cal-dow span { text-align: center; font-size: 10px; font-weight: 700; color: #98a3b5; }
+.cal-dow span { text-align: center; font-size: 10px; font-weight: 700; color: var(--label); }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
 /* The tab bar's thesis at 42 times the scale: the month is a field of pressed
    wells and the day you are looking at is the only thing standing out of it.
@@ -871,7 +986,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
    At .35 the number came out near 1.4:1 on a well and the diary dots went
    with it. Dim enough to read as inert, legible enough to use. */
 .cal-day.off { opacity: .55; }
-.cal-day .cd-num { font-size: 11.5px; font-weight: 700; color: #98a3b5; line-height: 1; }
+.cal-day .cd-num { font-size: 11.5px; font-weight: 700; color: var(--label); line-height: 1; }
 /* The browser's own ring here is orange, a shade off the gold that means race
    day, and on a grid of 42 cells that is a bad place to guess. White is the
    app's accent and cannot be read as a state — same rule as .avatar-btn. */
@@ -881,8 +996,8 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* The extruded cell. Selection stops being blue: which day you are looking at
    is a position, not a status, and blue is what marks today. The two were
    competing for one signal. */
-.cal-day.sel { background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .06)); box-shadow: var(--raise); }
-.cal-day.sel .cd-num { color: var(--ink); font-weight: 800; }
+.cal-day.sel { background: var(--cell-on-bg); box-shadow: var(--raise); }
+.cal-day.sel .cd-num { color: var(--cell-on-ink); font-weight: 800; }
 .cal-day.race { border-color: #facc15; }
 /* Deliberately NOT raised: one extruded cell at a time, and a drag already
    has a ghost following the pointer. It only has to beat the press. */
@@ -890,14 +1005,14 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 /* ---------- week range ----------
    One card per day, the weekday in a fixed gutter so the dates line up down
    the column whatever the rows beside them are doing. */
-.wk-head { font-size: 12.5px; font-weight: 700; color: #b3bdcd; margin: 0 4px 12px; }
+.wk-head { font-size: 12.5px; font-weight: 700; color: var(--sub); margin: 0 4px 12px; }
 .wk-day { display: flex; gap: 10px; padding: 12px 14px; align-items: flex-start; }
 /* Days already gone step back rather than disappearing — they are still where
    a missed session is, and moving one is the point of this range. */
 .wk-day.past { opacity: .62; }
 .wk-day.today { border-color: var(--blue); }
 .wk-day .wd-when { width: 34px; flex: none; padding-top: 10px; }
-.wk-day .wd-dow { font-size: 10px; font-weight: 800; color: #98a3b5; letter-spacing: .4px; }
+.wk-day .wd-dow { font-size: 10px; font-weight: 800; color: var(--label); letter-spacing: .4px; }
 .wk-day .wd-num { font-size: 15px; font-weight: 800; letter-spacing: -.4px; }
 .wk-day .wd-rows { flex: 1; min-width: 0; }
 .wk-day .wd-none { color: var(--faint); font-size: 12.5px; font-weight: 600; padding: 14px 4px; }
@@ -907,9 +1022,9 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .wk-day .wk .right span { font-size: 9.5px; font-weight: 800; color: var(--faint); letter-spacing: .5px; }
 
 /* ---------- season range ---------- */
-.section-sub { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.1px; color: #b3bdcd; margin-bottom: 10px; }
+.section-sub { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.1px; color: var(--sub); margin-bottom: 10px; }
 .season-ramp .sr-head { display: flex; align-items: baseline; gap: 10px; font-size: 13px; font-weight: 800; letter-spacing: -.2px; margin-bottom: 10px; }
-.season-ramp .sr-block { margin-left: auto; font-size: 11.5px; font-weight: 700; color: #98a3b5; white-space: nowrap; }
+.season-ramp .sr-block { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--label); white-space: nowrap; }
 /* The plot presses in: the chart is a reading, not a control. */
 .season-ramp .sr-plot { border-radius: 18px; padding: 10px 8px 6px; background: var(--well); box-shadow: var(--press-sm); }
 .season-ramp .sr-note { font-size: 11.5px; line-height: 1.45; color: var(--faint); margin: 10px 2px 0; }
@@ -926,7 +1041,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
    reads back so the block behind you cannot be mistaken for one ahead. */
 .season-blocks .sb-row.done { opacity: .5; }
 .season-blocks .sb-name { flex: 1; font-size: 13px; font-weight: 800; letter-spacing: -.2px; }
-.season-blocks .sb-row.far .sb-name { color: #b3bdcd; }
+.season-blocks .sb-row.far .sb-name { color: var(--sub); }
 .season-blocks .sb-when { font-size: 11px; font-weight: 700; color: var(--faint); }
 .season-blocks .sb-bar { width: 52px; height: 5px; border-radius: 3px; background: rgba(0, 0, 0, .35); box-shadow: inset 2px 2px 4px rgba(0, 0, 0, .6); flex: none; overflow: hidden; }
 .season-blocks .sb-bar i { display: block; height: 100%; border-radius: 3px; background: var(--ph, var(--accent)); }
@@ -938,8 +1053,8 @@ input:focus, select:focus { outline: none; border-color: var(--blue); }
 .season-miles .sm-tuneup { color: #9adcf8; background: rgba(56, 189, 248, .16); }
 /* The A race keeps full saturation: rule 4, status never reads as haze. */
 .season-miles .sm-race { color: var(--accent-ink); background: #facc15; }
-.season-miles .sm-label { flex: 1; font-size: 12.5px; font-weight: 700; color: #dbe3ee; min-width: 0; }
-.season-miles .sm-date { font-size: 11.5px; font-weight: 800; color: #b3bdcd; white-space: nowrap; }
+.season-miles .sm-label { flex: 1; font-size: 12.5px; font-weight: 700; color: var(--chrome-text); min-width: 0; }
+.season-miles .sm-date { font-size: 11.5px; font-weight: 800; color: var(--sub); white-space: nowrap; }
 .season-miles .sm-row.race .sm-label, .season-miles .sm-row.race .sm-date { color: #fde68a; font-weight: 800; }
 
 /* Amber, opaque and glowing: rule 4, the race is status and never haze. */

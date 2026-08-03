@@ -7,6 +7,7 @@
  * checklist is interactive but nothing touches real user storage.
  */
 import '@/styles.css';
+import { initHarnessTheme } from '@/dev/harness-theme.js';
 import { createRoot } from 'react-dom/client';
 import { RaceWeekCard } from '@/features/today/RaceWeekCard.jsx';
 import * as T from '@/lib';
@@ -28,6 +29,7 @@ const CASES = [
   ['Outside the window (8 days: renders nothing)', planAt(8)],
 ];
 
+initHarnessTheme();
 createRoot(document.getElementById('root')).render(
   <div className="app" style={{ paddingTop: 20 }}>
     {CASES.map(([label, plan]) => (

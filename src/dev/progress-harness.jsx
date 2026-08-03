@@ -1,6 +1,7 @@
 /* Dev harness (untracked pattern → committed like its siblings): mounts
    ProgressView in the three modes phase 3 changes, Clerk-free. */
 import '@/styles.css';
+import { initHarnessTheme } from '@/dev/harness-theme.js';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ProgressView } from '@/features/progress/ProgressView.jsx';
@@ -116,4 +117,5 @@ function Harness() {
     </div>
   );
 }
+initHarnessTheme();
 createRoot(document.getElementById('root')).render(<Harness />);

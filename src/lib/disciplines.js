@@ -2,10 +2,15 @@
    imported widely, so it lives apart from the pure plan-domain constants. */
 
 export const DISCIPLINES = {
-  swim:     { name: 'Swim',     color: '#38bdf8', grad: 'linear-gradient(135deg, #38bdf8, #2563eb)', icon: 'swim' },
-  bike:     { name: 'Bike',     color: '#fb923c', grad: 'linear-gradient(135deg, #fbbf24, #f97316)', icon: 'bike' },
-  run:      { name: 'Run',      color: '#34d399', grad: 'linear-gradient(135deg, #4ade80, #10b981)', icon: 'run' },
-  brick:    { name: 'Brick',    color: '#c084fc', grad: 'linear-gradient(135deg, #c084fc, #8b5cf6)', icon: 'brick' },
-  strength: { name: 'Strength', color: '#94a3b8', grad: 'linear-gradient(135deg, #94a3b8, #64748b)', icon: 'strength' },
-  rest:     { name: 'Rest',     color: '#3a3f4a', grad: 'linear-gradient(135deg, #3a3f4a, #2a2f38)', icon: 'rest' },
+  /* grad is a CSS custom-property reference, not a literal: the gradients
+     live in styles.css :root so the smoked theme can rebind them to its 30%
+     translucent fills. color stays literal — dots and chart strokes are
+     status, identical in both materials, and SVG attributes consume them
+     where var() would not resolve. */
+  swim:     { name: 'Swim',     color: '#38bdf8', grad: 'var(--grad-swim)', icon: 'swim' },
+  bike:     { name: 'Bike',     color: '#fb923c', grad: 'var(--grad-bike)', icon: 'bike' },
+  run:      { name: 'Run',      color: '#34d399', grad: 'var(--grad-run)', icon: 'run' },
+  brick:    { name: 'Brick',    color: '#c084fc', grad: 'var(--grad-brick)', icon: 'brick' },
+  strength: { name: 'Strength', color: '#94a3b8', grad: 'var(--grad-strength)', icon: 'strength' },
+  rest:     { name: 'Rest',     color: '#3a3f4a', grad: 'var(--grad-rest)', icon: 'rest' },
 };

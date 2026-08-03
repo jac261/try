@@ -167,6 +167,9 @@ function ApiConnectionCard() {
 export function SettingsView({ plan, tracker, focus, onFocusDone, noAuth, onEnterTracker, onRegenerate, onReset, onExport, onEditFitness, onEditTechnique, onEditPlan, onStartMaintenance, onReleaseWurm, onWellnessSynced, onExportCalibration, calibrationCount, watchSync, onWatchSync, watchPush, onSupportHub }) {
   const [wc, setWc] = useState(0);
   const clickWurm = () => { const n = wc + 1; if (n >= 10) { setWc(0); onReleaseWurm(); } else setWc(n); };
+  // Device-local, applied pre-paint by index.html; this state only keeps the
+  // Appearance card's selection in step with what the athlete taps.
+  const [theme, setTheme] = useState(() => T.readTheme());
   const p = plan.profile;
   // Deep-link focus (phase 4): a caller that opened Settings FOR something
   // (openSettings('connections')) lands scrolled to that card. Mount-only on
@@ -333,6 +336,18 @@ export function SettingsView({ plan, tracker, focus, onFocusDone, noAuth, onEnte
           );
         })}
         <p className="lead" style={{ margin: '10px 2px 0' }}>Record a test or update your fitness and these numbers upgrade themselves.</p>
+      </div>
+      <div className="card" id="settings-appearance">
+        <h2 style={{ marginBottom: 4 }}>Appearance</h2>
+        <p className="lead">Two builds of the same glass. This device only.</p>
+        <div className="choice">
+          {T.THEMES.map(t => (
+            <div key={t.key} className={'opt' + (theme === t.key ? ' on' : '')}
+              {...tap(() => { T.saveTheme(t.key); T.applyTheme(t.key); setTheme(t.key); })}>
+              {t.name}<small>{t.blurb}</small>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="card" id="settings-connections">
         <h2 style={{ marginBottom: 10 }}>Connections</h2>
