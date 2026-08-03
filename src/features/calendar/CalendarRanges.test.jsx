@@ -145,7 +145,11 @@ describe('the week range', () => {
   }, 20000);
 
   it('never says "rest day" where there is no plan to rest from', async () => {
-    const acts = [{ id: 'a1', type: 'Ride', name: 'Commute', date: iso(addDays(today, -1)),
+    /* The ride is dated TODAY, not yesterday: the week is Monday-first, so on
+       a Monday "yesterday" is the previous week and the fixture's ride fell
+       off the shown range — this test flaked every Monday until it did. Today
+       is in the shown week by definition, whatever weekday it is. */
+    const acts = [{ id: 'a1', type: 'Ride', name: 'Commute', date: todayISO,
       movingTimeSec: 40 * 60, distance: 15000 }];
     const { el, root } = await mount(buildTrackerPlan(generatePlan(profile()), todayISO), { activities: acts });
     await toWeek(el);
