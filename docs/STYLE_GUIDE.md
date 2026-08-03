@@ -315,6 +315,32 @@ header's radial glow (`.authgate`). Account/integration rows use `.authbox` (ins
 
 ---
 
+## 7a. Two materials, one vocabulary
+
+**As of 2026-08-03 the app has two themes**: moulded glass (the light-lit
+original) and smoked glass (the night build, `Smoked Glass Kit.dc.html`).
+**Smoked is the default**; the athlete picks in Settings → Appearance, the
+choice is device-local, and `index.html` applies it pre-paint.
+
+The mechanics: the bare `:root` in `styles.css` carries the MOULDED bindings;
+`:root[data-theme="smoked"]` rebinds the same tokens. A new surface therefore
+has exactly two legal forms — **use only tokens, or style both themes
+explicitly**. A literal colour on a new surface is a bug in whichever theme
+you were not looking at. Every future component PR styles two materials, and
+every contrast fix happens twice; that cost was accepted knowingly.
+
+What smoked changes, in one breath: on a near-black page a drop shadow is
+invisible, so **edge light carries the form** — the pane drops to a 5.5%
+tint with a 14% top rim, pressed surfaces darken past the page to a real
+black floor, discipline tiles run ~30% translucent fills (dots and strokes
+stay solid — rule 4 holds at night), ticks go mint, and **one action per
+screen is allowed to glow** (`--btn-primary-*`). Blur runs 28px/130% against
+moulded's 24px/160% — same layer counts, higher per-layer cost; the
+real-device frame check is still owed, now on the worse of the two.
+
+Harnesses honour `?theme=` and carry a flip chip; the flip is deliberately
+not persisted.
+
 ## 7b. Moulded glass, the house material
 
 **As of 2026-08-02 glass is the house style, not an exception.** It arrived one
