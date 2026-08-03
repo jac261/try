@@ -813,7 +813,12 @@ input[type='checkbox'] {
 }
 input[type='checkbox']::before {
   content: ''; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px;
-  border-radius: 50%; background: var(--pill-on-bg); box-shadow: var(--pill-on-shadow);
+  border-radius: 50%;
+  /* NOT --pill-on-bg: smoked binds that to a 16% tint, which as a knob is
+     invisible. The dark kit draws solid knobs in both materials, so the knob
+     is one theme-invariant solid, checked in each. */
+  background: linear-gradient(160deg, #ffffff, #cfd8e8);
+  box-shadow: 0 3px 7px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .7);
   transition: transform .15s;
 }
 input[type='checkbox']:checked { background: rgba(52, 211, 153, .22); }
