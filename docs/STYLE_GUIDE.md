@@ -389,6 +389,17 @@ New segmented controls take `.segbar`. Use real `<button>`s with
 `role="tab"` and `aria-selected`, so activation is the platform's and the
 selected one is announced.
 
+### Workout rows
+
+The completion circle is rule 3 made personal: a hollow pressed well until
+the session is done, then a raised tick (`--tick-*`, white in moulded, mint
+in smoked). A KEY session's tile glows faintly in its own discipline colour
+**in moulded only** — smoked reserves glow for the primary action, the first
+deliberate per-theme behaviour split. Race days and tune-ups never glow:
+events, not emphases. **Deviation from the smoked doc: tiles carry no
+`backdrop-filter`** — seven rows would add seven blur layers to screens that
+already carry the app's worst counts, and the 30% fills read without it.
+
 ### Chrome is a special case
 
 `.topbar` and `.nav` float over content the athlete chooses by scrolling, so
