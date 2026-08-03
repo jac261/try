@@ -47,3 +47,25 @@ describe('the completion circle', () => {
     expect(html).toContain('check');
   });
 });
+
+describe('the key glow', () => {
+  const base = { id: 'k', discipline: 'bike', type: 'Threshold', title: 'Threshold Ride', durationMin: 60, date: '2026-08-05' };
+
+  it('a key session marks its tile and hands it the discipline colour', () => {
+    const html = renderToString(<WorkoutRow w={{ ...base, key: true }} done={false} eff={base.date} onClick={() => {}} onToggle={() => {}} />);
+    expect(html).toContain('dot key');
+    expect(html).toContain('--tile-c:#fb923c');
+  });
+
+  it('race day never glows, even though it is flagged key', () => {
+    const race = { ...base, race: true, key: true, type: 'RACE', title: 'RACE DAY' };
+    const html = renderToString(<WorkoutRow w={race} done={false} eff={race.date} onClick={() => {}} onToggle={() => {}} />);
+    expect(html).not.toContain('dot key');
+  });
+
+  it('a tune-up is an event too, not an emphasis', () => {
+    const b = { ...base, bRace: true, key: true, type: 'RACE', title: 'TUNE-UP' };
+    const html = renderToString(<WorkoutRow w={b} done={false} eff={b.date} onClick={() => {}} onToggle={() => {}} />);
+    expect(html).not.toContain('dot key');
+  });
+});
