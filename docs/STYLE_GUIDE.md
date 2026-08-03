@@ -389,6 +389,19 @@ New segmented controls take `.segbar`. Use real `<button>`s with
 `role="tab"` and `aria-selected`, so activation is the platform's and the
 selected one is announced.
 
+### Forms
+
+Everything a finger changes presses inward: inputs and selects are wells,
+the day picker's unselected days press in and chosen days wear the raised
+pill (`--pill-on-*`, so the theme decides white or tinted blue). **The pill
+is right at nine characters wide and wrong at card width** — multi-line
+`.choice` cards LIFT when chosen (`--lift` + `--raise-sm` + accent border)
+instead of whitening, or the theme picker would be a glare. Text-field focus
+is a quiet themed ring on the well, not the white focus-visible ring — text
+fields focus on every tap, and a ring that fires constantly means nothing.
+The switch's knob is a theme-invariant solid: smoked's `--pill-on-bg` is a
+16% tint, invisible as a knob (checked, then rejected).
+
 ### Workout rows
 
 The completion circle is rule 3 made personal: a hollow pressed well until
