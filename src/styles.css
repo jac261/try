@@ -102,8 +102,74 @@
      surfaces keep the blur and the moulded highlight and put this
      underneath, which is the difference between glass and a window. */
   --chrome-base: linear-gradient(180deg, rgba(13, 17, 24, .82), rgba(13, 17, 24, .7));
+  --pane-edge: rgba(255, 255, 255, .18);
   color-scheme: dark;
   font-synthesis: none;
+}
+
+/* ---- smoked glass: the night build (Smoked Glass Kit + Moulded Glass Dark) ----
+   Same vocabulary, rebound. The physics that changes: on a near-black page a
+   drop shadow is invisible, so EDGE LIGHT carries the form instead — the 40%
+   top rim drops to 14%, the outer shadow becomes atmosphere, and pressed
+   surfaces darken PAST the page (a real black floor) instead of tinting
+   lighter. Colour is rationed: tiles run ~30% fills, and one action per
+   screen is allowed to glow. Status colours do not move — rule 4 holds at
+   night, and the smoked screen docs keep every discipline solid. */
+:root[data-theme='smoked'] {
+  --bg: #05070a;
+  --card: #0a0d12;           /* the opaque surfaces: sheets, live screens */
+  --card-2: #0d1118;
+  --chip: rgba(0, 0, 0, .32);
+  --ink: #e8edf5;
+  --muted: #98a3b5;
+  --faint: #6f7b8d;
+  --line: rgba(255, 255, 255, .07);
+  --track: rgba(255, 255, 255, .08);
+  --blue: #7f9dff;
+  --blue-soft: rgba(127, 157, 255, .14);
+  --shadow: 0 16px 44px rgba(0, 0, 0, .7);
+
+  --pane: linear-gradient(150deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .02));
+  --pane-blur: blur(28px) saturate(130%);
+  --pane-border: 1px solid rgba(255, 255, 255, .09);
+  --pane-shadow: 0 22px 52px rgba(0, 0, 0, .66), inset 0 1px 0 rgba(255, 255, 255, .14);
+  /* every neumorphic double-inset collapses: one black inner shadow plus a
+     single bottom hairline where the wall catches the light */
+  --press: inset 0 2px 7px rgba(0, 0, 0, .8), inset 0 -1px 0 rgba(255, 255, 255, .07);
+  --press-sm: inset 0 2px 5px rgba(0, 0, 0, .75), inset 0 -1px 0 rgba(255, 255, 255, .07);
+  --raise: 0 10px 24px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .22);
+  --raise-sm: 0 6px 14px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .18);
+  --well: rgba(0, 0, 0, .32);
+  --lift: rgba(255, 255, 255, .07);
+  --chrome-base: linear-gradient(180deg, rgba(5, 7, 10, .85), rgba(5, 7, 10, .7));
+  --pane-edge: rgba(255, 255, 255, .09);
+
+  /* the one glow per screen */
+  --btn-primary-bg: linear-gradient(160deg, #4a74dc, #2c4bad);
+  --btn-primary-ink: #ffffff;
+  --btn-primary-shadow: 0 0 22px rgba(74, 116, 220, .42), inset 0 1px 0 rgba(255, 255, 255, .4), inset 0 -2px 4px rgba(0, 0, 0, .3);
+  /* selection survives the dark the same way it survived the blur: the
+     active pill is still the only raised thing in its trough, tinted blue
+     rather than opaque white */
+  --pill-on-bg: rgba(111, 143, 245, .16);
+  --pill-on-ink: #a8bcff;
+  --pill-on-shadow: 3px 4px 9px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .13);
+  --cell-on-bg: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .07));
+  --cell-on-ink: #e8edf5;
+  /* ticks go mint (Post Session Smoked): a white tick is a glow at night */
+  --tick-bg: #4fd1a5;
+  --tick-ink: #052e20;
+  --chrome-text: #c2cad8;
+  --label: #98a3b5;
+  --sub: #98a3b5;
+  /* discipline tiles at ~30% translucent fill, each from its own gradient
+     stops; dots and strokes keep the solid colours */
+  --grad-swim: linear-gradient(150deg, rgba(56, 189, 248, .32), rgba(37, 99, 235, .18));
+  --grad-bike: linear-gradient(150deg, rgba(251, 191, 36, .32), rgba(249, 115, 22, .18));
+  --grad-run: linear-gradient(150deg, rgba(74, 222, 128, .32), rgba(16, 185, 129, .18));
+  --grad-brick: linear-gradient(150deg, rgba(192, 132, 252, .32), rgba(139, 92, 246, .18));
+  --grad-strength: linear-gradient(150deg, rgba(148, 163, 184, .3), rgba(100, 116, 139, .18));
+  --grad-rest: linear-gradient(150deg, rgba(58, 63, 74, .5), rgba(42, 47, 56, .3));
 }
 
 * { box-sizing: border-box; }
@@ -130,6 +196,17 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   body::before { animation: none; }
 }
+/* Smoked: ambient light halves. Three orbs at 10-20%, the ORANGE orb cut
+   entirely so amber still reads as a warning, slower drift, and the page
+   itself falls to near-black. */
+:root[data-theme='smoked'] body::before {
+  background:
+    radial-gradient(720px 720px at -12% -16%, rgba(74, 116, 220, .2), rgba(74, 116, 220, 0) 68%),
+    radial-gradient(620px 620px at 114% 46%, rgba(56, 189, 248, .12), rgba(56, 189, 248, 0) 70%),
+    radial-gradient(600px 600px at -10% 110%, rgba(52, 211, 153, .1), rgba(52, 211, 153, 0) 70%),
+    radial-gradient(120% 90% at 20% 0%, #0c1119, #05070a 62%);
+  animation-duration: 30s;
+}
 
 body {
   background: var(--bg);
@@ -149,6 +226,7 @@ body {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
   color: var(--text);
 }
+:root[data-theme='smoked'] .splash { background: radial-gradient(120% 80% at 25% 0%, #0b1017, #04060a 60%); }
 .splash h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.8px; }
 /* The mark tumbles one face of the triangle at a time (Jon, 2026-07-17):
    a slow 120 degree rotation brings a new side to the bottom, a pulse on
@@ -211,6 +289,14 @@ body {
   border-radius: 0 0 26px 26px; box-shadow: var(--raise);
   border-bottom: 1px solid rgba(255, 255, 255, .18);
 }
+/* Smoked drops the royal-blue radial: ambient light is rationed, and the
+   near-black chrome-base already holds the text the glow was keeping. */
+:root[data-theme='smoked'] .topbar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .015)),
+    var(--chrome-base);
+  border-bottom: 1px solid rgba(255, 255, 255, .09);
+}
 .topbar h1 { margin: 0; font-size: 23px; font-weight: 800; letter-spacing: -.6px; display: flex; align-items: center; gap: 8px; }
 /* Same reason as the tab labels: #c3ccdb at 80% was fine on an opaque navy
    header and reads about 3:1 once a white card can scroll under it. The
@@ -240,7 +326,7 @@ body {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
   background: var(--pane), var(--chrome-base);
   backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur);
-  border-top: 1px solid rgba(255, 255, 255, .18);
+  border-top: 1px solid var(--pane-edge);
   padding: 9px 8px calc(9px + env(safe-area-inset-bottom));
 }
 /* --well is 4% white, which is invisible against a pane this light. The
