@@ -63,7 +63,14 @@ async function request(path, { getToken, method = 'GET', body, headers, raw } = 
     const text = await response.text();
     const parsed = parseJson(text);
     if (!response.ok) {
-      const serverMessage = parsed && parsed.error && parsed.error.message ? parsed.error.message : text;
+      const err = parsed && parsed.error;
+      /* The details ride in the message. A validation response names the exact
+         failing field in error.details, and discarding it once turned a
+         one-line answer ("segments[].min must be an integer", in effect) into
+         a multi-day diagnosis of "One or more fields are invalid." — the
+         [sync] console warning is this message, so it must carry them. */
+      const details = err && Array.isArray(err.details) && err.details.length ? ' — ' + err.details.join(' ') : '';
+      const serverMessage = err && err.message ? err.message + details : text;
       return { ok: false, status: response.status, message: serverMessage || ('API returned ' + response.status + '.'), body: parsed || text };
     }
     return { ok: true, status: response.status, body: parsed };
@@ -104,13 +111,47 @@ export function deletePlan(getToken, planId) {
   return request('/api/plans/' + planId, { getToken, method: 'DELETE' });
 }
 
-// The POST/PUT body is exactly our T.generatePlan(profile) output — no transform.
+/* The one transform between T.generatePlan(profile) and the wire, and it
+   exists because "no transform" broke every plan save for three weeks.
+
+   The backend binds segments[].min as int? (IncomingPlanSegment.Min), and
+   System.Text.Json REJECTS a fractional number into it — the whole weeks
+   array fails to deserialize and the save 400s ("weeks contain invalid field
+   types"). The generator emits fractional segment minutes BY DESIGN: fitFlex
+   canonicalises a structured segment's min to its block total so segments sum
+   to exactly durationMin, and block totals are fractional (the strides
+   variant is 6 × (0.35 + 1) = 8.1 min).
+
+   So the wire copy rounds, and only the wire copy. Rounding at generation
+   would break the sums-to-durationMin invariant the card and watch rely on.
+   Rounding HERE is safe because the server's segment DTO keeps only
+   label/min/detail — zone/blocks/swim never round-trip — so
+   upgradePlanSegments rebuilds every hydrated workout's segments from
+   scratch anyway; the server's min is informational. blocks[].min stays
+   fractional: blocks is not a bound DTO member, the server ignores it.
+   Segments without a min (label-plus-detail warm-ups) are left without one.
+   api-contract.test.js holds this seam to the C# contract. */
+export function planToApi(plan) {
+  if (!plan || !Array.isArray(plan.weeks)) return plan;
+  return {
+    ...plan,
+    weeks: plan.weeks.map(w => ({
+      ...w,
+      workouts: (w.workouts || []).map(wo => !Array.isArray(wo.segments) ? wo : {
+        ...wo,
+        segments: wo.segments.map(s =>
+          s && typeof s.min === 'number' && !Number.isInteger(s.min) ? { ...s, min: Math.round(s.min) } : s),
+      }),
+    })),
+  };
+}
+
 export function createPlan(getToken, plan) {
-  return request('/api/plans', { getToken, method: 'POST', body: plan });
+  return request('/api/plans', { getToken, method: 'POST', body: planToApi(plan) });
 }
 
 export function replaceCurrentPlan(getToken, plan) {
-  return request('/api/plans/current', { getToken, method: 'PUT', body: plan });
+  return request('/api/plans/current', { getToken, method: 'PUT', body: planToApi(plan) });
 }
 
 // Resolves { ok:true, body:null } for a signed-in user with no plan yet (404).
