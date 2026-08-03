@@ -790,17 +790,40 @@ body {
 label.field { display: block; margin-bottom: 16px; }
 label.field .lab { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; display: block; letter-spacing: -.2px; }
 label.field .hint { color: var(--muted); font-size: 11.5px; font-weight: 500; }
-input, select { width: 100%; padding: 13px 14px; border: 1.5px solid var(--line); border-radius: 13px; font-size: 15px; background: var(--chip); color: var(--ink); font-family: inherit; }
+/* Everything a finger changes presses inward (Forms doc). Inputs are wells
+   cut into the pane; the old 1.5px border was pre-glass. */
+input, select { width: 100%; padding: 13px 14px; border: 0; border-radius: 14px; font-size: 15px; background: var(--well); box-shadow: var(--press); color: var(--ink); font-family: inherit; }
 input::placeholder { color: #66708320; color: #667083; }
-input:focus, select:focus { outline: none; border-color: var(--blue); }
+/* focus keeps the well and adds a quiet themed ring — text fields focus on
+   every tap, so the loud white focus-visible ring would be constant noise */
+input:focus, select:focus { outline: none; box-shadow: var(--press), 0 0 0 1.5px var(--blue); }
+
+/* The switch (Forms doc): the app's one checkbox, drawn as a pressed trough
+   that tints run-green when on, with a raised knob. CSS-only — the markup
+   stays a native checkbox so the label and handler wiring are untouched, and
+   keyboard/AT behaviour is the platform's. Status green is identical in both
+   themes (rule 4); the trough and knob are tokens. */
+input[type='checkbox'] {
+  appearance: none; -webkit-appearance: none; width: 52px; height: 30px; flex: none;
+  padding: 0; border: 0; border-radius: 999px; cursor: pointer; position: relative;
+  background: var(--well); box-shadow: var(--press-sm); transition: background .15s;
+}
+input[type='checkbox']::before {
+  content: ''; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--pill-on-bg); box-shadow: var(--pill-on-shadow);
+  transition: transform .15s;
+}
+input[type='checkbox']:checked { background: rgba(52, 211, 153, .22); }
+input[type='checkbox']:checked::before { transform: translateX(22px); }
+input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .choice { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.choice .opt { border: 1.5px solid var(--line); border-radius: 14px; padding: 13px; cursor: pointer; text-align: center; font-weight: 700; font-size: 14px; transition: all .12s; }
+.choice .opt { border: 1px solid transparent; border-radius: 14px; padding: 13px; cursor: pointer; text-align: center; font-weight: 700; font-size: 14px; transition: all .12s; background: var(--well); box-shadow: var(--press-sm); }
 .choice .opt small { display: block; color: var(--muted); font-weight: 500; font-size: 11.5px; margin-top: 4px; }
-.choice .opt.on { border-color: var(--accent); background: rgba(255, 255, 255, .07); color: #fff; }
+.choice .opt.on { border-color: var(--accent); background: var(--lift); box-shadow: var(--raise-sm); color: var(--ink); }
 .choice .opt.on small { color: #d7dde7; }
 .days { display: flex; gap: 6px; }
-.days .d { flex: 1; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 0; text-align: center; font-weight: 800; cursor: pointer; transition: all .12s; }
-.days .d.on { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.days .d { flex: 1; border: 0; border-radius: 12px; padding: 12px 0; text-align: center; font-weight: 800; cursor: pointer; transition: all .12s; color: var(--label); background: var(--well); box-shadow: var(--press-sm); }
+.days .d.on { background: var(--pill-on-bg); color: var(--pill-on-ink); box-shadow: var(--pill-on-shadow); }
 
 /* ---------- KPI ---------- */
 .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
