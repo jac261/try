@@ -38,8 +38,30 @@ export function WellnessTrends({ wellness , onSupport, onWhatIf, onOpenSettings 
   const base = T.wellness.baseline(wellness, T.iso(new Date()));
   const sleepAvg = avg(num(w, 'sleepH')), rhrAvg = avg(num(w, 'rhr'));
   const zone = T.wellness.formZone(tsb);
+  /* The readiness trend, moved here from the card's Details fold (Jon,
+     2026-08-04) so all four load charts sit together. Each day is scored
+     against the rolling baseline as it stood THAT day, and the shaded band is
+     the amber zone, so where the line sits reads green/amber/red at a glance.
+     It colours from its own last entry's band rather than from today's card,
+     which is what lets it live away from the card at all. */
+  const hist = T.wellness.history(wellness, 14);
+  const amber = T.wellness.MODEL.bands.find(b => b.key === 'amber').min;
+  const green = T.wellness.MODEL.bands.find(b => b.key === 'green').min;
+  const BAND_COLOR = { green: 'var(--run)', amber: 'var(--bike)', red: 'var(--danger)' };
   return (
     <>
+      {hist.length >= 3 && <>
+        <div className="section-title"><InfoLink onOpen={onSupport} topic="readiness" />Readiness <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>last {hist.length} days</span></div>
+        <div className="card">
+          <div className="load-stats" style={{ marginBottom: 10 }}>
+            <span><b style={{ color: BAND_COLOR[hist[hist.length - 1].band] }}>{hist[hist.length - 1].score}</b> this morning</span>
+            <span className="dim">{T.fmtDate(hist[0].date, { month: 'short', day: 'numeric' })} – {T.fmtDate(hist[hist.length - 1].date, { month: 'short', day: 'numeric' })}</span>
+          </div>
+          <TrendChart height={120} band={{ lo: amber, hi: green }}
+            series={[{ values: hist.map(h => h.score), color: BAND_COLOR[hist[hist.length - 1].band], fill: true, width: 2.4 }]} />
+        </div>
+      </>}
+
       <div className="section-title"><InfoLink onOpen={onSupport} topic="fitness-fatigue" />Fitness &amp; Fatigue <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>last {w.length} days</span></div>
       <div className="card">
         {/* the stat strip is the legend: each number wears its line's colour */}
