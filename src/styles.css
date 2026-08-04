@@ -516,8 +516,13 @@ body {
   width: 100%; max-width: 760px; max-height: 90vh; overflow-y: auto;
   border-radius: 24px 24px 0 0; padding: 8px 20px 30px; animation: up .25s ease;
   /* Scoped, not global: every var(--muted) INSIDE the sheet resolves to the
-     brighter chrome ink in both themes, and nothing outside it moves. */
+     brighter chrome ink in both themes, and nothing outside it moves.
+     --faint lifts too, one rung rather than two — measured at 2.61:1 on the
+     worst-case composite, which is below AA even for large text, and it
+     carries the profile axis and the low-confidence badge. The ladder is
+     preserved: ink brighter than muted brighter than faint. */
   --muted: var(--chrome-text);
+  --faint: var(--label);
 }
 .sheet:focus { outline: none; } /* programmatic focus target on open; inner controls keep their rings */
 @keyframes up { from { transform: translateY(40px); opacity: .4; } }
@@ -798,7 +803,9 @@ body {
 .rd-eased svg { flex: none; color: var(--run); }
 .tag.eased { background: rgba(52, 211, 153, .16); color: var(--tag-eased-ink); }
 .tag.trimmed { background: rgba(250, 204, 21, .16); color: #facc15; }
-.tag.boosted { background: rgba(56, 189, 248, .16); color: #38bdf8; }
+/* Not in the Tags doc, but the same blue on the same tint as .recovery, so it
+   takes the same ink: measured 4.06:1 on its own tint before, 5.89 after. */
+.tag.boosted { background: rgba(56, 189, 248, .16); color: #9adcf8; }
 
 /* The chart recess: every Progress-doc chart sits pressed INTO its card
    (rule 3 — a chart is read, not tapped). Tokens, not the docs' literals,
@@ -1001,7 +1008,11 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 /* ---------- add a session (Today) ---------- */
 .add-row { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 8px; padding: 11px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer; user-select: none; transition: color .15s; }
 .add-row:hover { color: var(--ink); }
-.tag.added { background: var(--blue-soft); color: var(--blue); }
+/* Same background as .key, so it takes .key's ink. It was --blue on
+   --blue-soft, which measured 2.96:1 and failed AA outright — caught only
+   because tokenising the doc's inks meant measuring every tag, not just the
+   ones the doc draws. */
+.tag.added { background: var(--blue-soft); color: var(--tag-key-ink); }
 .aw-lab { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin: 18px 0 8px; }
 .aw-discs { display: flex; gap: 8px; }
 .aw-disc { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; background: var(--chip); border-radius: 12px; border: 1px solid transparent; cursor: pointer; font-size: 11px; font-weight: 700; color: var(--muted); user-select: none; }

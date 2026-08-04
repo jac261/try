@@ -145,11 +145,23 @@ Pill badges pair a translucent tint with a saturated text colour.
 
 | Tag | Background | Text |
 |---|---|---|
-| `key` | `--blue-soft` | `#9ab8ff` |
-| `recovery` | `rgba(56,189,248,.15)` | `--swim` |
-| `moved` | `rgba(192,132,252,.16)` | `--brick` |
-| `test` | `rgba(251,191,36,.18)` | `--bike` |
-| `second` | `rgba(148,163,184,.2)` | `#cbd5e1` |
+| `key`, `added` | `--blue-soft` | `--tag-key-ink` |
+| `recovery`, `boosted` | `rgba(56,189,248,.15)` | `#9adcf8` |
+| `moved` | `rgba(192,132,252,.16)` | `#d9b6ff` |
+| `test` | `rgba(251,191,36,.18)` | `#fcd28a` |
+| `second`, `indoor` | `rgba(148,163,184,.2)` | `--chrome-text` |
+| `eased` | `rgba(52,211,153,.16)` | `--tag-eased-ink` |
+
+The inks are the Tags docs' own, which run lighter than the saturated ones
+they replaced; every tag now clears AA on its own tint in both materials
+(worst 5.2 moulded, 7.9 smoked). Three of them are literals because **both**
+docs draw them identically — that is deliberate, not an escaped hardcode.
+Two differ per theme and are tokens. The neutral one is `--chrome-text`,
+which already held each doc's value exactly.
+
+Tags do not borrow the discipline tokens any more. `recovery`, `test` and
+`eased` used to read `--swim`, `--bike` and `--run`; they are states, not
+sports, and the match was coincidence waiting to mislead someone.
 
 ---
 
@@ -430,6 +442,37 @@ blue tint was the kit accent leaking, not a palette change — bike tints stay
 Solid points are measured, hollow (transparent-filled) are projections or
 stale — the convention predates the glass and survives it.
 
+### The detail sheet
+
+**It is chrome, not a card** — it floats over content and it is the app's one
+long-form reading surface. So it takes `.topbar`'s construction rather than a
+bare `--pane`: the pane over `--chrome-base`, blurred, and the scrim beneath
+it deepened to `.82` so what shows through the glass is predictable instead
+of a function of whichever screen was open.
+
+Going glass costs contrast, and the fix is the one chrome already taught:
+**brighten the text, do not darken the surface.** One scoped line inside
+`.sheet` rebinds `--muted` to `--chrome-text` and `--faint` one rung up to
+`--label`, so every secondary line in the sheet lifts in both themes and
+nothing outside it moves. Measured against the worst backdrop the app can
+produce (a white card behind the scrim):
+
+| | bare pane, old scrim | after |
+|---|---|---|
+| secondary text | 1.9:1 | 6.8 smoked / 8.7 moulded |
+| tertiary text | — | 4.4 (5.2 on a normal backdrop) |
+
+Audit every `var(--muted)` and `var(--faint)` consumer that can render inside
+the sheet when changing this. Most are plain secondary text and want the
+lift; `.conf-badge` does not, and the check is its own stated invariant —
+low must stay the quietest — which holds because low reads `--faint`, a rung
+below the rest either way.
+
+Inside it, everything is an idiom that already existed: the grab handle is a
+groove, the hero tile is the workout row's tile one size up (without the key
+glow, which exists to pick one session out of seven), stat tiles press in,
+the interval profile takes `.chart-well`, and the why-card lifts.
+
 ### Chrome is a special case
 
 `.topbar` and `.nav` float over content the athlete chooses by scrolling, so
@@ -484,10 +527,16 @@ that each one is part of the app.
 | Calendar / Season | 3 (ramp, blocks, milestones) | 5 |
 | Progress, Bike tab | 8 | 10 |
 | Progress, Overview | 13 | 15 (the worst in the app) |
+| *any screen, with a detail sheet open* | *+1* | *+1* |
 
 The shell adds two everywhere: the sticky header and the fixed tab bar. The
 tab bar has blurred since long before the glass; the header joined it with the
 Navigation component.
+
+The sheet is a row modifier rather than a row of its own, because it opens
+over whatever was already there. It costs exactly one layer: counted in the
+DOM with a sheet open, the only blurring elements are the scrim, whose
+`blur(2px)` predates the glass, and the sheet itself.
 
 Calendar says **"a day selected"** because the day card and the recorded list
 only exist then; a number without its state is the same mistake in a third
