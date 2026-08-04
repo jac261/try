@@ -1053,6 +1053,12 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 /* the week's own facts, raised because they are the card's conclusions */
 .yw-notes { display: flex; gap: 8px; flex-wrap: wrap; }
 .yw-note { font-size: 11px; font-weight: 700; color: var(--sub); padding: 6px 10px; border-radius: 10px; background: var(--lift); box-shadow: var(--raise-sm); }
+/* the retrospective, embedded rather than a second card. Its own range
+   line is load-bearing: the strip above is live on the current week while
+   this reviews a finished one, and Monday to Wednesday those differ. */
+.yw-review { border-top: 1px solid var(--line); padding-top: 12px; }
+.yw-review-head { font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--muted); font-weight: 800; margin-top: 4px; }
+.yw-review-head .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .yw-empty { font-size: 13px; padding: 2px 2px 0; }
 .yw .wk { border-top: 1px solid var(--line); }
 
