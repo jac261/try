@@ -280,7 +280,10 @@ export function getIntervalsActivities(getToken, days) {
 
 // The interval/lap analysis of one activity (compact rows: type, label,
 // groupId, startTimeSec, movingTimeSec, distance, averageSpeed, averageHeartrate, maxHeartrate,
-// averageWatts, intensity, zone). 404 → not connected or an older backend.
+// averageWatts, intensity, zone, plus the swim pair averageCadence/averageStride
+// — this list had gone stale on the swim fields, which delivered-fields.test.js
+// has pinned as arriving on intervals since 2026-07-30). 404 → not connected
+// or an older backend.
 export function getIntervalsActivityIntervals(getToken, activityId) {
   return request('/api/integrations/intervals-icu/activities/' + encodeURIComponent(activityId) + '/intervals', { getToken });
 }

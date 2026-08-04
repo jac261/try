@@ -4,6 +4,7 @@ import { powerCurve, curvePoint } from './bike-power-curve.js';
 import { riderProfile } from './bike-profile.js';
 import { normalizedWatts, powerLoadAvailable, intensityFactor, powerTss, variabilityIndex } from './bike-load.js';
 import { STROKE_METRICS_FLAG, strokeMetricsEnabled } from './swim-strokes.js';
+import { swimDurabilityShape } from './durability-shape.js';
 
 /* The backend caught up (2026-07-30). Jack shipped the fields the bike and
  * swim work had been waiting on, and the client had no consumer for one of
@@ -169,5 +170,43 @@ describe('stroke metrics stay gated even though the fields now arrive', () => {
     expect(STROKE_METRICS_FLAG).toBe(false);
     const laps = [{ averageCadence: 30, averageStride: 2.2, distance: 50, movingTimeSec: 45 }];
     expect(strokeMetricsEnabled({ activity: { poolLengthM: 25 }, laps, enabled: STROKE_METRICS_FLAG })).toBe(false);
+  });
+
+  /* The durability shape (2026-08-04) reads the same two fields without
+     flipping that flag, because it makes a strictly weaker claim: the SHAPE
+     of the stroke count within ONE session on ONE device, never an absolute
+     count and never a comparison across devices. Whether the watch counts 32
+     or 64 does not change that the count fell across the set.
+
+     The line these tests hold: the durability path may draw a within-session
+     trend, and must refuse the whole session the moment the two derivations
+     disagree anywhere in it. If someone later widens it to quote an absolute
+     or compare two swims, that is the analysis module's job and the flag is
+     the gate for it. */
+  it('the durability shape reads the fields but only as a within-session trend', () => {
+    const swim = (n, mut = () => ({})) => Array.from({ length: n }, (_, i) => ({
+      type: 'WORK', movingTimeSec: 96, distance: 100, averageSpeed: 1.04,
+      averageStride: 2.5, averageCadence: 25, startTimeSec: i * 96, ...mut(i),
+    }));
+    const s = swimDurabilityShape({ rows: swim(30), movingTimeSec: 30 * 96, poolLengthM: 25 });
+    expect(s).toBeTruthy();
+    // it reports drift, never a headline stroke count
+    expect(s.strokeDrift).toBeDefined();
+    expect(s.deviceCounted).toBe(true);
+    expect(Object.keys(s)).not.toContain('strokes');
+    expect(Object.keys(s)).not.toContain('averageStrokes');
+    // and the flag it did NOT need is still off
+    expect(STROKE_METRICS_FLAG).toBe(false);
+  });
+
+  it('refuses the whole session when the 2x convention gap appears anywhere', () => {
+    const swim = (n, mut = () => ({})) => Array.from({ length: n }, (_, i) => ({
+      type: 'WORK', movingTimeSec: 96, distance: 100, averageSpeed: 1.04,
+      averageStride: 2.5, averageCadence: 25, startTimeSec: i * 96, ...mut(i),
+    }));
+    // one lap where cadence says half what stride says: the exact gap the
+    // module's validation found on real Garmin data
+    const rows = swim(30, i => (i === 11 ? { averageCadence: 12.5 } : {}));
+    expect(swimDurabilityShape({ rows, movingTimeSec: 30 * 96, poolLengthM: 25 })).toBe(null);
   });
 });

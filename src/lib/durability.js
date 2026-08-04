@@ -113,9 +113,12 @@ export function planBodySteady(workout, leg) {
 
 const sum = (xs, f) => xs.reduce((a, x) => a + f(x), 0);
 
-// One long recording's lap rows → a read, or null whenever any honesty gate
-// fails. rows are the intervals passthrough shape; discipline 'bike'|'run'.
-export function durabilityRead({ rows, discipline, movingTimeSec }) {
+/* The honesty gates, once. Extracted so the durability SHAPE selectors
+   (durability-shape.js, the design's per-sport charts) run the session
+   through the identical filter the read does — one implementation, so a card
+   and the verdict above it can never disagree about which laps counted.
+   Returns null on any gate failure, exactly as the read did inline. */
+export function usableDurabilityLaps({ rows, discipline, movingTimeSec }) {
   const gate = DURABILITY_GATES[discipline];
   if (!gate || !Array.isArray(rows) || !movingTimeSec) return null;
   if (movingTimeSec < gate.minMovingSec) return null;
@@ -141,6 +144,15 @@ export function durabilityRead({ rows, discipline, movingTimeSec }) {
   if (usable.length < DURABILITY_GATES.minLaps) return null;
   const usedSec = sum(usable, l => l.movingTimeSec);
   if (usedSec < movingTimeSec * DURABILITY_GATES.minCoverage) return null;
+  return { usable, usedSec };
+}
+
+// One long recording's lap rows → a read, or null whenever any honesty gate
+// fails. rows are the intervals passthrough shape; discipline 'bike'|'run'.
+export function durabilityRead({ rows, discipline, movingTimeSec }) {
+  const gated = usableDurabilityLaps({ rows, discipline, movingTimeSec });
+  if (!gated) return null;
+  const { usable, usedSec } = gated;
 
   // thirds by cumulative moving time over the usable laps, in recorded order
   const third = usedSec / 3;

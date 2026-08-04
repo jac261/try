@@ -11,6 +11,7 @@ import { InfoLink } from '@/components/InfoLink.jsx';
 import { SwimDashboard } from '@/features/progress/SwimDashboard.jsx';
 import { BikeDashboard } from '@/features/progress/BikeDashboard.jsx';
 import { RunDashboard } from '@/features/progress/RunDashboard.jsx';
+import { DurabilityShape } from '@/components/DurabilityShape.jsx';
 const D = T.DISCIPLINES;
 
 export function ProgressView({ plan, log, moves, activities, coach, durability, fuelLog, wellness, runLoad, recovery, onSupport, onWhatIf, retest, ftpRetest, powerCurve, previousPowerCurve, positionLog, decisionLog, shapeLabelLog, onOpenSettings }) {
@@ -193,9 +194,37 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
     const trend = T.durabilityTrend(reads);
     const noun = d === 'bike' ? 'rides' : d === 'swim' ? 'swims' : 'runs';
     const rowLabel = d === 'bike' ? 'Ride' : d === 'swim' ? 'Swim' : 'Run';
+    /* The doc's structure: the single number a coach would say out loud, the
+       shape behind it, then the rows as the evidence. The shape comes from
+       the NEWEST session that has one — shapes are backfilled two sessions
+       per app load, and older cached reads predate them entirely, so a card
+       with rows but no chart is the normal early state rather than a fault.
+       The swim also lands here whenever its stroke reading was refused. */
+    const shaped = reads.find(e => e.shape && e.shape.points);
+    const headline = shaped && (d === 'bike'
+      ? { v: (shaped.shape.dropPct > 0 ? '−' : '+') + Math.abs(shaped.shape.dropPct) + '%',
+        sub: 'power by ' + Math.round(shaped.shape.totalKJ) + ' kJ' }
+      : d === 'run'
+        ? { v: shaped.shape.decouplingPct + '%', sub: 'decoupling · ' + (Math.round(shaped.shape.totalM / 100) / 10) + ' km' }
+        : { v: (shaped.shape.paceDriftSec > 0 ? '+' : '') + shaped.shape.paceDriftSec + ' s',
+          sub: 'per 100 by the end of ' + (Math.round(shaped.shape.totalM / 100) / 10) + ' km' });
     return <>
       <div className="section-title">Durability <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(how the long {noun} ended)</span></div>
       <div className="card">
+        {headline && (
+          <div className="du-head">
+            <div className="du-headline">{headline.v}</div>
+            <div className="du-headsub">{headline.sub}<br />
+              <span className="du-when">{T.fmtDate(shaped.date, { day: 'numeric', month: 'short' })}</span></div>
+          </div>
+        )}
+        {shaped && <DurabilityShape shape={shaped.shape} />}
+        {/* The swim's stroke count is the device's own, and the two ways to
+            derive it disagree by 2x on some watches, so the card never lets
+            it read as an absolute. */}
+        {shaped && d === 'swim' && shaped.shape.deviceCounted && (
+          <div className="du-note" style={{ marginTop: 6 }}>Stroke counts are as your watch counts them, so read the shape across the set rather than the number.</div>
+        )}
         {trend && <div className="du-trend">{'Long ' + noun + ': '}{trend}</div>}
         {reads.slice(0, 5).map(e => (
           <div className="du-row" key={e.activityId}>

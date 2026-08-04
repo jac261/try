@@ -35,20 +35,63 @@ const storyActs = [
 /* One discipline per card since the durability split: the harness has to
    cover all three or it cannot show the thing it exists to show. Swim
    carries hrMissing because pool heart rate usually is. */
+/* The shapes behind the design's three charts. Deterministic and hand-set
+   rather than generated: these are the numbers a reviewer checks the chart
+   against, so they have to be readable in the source.
+
+   Only the NEWEST session of each sport carries a shape. That is deliberate
+   and it is the real state of the store — shapes are backfilled two sessions
+   per app load and older cached reads predate the field entirely, so the
+   harness shows a card whose chart comes from one session and whose rows go
+   back further. */
+const bikeShape = {
+  sport: 'bike', axis: 'kJ',
+  points: [
+    { kJ: 700, watts: 258, laps: 4 }, { kJ: 1400, watts: 253, laps: 4 },
+    { kJ: 2100, watts: 243, laps: 4 }, { kJ: 2800, watts: 227, laps: 4 },
+  ],
+  totalKJ: 2800, dropPct: 12, holdPct: [100, 98, 94, 88],
+};
+const runShape = {
+  sport: 'run', axis: 'm',
+  points: [
+    { metres: 5000, pace: 292, hr: 142, laps: 5 }, { metres: 10000, pace: 295, hr: 146, laps: 5 },
+    { metres: 15000, pace: 298, hr: 151, laps: 5 }, { metres: 21000, pace: 306, hr: 155, laps: 6 },
+  ],
+  totalM: 21000, decouplingPct: 4.8, hrDriftPct: 9.2,
+};
+const swimShape = {
+  sport: 'swim', axis: 'm',
+  points: [
+    { metres: 750, pace100: 96, strokesPerLength: 16, laps: 8 },
+    { metres: 1500, pace100: 98, strokesPerLength: 16, laps: 8 },
+    { metres: 2250, pace100: 99, strokesPerLength: 15, laps: 7 },
+    { metres: 3000, pace100: 101, strokesPerLength: 14.5, laps: 7 },
+  ],
+  totalM: 3000, paceDriftSec: 5, strokeDrift: -1.5, deviceCounted: true,
+};
 const storyDurability = [
   ...[2, 9, 13].map(n => ({
     activityId: 'sd' + n, date: ago(n), discipline: 'run', durationMin: 95,
     read: { band: 'held-strong', outputDropPct: 1.2, hrDriftPct: 2.5, efDropPct: null, hrMissing: false },
+    ...(n === 2 ? { shape: runShape } : {}),
   })),
   ...[3, 10].map(n => ({
     activityId: 'sdb' + n, date: ago(n), discipline: 'bike', durationMin: 165,
     read: { band: 'faded-a-little', outputDropPct: 5.4, hrDriftPct: 6.1, efDropPct: 4.2, hrMissing: false },
+    ...(n === 3 ? { shape: bikeShape } : {}),
   })),
   ...[4, 11].map(n => ({
     activityId: 'sds' + n, date: ago(n), discipline: 'swim', durationMin: 55,
     read: { band: 'held-strong', outputDropPct: 0, hrDriftPct: null, efDropPct: null, hrMissing: true },
+    ...(n === 4 ? { shape: swimShape } : {}),
   })),
 ];
+/* The refusal, made visible. A swim whose stroke derivations disagreed gets
+   NO shape at all, so its card must fall back to rows — the same path every
+   pre-backfill session takes. Without a mode that produces this, the refusal
+   is a branch nobody can look at. */
+const refusedDurability = storyDurability.map(e => (e.discipline === 'swim' ? { ...e, shape: null } : e));
 const storyDecisions = [{
   id: 'dev-d1', at: new Date(Date.now() - 2 * 864e5).toISOString(), status: 'accepted',
   headline: 'Retarget your FTP to the tested number', why: 'accepted from the sheet', confidence: 'high',
@@ -105,6 +148,8 @@ const MODES = {
   // durability rides on tri too: it is the only mode with all three tabs,
   // so it is the one that can show the per-discipline split at all
   tri: { plan: generatePlan(profile), coach, durability: storyDurability },
+  // the swim's stroke reading refused: its card must show rows, not a chart
+  refused: { plan: generatePlan(profile), coach, durability: refusedDurability },
   // a real rider's curve, so the expected-shape line has something to diverge
   // from and the profile reads something other than "even"
   /* FTP 191 is what this curve's own 20-minute best implies (0.95 x 201), so

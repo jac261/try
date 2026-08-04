@@ -688,9 +688,18 @@ export function App({ storage, getToken, user }) {
           // later load retries. An array, even empty, is a real answer.
           if (rows === null) continue;
           const read = T.durabilityRead({ rows, discipline: c.discipline, movingTimeSec: c.activity.movingTimeSec });
+          /* The SHAPE behind the read, from the rows already in hand. It has
+             to be derived here or not at all: these rows are discarded the
+             moment this loop moves on, and re-deriving at render time would
+             be a network round-trip per card. Null whenever the sport's own
+             gates refuse — the card falls back to the rows for those. */
+          const shape = T.durabilityShape({
+            rows, discipline: c.discipline, movingTimeSec: c.activity.movingTimeSec,
+            poolLengthM: c.activity.poolLengthM,
+          });
           setDurability(storage.saveDurabilityRead({
             activityId: c.activity.id, date: c.activity.date, discipline: c.discipline,
-            durationMin: Math.round((c.activity.movingTimeSec || 0) / 60), read,
+            durationMin: Math.round((c.activity.movingTimeSec || 0) / 60), read, shape,
           }));
         }
       } finally {

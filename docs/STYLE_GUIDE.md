@@ -483,8 +483,22 @@ already carry the app's worst counts, and the 30% fills read without it.
 
 A chart is read, not tapped, so it presses INTO its card: `.chart-well` is
 the shared recess (tokens — `--well` + `--press-sm` — so both materials bind
-it, and no backdrop-filter, so the blur count does not move). The spider and
-the power curve wear it; any future chart-in-a-card takes the same class.
+it, and no backdrop-filter, so the blur count does not move). The spider, the
+power curve and the durability shapes wear it; any future chart-in-a-card
+takes the same class.
+
+**Bars for buckets, lines for series.** A durability bucket is a STRETCH of a
+session ("the work between 1 000 and 2 000 kJ"), so it is drawn as a bar: a
+line between bucket centres would draw a continuity through ground that was
+never sampled that way. A pace bar is inverted, longer meaning faster, or a
+bar growing as the athlete slows reads as improvement.
+
+**A small change needs a number, not a cropped axis.** The durability bars
+keep a zero base and print the percentage above them, because a 12% fade
+across a 70px plot is eight pixels. Zooming the axis would make it legible by
+exaggerating it, which is the cliff `PowerCurveChart` already warns about in
+its own comment. Where the eye cannot resolve the difference, the label
+carries the precision and the bar carries the scale.
 
 **The athlete's line is white.** On any chart, "you" is the single white
 line — the docs' legends all draw the you-swatch white — and the discipline
