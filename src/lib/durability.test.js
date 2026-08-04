@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
-import { durabilityRead, durabilityTrend, planBodySteady, fadeCorroborated, longestOfWeek, durabilityCandidates, DURABILITY_GATES, DURABILITY_BAND_LABELS } from './durability.js';
+import { durabilityRead, durabilityTrend, planBodySteady, fadeCorroborated, longestOfWeek, durabilityCandidates, pendingShapeEntries, reshapeQueue, DURABILITY_GATES, DURABILITY_BAND_LABELS } from './durability.js';
 import { DISCIPLINE } from './autolog.js';
 import { decideWeek } from './coach.js';
 import { generatePlan } from './plan.js';
@@ -525,37 +525,40 @@ describe('durabilityCandidates: only the long ones, per discipline', () => {
     expect(got[0].discipline).toBe('swim');
   });
 
-  /* The bug that made the durability cards look unchanged after the shapes
-     shipped (2026-08-04): a session already in the store is excluded from
-     re-fetch, so an entry read before the shape existed could never gain one.
-     The store was the very thing keeping it stale. */
-  it('re-offers a stored session whose shape was never attempted', () => {
-    const workouts = [swim('s1', '2026-08-10', 30), swim('s2', '2026-08-13', 60)];
-    const args = {
-      plan: { race: 'olympic', weeks: [{ workouts }] },
-      activities: [act('s1', '2026-08-10', 30 * 60), act('s2', '2026-08-13', 60 * 60)],
-      log: { s1: { done: true }, s2: { done: true } },
-      have: new Set(['act-s2']),
-    };
-    // already held and not flagged: nothing to do
-    expect(call(args)).toEqual([]);
-    // held, but its entry carries a read and NO shape key: offer it once
-    expect(call({ ...args, needShape: new Set(['act-s2']) }).map(c => c.activity.id))
-      .toEqual(['act-s2']);
+  /* The re-read moved OFF the candidate pipeline (2026-08-04, second round):
+     candidates answer which NEW sessions deserve a verdict, and their
+     current-plan constraint made sessions from earlier plans permanently
+     un-re-readable while the card's note promised otherwise. The sweep now
+     walks the store directly; these tests pin that seam. */
+  it('queues every never-attempted record, including ones no plan can reach', () => {
+    const store = [
+      // read under a PREVIOUS plan: unreachable by candidates, sweepable here
+      { activityId: 'act-old', date: '2026-06-02', discipline: 'bike', durationMin: 160, read: {} },
+      { activityId: 'act-a', date: '2026-08-01', discipline: 'run', durationMin: 65, read: {}, shape: null }, // refused: final
+      { activityId: 'act-b', date: '2026-08-02', discipline: 'swim', durationMin: 55, read: {} },
+      { activityId: 'act-c', date: '2026-08-03', discipline: 'run', durationMin: 70, read: null },            // unreadable recording
+    ];
+    expect(pendingShapeEntries(store).map(e => e.activityId)).toEqual(['act-old', 'act-b']);
+    const q = reshapeQueue(store, []);
+    expect(q.map(x => x.activityId)).toEqual(['act-old', 'act-b']);
+    // fallback timing: durationMin in seconds, within 30 s of the truth
+    expect(q[0].movingTimeSec).toBe(160 * 60);
   });
 
-  it('never re-offers a session whose shape was attempted and refused', () => {
-    /* An explicit `shape: null` is an answer, exactly as `read: null` is.
-       The caller builds needShape from `!('shape' in e)`, so a refusal is
-       absent from the set and this stays a one-time migration rather than a
-       loop. Asserted at the seam the caller actually uses. */
+  it('takes exact timing and pool length from the feed when the session is still in it', () => {
     const store = [
-      { activityId: 'act-a', read: {}, shape: null },        // refused
-      { activityId: 'act-b', read: {} },                     // never attempted
-      { activityId: 'act-c', read: null },                   // unreadable recording
+      { activityId: 'act-s', date: '2026-08-02', discipline: 'swim', durationMin: 55, read: {} },
+      { activityId: 'act-r', date: '2026-08-03', discipline: 'run', durationMin: 58, read: {} },
     ];
-    const needShape = new Set(store.filter(e => e.read && !('shape' in e)).map(e => e.activityId));
-    expect([...needShape]).toEqual(['act-b']);
+    const feed = [
+      { id: 'act-s', movingTimeSec: 3312, poolLengthM: 25 },
+      // act-r absent from the feed: exact values unavailable, fallback applies
+    ];
+    const q = reshapeQueue(store, feed);
+    expect(q[0]).toEqual({ activityId: 'act-s', discipline: 'swim', movingTimeSec: 3312, poolLengthM: 25 });
+    expect(q[1].movingTimeSec).toBe(58 * 60);
+    // no pool-length fallback: a swim outside the feed refuses its shape
+    expect(q[1].poolLengthM).toBe(undefined);
   });
 
   it('plan mode: a week whose swims are all short offers none', () => {

@@ -273,22 +273,49 @@ export function longestOfWeek(items) {
  * have: Set of activity ids already read
  * floor: ISO date below which candidates are out of the window, or null
  */
-export function durabilityCandidates({ plan, activities, log, moves, have, needShape, floor, todayISO, hour, deps }) {
+/* Which stored durability records still need their SHAPE. A record with a
+   verdict and NO shape key was read before charts existed (never attempted);
+   `shape: null` means attempted and refused, never retried, exactly as
+   `read: null` is never retried. So a session is re-read at most once and a
+   refusal is final — the one-shot contract from 2026-08-04.
+
+   Shared by the App's sweep and the card's "charts are on their way" note,
+   so the promise on screen and the work actually queued cannot drift. */
+export function pendingShapeEntries(entries) {
+  return (entries || []).filter(e => e && e.read && !('shape' in e));
+}
+
+/* The sweep's fetch specs, straight from the store. This deliberately does
+   NOT go through durabilityCandidates: that pipeline answers a coaching
+   question — which new sessions deserve a verdict — and constrains itself to
+   the current plan's logged, matched workouts. A re-read is not that
+   question; the stored record already names its recording, and routing it
+   through candidate discovery made sessions from earlier plans permanently
+   un-re-readable while the note promised otherwise (Jon's 2026-08-04
+   "migration slowed" report).
+
+   The activities feed, when it still holds the session, supplies the exact
+   movingTimeSec and the swim's pool length. The fallback is durationMin in
+   seconds — within 30 s of the truth, harmless against gates with minutes of
+   slack at session scale. Pool length has no fallback: a swim outside the
+   feed refuses its shape, and that refusal is stored as the honest null. */
+export function reshapeQueue(entries, activities) {
+  const feed = new Map((Array.isArray(activities) ? activities : []).map(a => [a.id, a]));
+  return pendingShapeEntries(entries).map(e => {
+    const a = feed.get(e.activityId);
+    return {
+      activityId: e.activityId,
+      discipline: e.discipline,
+      movingTimeSec: (a && a.movingTimeSec) || (e.durationMin || 0) * 60,
+      poolLengthM: a ? a.poolLengthM : undefined,
+    };
+  });
+}
+
+export function durabilityCandidates({ plan, activities, log, moves, have, floor, todayISO, hour, deps }) {
   if (!Array.isArray(activities)) return [];
   const { DISCIPLINE, planBodySteady, brickPairFor, activityFor, reviewedWeekMonday } = deps;
-  /* `have` is what we already hold and will not fetch again. `needShape` is
-     the exception: an entry read BEFORE the shape existed carries a verdict
-     and no chart, and without this it could never gain one — the store is
-     the very thing that excludes it. That is why the durability cards sat
-     unchanged after the shapes shipped (2026-08-04).
-
-     One-time by construction, because the two absences differ:
-       shape undefined -> never attempted, re-read once;
-       shape null      -> attempted and refused, never retried, exactly as
-                          `read: null` is never retried today.
-     So an entry can be re-read at most once, and a refusal is final. */
-  const stale = needShape || new Set();
-  const seen = new Set([...(have || [])].filter(id => !stale.has(id)));
+  const seen = have || new Set();
   const out = [];
 
   if (plan && plan.race !== 'tracker' && Array.isArray(plan.weeks) && plan.weeks.length) {
