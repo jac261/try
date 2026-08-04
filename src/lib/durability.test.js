@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
-import { durabilityRead, durabilityTrend, planBodySteady, fadeCorroborated, longestOfWeek, durabilityCandidates, pendingShapeEntries, reshapeQueue, DURABILITY_GATES, DURABILITY_BAND_LABELS } from './durability.js';
-import { DISCIPLINE } from './autolog.js';
+import { durabilityRead, durabilityTrend, planBodySteady, fadeCorroborated, longestOfWeek, durabilityCandidates, pendingShapeEntries, reshapeQueue, sessionNameVerdict, purgeRefusedReads, DURABILITY_GATES, DURABILITY_BAND_LABELS } from './durability.js';
+import { DISCIPLINE, activityFor } from './autolog.js';
 import { decideWeek } from './coach.js';
 import { generatePlan } from './plan.js';
 import { storageForUser } from '@/app/storage.js';
@@ -495,6 +495,105 @@ describe('longestOfWeek picks the long session where no role names it', () => {
   it('ignores rubbish rows and unknown disciplines', () => {
     expect(longestOfWeek([null, {}, mk('a', '2026-08-05', 'strength', 90)]).size).toBe(0);
     expect(longestOfWeek(null).size).toBe(0);
+  });
+});
+
+describe('the session-name rule (measured against Jon\'s real history, 2026-08-04)', () => {
+  /* Every name below is verbatim from Jon's intervals.icu account. The rule
+     exists because the duration gates cannot separate a long run from an
+     ordinary one — they sit five minutes under the shortest long run Try
+     prescribes — and because an athlete on someone else's plan records that
+     plan's sessions on the day Try scheduled its own. */
+  it('refuses the sessions that were being wrongly read', () => {
+    ['Run — 10k easy (RUNNA)', 'Run — 12k easy + 4 strides', 'Technique Swim',
+      'Swim — recovery + technique 1,200m (easy)', 'Bike — 45min easy spin (frequency)',
+      'Easy aerobic run — 70min @ 5:00–5:30/km, HR 145–158']
+      .forEach(n => expect(sessionNameVerdict(n), n).toBe(false));
+  });
+
+  it('admits the ones that say so', () => {
+    ['Long Ride', 'Long Run', 'Long Swim', 'Long run — 75min easy (Z2, cornerstone)']
+      .forEach(n => expect(sessionNameVerdict(n), n).toBe(true));
+  });
+
+  it('admit beats refuse, which one of Jon\'s real long runs depends on', () => {
+    // "Long run — 75min easy (Z2, cornerstone)", 11 Jul, 1h53: a genuine long
+    // run that a refuse-first reading would have thrown away
+    expect(sessionNameVerdict('Long run — 75min easy (Z2, cornerstone)')).toBe(true);
+  });
+
+  it('says nothing about the names that carry no signal, so the old rules still decide', () => {
+    ['Bristol Road Cycling', 'Afternoon Run', 'Club swim', 'Morning Run', 'Lunch Run',
+      'Pool Swim', 'Zwift - TrainerRoad: Oso', '', null, undefined]
+      .forEach(n => expect(sessionNameVerdict(n), String(n)).toBe(null));
+  });
+
+  it('matches whole words only, so "spinning" and "longitude" are not signals', () => {
+    expect(sessionNameVerdict('Spinning Class')).toBe(null);
+    expect(sessionNameVerdict('Longitude Loop')).toBe(null);
+    // and the word forms that ARE signals still land
+    expect(sessionNameVerdict('Spin Class')).toBe(false);
+    expect(sessionNameVerdict('Cooldown jog')).toBe(false);
+  });
+
+  it('purges stored reads the feed can judge, and keeps the ones it cannot', () => {
+    const entries = [
+      { activityId: 'a-easy', date: '2026-08-04', discipline: 'run', read: {} },
+      { activityId: 'a-club', date: '2026-07-26', discipline: 'bike', read: {} },
+      { activityId: 'a-gone', date: '2026-05-01', discipline: 'run', read: {} },
+    ];
+    const feed = [
+      { id: 'a-easy', name: 'Run — 10k easy (RUNNA)' },
+      { id: 'a-club', name: 'Bristol Road Cycling' },
+      // a-gone has aged out of the 80-day feed: unjudgeable, so kept
+    ];
+    expect(purgeRefusedReads(entries, feed).map(e => e.activityId)).toEqual(['a-club', 'a-gone']);
+    // idempotent: a purged store purges to itself
+    const once = purgeRefusedReads(entries, feed);
+    expect(purgeRefusedReads(once, feed)).toEqual(once);
+  });
+});
+
+describe('the long-run leak that the real matcher allowed (2026-08-04)', () => {
+  /* Every other test in this file stubs activityFor, which is exactly why
+     this shipped: the leak lives INSIDE the matcher's duration window. Try
+     plans a 70-minute long run; MATCH_WINDOW is 0.5x-1.7x, so 35-119
+     minutes; Jon's 58-minute easy 10k lands inside and was read as the long
+     run. This test uses the real matcher deliberately. */
+  const DEPS = {
+    DISCIPLINE, planBodySteady, brickPairFor: () => null, activityFor,
+    reviewedWeekMonday: () => null,
+  };
+  const longRun = {
+    id: 'w-long', date: '2026-08-04', discipline: 'run', role: 'long', durationMin: 70,
+    segments: [{ label: 'Body', zone: 'Z2' }],
+  };
+  const call = activities => durabilityCandidates({
+    plan: { race: 'olympic', weeks: [{ workouts: [longRun] }] },
+    activities, log: { 'w-long': { done: true } }, moves: {}, have: new Set(),
+    floor: null, todayISO: '2026-08-05', hour: 12, deps: DEPS,
+  });
+
+  it('refuses the easy 10k the plan\'s long slot used to swallow', () => {
+    const easy = { id: 'i172317084', date: '2026-08-04', type: 'Run', movingTimeSec: 3497, name: 'Run — 10k easy (RUNNA)' };
+    expect(call([easy])).toEqual([]);
+  });
+
+  it('control: the same recording under a neutral name is still offered', () => {
+    const neutral = { id: 'i172317084', date: '2026-08-04', type: 'Run', movingTimeSec: 3497, name: 'Afternoon Run' };
+    expect(call([neutral]).map(c => c.activity.id)).toEqual(['i172317084']);
+  });
+
+  it('a session named long is offered even though the plan scheduled nothing that day', () => {
+    // Jon's 19 Jul "Long Ride": his plan had no long ride slot matched, and
+    // before this the plan branch could only ever see what it scheduled
+    const ride = { id: 'i167194088', date: '2026-07-19', type: 'Ride', movingTimeSec: 6936, name: 'Long Ride' };
+    expect(call([ride]).map(c => c.activity.id)).toEqual(['i167194088']);
+  });
+
+  it('the name is not a bypass: a short session named long still fails the gate', () => {
+    const stub = { id: 'x', date: '2026-07-19', type: 'Ride', movingTimeSec: 40 * 60, name: 'Long Ride' };
+    expect(call([stub])).toEqual([]);
   });
 });
 

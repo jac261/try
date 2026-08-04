@@ -59,6 +59,58 @@ export const DURABILITY_GATES = {
   minEfLapsPerWindow: 2,
 };
 
+/* What the athlete's own name for a session says about whether it is a long
+   one. Two-sided by Jon's call (2026-08-04) after the rule was measured
+   against 60 days of his real recordings.
+ *
+ * The duration gates above cannot separate a long run from an ordinary one:
+ * they sit five minutes below the shortest long run Try prescribes, so a
+ * 58-minute easy 10k clears them. Neither can the plan, because an athlete
+ * following an externally-written plan records whatever that plan asked for
+ * on the day Try scheduled a long session, and the matcher is happy to pair
+ * them. The name is the only field that says what the session WAS.
+ *
+ * `refuses` alone would be too weak (nothing would ever be admitted against
+ * the plan) and `admits` alone far too strong: measured on Jon's history,
+ * requiring the word "long" kept 2 recordings out of 60 days and threw away
+ * his 2h26 club ride and both his 20 km long runs, because Garmin named them
+ * "Bristol Road Cycling" and "Afternoon Run". Most sessions say nothing
+ * either way, and for those the role and longest-of-week rules still decide.
+ *
+ * ADMIT BEATS REFUSE, and that ordering is load-bearing: "Long run — 75min
+ * easy (Z2, cornerstone)" is a real long run in Jon's history that a
+ * refuse-first reading would discard. */
+export const SESSION_NAME_RULES = {
+  admits: /\blong\b/i,
+  refuses: /\b(easy|recovery|technique|drills?|shake\s?out|spin|warm\s?up|cool\s?down)\b/i,
+};
+
+// true = a long session whatever else says; false = never a long session;
+// null = no opinion, so the caller's own rules decide.
+export function sessionNameVerdict(name) {
+  const s = typeof name === 'string' ? name : '';
+  if (SESSION_NAME_RULES.admits.test(s)) return true;
+  if (SESSION_NAME_RULES.refuses.test(s)) return false;
+  return null;
+}
+
+/* Reads chosen under the OLD rule, dropped once the new one exists.
+ *
+ * A selection rule that only applies going forward leaves yesterday's wrong
+ * answers on screen, and the card cannot tell them apart from right ones —
+ * the store keeps no name, only an activity id. So the feed is the judge:
+ * an entry whose recording is still in it and whose name now refuses is
+ * dropped, and an entry the feed no longer covers is kept, because "I cannot
+ * check" is not the same as "it fails". Those age out through the 40-entry
+ * cap on their own. */
+export function purgeRefusedReads(entries, activities) {
+  const feed = new Map((Array.isArray(activities) ? activities : []).map(a => [a.id, a]));
+  return (entries || []).filter(e => {
+    const a = e && feed.get(e.activityId);
+    return !a || sessionNameVerdict(a.name) !== false;
+  });
+}
+
 // Verdict bands, anchored to the aerobic-decoupling convention (roughly 5%
 // meaningful, double for hard). Output fades slightly wider: modest late
 // slowing is normal pacing, not collapse.
@@ -353,9 +405,29 @@ export function durabilityCandidates({ plan, activities, log, moves, have, floor
         } else {
           if (!planBodySteady(w)) return;
           const a = activityFor({ workout: w, activities, moves });
+          /* The plan says a long run was scheduled; the RECORDING says what
+             was actually done. activityFor pairs on discipline, date and a
+             0.5x-1.7x duration window, so an easy 10k on the long run's day
+             lands inside it and used to be read as the long run. The name
+             is the only thing that catches that. */
+          if (a && sessionNameVerdict(a.name) === false) return;
           if (a && !seen.has(a.id)) out.push({ activity: a, discipline: w.discipline });
         }
       });
+
+    /* A session whose own name says "long" qualifies whatever the plan
+       scheduled. An athlete following someone else's plan carries that
+       plan's names, and their long ride may sit on a day Try left open —
+       without this the plan branch could only ever see what it scheduled
+       itself. The duration gate still applies; the name is not a bypass. */
+    activities.forEach(a => {
+      const disc = DISCIPLINE[a.type];
+      if (disc !== 'run' && disc !== 'bike' && disc !== 'swim') return;
+      if (a.manual || seen.has(a.id) || sessionNameVerdict(a.name) !== true) return;
+      if ((a.movingTimeSec || 0) < DURABILITY_GATES[disc].minMovingSec) return;
+      if (out.some(c => c.activity.id === a.id)) return;
+      out.push({ activity: a, discipline: disc });
+    });
   } else if (!plan || plan.race === 'tracker') {
     /* No plan, so nothing is named "long" — the week's longest per
        discipline is, provided it clears the gate too. Taking every
@@ -363,13 +435,23 @@ export function durabilityCandidates({ plan, activities, log, moves, have, floor
        and calls all of it durability. */
     const eligible = activities.filter(a => {
       const d = DISCIPLINE[a.type];
-      return (d === 'run' || d === 'bike' || d === 'swim') && !a.manual;
+      /* The refusal is applied BEFORE longest-of-week, not after, so a week
+         whose longest recording is an easy session promotes the next one
+         down instead of yielding nothing. Filtering afterwards would let one
+         long easy run hide the real long run behind it. */
+      return (d === 'run' || d === 'bike' || d === 'swim') && !a.manual
+        && sessionNameVerdict(a.name) !== false;
     });
     const longIds = longestOfWeek(eligible.map(a => ({
       id: a.id, date: a.date, discipline: DISCIPLINE[a.type], movingTimeSec: a.movingTimeSec || 0,
     })));
     eligible.forEach(a => {
-      if (longIds.has(a.id) && !seen.has(a.id)) out.push({ activity: a, discipline: DISCIPLINE[a.type] });
+      const disc = DISCIPLINE[a.type];
+      // named long, or the week's longest; either way it clears the gate,
+      // which longestOfWeek applies for its own path
+      const named = sessionNameVerdict(a.name) === true
+        && (a.movingTimeSec || 0) >= DURABILITY_GATES[disc].minMovingSec;
+      if ((longIds.has(a.id) || named) && !seen.has(a.id)) out.push({ activity: a, discipline: disc });
     });
   }
 
