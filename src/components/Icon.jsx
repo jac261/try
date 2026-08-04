@@ -47,11 +47,46 @@ const ICON_PATHS = {
 // New triathlon set is drawn for a uniform stroke-width of 2 (the app default);
 // no per-icon weight overrides needed.
 const ICON_BOLD = {};
+
+/* ---------------- the glass emboss (Icons.dc.html) ----------------
+ * "The Try set, unchanged in geometry and re-lit for glass: cast shadow
+ * down-right, highlight up-left." Nothing above this line changed: the same
+ * path string is simply drawn three times, an offset dark copy and an offset
+ * light copy beneath the real one.
+ *
+ * It recolours by setting `color` on the wrapping group, which works because
+ * every path in the set paints with currentColor — including the filled
+ * discipline marks, whose inner group inherits the wrapper's colour.
+ *
+ * The numbers are the doc's own and are IDENTICAL in both materials (checked
+ * across all 31 embossed icons in the moulded doc against the smoked set), so
+ * this is one of the few things in the design system that needs no token: the
+ * light source does not change when the material does. */
+const EMBOSS = paths =>
+  '<g transform="translate(.55 .75)" style="color:rgba(0,0,0,.55)" opacity=".9">' + paths + '</g>'
+  + '<g transform="translate(-.35 -.45)" style="color:rgba(255,255,255,.55)" opacity=".8">' + paths + '</g>'
+  + '<g>' + paths + '</g>';
+
+/* Below this the bevel is not a bevel. The offsets are .55 and .75 of a
+   24-unit viewBox, so at the app's commonest icon size (18px, 26 of 57 call
+   sites) the shadow lands 0.41 CSS pixels away and reads as a muddy stroke
+   rather than as depth. The doc draws the emboss down to 21px; stopping at 26
+   is Jon's call (2026-08-04) on those measurements, and it is the one place
+   this component departs from the doc. */
+const EMBOSS_MIN_PX = 26;
+
+/* The brand mark stays flat at every size, which is the doc's own choice: it
+   is the single un-embossed icon in a sheet of 32. Without this the size rule
+   alone would light it, since the app draws the logo at 26, 34 and 64. */
+const NEVER_EMBOSSED = new Set(['logo']);
+
 export function Icon({ name, size, style }) {
   const s = size || 22;
+  const paths = ICON_PATHS[name] || '';
+  const lit = paths && s >= EMBOSS_MIN_PX && !NEVER_EMBOSSED.has(name);
   return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth={ICON_BOLD[name] || 2} strokeLinecap="round" strokeLinejoin="round"
     style={{ display: 'block', flex: 'none', ...style }}
-    dangerouslySetInnerHTML={{ __html: ICON_PATHS[name] || '' }} />;
+    dangerouslySetInnerHTML={{ __html: lit ? EMBOSS(paths) : paths }} />;
 }
 
