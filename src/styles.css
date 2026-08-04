@@ -1295,6 +1295,14 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .du-disc { flex: 0 0 auto; font-weight: 600; }
 .du-nums { color: var(--muted); font-variant-numeric: tabular-nums; }
 .du-note { font-size: 11.5px; color: var(--muted); margin-top: 10px; line-height: 1.45; }
+/* The doc's structure: the one number a coach would say out loud, then the
+   shape behind it. Tokens only — the chart well and the inks bind per theme,
+   so neither material needs its own values here. */
+.du-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.du-headline { font-size: 30px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+.du-headsub { font-size: 12px; color: var(--sub); line-height: 1.45; }
+.du-when { color: var(--faint); }
+.du-legend { font-size: 10.5px; color: var(--sub); text-align: center; margin-top: 6px; }
 
 .coach-row-wrap { margin: 6px 0 10px; }
 .coach-row-wrap .coach-ev { margin-left: 46px; }
