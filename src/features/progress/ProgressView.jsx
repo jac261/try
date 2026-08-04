@@ -219,12 +219,28 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
           </div>
         )}
         {shaped && <DurabilityShape shape={shaped.shape} />}
-        {/* The swim's stroke count is the device's own, and the two ways to
-            derive it disagree by 2x on some watches, so the card never lets
-            it read as an absolute. */}
+        {/* The swim's stroke unit is settled (cycles vs arm strokes, measured
+            2026-08-04), but the device's own definition of a stroke is not,
+            so the card still reads it as the watch's number, never an
+            absolute claim. */}
         {shaped && d === 'swim' && shaped.shape.deviceCounted && (
           <div className="du-note" style={{ marginTop: 6 }}>Stroke counts are as your watch counts them, so read the shape across the set rather than the number.</div>
         )}
+        {/* A chartless card says WHICH honest reason applies. Without this a
+            rows-only card is pixel-identical in a build without charts and in
+            a build whose charts have not arrived yet, which made 2026-08-04's
+            "still unchanged" report undiagnosable from a screenshot. The
+            line's presence is also the build marker. */}
+        {!shaped && (() => {
+          const pending = reads.filter(e => !('shape' in e)).length;
+          return (
+            <div className="du-note" style={{ marginTop: 0, marginBottom: 8 }}>
+              {pending > 0
+                ? 'Charts are on their way: ' + (pending === 1 ? 'one session here' : pending + ' sessions here') + ' will be re-read over the next few times the app opens.'
+                : 'No chart for these ' + noun + ': their laps were too uneven to draw a fair shape, so the rows carry the story.'}
+            </div>
+          );
+        })()}
         {trend && <div className="du-trend">{'Long ' + noun + ': '}{trend}</div>}
         {reads.slice(0, 5).map(e => (
           <div className="du-row" key={e.activityId}>

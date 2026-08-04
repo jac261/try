@@ -128,6 +128,30 @@ describe('ProgressView renders in every mode', () => {
     expect(swim).toContain('no heart rate data');    // pool HR absent, said plainly
   });
 
+  it('a chartless card names its reason: pending re-read vs refused laps', async () => {
+    const plan = generatePlan(profile);
+    // no shape key at all: read before charts existed, awaiting re-read
+    const pending = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE }, 'Run');
+    expect(pending).toContain('Charts are on their way');
+    expect(pending).toContain('one session here');
+    // shape attempted and refused (explicit null): the rows carry the story
+    const refusedFixture = DURABILITY_FIXTURE.map(e => ({ ...e, shape: null }));
+    const refused = await mount({ plan, activities: null, durability: refusedFixture }, 'Run');
+    expect(refused).toContain('too uneven to draw a fair shape');
+    expect(refused).not.toContain('Charts are on their way');
+    // a shape present: chart renders, neither note appears
+    const shapedFixture = DURABILITY_FIXTURE.map(e => (e.discipline === 'run'
+      ? { ...e, shape: { sport: 'run', axis: 'm', points: [
+        { metres: 5000, pace: 292, hr: 142, laps: 5 }, { metres: 10000, pace: 295, hr: 146, laps: 5 },
+        { metres: 15000, pace: 298, hr: 151, laps: 5 }, { metres: 21000, pace: 306, hr: 155, laps: 6 },
+      ], totalM: 21000, decouplingPct: 4.8, hrDriftPct: 9.2 } }
+      : e));
+    const shaped = await mount({ plan, activities: null, durability: shapedFixture }, 'Run');
+    expect(shaped).toContain('decoupling');
+    expect(shaped).not.toContain('Charts are on their way');
+    expect(shaped).not.toContain('too uneven to draw');
+  });
+
   it('Overview no longer carries durability when the discipline has its own tab', async () => {
     const plan = generatePlan(profile);
     const overview = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE });
