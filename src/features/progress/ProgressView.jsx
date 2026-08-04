@@ -360,13 +360,13 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
     {!disciplineOn('run') && runVolumeBlock}
     {!disciplineOn('bike') && curveCard}
 
-    {/* Durability lives in each discipline's own tab now. A discipline with
-        no tab (solo plans, an excluded discipline, tracker mode's tabless
-        page) keeps its card here, the same fallback the run volume and
-        power curve above already use. */}
-    {!disciplineOn('swim') && durabilityCard('swim')}
-    {!disciplineOn('bike') && durabilityCard('bike')}
-    {!disciplineOn('run') && durabilityCard('run')}
+    {/* Durability deliberately has NO Overview fallback (Jon's call,
+        2026-08-04): the cards exist only inside their discipline tabs, so
+        tracker's tabless page, a solo plan's absent disciplines and an
+        excluded discipline show none. The stored reads persist and return
+        the moment a plan gives the discipline its tab back. Run volume and
+        the power curve above keep the fallback; durability is the carve-out
+        from the losing-a-tab-must-never-lose-content rule. */}
 
     {(() => {
       // Weakest link: the three sports on one experience scale, and what the

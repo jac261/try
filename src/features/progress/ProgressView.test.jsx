@@ -162,20 +162,31 @@ describe('ProgressView renders in every mode', () => {
     expect(overview).not.toContain('Durability');
   });
 
-  it('a discipline with no tab keeps its card on Overview', async () => {
-    // solo run plan: swim and bike have no tab, so a run card must still
-    // appear somewhere rather than vanishing with the tab that never existed
+  it('durability is tab-only: a solo plan shows no card for tabless disciplines', async () => {
+    /* Jon's call, 2026-08-04: durability cards exist only inside their
+       discipline tabs — the carve-out from the losing-a-tab-must-never-
+       lose-content rule (run volume and the power curve keep their
+       fallbacks). Stored reads persist; only the rendering is tab-bound. */
     const plan = generatePlan({ ...profile, raceType: 'run10k' });
     // a solo plan opens on its own discipline, so ask for Overview by name
     const html = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE }, 'Overview');
-    expect(html).toContain('Durability');
-    expect(html).toContain('how the long rides ended');  // bike has no tab here
-    expect(html).toContain('how the long swims ended');  // nor does swim
-    expect(html).not.toContain('how the long runs ended'); // run has one, so it is not here
+    expect(html).not.toContain('how the long rides ended');  // bike has no tab, no card
+    expect(html).not.toContain('how the long swims ended');  // nor swim
+    expect(html).not.toContain('how the long runs ended');   // run's card is on its tab
 
-    // and the run card is on the Run tab, not lost with the fallback
+    // the one discipline WITH a tab keeps its card there
     const run = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE }, 'Run');
     expect(run).toContain('how the long runs ended');
+  });
+
+  it('durability is tab-only: tracker mode shows none at all', async () => {
+    // tracker has no tabs, so the tabless Overview must not inherit the
+    // cards; the reads stay stored for the next plan's tabs
+    const plan = buildTrackerPlan(generatePlan(profile), '2026-07-27T10:00:00.000Z');
+    const html = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE });
+    expect(html).not.toContain('how the long runs ended');
+    expect(html).not.toContain('how the long rides ended');
+    expect(html).not.toContain('how the long swims ended');
   });
 
   it('maintenance block: the countdown speaks in block weeks, never race day', async () => {
