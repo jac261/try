@@ -187,7 +187,7 @@ describe('PowerCurveCard: gated now, correct when it opens', () => {
        the chart does not actually rely on. Opacity 0.5 belongs to the
        previous curve and nothing else. */
     expect(html).not.toMatch(/<path[^>]*opacity="0\.5"/);      // the previous curve's line
-    expect(html).toContain('stroke="var(--bike, var(--run))"'); // the rider's own, still drawn
+    expect(html).toContain('stroke="#fff"');                    // the rider's own, still drawn
     expect(html).toContain('stroke-dasharray="4 3"');           // the reference, unaffected
     // and the same caveat is repeated for the profile, which is measured
     // against a threshold set on the old meter

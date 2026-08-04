@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import * as T from '@/lib';
 
 /* The power curve as a curve (Jon, 2026-07-30). It was a list of rows, which
@@ -25,6 +26,11 @@ import * as T from '@/lib';
  * that is real but no longer describes now.
  */
 export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, showDeltas, height = 190 }) {
+  // Before the early return (the hook-order lesson). The curve harness
+  // mounts a dozen of these on one page, so the area-fill gradient id must
+  // be per-instance; useId's delimiters are stripped because url(#…) does
+  // not reliably parse them across engines.
+  const fillId = 'pcfill-' + useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const pts = (curve && curve.points) || [];
   if (pts.length < 2) return null;                 // one point is not a curve
 
@@ -144,8 +150,20 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
           strokeWidth="1.5" opacity="0.5" strokeLinejoin="round" />
       ))}
 
-      {/* the current curve */}
-      <path d={path(pts)} fill="none" stroke="var(--bike, var(--run))" strokeWidth="2" strokeLinejoin="round" />
+      {/* The current curve, in the design's chart voice: "you" is the one
+          white line, the discipline is the tinted fill under it. The area
+          fill closes down to the zero line, which the zero-based axis makes
+          honest — the shaded area IS the watts. */}
+      <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+        {/* var(--bike) resolves at the stop: the token lives on :root */}
+        <stop offset="0%" style={{ stopColor: 'var(--bike)' }} stopOpacity="0.16" />
+        <stop offset="100%" style={{ stopColor: 'var(--bike)' }} stopOpacity="0" />
+      </linearGradient>
+      <path d={path(pts)
+        + ' L' + X(pts[pts.length - 1].durationSec).toFixed(1) + ' ' + Y(0).toFixed(1)
+        + ' L' + X(pts[0].durationSec).toFixed(1) + ' ' + Y(0).toFixed(1) + ' Z'}
+        fill={'url(#' + fillId + ')'} stroke="none" />
+      <path d={path(pts)} fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
 
       {/* Every duration's watts, on the chart. The rows that used to carry
           these numbers are gone, so the labels ALTERNATE above and below the
@@ -175,8 +193,8 @@ export function PowerCurveChart({ curve, previous, comparison, stale, ftpWatts, 
               /* transparent for a stale point: it reads as hollow against
                  whatever is behind, which var(--card) stopped doing when the
                  pane went translucent. */
-              fill={staleSet.has(p.durationSec) ? 'transparent' : 'var(--bike, var(--run))'}
-              stroke="var(--bike, var(--run))" strokeWidth="1.5">
+              fill={staleSet.has(p.durationSec) ? 'transparent' : '#fff'}
+              stroke="#fff" strokeWidth="1.5">
               <title>{tick(p.durationSec) + ': ' + p.watts + ' W'
                 + (ftpWatts ? ' (' + Math.round(p.watts / ftpWatts * 100) + '% of threshold)' : '')
                 + (delta ? ', ' + delta + ' vs previous' : '')}</title>

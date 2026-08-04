@@ -245,11 +245,11 @@ A custom **monoline** SVG set, drawn on a **24×24 viewBox**, `fill: none`,
 
 **Cards** — `--card` bg, `1px --line` border, `--radius`, `--shadow`, 18px padding.
 
-**Tablist (segmented view switcher)** — a row of small buttons, exactly one
-`primary` (the selected tab), the rest `ghost`; proper `role="tablist"` /
-`role="tab"` / `role="tabpanel"` wiring, inactive panels unmounted. Two
-instances share the idiom: the what-if sheet's mode tabs (`.wi-tabs`) and the
-Progress view's Overview · Swim · Bike · Run tabs (`.prog-tabs`, phase 3).
+**Tablist (segmented view switcher)** — the `.segbar` pill trough with the
+chosen segment as the only extruded thing in it; proper `role="tablist"` /
+`role="tab"` / `role="tabpanel"` wiring, inactive panels unmounted. The
+what-if sheet's mode tabs (`.wi-tabs`) are still a button row; the Progress
+view's Overview · Swim · Bike · Run tabs ride `.segbar`.
 Progress rules: a discipline whose plan gate fails (solo race, excluded
 discipline) gets no tab rather than a disabled one; a solo plan opens
 directly on its discipline's tab; tracker mode renders the Overview flow in
@@ -373,17 +373,15 @@ this app share one vocabulary: `--pane`, `--pane-blur`, `--pane-border`,
 4. **Status keeps its saturation.** Discipline colours, readiness green and
    warning amber stay opaque, so state never reads as haze.
 
-### Segmented controls: one idiom, three implementations
+### Segmented controls: one idiom, two implementations
 
 The house pattern is a **pill trough with the chosen segment as the only
 extruded thing in it** — rule 3 doing the work colour alone cannot. `.segbar`
 (the calendar's range) is the general form; `.nav .tabs` is the fixed-bar
 variant, differing only in shape.
 
-**`.prog-tabs` is still a row of `.btn`s from before the glass.** That is a
-real inconsistency and it is recorded here rather than fixed, because
-rewriting a tab bar in a PR that does not otherwise touch that screen is how a
-calendar change breaks Progress. It belongs to the Progress component.
+The Progress tabs joined `.segbar` with the Progress component PR, so the
+idiom has no stragglers left.
 
 New segmented controls take `.segbar`. Use real `<button>`s with
 `role="tab"` and `aria-selected`, so activation is the platform's and the
@@ -412,6 +410,25 @@ deliberate per-theme behaviour split. Race days and tune-ups never glow:
 events, not emphases. **Deviation from the smoked doc: tiles carry no
 `backdrop-filter`** — seven rows would add seven blur layers to screens that
 already carry the app's worst counts, and the 30% fills read without it.
+
+### Charts
+
+A chart is read, not tapped, so it presses INTO its card: `.chart-well` is
+the shared recess (tokens — `--well` + `--press-sm` — so both materials bind
+it, and no backdrop-filter, so the blur count does not move). The spider and
+the power curve wear it; any future chart-in-a-card takes the same class.
+
+**The athlete's line is white.** On any chart, "you" is the single white
+line — the docs' legends all draw the you-swatch white — and the discipline
+colour moves into the fill tint under it (spider: radial white-to-discipline
+fill; power curve: discipline-tinted area closing to the zero axis).
+References and comparisons stay dashed or dimmed, never white. White is
+deliberately theme-invariant: both materials are dark fields. The bike doc's
+blue tint was the kit accent leaking, not a palette change — bike tints stay
+`var(--bike)`.
+
+Solid points are measured, hollow (transparent-filled) are projections or
+stale — the convention predates the glass and survives it.
 
 ### Chrome is a special case
 

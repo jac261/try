@@ -99,8 +99,10 @@ export function PowerCurveCard({ curve, previous, ftpWatts, todayISO }) {
             ))}
           </div>
         )}
-        <PowerCurveChart curve={curve} previous={previous} comparison={comparison}
-          stale={stale} ftpWatts={ftpWatts} showDeltas={hasDeltas && showDeltas} />
+        <div className="chart-well">
+          <PowerCurveChart curve={curve} previous={previous} comparison={comparison}
+            stale={stale} ftpWatts={ftpWatts} showDeltas={hasDeltas && showDeltas} />
+        </div>
 
         {ends && (
           <div className="lead" style={{ margin: '8px 0 0', fontSize: 13 }}>
