@@ -16,8 +16,21 @@
  * Each returns null rather than a partial shape. A chart drawn from half a
  * session is worse than no chart: it looks like evidence.
  */
-import { usableDurabilityLaps, DURABILITY_GATES } from './durability.js';
+import { usableDurabilityLaps, durabilityRead, DURABILITY_GATES } from './durability.js';
 import { lapStrokeMetrics } from './swim-strokes.js';
+
+/* A shape may not outlive its read. usableDurabilityLaps is only the FIRST
+   half of the read's gates — the window checks (maxLapShare, and the need for
+   a usable first and last third) live in durabilityRead itself. Skipping them
+   let a shape be built for a session the verdict refused: found on a real long
+   ride whose 18-minute opening lap breaks maxLapShare, where the read was null
+   and the shape was a full four buckets.
+
+   Nothing could ever have drawn it — the card lists entries with a read — so
+   this was storage for charts with no home, and worse, it let the shape and
+   the verdict disagree about whether a session is readable at all. */
+const readable = (rows, discipline, movingTimeSec) =>
+  durabilityRead({ rows, discipline, movingTimeSec }) != null;
 
 // Four buckets is the doc's own resolution (fresh + three), and it is about
 // as fine as auto-laps support: below this the buckets stop holding enough
@@ -72,6 +85,7 @@ const pct1 = v => Math.round(v * 10) / 10;
  * fading at 90 minutes, and the kJ number is the one that transfers to a
  * race plan ("Vichy sits at 2 400 kJ"). */
 export function bikeDurabilityShape({ rows, movingTimeSec }) {
+  if (!readable(rows, 'bike', movingTimeSec)) return null;
   const gated = usableDurabilityLaps({ rows, discipline: 'bike', movingTimeSec });
   if (!gated) return null;
   const laps = gated.usable.filter(l => l.averageWatts > 0);
@@ -110,6 +124,7 @@ export function bikeDurabilityShape({ rows, movingTimeSec }) {
  * than drawing pace on its own — a pace-only chart would be answering an
  * easier question while looking like it answered this one. */
 export function runDurabilityShape({ rows, movingTimeSec }) {
+  if (!readable(rows, 'run', movingTimeSec)) return null;
   const gated = usableDurabilityLaps({ rows, discipline: 'run', movingTimeSec });
   if (!gated) return null;
   const laps = gated.usable.filter(l => l.averageHeartrate > 0);
@@ -146,26 +161,27 @@ export function runDurabilityShape({ rows, movingTimeSec }) {
 
 /* THE SWIM — pace and stroke over the set.
  *
- * STROKE COUNT IS NOT A SETTLED NUMBER IN THIS APP. swim-strokes.js found,
- * against real Garmin swims, that the two available derivations disagree by
- * exactly 2x: one counts arm strokes, the other full cycles, and which is
- * which is a device convention rather than a fact about the swim. That is
- * why STROKE_METRICS_FLAG gates the analysis module.
+ * The 2x gap between the two stroke derivations turned out to be a UNIT
+ * relationship, not an ambiguity — cadence counts full cycles, stride counts
+ * arm strokes, measured at exactly 2.0000 across 43 real laps on two Garmin
+ * models (2026-08-04). swim-strokes.js recognises it now and reports arm
+ * strokes, so this reads a real count rather than refusing every swim, which
+ * is what it did before that was measured.
  *
- * What this draws is a WEAKER and survivable claim (Jon, 2026-08-04): the
- * SHAPE within one session on one device. Whether the watch counts 32 or 64
- * does not change that the count fell across the set. So:
+ * What this draws is still the WEAKER claim: the SHAPE within one session on
+ * one device. The unit is known; the device's own definition of a stroke
+ * still is not, and no cross-device comparison is made anywhere. So:
  *
  *   - it never quotes a stroke count as authoritative, and the card says
  *     "as your watch counts them";
- *   - ANY lap whose two derivations disagree kills the whole shape, not just
- *     that lap. A session where the convention is unclear anywhere is a
- *     session whose shape cannot be trusted, and a chart missing its
- *     ambiguous laps would silently be a different chart.
+ *   - ANY lap on a relationship swim-strokes.js does not recognise kills the
+ *     whole shape, not just that lap. A chart missing its unreadable laps
+ *     would silently be a different chart.
  *
  * Without a pool length there is no stroke reading at all, so no shape. */
 export function swimDurabilityShape({ rows, movingTimeSec, poolLengthM }) {
   if (!poolLengthM) return null;
+  if (!readable(rows, 'swim', movingTimeSec)) return null;
   const gated = usableDurabilityLaps({ rows, discipline: 'swim', movingTimeSec });
   if (!gated) return null;
 

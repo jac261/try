@@ -4,7 +4,7 @@ import {
   bikeDurabilityShape, runDurabilityShape, swimDurabilityShape, durabilityShape,
   SHAPE_BUCKETS,
 } from './durability-shape.js';
-import { DURABILITY_GATES } from './durability.js';
+import { DURABILITY_GATES, durabilityRead } from './durability.js';
 
 /* The shapes behind the Durability design's three charts. Every fixture is
    built so the ANSWER is arithmetic anyone can check by hand, because a chart
@@ -31,6 +31,29 @@ const steadySwim = (n = 30, mut = () => ({})) => Array.from({ length: n }, (_, i
   averageStride: 2.5, averageCadence: 25, startTimeSec: i * 96, ...mut(i),
 }));
 const SWIM_SEC = 30 * 96;
+
+describe('a shape may not outlive its read', () => {
+  /* The real case that found this: Jon's 19 Jul long ride, 11 WORK laps of
+     ~5 km, whose 18-minute opening lap is more than 40% of the read's first
+     window. durabilityRead refuses it on maxLapShare; the shape used to be
+     built anyway, because usableDurabilityLaps holds only the first half of
+     the gates. Nothing could draw it — the card lists entries with a read. */
+  const longRide = [
+    [5001.98, 1078, 104, 124, 4.6400557, 0], [5006.26, 660, 141, 144, 7.5852423, 1196],
+    [5001.67, 641, 120, 137, 7.802917, 1856], [5006.59, 645, 134, 146, 7.7621546, 2497],
+    [4989.66, 574, 147, 149, 8.692788, 3225], [5000.58, 628, 159, 151, 7.962707, 3799],
+    [5006.449, 661, 140, 146, 7.5740533, 4437], [4995.7305, 719, 143, 143, 6.948165, 5105],
+    [5005.7188, 602, 152, 149, 8.315147, 5865], [5001.582, 662, 144, 151, 7.5552597, 6467],
+    [415.5586, 75, 63, 124, 5.540781, 7160],
+  ].map(([distance, movingTimeSec, averageWatts, averageHeartrate, averageSpeed, startTimeSec]) =>
+    ({ type: 'WORK', distance, movingTimeSec, averageWatts, averageHeartrate, averageSpeed, startTimeSec }));
+
+  it('refuses exactly where the read refuses, on real lap data', () => {
+    const args = { rows: longRide, discipline: 'bike', movingTimeSec: 6936 };
+    expect(durabilityRead(args)).toBe(null);
+    expect(bikeDurabilityShape({ rows: longRide, movingTimeSec: 6936 })).toBe(null);
+  });
+});
 
 describe('the gates are the read\'s gates, not new ones', () => {
   it('a session too short, too few laps or too thin to cover itself has no shape', () => {
