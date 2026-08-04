@@ -311,7 +311,11 @@ discipline) gets no tab rather than a disabled one; a solo plan opens
 directly on its discipline's tab; tracker mode renders the Overview flow in
 one column with no tab bar at all. A discipline-linked block whose tab does
 not exist falls back to its pre-tab Overview position instead of
-disappearing — losing a tab must never lose the content.
+disappearing — losing a tab must never lose the content. One carve-out, by
+Jon's call (2026-08-04): durability cards are tab-only. Tracker's tabless
+page, a solo plan's absent disciplines and an excluded discipline show no
+durability card; the stored reads persist and the card returns with the
+tab. Run volume and the power curve keep the fallback.
 
 **Discipline tile (the signature element)** — rounded square, discipline **gradient**,
 white icon, inset hairline. Sizes in-app: 46px (rows), 54px (sheet hero), 60px (building screen).

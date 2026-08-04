@@ -157,9 +157,12 @@ const MODES = {
      stale one. The profile is patched rather than regenerated: an ftp change
      would move plan generation too, and this mode exists to look at a chart. */
   shape: { plan: withFtp(generatePlan(profile), 191), coach, durability: storyDurability, powerCurve: shapedCurve },
-  solo: { plan: generatePlan({ ...profile, raceType: 'runhalf' }), coach },
-  // tracker has no tabs at all, so it is the mode that exercises the
-  // Overview fallback: all three cards must appear there or they vanish
+  // solo carries all three disciplines' reads to show the tab-only rule's
+  // positive case: only the run card renders, on the one tab that exists
+  solo: { plan: generatePlan({ ...profile, raceType: 'runhalf' }), coach, durability: storyDurability },
+  // tracker has no tabs at all, and durability is tab-only (Jon's call,
+  // 2026-08-04): the fixture stays PRECISELY so the mode proves no card
+  // renders on the tabless page
   tracker: { plan: buildTrackerPlan(generatePlan(profile), '2026-07-27T10:00:00.000Z'), coach: null, durability: storyDurability },
   stories: {
     plan: generatePlan(profile), coach,
