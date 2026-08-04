@@ -134,10 +134,11 @@ describe('ProgressView renders in every mode', () => {
     const pending = await mount({ plan, activities: null, durability: DURABILITY_FIXTURE }, 'Run');
     expect(pending).toContain('Charts are on their way');
     expect(pending).toContain('one session here');
+    expect(pending).toContain('when the app next starts');
     // shape attempted and refused (explicit null): the rows carry the story
     const refusedFixture = DURABILITY_FIXTURE.map(e => ({ ...e, shape: null }));
     const refused = await mount({ plan, activities: null, durability: refusedFixture }, 'Run');
-    expect(refused).toContain('too uneven to draw a fair shape');
+    expect(refused).toContain('a fair shape could not be drawn from their laps');
     expect(refused).not.toContain('Charts are on their way');
     // a shape present: chart renders, neither note appears
     const shapedFixture = DURABILITY_FIXTURE.map(e => (e.discipline === 'run'
@@ -149,7 +150,7 @@ describe('ProgressView renders in every mode', () => {
     const shaped = await mount({ plan, activities: null, durability: shapedFixture }, 'Run');
     expect(shaped).toContain('decoupling');
     expect(shaped).not.toContain('Charts are on their way');
-    expect(shaped).not.toContain('too uneven to draw');
+    expect(shaped).not.toContain('could not be drawn');
   });
 
   it('Overview no longer carries durability when the discipline has its own tab', async () => {

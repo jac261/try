@@ -232,12 +232,12 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
             "still unchanged" report undiagnosable from a screenshot. The
             line's presence is also the build marker. */}
         {!shaped && (() => {
-          const pending = reads.filter(e => !('shape' in e)).length;
+          const pending = T.pendingShapeEntries(reads).length;
           return (
             <div className="du-note" style={{ marginTop: 0, marginBottom: 8 }}>
               {pending > 0
-                ? 'Charts are on their way: ' + (pending === 1 ? 'one session here' : pending + ' sessions here') + ' will be re-read over the next few times the app opens.'
-                : 'No chart for these ' + noun + ': their laps were too uneven to draw a fair shape, so the rows carry the story.'}
+                ? 'Charts are on their way: ' + (pending === 1 ? 'one session here' : pending + ' sessions here') + ' will be re-read when the app next starts.'
+                : 'No chart for these ' + noun + ': a fair shape could not be drawn from their laps, so the rows carry the story.'}
             </div>
           );
         })()}
