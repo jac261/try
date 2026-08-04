@@ -19,6 +19,32 @@ const code = src.split('\n').map(l => {
   return (c >= 0 ? l.slice(0, c) : l).replace(/'[^'\n]*'/g, "''").replace(/`[^`\n]*`/g, '``');
 }).join('\n');
 
+describe('durability backfill: the freeze releases before the sweep', () => {
+  /* No unit test can see this timing — the effect is one async body — so the
+     sequence is pinned at the source, the openRecording pattern. The coach
+     freeze waits on durabilityDone, which must flip the moment the two fresh
+     reads finish: the store sweep that follows only attaches shapes, can
+     never change a decision, and must never make the athlete wait. Busy is
+     released last so a re-render cannot start a second overlapping body. */
+  const body = src.slice(src.indexOf('durabilityBusy.current = true;'), src.indexOf('// deps deliberately EXCLUDE'));
+
+  it('finds the async backfill body where it expects it', () => {
+    expect(body.length).toBeGreaterThan(0);
+    expect(body).toContain('for (const c of fresh)');
+    expect(body).toContain('for (const spec of queue)');
+  });
+
+  it('setDurabilityDone(true) sits between the fresh reads and the sweep', () => {
+    const done = body.indexOf('setDurabilityDone(true)');
+    expect(done).toBeGreaterThan(body.indexOf('for (const c of fresh)'));
+    expect(done).toBeLessThan(body.indexOf('for (const spec of queue)'));
+  });
+
+  it('busy is held across both stages and released after the sweep', () => {
+    expect(body.indexOf('durabilityBusy.current = false')).toBeGreaterThan(body.indexOf('for (const spec of queue)'));
+  });
+});
+
 describe('App.jsx declaration order (TDZ guard)', () => {
   // anchor on the splash early return itself, not on effect guards that also
   // test !hydrated (matching those made `above` end before the effects and
