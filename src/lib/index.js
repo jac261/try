@@ -75,4 +75,5 @@ export * from './eftp.js';
 export * from './runstats.js';
 export * from './coach.js';
 export * from './durability.js';
+export * from './durability-shape.js';
 export * from './bodymass.js';
