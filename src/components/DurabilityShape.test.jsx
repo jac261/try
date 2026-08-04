@@ -108,6 +108,38 @@ describe('the scaling rules', () => {
   });
 });
 
+describe('nothing runs off the edge of its own plot', () => {
+  /* All three of these were found by LOOKING at the rendered chart, not by
+     a test: the end points sit ON the plot edges, so a centred label there
+     is clipped by the viewBox and reads as a wrong number rather than a
+     cut-off one — the bike's last value showed "227 v". */
+  it('the bike anchors its end labels inward', () => {
+    const out = html(bikeShape);
+    expect(out).toMatch(/text-anchor="start"[^>]*>258 w|258 w/);
+    expect(out).toContain('text-anchor="end"');
+    // the first and last x labels are anchored, the middles centred
+    expect((out.match(/text-anchor="middle"/g) || []).length).toBeGreaterThan(0);
+  });
+
+  it('the swim holds its end bars inside the viewBox', () => {
+    const out = html(swimShape);
+    const rects = [...out.matchAll(/<rect x="([\d.]+)"[^>]*width="([\d.]+)"/g)]
+      .map(m => Number(m[1]) + Number(m[2]));
+    expect(rects.length).toBe(4);
+    rects.forEach(right => expect(right).toBeLessThanOrEqual(320));
+    expect(Math.min(...[...out.matchAll(/<rect x="([\d.]+)"/g)].map(m => Number(m[1])))).toBeGreaterThanOrEqual(0);
+  });
+
+  it('the swim axis prints the time alone, since the legend carries the unit', () => {
+    // "1:36 /100m" does not fit the 34px gutter and rendered as "5 /100m"
+    const out = html(swimShape);
+    expect(out).toContain('>1:36<');
+    expect(out).not.toContain('>1:36 /100m<');
+    // the spoken label keeps the unit for screen readers
+    expect(out).toContain('1:36 /100m at 16 strokes per length');
+  });
+});
+
 describe('the legends say what the marks mean', () => {
   it('the run legend states the tick\'s window in bpm', () => {
     expect(html(runShape)).toContain('100–180 bpm across the bar');

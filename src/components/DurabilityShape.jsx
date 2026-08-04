@@ -77,6 +77,10 @@ const PLOT = { w: 320, h: 112, padL: 34, padR: 8, padT: 14, padB: 20 };
 // x centres for n points across the plot, and the y for a 0..1 fraction
 const plotX = (i, n) => PLOT.padL + (n === 1 ? 0 : (i * (PLOT.w - PLOT.padL - PLOT.padR)) / (n - 1));
 const plotY = f => PLOT.padT + (1 - f) * (PLOT.h - PLOT.padT - PLOT.padB);
+/* The end points sit ON the plot edges, so a centred label there runs off
+   the viewBox and the browser simply clips it — the last watts value read
+   "227 v" until this existed. Anchor the ends inward instead. */
+const endAnchor = (i, n) => (i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle');
 
 /* THE BIKE — power held against work done, as a line over its own area. The
    y-axis spans the session's own hold percentages and PRINTS them, which is
@@ -112,11 +116,11 @@ function BikeShape({ shape }) {
           const last = i === pts.length - 1;
           return <g key={i}>
             <circle cx={x} cy={y} r={last ? 4.5 : 3.5} fill={last ? 'var(--bike)' : '#fff'} />
-            <text x={x} y={y - 8} fontSize="8.5" fontWeight="800" fill="var(--ink)" textAnchor="middle">{shape.points[i].watts} w</text>
+            <text x={x} y={y - 8} fontSize="8.5" fontWeight="800" fill="var(--ink)" textAnchor={endAnchor(i, pts.length)}>{shape.points[i].watts} w</text>
           </g>;
         })}
         {shape.points.map((p, i) => (
-          <text key={i} x={plotX(i, shape.points.length)} y={PLOT.h - 5} fontSize="7.5" fill="var(--sub)" textAnchor="middle">
+          <text key={i} x={plotX(i, shape.points.length)} y={PLOT.h - 5} fontSize="7.5" fill="var(--sub)" textAnchor={endAnchor(i, shape.points.length)}>
             {rangeLabel(shape.points, i, 'kJ', 'kJ')}
           </text>
         ))}
@@ -143,11 +147,16 @@ function SwimShape({ shape }) {
   const pts = paces.map((v, i) => [plotX(i, n), py(v)]);
   const barW = Math.min(26, (PLOT.w - PLOT.padL - PLOT.padR) / (n * 1.6));
   const base = PLOT.h - PLOT.padB;
-  const label = v => T.swimPaceLabel(v, { length: 100, unit: 'meters' });
+  /* The gutter is 34px and "1:36 /100m" does not fit in it — it rendered as
+     "5 /100m", a clipped label that reads as a wrong number rather than a
+     cut-off one. The legend already says these are per 100, so the axis
+     prints the time alone; the aria-label keeps the full unit. */
+  const label = v => Math.floor(v / 60) + ':' + String(Math.round(v % 60)).padStart(2, '0');
+  const spoken = v => T.swimPaceLabel(v, { length: 100, unit: 'meters' });
   return (
     <div className="chart-well">
       <svg viewBox={'0 0 ' + PLOT.w + ' ' + PLOT.h} style={{ width: '100%', height: PLOT.h, display: 'block' }}
-        role="img" aria-label={'Pace and stroke count: ' + shape.points.map(p => label(p.pace100) + ' at ' + p.strokesPerLength + ' strokes per length').join(', ')}>
+        role="img" aria-label={'Pace and stroke count: ' + shape.points.map(p => spoken(p.pace100) + ' at ' + p.strokesPerLength + ' strokes per length').join(', ')}>
         {[lo, hi].map(v => (
           <g key={v}>
             <line x1={PLOT.padL} y1={py(v)} x2={PLOT.w - PLOT.padR} y2={py(v)}
@@ -158,7 +167,9 @@ function SwimShape({ shape }) {
         {spl.map((v, i) => {
           // zero-based, and held to the lower half so the pace line stays clear
           const h = (v / maxSpl) * (base - PLOT.padT) * 0.55;
-          const x = plotX(i, n) - barW / 2;
+          // the end points sit ON the edges, so an edge bar would straddle
+          // the viewBox and lose half its inked value to the clip
+          const x = Math.max(0, Math.min(PLOT.w - barW, plotX(i, n) - barW / 2));
           return <g key={i}>
             <rect x={x} y={base - h} width={barW} height={h} rx="4" fill="var(--swim)" opacity="0.5" />
             <text x={x + barW / 2} y={base - 5} fontSize="8" fontWeight="800" fill="var(--ink)" textAnchor="middle">{v}</text>
@@ -169,7 +180,7 @@ function SwimShape({ shape }) {
           <circle key={i} cx={x} cy={y} r={i === n - 1 ? 4.5 : 3.5} fill={i === n - 1 ? 'var(--swim)' : '#fff'} />
         ))}
         {shape.points.map((p, i) => (
-          <text key={i} x={plotX(i, n)} y={PLOT.h - 5} fontSize="7.5" fill="var(--sub)" textAnchor="middle">
+          <text key={i} x={plotX(i, n)} y={PLOT.h - 5} fontSize="7.5" fill="var(--sub)" textAnchor={endAnchor(i, n)}>
             {rangeLabel(shape.points, i, 'metres', 'm')}
           </text>
         ))}
