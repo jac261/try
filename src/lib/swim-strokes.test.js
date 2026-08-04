@@ -49,15 +49,41 @@ describe('the gate: nothing runs until the backend carries the fields (§8)', ()
   });
 });
 
-describe('the factor-of-two problem, found in real device data (§3, §4)', () => {
-  it('refuses a single stroke count when the two derivations disagree', () => {
+describe('the factor of two, resolved by measurement (§3, §4)', () => {
+  /* This block used to assert that a 2x gap was unresolvable. Re-measured on
+     2026-08-04 against two swims on two Garmin models, 43 work laps: the
+     ratio is EXACTLY 2.0000 every time, stdev 0.000000, at lap and activity
+     level. Measurements that genuinely disagree do not do that — it is a
+     unit relationship, cadence counting full cycles and stride counting arm
+     strokes. So 2.0 is now a RECOGNISED basis and the refusal is reserved
+     for ratios that are on neither known footing. */
+  it('reads a 2x lap as cycles-versus-strokes and reports arm strokes', () => {
     const m = lapStrokeMetrics(realLaps[0], { poolLengthM: 25 });
-    // distance/stride = 96.9 strokes; cadence x time = 48.5. One counts arm
-    // strokes, the other counts cycles. Which is a device convention.
-    expect(m.mismatch).toBeTruthy();
-    expect(m.mismatch.ratio).toBeCloseTo(2, 1);
+    // distance/stride = 96.9 arm strokes; cadence x time = 48.5 cycles
+    expect(m.strokeBasis).toBe('cycles');
+    expect(m.mismatch).toBe(null);
+    expect(m.strokes).toBe(97);
+    // ~24 arm strokes per 25 m length: a number a swimmer recognises
+    expect(m.strokesPerLength).toBeCloseTo(24.3, 1);
+    expect(m.swolf).toBeGreaterThan(0);
+  });
+
+  it('still refuses a ratio on neither known footing', () => {
+    // 1.5x is not a unit relationship anybody has validated, and that is
+    // exactly the case the original refusal was written for
+    const odd = { ...realLaps[0], averageCadence: 25.5 * (2 / 1.5) };
+    const m = lapStrokeMetrics(odd, { poolLengthM: 25 });
     expect(m.strokes).toBe(null);
+    expect(m.strokeBasis).toBe(null);
+    expect(m.mismatch).toBeTruthy();
     expect(m.swolf).toBe(null);      // and no SWOLF built on a number we do not have
+  });
+
+  it('reads an already-agreeing device as the same unit, unchanged', () => {
+    const agreeing = { ...realLaps[0], averageCadence: 96.9 / (114 / 60) };
+    const m = lapStrokeMetrics(agreeing, { poolLengthM: 25 });
+    expect(m.strokeBasis).toBe('same');
+    expect(m.strokes).toBe(97);
   });
 
   it('still reports what each field says, because both are real measurements', () => {
@@ -125,8 +151,10 @@ describe('the descriptive summary (§5): ranges, drift, and no verdict', () => {
     expect(out.summary.strokeRate.min).toBeGreaterThan(20);
   });
 
-  it('surfaces how many laps had the device disagreement', () => {
-    expect(out.summary.mismatchedLaps).toBeGreaterThan(0);
+  it('reports no device disagreement now that 2x is a recognised basis', () => {
+    // this fixture is all 2x, which used to be counted as a mismatch on every
+    // lap and is now simply the cycles basis
+    expect(out.summary.mismatchedLaps).toBe(0);
   });
 
   it('offers no better or worse anywhere in the output', () => {

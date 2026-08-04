@@ -34,14 +34,40 @@ export const STROKE_FIELDS = {
   lap: ['averageCadence', 'averageStride', 'distance', 'movingTimeSec'],
 };
 
-// A stroke count derived two ways must agree within this before either is
-// quoted. 2% absorbs rounding; a factor-of-two convention gap never passes.
+/* A stroke count derived two ways must land on a RECOGNISED relationship
+   before either is quoted. 2% absorbs rounding.
+
+   The header above records the 2x gap as an unresolved device convention.
+   Measured against real data (2026-08-04, two swims on two Garmin models,
+   43 work laps), it is not unresolved: `(distance/stride) / (cadence x
+   minutes)` is EXACTLY 2.0000 every time, stdev 0.000000, at lap and
+   activity level. Measurements that genuinely disagree do not do that. It is
+   a unit relationship — cadence counts full stroke CYCLES, stride is metres
+   per single ARM stroke, and one cycle is two arm strokes. The sanity check
+   agrees: 1.23 m/stroke in a 25 m pool is ~20 arm strokes per length.
+
+   So two ratios are known and everything else is still refused. An
+   unrecognised relationship is precisely the case the original refusal was
+   written for, and it keeps it. */
 export const STROKE_RULES = {
   agreeTol: 0.02,
+  // 1 = both routes already count the same thing; 2 = the cycles/strokes pair
+  knownRatios: [1, 2],
   minLapSec: 20,        // shorter than this is a wall touch, not a lap
   minLapM: 25,          // and a lap shorter than a length cannot be read
   drillPaceRatio: 1.35, // this much slower than the session's median = drill or kick
 };
+
+/* Which recognised relationship a lap's two derivations sit on, or null when
+   it is on none of them. 'same' means they already agree; 'cycles' means the
+   cadence route counted full cycles and the stride route counted arm strokes. */
+export function strokeBasisFor(ratio) {
+  if (!(ratio > 0)) return null;
+  for (const r of STROKE_RULES.knownRatios) {
+    if (Math.abs(ratio / r - 1) <= STROKE_RULES.agreeTol) return r === 1 ? 'same' : 'cycles';
+  }
+  return null;
+}
 
 /* §7 + §8: what is actually present, per activity. Every downstream function
    consults this, and 'none' is the expected answer on today's backend. */
@@ -86,13 +112,19 @@ export function lapStrokeMetrics(lap, { poolLengthM } = {}) {
   // two independent routes to a stroke count; see the header note
   const fromStride = perStroke ? dist / perStroke : null;
   const fromCadence = cadence ? cadence * (sec / 60) : null;
-  let strokes = null, mismatch = null;
+  let strokes = null, mismatch = null, strokeBasis = null;
   if (fromStride && fromCadence) {
     const ratio = fromStride / fromCadence;
-    if (Math.abs(ratio - 1) <= STROKE_RULES.agreeTol) strokes = Math.round(fromStride);
+    strokeBasis = strokeBasisFor(ratio);
+    /* ALWAYS the stride route when a basis is recognised: it counts arm
+       strokes either way, which is what a swimmer means by "strokes" and what
+       makes strokes-per-length a number they recognise. On 'cycles' the
+       cadence route is the same swim counted in cycles, so taking it would
+       silently halve the answer. */
+    if (strokeBasis) strokes = Math.round(fromStride);
     else mismatch = { fromStride: Math.round(fromStride), fromCadence: Math.round(fromCadence), ratio: Math.round(ratio * 100) / 100 };
-  } else if (fromStride) strokes = Math.round(fromStride);
-  else if (fromCadence) strokes = Math.round(fromCadence);
+  } else if (fromStride) { strokes = Math.round(fromStride); strokeBasis = 'stride-only'; }
+  else if (fromCadence) { strokes = Math.round(fromCadence); strokeBasis = 'cadence-only'; }
 
   // SWOLF is per LENGTH by definition, and watches differ on how they count
   // it, so this is only ever OUR derived figure and says so. Without a pool
@@ -108,10 +140,11 @@ export function lapStrokeMetrics(lap, { poolLengthM } = {}) {
     pace100: Math.round(sec / (dist / 100) * 10) / 10,
     strokeRate: cadence,                                   // as the device reports it
     distancePerStroke: perStroke ? Math.round(perStroke * 1000) / 1000 : null,
-    strokes,                                               // null when the two disagree
+    strokes,                        // ARM strokes; null on an unrecognised ratio
     strokesPerLength: strokes && poolLengthM ? Math.round(strokes / (dist / poolLengthM) * 10) / 10 : null,
     swolf,                                                 // derived, never the device's
     swolfDerived: swolf != null,
+    strokeBasis,                    // which relationship the two routes sat on
     mismatch,
   };
 }

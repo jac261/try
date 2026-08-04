@@ -20,14 +20,19 @@ import * as T from '@/lib';
 
 const BAR_W = 320, BAR_H = 96, PAD_X = 6, GAP = 8, LABEL_H = 26;
 
-/* Axis ticks. Only the last one carries the unit, and a thousands value
+/* Axis ticks. Only the LAST one carries the unit, and a thousands value
    carries it as the SCALED unit — "21 km", not the "21k m" a naive suffix
-   produces, which is the kind of label that reads as a typo. */
+   produces, which is the kind of label that reads as a typo.
+
+   Every scaled tick keeps its "k" though, last or not: dropping it left the
+   middle of a metres axis reading "1.5" and "2.3" with nothing to say what
+   they were. Caught by looking at the rendered chart, not by the tests, which
+   only ever asserted the final tick. */
 function axisTick(v, s, p, unit) {
   const last = p === s.points[s.points.length - 1];
   const big = v >= 1000;
   const n = big ? Math.round(v / 100) / 10 : v;
-  if (!last) return String(n) + (big && unit === 'kJ' ? 'k' : '');
+  if (!last) return n + (big ? 'k' : '');
   if (unit === 'kJ') return n + (big ? 'k' : '') + ' kJ';
   return n + (big ? ' km' : ' m');
 }
