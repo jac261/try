@@ -91,6 +91,20 @@ speed, a window dominated by one lap voids the read, and a planned session
 whose own card scripts a late pace change never qualifies: the athlete
 following a fast-finish instruction is not fading.
 
+**Which sessions qualify (tightened 2026-08-04).** The planned role was not
+enough on its own: the recording matcher pairs a planned long run with any
+same-discipline session that day inside a 0.5x-1.7x duration window, so an
+easy 10k on the long run's day was read as the long run, and the duration
+gates cannot catch it because they sit below the shortest long Try
+prescribes. The session's own name now decides where it speaks. "Long"
+admits whatever else says; the easy, recovery, technique, drill, shakeout
+and spin vocabulary refuses whatever the duration; anything else is silent
+and the role and longest-of-week rules still decide it. Admit beats refuse.
+The rule's shape was measured against sixty days of real recordings rather
+than argued: requiring the word "long" alone would have discarded club rides
+and long runs that a watch had named for the time of day. Reads stored under
+the old rule are purged once, judged against the activities feed.
+
 Reads are cached per activity id, device-local, surviving plan changes (a
 read is a fact about a past recording). The backfill fetches at most two
 NEW recordings per app launch, the reviewed week's sessions first, sharing

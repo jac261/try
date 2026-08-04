@@ -1302,7 +1302,31 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .du-headline { font-size: 30px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
 .du-headsub { font-size: 12px; color: var(--sub); line-height: 1.45; }
 .du-when { color: var(--faint); }
-.du-legend { font-size: 10.5px; color: var(--sub); text-align: center; margin-top: 6px; }
+/* The run's pill rows (the design's Durability run card): label, pressed
+   trough, value. Same label/track/value skeleton as .rd-sig, including its
+   documented rule that a short track keeps its own tighter inset because
+   --press-sm is built for taller objects. Tokens only, so both materials
+   come free. */
+/* The design's one-line framing of what this sport's chart asks, sitting
+   between the headline number and the shape behind it. */
+.du-asks { font-size: 11.5px; color: var(--sub); margin: -4px 0 10px; }
+.du-bar { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
+.du-bar-label { width: 52px; flex: none; font-size: 10px; font-weight: 800; color: var(--muted); }
+.du-bar-track { flex: 1; height: 20px; border-radius: 999px; background: var(--well); box-shadow: inset 2px 2px 5px rgba(0, 0, 0, .6); position: relative; }
+.du-bar-fill { position: absolute; left: 0; top: 3px; bottom: 3px; border-radius: 999px; }
+.du-bar-fill.run { background: linear-gradient(90deg, color-mix(in srgb, var(--run) 55%, transparent), #fff); }
+/* the heart-rate tick: dark against the fill, ringed so it reads on the
+   empty part of the trough too */
+.du-bar-tick { position: absolute; top: -2px; bottom: -2px; width: 2.5px; margin-left: -1.25px; border-radius: 2px; background: #0e1217; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .5); }
+.du-bar-val { width: 76px; flex: none; text-align: right; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.du-bar-sub { color: var(--sub); font-weight: 700; }
+.du-legend { font-size: 10.5px; color: var(--sub); margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.du-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.du-key { width: 14px; height: 8px; border-radius: 4px; display: block; flex: none; }
+.du-key.run { background: linear-gradient(90deg, color-mix(in srgb, var(--run) 55%, transparent), #fff); }
+.du-key.swim { background: var(--swim); opacity: .5; }
+.du-key.line { height: 3px; border-radius: 2px; background: #fff; }
+.du-key.tick { width: 2.5px; height: 12px; border-radius: 2px; background: #0e1217; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .5); }
 
 .coach-row-wrap { margin: 6px 0 10px; }
 .coach-row-wrap .coach-ev { margin-left: 46px; }

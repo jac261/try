@@ -657,8 +657,9 @@ export function App({ storage, getToken, user }) {
   // stops waiting for a reviewed-week read that is not coming this session
   const [durabilityDone, setDurabilityDone] = useState(false);
   const durabilityBusy = useRef(false);
-  const durabilityCandidates = () => {
-    const store = durabilityRef.current;
+  // takes the store explicitly: the purge below rewrites it, and the ref
+  // does not catch up until the next render
+  const durabilityCandidates = store => {
     const now = new Date();
     return T.durabilityCandidates({
       plan, activities, log, moves,
@@ -689,8 +690,16 @@ export function App({ storage, getToken, user }) {
        earlier plans permanently un-re-readable. The stored record already
        names its recording, which is everything a lap fetch needs. One cold
        start clears the backlog, so no per-visit cap is needed. */
-    const fresh = durabilityCandidates().slice(0, 2);
-    const queue = T.reshapeQueue(durabilityRef.current, activities);
+    /* Reads chosen under the OLD selection rule are dropped once, here: the
+       store keeps no session name, so the card cannot tell a wrongly-chosen
+       record from a right one. Everything below works from the purged array
+       rather than the ref, which is a render behind, and it is idempotent:
+       a purged store purges to itself. */
+    const store = T.purgeRefusedReads(durabilityRef.current, activities);
+    if (store.length !== durabilityRef.current.length) setDurability(storage.replaceDurability(store));
+    const fresh = durabilityCandidates(store).slice(0, 2);
+    const queue = T.reshapeQueue(store, activities);
+    const heldBy = new Map(store.map(e => [e.activityId, e]));
     if (!fresh.length && !queue.length) { setDurabilityDone(true); return; }
     durabilityBusy.current = true;
     (async () => {
@@ -727,7 +736,7 @@ export function App({ storage, getToken, user }) {
              rounded fallback could flip a borderline call retroactively.
              Only the shape is attached; null when the gates refuse, which
              is final and honest. */
-          const held = durabilityRef.current.find(e => e.activityId === spec.activityId);
+          const held = heldBy.get(spec.activityId);
           if (!held) continue;
           const shape = T.durabilityShape({
             rows, discipline: spec.discipline, movingTimeSec: spec.movingTimeSec,

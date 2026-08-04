@@ -136,6 +136,14 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'durability', JSON.stringify(capped)); } catch (e) {}
       return capped;
     },
+    /* The whole list at once. Only the selection-rule purge needs this —
+       every other write is one entry through saveDurabilityRead — and it
+       only ever removes, so the append-only spirit above survives. */
+    replaceDurability(list) {
+      const next = [...(list || [])].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-40);
+      try { localStorage.setItem(ns + 'durability', JSON.stringify(next)); } catch (e) {}
+      return next;
+    },
     /* The shape label's own history, so it can show what it changed FROM.
        Append-on-change only: a label that has not moved writes nothing, so
        the list is a record of transitions rather than of renders. Spans
