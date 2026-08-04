@@ -92,9 +92,10 @@ Used for week/phase badges and progress accents. They deliberately reuse discipl
 | Feel: "Hard" | bike amber `#fb923c` | |
 
 ### Readiness bands
-The daily readiness score (0–100) reuses the traffic-light hues — the ring, the
-card's left border (`rd-green/amber/red`), and the readiness-trend line all wear
-the current band's colour.
+The daily readiness score (0–100) reuses the traffic-light hues — the score
+disc, the card's band rail (`rd-green/amber/red`, a 3px gradient fading to a
+fifth of the colour) and the readiness-trend line in Progress all wear the
+current band's colour.
 
 | Band | Score | Colour |
 |---|---|---|
@@ -335,8 +336,9 @@ links via a nullable `onOpenSettings` callback where cheap.
 
 **Chevroned-question fold** — a muted bold question ending in a chevron
 (`▸`/`▾`), `role="button"` + `aria-expanded`, folding out derived reasons.
-Two consumers: the readiness card's "Why?" (`.rd-why-toggle`) and the detail
-sheet's "Why not harder?" (`.wnh-toggle`, phase 6). The folded content only
+One consumer now: the detail sheet's "Why not harder?" (`.wnh-toggle`, phase
+6). The readiness card's folds are both gone — "Why?" was replaced by the
+always-visible SignalBars, and "Details" came out on 2026-08-04. The folded content only
 ever states what its selector can prove; a fold that cannot prove anything
 does not render its toggle.
 
@@ -352,9 +354,20 @@ WorkoutRows; the row component stays shared and undecorated.
 `1.5px rgba(255,255,255,.18)` hairline, or a gradient fallback
 (`135° #4a74dc → #6d54c8`) with the athlete's initial in white 800.
 
-**Readiness card** — a `--card` with a 3px left border in the current band colour
-(`rd-green/amber/red`), the score ring (band-coloured stroke on `--track`), and driver
-chips (`--chip` pills; "bad" drivers tinted `rgba(251,146,60,.14)` with `#f6b27a` text).
+**Readiness card** — a pane with a 3px band rail down its left edge, the score
+pressed into it as a disc with the band's colour glowing out, the signals that
+produced the score as bars against their own baselines, today's coaching, and
+three pressed load tiles (Fitness / Fatigue / Form).
+
+It carries **no charts**: they live in Progress (Jon, 2026-08-04). The Form
+tile takes its zone colour only when the zone means something — the grey zone
+keeps the plain ink rather than paying legibility to signal nothing.
+
+It also stopped being a material island. It shipped with private copies of
+`--pane`, `--press` and `--well`, which meant it wore moulded material inside
+the smoked theme until 2026-08-04. **A component that redefines the material
+tokens cannot follow the theme** — if a surface needs to look different, give
+it its own class, never its own `--pane`.
 
 **Charts** — uniform-scaled SVG only (`viewBox` + `width:100%; height:auto`); **never**
 `preserveAspectRatio="none"` with text (it distorts). Zone strata behind the data, the

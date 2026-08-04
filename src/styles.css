@@ -687,7 +687,11 @@ body {
    detail sheet and the athlete-state strip, all of which move with it. */
 .rd-pmc > div { flex: 1; background: var(--well); box-shadow: var(--press-sm); border-radius: 16px; padding: 9px 4px; text-align: center; }
 .rd-pmc b { display: block; font-size: 18px; font-weight: 800; letter-spacing: -.4px; }
-.rd-pmc span { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; }
+/* --sub, not --muted: pressing the tile into the pane made its surface
+   LIGHTER than the opaque chip it replaced, and --muted fell to 3.39:1 on it
+   at 10.5px. Measured, not guessed — the label is the caption for the number
+   above it and has to be readable. */
+.rd-pmc span { font-size: 10.5px; color: var(--sub); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; }
 /* Athlete state strip: 4 tiles reusing the .rd-pmc chip row. Tiles are
    buttons (tap → support topic), so reset button chrome and lay them out as
    centered columns; .rd-pmc b / span descendant rules still style the value

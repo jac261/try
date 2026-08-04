@@ -218,7 +218,10 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
         <div className="rd-pmc">
           <div><b>{Math.round(lastLoad.ctl)}</b><span>Fitness</span></div>
           <div><b>{Math.round(lastLoad.atl)}</b><span>Fatigue</span></div>
-          <div><b style={{ color: zone ? zone.color : undefined }}><Signed v={tsbNow} /></b><span>Form</span></div>
+          {/* The grey zone means "nothing notable", so it keeps the plain ink:
+              its colour measured 3.99:1 on the pressed tile, which is paying
+              legibility to signal nothing. Coloured here means worth a look. */}
+          <div><b style={{ color: zone && zone.key !== 'grey' ? zone.color : undefined }}><Signed v={tsbNow} /></b><span>Form</span></div>
         </div>
       )}
       <div className="rd-foot">
