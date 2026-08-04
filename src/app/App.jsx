@@ -663,6 +663,11 @@ export function App({ storage, getToken, user }) {
     return T.durabilityCandidates({
       plan, activities, log, moves,
       have: new Set(store.map(e => e.activityId)),
+      /* Sessions read BEFORE the shape existed: they hold a verdict and no
+         chart, and the store itself is what would otherwise exclude them
+         forever. An ABSENT shape key means never attempted; an explicit null
+         means attempted and refused, and is never retried. */
+      needShape: new Set(store.filter(e => e.read && !('shape' in e)).map(e => e.activityId)),
       // once the store is full, candidates older than its oldest entry
       // would evict-and-refetch forever; they are simply out of the window
       floor: store.length >= 40 ? store[0].date : null,
@@ -677,7 +682,17 @@ export function App({ storage, getToken, user }) {
   useEffect(() => {
     if (!hydrated || !fetchesSettled || durabilityBusy.current || durabilityDone) return;
     if (!Array.isArray(activities)) { setDurabilityDone(true); return; }
-    const picks = durabilityCandidates().slice(0, 2);
+    /* Two NEW reads per open, as before — the coach freeze waits on those.
+       The shape backfill is separate and additive: it re-reads sessions whose
+       verdict is already stored, so it can never change a decision and must
+       not delay one. Four per open clears a full store of forty in about ten
+       visits instead of never. */
+    const store = durabilityRef.current;
+    const stale = new Set(store.filter(e => e.read && !('shape' in e)).map(e => e.activityId));
+    const all = durabilityCandidates();
+    const fresh = all.filter(c => !stale.has(c.activity.id)).slice(0, 2);
+    const reshape = all.filter(c => stale.has(c.activity.id)).slice(0, 4);
+    const picks = [...fresh, ...reshape];
     if (!picks.length) { setDurabilityDone(true); return; }
     durabilityBusy.current = true;
     (async () => {

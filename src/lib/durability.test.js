@@ -525,6 +525,39 @@ describe('durabilityCandidates: only the long ones, per discipline', () => {
     expect(got[0].discipline).toBe('swim');
   });
 
+  /* The bug that made the durability cards look unchanged after the shapes
+     shipped (2026-08-04): a session already in the store is excluded from
+     re-fetch, so an entry read before the shape existed could never gain one.
+     The store was the very thing keeping it stale. */
+  it('re-offers a stored session whose shape was never attempted', () => {
+    const workouts = [swim('s1', '2026-08-10', 30), swim('s2', '2026-08-13', 60)];
+    const args = {
+      plan: { race: 'olympic', weeks: [{ workouts }] },
+      activities: [act('s1', '2026-08-10', 30 * 60), act('s2', '2026-08-13', 60 * 60)],
+      log: { s1: { done: true }, s2: { done: true } },
+      have: new Set(['act-s2']),
+    };
+    // already held and not flagged: nothing to do
+    expect(call(args)).toEqual([]);
+    // held, but its entry carries a read and NO shape key: offer it once
+    expect(call({ ...args, needShape: new Set(['act-s2']) }).map(c => c.activity.id))
+      .toEqual(['act-s2']);
+  });
+
+  it('never re-offers a session whose shape was attempted and refused', () => {
+    /* An explicit `shape: null` is an answer, exactly as `read: null` is.
+       The caller builds needShape from `!('shape' in e)`, so a refusal is
+       absent from the set and this stays a one-time migration rather than a
+       loop. Asserted at the seam the caller actually uses. */
+    const store = [
+      { activityId: 'act-a', read: {}, shape: null },        // refused
+      { activityId: 'act-b', read: {} },                     // never attempted
+      { activityId: 'act-c', read: null },                   // unreadable recording
+    ];
+    const needShape = new Set(store.filter(e => e.read && !('shape' in e)).map(e => e.activityId));
+    expect([...needShape]).toEqual(['act-b']);
+  });
+
   it('plan mode: a week whose swims are all short offers none', () => {
     const workouts = [swim('s1', '2026-08-10', 30), swim('s2', '2026-08-13', 25)];
     expect(call({

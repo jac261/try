@@ -273,10 +273,22 @@ export function longestOfWeek(items) {
  * have: Set of activity ids already read
  * floor: ISO date below which candidates are out of the window, or null
  */
-export function durabilityCandidates({ plan, activities, log, moves, have, floor, todayISO, hour, deps }) {
+export function durabilityCandidates({ plan, activities, log, moves, have, needShape, floor, todayISO, hour, deps }) {
   if (!Array.isArray(activities)) return [];
   const { DISCIPLINE, planBodySteady, brickPairFor, activityFor, reviewedWeekMonday } = deps;
-  const seen = have || new Set();
+  /* `have` is what we already hold and will not fetch again. `needShape` is
+     the exception: an entry read BEFORE the shape existed carries a verdict
+     and no chart, and without this it could never gain one — the store is
+     the very thing that excludes it. That is why the durability cards sat
+     unchanged after the shapes shipped (2026-08-04).
+
+     One-time by construction, because the two absences differ:
+       shape undefined -> never attempted, re-read once;
+       shape null      -> attempted and refused, never retried, exactly as
+                          `read: null` is never retried today.
+     So an entry can be re-read at most once, and a refusal is final. */
+  const stale = needShape || new Set();
+  const seen = new Set([...(have || [])].filter(id => !stale.has(id)));
   const out = [];
 
   if (plan && plan.race !== 'tracker' && Array.isArray(plan.weeks) && plan.weeks.length) {
