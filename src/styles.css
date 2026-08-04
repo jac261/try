@@ -673,15 +673,14 @@ body {
 .rd-main { min-width: 0; }
 .rd-headline { font-size: 17px; font-weight: 800; letter-spacing: -.3px; }
 .rd-advice { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 3px; }
-.rd-why { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
-.rd-why-toggle { width: 100%; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 6px; }
 /* The detail sheet's why-not-harder fold (phase 6): same chevroned-question
    idiom, sized for the sheet rather than the readiness card. */
 .wnh-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; margin: 6px 2px 2px; }
-/* Input chips swell out, per the doc: they are the readings behind the score,
-   sitting on the pane rather than cut into it. */
-.rd-chip { font-size: 11.5px; font-weight: 600; color: var(--chrome-text); background: var(--lift); box-shadow: var(--raise-sm); border-radius: 10px; padding: 6px 10px; }
-.rd-chip.bad { background: rgba(251, 146, 60, .14); color: #f6b27a; }
+/* The doc also draws a row of input chips (Sleep 7:42, HRV 68, RHR +3). The
+   app answers that with SignalBars instead — the same readings, but each one
+   placed against its own baseline rather than just stated. The chip rules that
+   used to serve it went with the fold; nothing had rendered them since card 1f
+   replaced them, so they were dead before this PR touched them. */
 .rd-pmc { display: flex; gap: 10px; margin-top: 14px; }
 /* The same pressed stat tile as .statline .s (PR #50) — one idiom that had
    ended up with two class names. Shared by the dashboards, the digest, the
@@ -980,12 +979,6 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .rd-trend-head { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin-bottom: 6px; }
 /* collapsed training-load summary row: the numbers wear zone-coloured dots, so
    even folded shut the card still answers "am I OK?" at a glance */
-.rd-load-toggle { display: flex; align-items: center; gap: 10px; margin-top: 13px; padding: 10px 12px; background: var(--chip); border-radius: 12px; cursor: pointer; user-select: none; }
-.rd-load-toggle .rlt-title { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; flex: none; }
-.rd-load-toggle .rlt-stats { display: flex; gap: 12px; flex: 1; justify-content: flex-end; font-size: 12px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
-.rd-load-toggle .rlt-stats span { display: inline-flex; align-items: center; gap: 5px; }
-.rd-load-toggle .rlt-stats i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-.rd-load-toggle .rlt-chev { color: var(--faint); font-size: 11px; flex: none; }
 .rd-coach { margin-top: 8px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 
 /* colour-keyed load stats: the numbers ARE the legend (colours match the lines) */
