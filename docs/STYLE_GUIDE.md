@@ -313,6 +313,24 @@ one column with no tab bar at all. A discipline-linked block whose tab does
 not exist falls back to its pre-tab Overview position instead of
 disappearing — losing a tab must never lose the content.
 
+**Chart scaling (settled 2026-08-04, when the durability cards were drawn
+against their design).** A chart may not exaggerate a small change:
+
+- A bar's **length is a magnitude**, so bars start at zero. The honest
+  consequence is that a strong session looks flat; the printed number carries
+  the precision, which is why every bar in the app prints its value.
+- A line encodes **change**, so its axis need not start at zero — but every
+  gridline it is read against must be printed. A declared span is honest; a
+  silent one is a crop.
+- A **tick that encodes a value needs a fixed, stated span**, never the
+  session's own min-to-max. A per-session span pins the lowest value to one
+  end and the highest to the other every time, which is a full-width crop,
+  and it also makes two sessions' cards incomparable.
+
+The durability design cards break the second and third of these (the bike
+crops to 100/94/88 %, the swim to two gridlines); the app deliberately does
+not follow them there. `PowerCurveChart` refuses the same cliff.
+
 **Discipline tile (the signature element)** — rounded square, discipline **gradient**,
 white icon, inset hairline. Sizes in-app: 46px (rows), 54px (sheet hero), 60px (building screen).
 
