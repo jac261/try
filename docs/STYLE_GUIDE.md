@@ -373,7 +373,7 @@ this app share one vocabulary: `--pane`, `--pane-blur`, `--pane-border`,
 4. **Status keeps its saturation.** Discipline colours, readiness green and
    warning amber stay opaque, so state never reads as haze.
 
-### Segmented controls: one idiom, three implementations
+### Segmented controls: one idiom, two implementations
 
 The house pattern is a **pill trough with the chosen segment as the only
 extruded thing in it** — rule 3 doing the work colour alone cannot. `.segbar`
@@ -410,6 +410,25 @@ deliberate per-theme behaviour split. Race days and tune-ups never glow:
 events, not emphases. **Deviation from the smoked doc: tiles carry no
 `backdrop-filter`** — seven rows would add seven blur layers to screens that
 already carry the app's worst counts, and the 30% fills read without it.
+
+### Charts
+
+A chart is read, not tapped, so it presses INTO its card: `.chart-well` is
+the shared recess (tokens — `--well` + `--press-sm` — so both materials bind
+it, and no backdrop-filter, so the blur count does not move). The spider and
+the power curve wear it; any future chart-in-a-card takes the same class.
+
+**The athlete's line is white.** On any chart, "you" is the single white
+line — the docs' legends all draw the you-swatch white — and the discipline
+colour moves into the fill tint under it (spider: radial white-to-discipline
+fill; power curve: discipline-tinted area closing to the zero axis).
+References and comparisons stay dashed or dimmed, never white. White is
+deliberately theme-invariant: both materials are dark fields. The bike doc's
+blue tint was the kit accent leaking, not a palette change — bike tints stay
+`var(--bike)`.
+
+Solid points are measured, hollow (transparent-filled) are projections or
+stale — the convention predates the glass and survives it.
 
 ### Chrome is a special case
 
