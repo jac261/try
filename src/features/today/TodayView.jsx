@@ -1,10 +1,11 @@
 import { Fragment, useState } from 'react';
 import * as T from '@/lib';
-import { effDate, weekRange } from '@/lib/schedule.js';
+import { effDate } from '@/lib/schedule.js';
 import { paceSuggestions } from '@/lib/tuning.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
+import { WeekCard } from '@/features/today/WeekCard.jsx';
 import { ReadinessCard } from '@/features/wellness/ReadinessCard.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 import { WeeklyDigest } from '@/features/today/WeeklyDigest.jsx';
@@ -55,62 +56,7 @@ const saveShortfallDismiss = v => dSet('startShortfallDismissed', v);
 const loadWeekPref = () => { try { return JSON.parse(dGet('showWeek')); } catch (e) { return null; } };
 const saveWeekPref = v => dSet('showWeek', JSON.stringify(v));
 
-/* One glanceable card for the rest of the week: a 7-day strip of discipline
-   dots (faded = logged, gold = race day, dash = rest), tap to fold out the
-   remaining sessions in full detail. Replaces the old separate "Week N of M"
-   card and always-open "Coming up" list. */
-function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorkout }) {
-  const [openWk, setOpenWk] = useState(() => loadWeekPref() === true);
-  const toggle = () => setOpenWk(o => { saveWeekPref(!o); return !o; });
-  const days = weekRange(todayISO);
-  const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest');
-  const byDay = d => all.filter(w => effDate(w, moves) === d);
-  const curWeek = plan.weeks.find(w => w.workouts.some(x => x.date >= todayISO)) || plan.weeks[plan.weeks.length - 1];
-  const upcoming = all.filter(w => { const d = effDate(w, moves); return !w.race && d > todayISO && d <= days[6]; })
-    .sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1);
-  return (
-    <div className="card week-tab">
-      <div className="wt-head" {...tap(toggle)} aria-expanded={openWk}
-        aria-label={'This week, week ' + (curWeek.index + 1) + ' of ' + plan.totalWeeks + ': show remaining sessions'}>
-        <div>
-          <div className="wt-title">This week</div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-            Week {curWeek.index + 1} of {plan.totalWeeks} · {curWeek.phase} · {T.fmtDuration(curWeek.totalMin)} planned
-          </div>
-        </div>
-        <div className="spacer" />
-        <span className="wt-chev">{openWk ? '▾' : '▸'}</span>
-      </div>
-      {/* strip background is a pointer-only shortcut to toggle; each day cell is
-          the keyboard/screen-reader path (avoids a button-inside-a-button). */}
-      <div className="wt-strip" onClick={toggle}>
-        {days.map(d => {
-          const ws = byDay(d);
-          const logged = ws.filter(w => log[w.id]).length;
-          return (
-            <div key={d} className={'wt-day' + (d === todayISO ? ' today' : '') + (d < todayISO ? ' past' : '')}
-              aria-label={T.fmtDate(d, { weekday: 'long' }) + ': ' + (ws.length === 0 ? 'rest day'
-                : ws.map(w => w.title).join(' and ') + (logged ? ', ' + logged + ' logged' : ''))}
-              {...tap(e => { e.stopPropagation(); if (ws.length) open(ws[0]); else toggle(); })}>
-              <div className="wt-lab">{T.fmtDate(d, { weekday: 'short' }).slice(0, 1)}</div>
-              <div className="wt-dots">
-                {ws.length === 0 ? <i className="wt-rest" />
-                  : ws.slice(0, 3).map(w => <i key={w.id} className={log[w.id] ? 'done' : ''}
-                    style={{ background: w.race || w.bRace ? '#facc15' : D[w.discipline].color }} />)}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {openWk && (upcoming.length
-        ? upcoming.map(w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
-          moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />)
-        : <div className="muted" style={{ fontSize: 13, padding: '10px 2px 2px' }}>Nothing more this week — rest up.</div>)}
-    </div>
-  );
-}
-
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, runFail, onFixRun, ftpRetest, onFtpRetest, startShortfall, onDecision, fuelLog }) {
+export function TodayView({ plan, log, moves, missedReasons, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, runFail, onFixRun, ftpRetest, onFtpRetest, startShortfall, onDecision, fuelLog }) {
   // Align the dismissal keys to THIS user before any lazy initialiser runs.
   // They were browser-global, so two accounts on one device shared them.
   DISMISS_NS = (storage && storage.ns) || 'try.';
@@ -332,9 +278,20 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
         <div className="add-row" {...tap(onAddWorkout)}><Icon name="plus" size={15} /> {tracker ? 'Log a session' : 'Add a session'}</div>
       </div>
       <RecordedActivities activities={displayActivities || activities} date={todayISO} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} />
-      {storage && <WeeklyDigest plan={plan} log={log} moves={moves} adjust={adjust} adjustLog={adjustLog}
+      {/* One week card, not two: the retrospective used to sit above the
+          strip as its own card carrying the same three numbers under the
+          title this one now wears, so it rides inside instead. */}
+      {!tracker && (
+        <WeekCard plan={plan} log={log} moves={moves} adjust={adjust} missedReasons={missedReasons}
+          open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout}
+          loadOpen={loadWeekPref} saveOpen={saveWeekPref}>
+          {storage && <WeeklyDigest embedded plan={plan} log={log} moves={moves} adjust={adjust} adjustLog={adjustLog}
+            wellness={wellness} activities={displayActivities || activities} storage={storage} todayISO={todayISO} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={onBlockReviewed} onFocus={onFocus} />}
+        </WeekCard>
+      )}
+      {/* tracker has no plan week to strip, so the digest keeps its own card */}
+      {tracker && storage && <WeeklyDigest plan={plan} log={log} moves={moves} adjust={adjust} adjustLog={adjustLog}
         wellness={wellness} activities={displayActivities || activities} storage={storage} todayISO={todayISO} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={onBlockReviewed} onFocus={onFocus} />}
-      {!tracker && <WeekOverview plan={plan} log={log} moves={moves} open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout} />}
     </>
   );
 }

@@ -994,24 +994,67 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .rd-proposal .ph { font-size: 13.5px; font-weight: 800; letter-spacing: -.2px; display: flex; align-items: center; gap: 7px; }
 .rd-proposal .pw { color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 5px; }
 
-/* ---------- week overview tab (Today, below the day's session) ---------- */
-.week-tab .wt-head { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
-.week-tab .wt-title { font-size: 16px; font-weight: 800; letter-spacing: -.2px; }
-.week-tab .wt-chev { color: var(--faint); font-size: 13px; }
-.week-tab .wt-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 12px; cursor: pointer; user-select: none; }
-.week-tab .wt-day { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 7px 0 8px; border-radius: 10px; }
-.week-tab .wt-day.today { background: var(--blue-soft); }
-.week-tab .wt-day.today .wt-lab { color: var(--ink); font-weight: 800; }
-.week-tab .wt-day.past { opacity: .5; }
-.week-tab .wt-lab { font-size: 10px; font-weight: 700; color: var(--faint); text-transform: uppercase; }
-.week-tab .wt-dots { display: flex; gap: 3px; align-items: center; min-height: 8px; }
-.week-tab .wt-dots i { width: 8px; height: 8px; border-radius: 50%; display: block; }
-/* logged sessions: dim + a tick, so state isn't carried by opacity alone */
-.week-tab .wt-dots i.done { opacity: .55; }
-.week-tab .wt-dots i.done::after { content: '✓'; display: block; color: #fff; font-size: 7px; line-height: 8px; font-weight: 800; text-align: center; font-style: normal; }
-.week-tab .wt-rest { width: 7px; height: 2px; border-radius: 1px; background: var(--line); display: block; }
-.week-tab .wk { border-top: 1px solid var(--line); }
-.week-tab .wk:first-of-type { margin-top: 10px; }
+/* ---------- Your week (Today) ----------
+   The design's day strip (Your week day strip.dc.html). The mockup hard-codes
+   every colour and defines no custom properties, so nothing is copied
+   literally: its recessed/raised pairing is exactly this kit's
+   in-means-inert / out-means-actionable rule, and maps onto the material
+   tokens, which is what makes both themes come free (§7a). */
+.yw { display: flex; flex-direction: column; gap: 14px; }
+.yw-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; cursor: pointer; user-select: none; }
+.yw-head-l { display: flex; flex-direction: column; gap: 3px; }
+.yw-eyebrow { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.1px; color: var(--sub); }
+.yw-headline { font-size: 21px; font-weight: 800; letter-spacing: -.7px; }
+.yw-sub { font-size: 11.5px; color: var(--muted); }
+.yw-range { font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+
+/* the done-over-planned pair. Pressed, like every inert readout in the kit. */
+.yw-stats { display: flex; gap: 10px; }
+.yw-stat { flex: 1; border-radius: 14px; padding: 11px 13px; background: var(--well); box-shadow: var(--press-sm); display: flex; flex-direction: column; gap: 2px; }
+.yw-stat-lab { font-size: 10px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--sub); }
+.yw-stat-val { font-size: 19px; font-weight: 800; letter-spacing: -.6px; font-variant-numeric: tabular-nums; }
+.yw-stat-val i { font-size: 12px; font-weight: 800; color: var(--sub); font-style: normal; margin-left: 4px; }
+
+.yw-strip { display: flex; gap: 5px; }
+/* every day presses IN; today is the one that lifts OUT, which is the whole
+   of the design's today treatment and the kit's rule for "this is the live
+   one" at the same time */
+.yw-day { flex: 1; min-width: 0; border-radius: 16px; padding: 10px 4px; background: var(--well); box-shadow: var(--press-sm); display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.yw-day.today { background: var(--lift); box-shadow: var(--raise-sm); }
+.yw-day.today .yw-dow { color: var(--ink); }
+.yw-day.past { opacity: .62; }
+.yw-day:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.yw-dow { font-size: 9.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--sub); }
+.yw-min { font-size: 10.5px; font-weight: 800; letter-spacing: -.2px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* the discipline tile: the design's 28px gradient chip, on the kit's own
+   gradient tokens so the smoked theme rebinds it with everything else */
+.yw-chips { display: flex; align-items: center; justify-content: center; gap: 3px; min-height: 28px; }
+.yw-chip { width: 28px; height: 28px; flex: none; border-radius: 9px; display: grid; place-items: center; color: #fff; box-shadow: var(--raise-sm); }
+.yw-chips.pair .yw-chip { width: 21px; height: 21px; border-radius: 7px; }
+.yw-chip.race { background: linear-gradient(135deg, #facc15, #f59e0b); }
+.yw-chip.done { opacity: .55; }
+/* rest is the one recessed chip: nothing happened here, and nothing should */
+.yw-chip.rest { background: var(--well); box-shadow: inset 2px 2px 6px rgba(0, 0, 0, .5); color: var(--faint); border-radius: 10px; }
+.yw-more { font-size: 9px; font-weight: 800; color: var(--sub); }
+
+.yw-mark { font-size: 9.5px; font-weight: 800; letter-spacing: .5px; color: var(--faint); line-height: 1; }
+.yw-mark.done { color: #6ee7b7; font-size: 11px; }
+.yw-mark.now { color: var(--ink); }
+.yw-mark.missed { color: var(--muted); }
+
+.yw-next { border-radius: 18px; padding: 13px; background: var(--well); box-shadow: var(--press-sm); display: flex; align-items: center; gap: 12px; }
+.yw-next .yw-chip { width: 38px; height: 38px; border-radius: 13px; }
+.yw-next-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.yw-next-kick { font-size: 10px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--sub); }
+.yw-next-title { font-size: 14px; font-weight: 800; letter-spacing: -.3px; }
+.yw-next-meta { font-size: 11.5px; color: var(--sub); }
+
+/* the week's own facts, raised because they are the card's conclusions */
+.yw-notes { display: flex; gap: 8px; flex-wrap: wrap; }
+.yw-note { font-size: 11px; font-weight: 700; color: var(--sub); padding: 6px 10px; border-radius: 10px; background: var(--lift); box-shadow: var(--raise-sm); }
+.yw-empty { font-size: 13px; padding: 2px 2px 0; }
+.yw .wk { border-top: 1px solid var(--line); }
 
 /* ---------- add a session (Today) ---------- */
 .add-row { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 8px; padding: 11px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer; user-select: none; transition: color .15s; }
