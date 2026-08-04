@@ -203,11 +203,15 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
     const shaped = reads.find(e => e.shape && e.shape.points);
     const headline = shaped && (d === 'bike'
       ? { v: (shaped.shape.dropPct > 0 ? '−' : '+') + Math.abs(shaped.shape.dropPct) + '%',
-        sub: 'power by ' + Math.round(shaped.shape.totalKJ) + ' kJ' }
+        sub: 'at ' + Math.round(shaped.shape.totalKJ) + ' kJ' }
       : d === 'run'
         ? { v: shaped.shape.decouplingPct + '%', sub: 'decoupling · ' + (Math.round(shaped.shape.totalM / 100) / 10) + ' km' }
         : { v: (shaped.shape.paceDriftSec > 0 ? '+' : '') + shaped.shape.paceDriftSec + ' s',
-          sub: 'per 100 by the end of ' + (Math.round(shaped.shape.totalM / 100) / 10) + ' km' });
+          sub: 'per 100 by the last ' + Math.round(shaped.shape.totalM / shaped.shape.points.length) + ' m' });
+    // the design's own one-line framing of what each sport's chart asks
+    const asks = d === 'bike' ? 'Threshold power as work accumulates'
+      : d === 'run' ? 'Pace held against rising heart rate'
+        : 'Pace and stroke count across the set';
     return <>
       <div className="section-title">Durability <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>(how the long {noun} ended)</span></div>
       <div className="card">
@@ -218,6 +222,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
               <span className="du-when">{T.fmtDate(shaped.date, { day: 'numeric', month: 'short' })}</span></div>
           </div>
         )}
+        {shaped && <div className="du-asks">{asks}</div>}
         {shaped && <DurabilityShape shape={shaped.shape} />}
         {/* The swim's stroke unit is settled (cycles vs arm strokes, measured
             2026-08-04), but the device's own definition of a stroke is not,
@@ -250,7 +255,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
             <span className="du-nums">{outputBit(e)} · {hrBit(e)}{e.read.efDropPct != null && e.read.efDropPct > 0 ? ' · efficiency ' + pct(e.read.efDropPct) + ' down' : ''}{fuelLog && fuelLog[e.activityId] ? ' · fuel: ' + T.FUEL_LEVELS[fuelLog[e.activityId].level].toLowerCase() : ''}</span>
           </div>
         ))}
-        <div className="du-note">Laps only tell part of it: hills, heat, wind and fuelling are invisible here, so read the pattern across weeks, never one session.</div>
+        <div className="du-note">Laps cannot see hills, heat, wind or fuelling, so read the pattern across weeks, never one session.</div>
       </div>
     </>;
   };

@@ -149,6 +149,9 @@ describe('ProgressView renders in every mode', () => {
       : e));
     const shaped = await mount({ plan, activities: null, durability: shapedFixture }, 'Run');
     expect(shaped).toContain('decoupling');
+    // the design's framing line rides with the chart, and only with it
+    expect(shaped).toContain('Pace held against rising heart rate');
+    expect(pending).not.toContain('Pace held against rising heart rate');
     expect(shaped).not.toContain('Charts are on their way');
     expect(shaped).not.toContain('could not be drawn');
   });

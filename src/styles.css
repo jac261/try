@@ -1307,6 +1307,9 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
    documented rule that a short track keeps its own tighter inset because
    --press-sm is built for taller objects. Tokens only, so both materials
    come free. */
+/* The design's one-line framing of what this sport's chart asks, sitting
+   between the headline number and the shape behind it. */
+.du-asks { font-size: 11.5px; color: var(--sub); margin: -4px 0 10px; }
 .du-bar { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
 .du-bar-label { width: 52px; flex: none; font-size: 10px; font-weight: 800; color: var(--muted); }
 .du-bar-track { flex: 1; height: 20px; border-radius: 999px; background: var(--well); box-shadow: inset 2px 2px 5px rgba(0, 0, 0, .6); position: relative; }
