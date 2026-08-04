@@ -85,9 +85,14 @@
   --cell-on-ink: var(--ink);
   --tick-bg: var(--accent);
   --tick-ink: var(--accent-ink);
-  --chrome-text: #dbe3ee;      /* secondary text on the two floating bars */
+  --chrome-text: #dbe3ee;      /* secondary text on the two floating bars, and
+                                  the neutral tag ink — the Tags docs draw
+                                  exactly this value in each theme */
   --label: #98a3b5;            /* 10-12px labels on lit wells (day numbers, dow) */
   --sub: #b3bdcd;              /* card sub-headings, week gutters */
+  /* the two tag inks the two docs draw DIFFERENTLY; the rest are shared */
+  --tag-key-ink: #c3d5ff;
+  --tag-eased-ink: #8fecc4;
   /* discipline tile gradients; smoked drops these to ~30% translucent fills */
   --grad-swim: linear-gradient(135deg, #38bdf8, #2563eb);
   --grad-bike: linear-gradient(135deg, #fbbf24, #f97316);
@@ -117,7 +122,8 @@
    night, and the smoked screen docs keep every discipline solid. */
 :root[data-theme='smoked'] {
   --bg: #05070a;
-  --card: #0a0d12;           /* the opaque surfaces: sheets, live screens */
+  --card: #0a0d12;           /* the opaque surfaces: live screens, splash
+                                (sheets left this list when they went glass) */
   --card-2: #0d1118;
   --chip: rgba(0, 0, 0, .32);
   --ink: #e8edf5;
@@ -162,6 +168,8 @@
   --chrome-text: #c2cad8;
   --label: #98a3b5;
   --sub: #98a3b5;
+  --tag-key-ink: #a8bcff;
+  --tag-eased-ink: #7fe3c0;
   /* discipline tiles at ~30% translucent fill, each from its own gradient
      stops; dots and strokes keep the solid colours */
   --grad-swim: linear-gradient(150deg, rgba(56, 189, 248, .32), rgba(37, 99, 235, .18));
@@ -396,17 +404,27 @@ body {
 .wk .check { width: 26px; height: 26px; border-radius: 50%; background: var(--well); box-shadow: var(--press-sm); display: grid; place-items: center; font-size: 13px; font-weight: 800; color: transparent; transition: all .15s; }
 .wk.done .check { background: var(--tick-bg); box-shadow: var(--raise-sm); color: var(--tick-ink); }
 
-/* One rim seats every tag variant on its surface; the colours underneath are
-   status and stay exactly as they were, in both themes. */
-.tag { display: inline-block; font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .6px; vertical-align: middle; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3); }
-.tag.key { background: var(--blue-soft); color: #9ab8ff; }
-.tag.recovery { background: rgba(56, 189, 248, .15); color: var(--swim); }
-.tag.moved { background: rgba(192, 132, 252, .16); color: var(--brick); }
-.tag.test { background: rgba(251, 191, 36, .18); color: var(--bike); }
-.tag.second { background: rgba(148, 163, 184, .2); color: #cbd5e1; }
+/* "Tags stay raised and saturated" (Tags.dc.html). The shadow was a rim ONLY,
+   and the rim was a moulded literal at .3 that smoked wore at full brightness
+   for two PRs — the exact bug §7a warns about. --raise-sm binds the rim per
+   theme and brings the drop the doc asks for. In smoked that drop is black on
+   near-black and barely registers, which is that material's own physics:
+   edge light, not shadow. */
+.tag { display: inline-block; font-size: 10px; font-weight: 800; padding: 5px 11px; border-radius: 999px; text-transform: uppercase; letter-spacing: .6px; vertical-align: middle; box-shadow: var(--raise-sm); }
+/* Inks are the docs' lighter set. The three that BOTH docs draw identically
+   are literals on purpose: they are theme-invariant, not an oversight. The
+   two that differ per theme are tokens, and the neutral one is --chrome-text,
+   which already holds each doc's value exactly. Note these stopped borrowing
+   the discipline tokens (--swim/--bike/--run): recovery, test and eased are
+   states, not sports, and the collision was only ever coincidence. */
+.tag.key { background: var(--blue-soft); color: var(--tag-key-ink); }
+.tag.recovery { background: rgba(56, 189, 248, .15); color: #9adcf8; }
+.tag.moved { background: rgba(192, 132, 252, .16); color: #d9b6ff; }
+.tag.test { background: rgba(251, 191, 36, .18); color: #fcd28a; }
+.tag.second { background: rgba(148, 163, 184, .2); color: var(--chrome-text); }
 /* Its own class rather than borrowing .second (a day's 2nd session): the two
    mean different things and must be able to diverge. */
-.tag.indoor { background: rgba(148, 163, 184, .2); color: #cbd5e1; }
+.tag.indoor { background: rgba(148, 163, 184, .2); color: var(--chrome-text); }
 
 /* test "log result" note */
 .testnote { display: flex; gap: 10px; align-items: center; background: var(--blue-soft); border: 1px solid rgba(91, 140, 255, .3); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; color: #aac3ff; font-size: 13px; font-weight: 600; line-height: 1.4; }
@@ -457,7 +475,10 @@ body {
 .trend-base { font-size: 11px; color: var(--muted); font-weight: 600; }
 
 /* "why this session" coaching note */
-.why { background: var(--chip); border-left: 3px solid var(--accent); border-radius: 10px; padding: 11px 14px; margin: 14px 0 2px; font-size: 13px; line-height: 1.5; color: #cfd6e2; }
+/* Raised, with the doc's left rule kept. The rule's colour is set per
+   discipline at the call site (DetailSheet.jsx) — the doc simply draws the
+   default, so nothing there changes. */
+.why { background: var(--lift); box-shadow: var(--raise-sm); border-left: 3px solid var(--accent); border-radius: 14px; padding: 11px 14px; margin: 14px 0 2px; font-size: 13px; line-height: 1.5; color: #cfd6e2; }
 .why-label { display: block; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 4px; }
 
 /* ---------- calendar week ---------- */
@@ -468,7 +489,12 @@ body {
 .weekbar > span { display: block; height: 100%; border-radius: 4px; }
 
 /* ---------- detail sheet ---------- */
-.scrim { position: fixed; inset: 0; background: rgba(4, 7, 12, .66); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+/* Deepened from .66 when the sheet went translucent (Jon, 2026-08-04). The
+   scrim is now part of the sheet's own backdrop rather than only a dimmer,
+   so what sits behind the glass has to be predictable instead of a function
+   of whichever screen happened to be open — a white card underneath was the
+   worst case and it drove the sheet's text contrast on its own. */
+.scrim { position: fixed; inset: 0; background: rgba(4, 7, 12, .82); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
 /* Confidence badge (phase 2): the confidence word as a quiet chip. Low is
    the QUIETEST, deliberately — uncertainty must never look like a warning. */
 .conf-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid var(--line); }
@@ -476,12 +502,41 @@ body {
 .conf-badge.medium { color: var(--muted); }
 .conf-badge.low { color: var(--faint); border-color: transparent; background: var(--chip); }
 
-.sheet { background: var(--card); border: 1px solid var(--line); border-bottom: 0; width: 100%; max-width: 760px; max-height: 90vh; overflow-y: auto; border-radius: 24px 24px 0 0; padding: 8px 20px 30px; animation: up .25s ease; }
+/* The sheet is glass (Jon, 2026-08-04) — and it is chrome, not a card, so it
+   takes .topbar's construction rather than a bare --pane: the pane over an
+   opaque base, because this is the app's one long-form reading surface and
+   a bare pane put --muted at ~2.4:1 over the worst-case backdrop.
+   The other half of that fix is below: secondary text brightens rather than
+   the surface darkening, which is the lesson the two floating bars already
+   taught. Measured, not eyeballed — the numbers are in the PR. */
+.sheet {
+  background: var(--pane), var(--chrome-base);
+  backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur);
+  border: 1px solid var(--pane-edge); border-bottom: 0;
+  width: 100%; max-width: 760px; max-height: 90vh; overflow-y: auto;
+  border-radius: 24px 24px 0 0; padding: 8px 20px 30px; animation: up .25s ease;
+  /* Scoped, not global: every var(--muted) INSIDE the sheet resolves to the
+     brighter chrome ink in both themes, and nothing outside it moves.
+     --faint lifts too, one rung rather than two — measured at 2.61:1 on the
+     worst-case composite, which is below AA even for large text, and it
+     carries the profile axis and the low-confidence badge. The ladder is
+     preserved: ink brighter than muted brighter than faint. */
+  --muted: var(--chrome-text);
+  --faint: var(--label);
+}
 .sheet:focus { outline: none; } /* programmatic focus target on open; inner controls keep their rings */
 @keyframes up { from { transform: translateY(40px); opacity: .4; } }
-.sheet .grab { width: 42px; height: 5px; background: var(--line); border-radius: 3px; margin: 8px auto 16px; }
+/* The grab handle is a groove pressed into the sheet, not a painted rule.
+   --press-sm is built for objects several times this tall and turns to mush
+   at 5px, so this is the doc's own smaller inset, which both Tags-era docs
+   draw identically. */
+.sheet .grab { width: 42px; height: 5px; background: var(--well); border-radius: 3px; margin: 8px auto 16px; box-shadow: inset 0 2px 4px rgba(0, 0, 0, .6), inset 0 -1px 0 rgba(255, 255, 255, .07); }
 .sheet .hero { display: flex; gap: 14px; align-items: center; margin-bottom: 6px; }
-.sheet .hero .dot { width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; font-size: 27px; color: #fff; flex: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
+/* The same object as the workout row's tile, one size up: identical rim,
+   glare and drop (PR #47), so the session looks like itself in the list and
+   in the sheet. The key glow is not repeated here — the row uses it to pick
+   one session out of seven, and a sheet only ever shows the one. */
+.sheet .hero .dot { width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; font-size: 27px; color: #fff; flex: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), inset 0 1px 0 rgba(255, 255, 255, .45), 4px 6px 14px rgba(0, 0, 0, .4); }
 .sheet .hero h2 { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -.5px; }
 .sheet .hero .s { color: var(--muted); font-size: 13px; margin-top: 2px; }
 
@@ -492,7 +547,9 @@ body {
 .seg .m { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; font-weight: 700; }
 
 .statline { display: flex; gap: 10px; margin: 16px 0; }
-.statline .s { flex: 1; background: var(--chip); border-radius: 15px; padding: 13px; text-align: center; }
+/* Pressed tiles, per the doc. Shared with the swim dashboard, which is the
+   point rather than a side effect: a stat tile is a stat tile. */
+.statline .s { flex: 1; background: var(--well); box-shadow: var(--press-sm); border-radius: 16px; padding: 13px; text-align: center; }
 .statline .s b { display: block; font-size: 19px; font-weight: 800; letter-spacing: -.4px; }
 .statline .s span { font-size: 11px; color: var(--muted); }
 /* Assumption Center rows (Settings, phase 4): sport label + provenance line. */
@@ -744,9 +801,11 @@ body {
 .ck-skip { font-size: 11.5px; color: var(--muted); padding: 15px 6px; cursor: pointer; }
 .rd-eased { margin-top: 13px; font-size: 12.5px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 7px; line-height: 1.4; }
 .rd-eased svg { flex: none; color: var(--run); }
-.tag.eased { background: rgba(52, 211, 153, .16); color: var(--run); }
+.tag.eased { background: rgba(52, 211, 153, .16); color: var(--tag-eased-ink); }
 .tag.trimmed { background: rgba(250, 204, 21, .16); color: #facc15; }
-.tag.boosted { background: rgba(56, 189, 248, .16); color: #38bdf8; }
+/* Not in the Tags doc, but the same blue on the same tint as .recovery, so it
+   takes the same ink: measured 4.06:1 on its own tint before, 5.89 after. */
+.tag.boosted { background: rgba(56, 189, 248, .16); color: #9adcf8; }
 
 /* The chart recess: every Progress-doc chart sits pressed INTO its card
    (rule 3 — a chart is read, not tapped). Tokens, not the docs' literals,
@@ -949,7 +1008,11 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 /* ---------- add a session (Today) ---------- */
 .add-row { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 8px; padding: 11px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer; user-select: none; transition: color .15s; }
 .add-row:hover { color: var(--ink); }
-.tag.added { background: var(--blue-soft); color: var(--blue); }
+/* Same background as .key, so it takes .key's ink. It was --blue on
+   --blue-soft, which measured 2.96:1 and failed AA outright — caught only
+   because tokenising the doc's inks meant measuring every tag, not just the
+   ones the doc draws. */
+.tag.added { background: var(--blue-soft); color: var(--tag-key-ink); }
 .aw-lab { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin: 18px 0 8px; }
 .aw-discs { display: flex; gap: 8px; }
 .aw-disc { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; background: var(--chip); border-radius: 12px; border: 1px solid transparent; cursor: pointer; font-size: 11px; font-weight: 700; color: var(--muted); user-select: none; }
@@ -963,7 +1026,9 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .btn.remove { color: #f87171; }
 
 /* ---------- workout interval profile (detail sheet) ---------- */
-.wprof { margin: 8px 0 12px; padding: 10px 10px 7px; background: var(--chip); border-radius: 12px; }
+/* Takes .chart-well (PR #49) for its surface — the first new caller of that
+   class, and the rule it was written for. Only the spacing stays local. */
+.wprof { margin: 8px 0 12px; padding: 10px 10px 7px; }
 .wprof-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--faint); margin-top: 4px; }
 
 /* ---------- coach slot + done-for-today (Today tab) ---------- */

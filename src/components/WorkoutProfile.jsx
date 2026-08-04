@@ -11,7 +11,7 @@ export function WorkoutProfile({ w }) {
   const H = 40;
   let x = 0;
   return (
-    <div className="wprof">
+    <div className="wprof chart-well">
       <svg viewBox={'0 0 100 ' + H} preserveAspectRatio="none" style={{ width: '100%', height: 54, display: 'block' }}>
         {blocks.map((b, i) => {
           const bw = b.min / total * 100;
