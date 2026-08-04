@@ -93,8 +93,13 @@ following a fast-finish instruction is not fading.
 
 Reads are cached per activity id, device-local, surviving plan changes (a
 read is a fact about a past recording). The backfill fetches at most two
-recordings per app load, the reviewed week's sessions first, sharing one
-memoised intervals fetch with the rep table and auto-CSS.
+NEW recordings per app launch, the reviewed week's sessions first, sharing
+one memoised intervals fetch with the rep table and auto-CSS. A separate
+sweep then walks the whole store for records holding a verdict but no
+chart (read before the shapes existed) and attaches the shape, keeping the
+stored verdict verbatim; it runs after the coach freeze releases and does
+not go through candidate discovery, so sessions read under earlier plans
+are reachable too. One launch clears the backlog.
 
 The Progress card leads with the pattern and hedges the rest: laps cannot
 see hills, heat, wind or fuelling, so one read is never a claim. The coach
