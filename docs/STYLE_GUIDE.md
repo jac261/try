@@ -457,10 +457,11 @@ Going glass costs contrast, and the fix is the one chrome already taught:
 nothing outside it moves. Measured against the worst backdrop the app can
 produce (a white card behind the scrim):
 
-| | bare pane, old scrim | after |
+| | bare pane, old scrim | shipped |
 |---|---|---|
-| secondary text | 1.9:1 | 6.8 smoked / 8.7 moulded |
-| tertiary text | — | 4.4 (5.2 on a normal backdrop) |
+| body ink | 4.5 moulded / 4.1 smoked | 10.4 / 9.5 |
+| secondary text | **1.6 / 1.9** | 8.7 / 6.8 |
+| tertiary text | **1.1 / 1.1** | 4.4 / 4.4 (5.2 on a normal backdrop) |
 
 Audit every `var(--muted)` and `var(--faint)` consumer that can render inside
 the sheet when changing this. Most are plain secondary text and want the
