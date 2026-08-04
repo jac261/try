@@ -10,7 +10,7 @@ import { Icon } from '@/components/Icon.jsx';
  * 2026-07-15). Shows from Sunday evening through Wednesday, then lapses on
  * its own; dismiss hides this week's for good. Content is recomputed live —
  * only the seen flag persists. */
-export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, storage, todayISO, coachLog, blockReviewed, onBlockReviewed, onFocus }) {
+export function WeeklyDigest({ embedded, plan, log, moves, adjust, adjustLog, wellness, activities, storage, todayISO, coachLog, blockReviewed, onBlockReviewed, onFocus }) {
   const [gone, setGone] = useState(false);
   /* HOISTED above the early returns, where every hook must live. This sat
      below them, so the first render mounted two hooks and the render after
@@ -65,10 +65,18 @@ export function WeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, ac
   const review = coach && blockReviewed !== weekMonday
     ? T.buildBlockReview({ plan, coachLog, weekMonday, focus: fx.focus, lastReviewedMonday: blockReviewed }) : null;
 
+  /* Embedded, this is a section of the Your week card rather than a card of
+     its own: no wrapper, no section title. It keeps its OWN range line
+     though, and that is the load-bearing part — the strip above is always
+     live on the current week while this reviews a finished one, and from
+     Monday to Wednesday those are different weeks. A shared heading would
+     put one week's numbers under another week's name. */
   return (
     <>
-      <div className="section-title">Your week <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>{fmtD(d.range.start)} to {fmtD(d.range.end)}</span></div>
-      <div className="card">
+      {embedded
+        ? <div className="yw-review-head">Week in review <span className="muted">{fmtD(d.range.start)} to {fmtD(d.range.end)}</span></div>
+        : <div className="section-title">Your week <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>{fmtD(d.range.start)} to {fmtD(d.range.end)}</span></div>}
+      <div className={embedded ? 'yw-review' : 'card'}>
         <div className="row" style={{ marginBottom: 8 }}>
           <div className="muted" style={{ fontSize: 12 }}>
             {d.tracker ? 'No plan active' : (d.phase ? d.phase + ' phase · week ' + d.weekNo + ' of ' + d.totalWeeks : '')}

@@ -36,10 +36,32 @@ describe('the race week digest renders', () => {
     startDate: '2026-05-04', raceDate: '2026-07-12',
   });
   const storage = { load: () => null, save: () => {} };
-  const render = () => renderToString(
+  const render = (over = {}) => renderToString(
     <WeeklyDigest plan={plan} log={{}} moves={{}} adjust={{}} adjustLog={[]}
       wellness={[]} activities={null} storage={storage} todayISO="2026-07-13"
-      coachLog={null} blockReviewed={null} onBlockReviewed={() => {}} onFocus={() => {}} />);
+      coachLog={null} blockReviewed={null} onBlockReviewed={() => {}} onFocus={() => {}} {...over} />);
+
+  /* Embedded, this is a section of the Your week card rather than a card of
+     its own — the two used to sit stacked, carrying the same three numbers,
+     one of them under the title the other now wears. */
+  it('embedded: drops its own card and title, keeps its own range line', () => {
+    const bare = render({ embedded: true });
+    expect(bare).not.toMatch(/class="card"/);
+    expect(bare).not.toContain('section-title');
+    /* It still says WHICH week it reviews. The strip above is live on the
+       current week while this reviews a finished one, and from Monday to
+       Wednesday those differ: one heading over both would put one week's
+       numbers under another week's name. */
+    expect(bare).toContain('Week in review');
+    expect(bare).toContain('yw-review');
+  });
+
+  it('stands alone unchanged when it is not embedded', () => {
+    const out = render();
+    expect(out).toContain('section-title');
+    expect(out).toContain('Your week');
+    expect(out).toMatch(/class="card"/);
+  });
 
   it('shows the race as a calendar fact, with the generated title bare', () => {
     let html;
