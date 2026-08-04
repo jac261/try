@@ -122,7 +122,8 @@
    night, and the smoked screen docs keep every discipline solid. */
 :root[data-theme='smoked'] {
   --bg: #05070a;
-  --card: #0a0d12;           /* the opaque surfaces: sheets, live screens */
+  --card: #0a0d12;           /* the opaque surfaces: live screens, splash
+                                (sheets left this list when they went glass) */
   --card-2: #0d1118;
   --chip: rgba(0, 0, 0, .32);
   --ink: #e8edf5;
@@ -485,7 +486,12 @@ body {
 .weekbar > span { display: block; height: 100%; border-radius: 4px; }
 
 /* ---------- detail sheet ---------- */
-.scrim { position: fixed; inset: 0; background: rgba(4, 7, 12, .66); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+/* Deepened from .66 when the sheet went translucent (Jon, 2026-08-04). The
+   scrim is now part of the sheet's own backdrop rather than only a dimmer,
+   so what sits behind the glass has to be predictable instead of a function
+   of whichever screen happened to be open — a white card underneath was the
+   worst case and it drove the sheet's text contrast on its own. */
+.scrim { position: fixed; inset: 0; background: rgba(4, 7, 12, .82); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
 /* Confidence badge (phase 2): the confidence word as a quiet chip. Low is
    the QUIETEST, deliberately — uncertainty must never look like a warning. */
 .conf-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid var(--line); }
@@ -493,7 +499,23 @@ body {
 .conf-badge.medium { color: var(--muted); }
 .conf-badge.low { color: var(--faint); border-color: transparent; background: var(--chip); }
 
-.sheet { background: var(--card); border: 1px solid var(--line); border-bottom: 0; width: 100%; max-width: 760px; max-height: 90vh; overflow-y: auto; border-radius: 24px 24px 0 0; padding: 8px 20px 30px; animation: up .25s ease; }
+/* The sheet is glass (Jon, 2026-08-04) — and it is chrome, not a card, so it
+   takes .topbar's construction rather than a bare --pane: the pane over an
+   opaque base, because this is the app's one long-form reading surface and
+   a bare pane put --muted at ~2.4:1 over the worst-case backdrop.
+   The other half of that fix is below: secondary text brightens rather than
+   the surface darkening, which is the lesson the two floating bars already
+   taught. Measured, not eyeballed — the numbers are in the PR. */
+.sheet {
+  background: var(--pane), var(--chrome-base);
+  backdrop-filter: var(--pane-blur); -webkit-backdrop-filter: var(--pane-blur);
+  border: 1px solid var(--pane-edge); border-bottom: 0;
+  width: 100%; max-width: 760px; max-height: 90vh; overflow-y: auto;
+  border-radius: 24px 24px 0 0; padding: 8px 20px 30px; animation: up .25s ease;
+  /* Scoped, not global: every var(--muted) INSIDE the sheet resolves to the
+     brighter chrome ink in both themes, and nothing outside it moves. */
+  --muted: var(--chrome-text);
+}
 .sheet:focus { outline: none; } /* programmatic focus target on open; inner controls keep their rings */
 @keyframes up { from { transform: translateY(40px); opacity: .4; } }
 .sheet .grab { width: 42px; height: 5px; background: var(--line); border-radius: 3px; margin: 8px auto 16px; }
