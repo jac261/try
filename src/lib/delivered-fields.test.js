@@ -199,14 +199,16 @@ describe('stroke metrics stay gated even though the fields now arrive', () => {
     expect(STROKE_METRICS_FLAG).toBe(false);
   });
 
-  it('refuses the whole session when the 2x convention gap appears anywhere', () => {
+  it('refuses the whole session when a lap sits on no recognised footing', () => {
     const swim = (n, mut = () => ({})) => Array.from({ length: n }, (_, i) => ({
       type: 'WORK', movingTimeSec: 96, distance: 100, averageSpeed: 1.04,
       averageStride: 2.5, averageCadence: 25, startTimeSec: i * 96, ...mut(i),
     }));
-    // one lap where cadence says half what stride says: the exact gap the
-    // module's validation found on real Garmin data
-    const rows = swim(30, i => (i === 11 ? { averageCadence: 12.5 } : {}));
+    /* 1.5x is on neither known basis. The 2x gap the module's validation
+       originally found turned out to be a UNIT relationship (measured
+       2026-08-04: exactly 2.0000 across 43 real laps), so it is recognised
+       now and this test uses a genuinely unreadable ratio instead. */
+    const rows = swim(30, i => (i === 11 ? { averageCadence: 16.6667 } : {}));
     expect(swimDurabilityShape({ rows, movingTimeSec: 30 * 96, poolLengthM: 25 })).toBe(null);
   });
 });

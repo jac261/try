@@ -139,11 +139,23 @@ describe('the swim: the stroke shape, and when it refuses', () => {
     expect(s.strokeDrift).toBeGreaterThan(0);   // strokes per length ROSE as stride shortened
   });
 
-  it('ONE ambiguous lap kills the whole shape, not just that lap', () => {
-    // the 2x convention gap: cadence says half what stride says. A chart
-    // built from the surviving laps would silently be a different chart.
-    const rows = steadySwim(30, i => (i === 11 ? { averageCadence: 12.5 } : {}));
+  it('ONE lap on an unrecognised footing kills the whole shape', () => {
+    /* 1.5x is on neither known basis — not the same unit, not the
+       cycles/strokes pair — so the lap is unreadable. A chart built from the
+       surviving laps would silently be a different chart.
+
+       (This used to use 2x. Measurement showed 2x IS a known basis, so it is
+       accepted now and no longer tests a refusal at all.) */
+    const rows = steadySwim(30, i => (i === 11 ? { averageCadence: 16.6667 } : {}));
     expect(swimDurabilityShape({ rows, movingTimeSec: SWIM_SEC, poolLengthM: 25 })).toBe(null);
+  });
+
+  it('a whole session on the cycles basis reads fine', () => {
+    // every lap 2x apart: one device convention, consistently applied
+    const rows = steadySwim(30, () => ({ averageCadence: 12.5 }));
+    const s = swimDurabilityShape({ rows, movingTimeSec: SWIM_SEC, poolLengthM: 25 });
+    expect(s).toBeTruthy();
+    expect(s.points[0].strokesPerLength).toBe(10);
   });
 
   it('no pool length, no stroke reading at all', () => {
