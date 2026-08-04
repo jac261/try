@@ -42,6 +42,9 @@ export function SpiderChart({ spider, color = 'var(--accent)', fmtValue, size = 
 
   return (
     <div className="center" style={{ margin: '4px 0' }}>
+      {/* The recess spans the card (block div), the chart centres inside it
+          via the inherited text-align; the hint stays on the card surface. */}
+      <div className="chart-well">
       {/* The viewBox carries horizontal padding the box itself does not.
           Axis labels sit at 1.26 x radius, so on a pentagon the left and
           right spokes centre their text near the edges and anything longer
@@ -92,6 +95,7 @@ export function SpiderChart({ spider, color = 'var(--accent)', fmtValue, size = 
             fill={d.ax.measured ? color : 'transparent'} stroke={color} strokeWidth="2" />
         ))}
       </svg>
+      </div>
       <div className="hint" style={{ marginTop: 2 }}>
         {(T.SPIDER_SOURCES[spider.source] ? T.SPIDER_SOURCES[spider.source].label + ' · ' : '')}
         solid points are measured, hollow are projections

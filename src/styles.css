@@ -748,6 +748,12 @@ body {
 .tag.trimmed { background: rgba(250, 204, 21, .16); color: #facc15; }
 .tag.boosted { background: rgba(56, 189, 248, .16); color: #38bdf8; }
 
+/* The chart recess: every Progress-doc chart sits pressed INTO its card
+   (rule 3 — a chart is read, not tapped). Tokens, not the docs' literals,
+   so both materials come for free; no backdrop-filter, so the per-screen
+   blur count does not move. The pattern for any future chart-in-a-card. */
+.chart-well { border-radius: 20px; padding: 12px 6px; background: var(--well); box-shadow: var(--press-sm); }
+
 /* trend chart legend */
 .chart-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 11px; font-size: 11.5px; color: var(--muted); font-weight: 600; }
 .chart-legend i { display: inline-block; width: 11px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
