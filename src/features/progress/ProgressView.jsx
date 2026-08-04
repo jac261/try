@@ -486,11 +486,11 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
       <div className="section-title">Progress</div>
 
       {!tracker && TABS.length > 1 && (
-        <div className="prog-tabs" role="tablist" aria-label="Progress sections">
+        <div className="segbar" role="tablist" aria-label="Progress sections">
           {TABS.map(([k, lab]) => (
             <button key={k} role="tab" id={'prog-tab-' + k} aria-controls={'prog-panel-' + k}
               aria-selected={activeTab === k}
-              className={'btn sm ' + (activeTab === k ? 'primary' : 'ghost')}
+              className={activeTab === k ? 'on' : ''}
               onClick={() => setTab(k)}>{lab}</button>
           ))}
         </div>
