@@ -64,13 +64,16 @@ describe('PowerCurveChart', () => {
        marker matched it. When the card became a glass pane that stopped being
        true and the same fill painted a solid slab, while this test went on
        passing. It now asserts the property the name claims. */
+    /* Points are white since the Progress glass PR — "you" is the one white
+       line on any chart and its points go with it. Solid/hollow still
+       carries fresh/stale. */
     const circles = [...html.matchAll(/<circle[^>]*>/g)].map(m => m[0]);
     const hollow = circles.filter(c => /fill="transparent"/.test(c));
-    const filled = circles.filter(c => /fill="var\(--bike/.test(c));
+    const filled = circles.filter(c => /fill="#fff"/.test(c));
     expect(hollow.length).toBe(1);                 // exactly the stale one
     expect(filled.length).toBe(CURVE_DURATIONS.length - 1);
     // and a hollow point still has its outline, or it would just be missing
-    expect(hollow[0]).toMatch(/stroke="var\(--bike/);
+    expect(hollow[0]).toMatch(/stroke="#fff"/);
   });
 
   it('refuses to draw a previous curve through incomparable points', () => {
@@ -83,7 +86,7 @@ describe('PowerCurveChart', () => {
     const withMeterChange = render({ curve: FULL, previous: prevMeter, comparison: curveComparison({ current: FULL, previous: prevMeter }), stale: [] });
     const paths = h => (h.match(/<path/g) || []).length;
     expect(paths(withPrev)).toBeGreaterThan(paths(withMeterChange));
-    expect(paths(withMeterChange)).toBe(1);   // the current curve only
+    expect(paths(withMeterChange)).toBe(2);   // the current curve and its area fill, nothing else
   });
 
   it('anchors the threshold label left, clear of the crossing region', () => {

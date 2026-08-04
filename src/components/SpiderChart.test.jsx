@@ -32,7 +32,7 @@ describe('SpiderChart', () => {
     expect(projected).toContain('~');
     const withRace = renderToString(<SpiderChart
       spider={runSpider(REAL_RUN, [{ type: 'Run', date: 'x', distance: 10100, movingTimeSec: 2900 }])} />);
-    // the measured 10k point renders solid (fill=colour, not the card colour)
+    // the measured 10k point renders solid (fill=white, not transparent)
     expect(withRace.split('~').length).toBeLessThan(projected.split('~').length);
   });
 

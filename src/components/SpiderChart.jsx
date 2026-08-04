@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import * as T from '@/lib';
 
 /* The spider chart, as data-driven SVG. No chart library: the app ships no
@@ -24,6 +25,11 @@ const polar = (cx, cy, r, i, n) => {
 };
 
 export function SpiderChart({ spider, color = 'var(--accent)', fmtValue, size = 240 }) {
+  // Before the early returns (the hook-order lesson): two spiders can share
+  // a page, and a duplicated gradient id silently paints both from one def.
+  // useId's delimiters (:r0: / «r1») are stripped — they are legal in an id
+  // attribute but not reliably parsed inside url(#…) across engines.
+  const gradId = 'spider-' + useId().replace(/[^a-zA-Z0-9_-]/g, '');
   if (!spider) return null;
   if (!spider.axes) {
     return spider.reason
@@ -82,17 +88,29 @@ export function SpiderChart({ spider, color = 'var(--accent)', fmtValue, size = 
             </g>
           );
         })}
-        {/* the athlete */}
+        {/* The athlete, in the design's chart voice: "you" is the one WHITE
+            line on any chart, and the discipline lives in the fill tint under
+            it (all four Progress docs agree; the legend swatch for "you" is
+            white in every one). White is deliberately theme-invariant — both
+            materials are dark fields. */}
         {poly.length >= 3 && (
-          <polygon points={poly.map(d => d.p.join(',')).join(' ')}
-            fill={color} opacity="0.18" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+          <>
+            <radialGradient id={gradId} cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#fff" stopOpacity="0.35" />
+              {/* the colour prop is a var(--…) reference; it resolves at the
+                  stop because the tokens live on :root, not on the polygon */}
+              <stop offset="100%" style={{ stopColor: color }} stopOpacity="0.18" />
+            </radialGradient>
+            <polygon points={poly.map(d => d.p.join(',')).join(' ')}
+              fill={'url(#' + gradId + ')'} stroke="#fff" strokeWidth="2.5" strokeLinejoin="round" />
+          </>
         )}
         {poly.map(d => (
           <circle key={d.ax.key} cx={d.p[0]} cy={d.p[1]} r="3.5"
             /* transparent, not the card colour: an unmeasured point is a HOLE.
                Painting it var(--card) only ever worked because the card was
                opaque and matched — on a glass pane it became a solid slab. */
-            fill={d.ax.measured ? color : 'transparent'} stroke={color} strokeWidth="2" />
+            fill={d.ax.measured ? '#fff' : 'transparent'} stroke="#fff" strokeWidth="2" />
         ))}
       </svg>
       </div>
