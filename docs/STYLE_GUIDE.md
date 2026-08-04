@@ -245,6 +245,49 @@ A custom **monoline** SVG set, drawn on a **24×24 viewBox**, `fill: none`,
   download, trend, watch, transition, stopwatch, route, heartrate, pace, trophy, settings`.
 - No emoji in the UI — every glyph is a monoline icon.
 
+### The glass emboss
+
+The doc's own thesis: *"The Try set, unchanged in geometry and re-lit for
+glass: cast shadow down-right, highlight up-left."* **No path data moves.**
+The same string is drawn three times, an offset dark copy and an offset light
+copy beneath the real one:
+
+```
+<g transform="translate(.55 .75)"   style="color:rgba(0,0,0,.55)"       opacity=".9">…</g>
+<g transform="translate(-.35 -.45)" style="color:rgba(255,255,255,.55)" opacity=".8">…</g>
+<g>…</g>
+```
+
+It recolours by setting `color` on the wrapper, which works because every
+path paints with `currentColor` — including the filled discipline marks,
+whose inner group inherits it. That relies on `currentcolor` resolving per
+element rather than computing once on the `<svg>`; it does, and the harness
+checks it by reading the three layers' rendered paints rather than assuming.
+
+**The numbers are theme-invariant** — identical across all 31 embossed icons
+in the moulded doc and the smoked set. The light source does not change when
+the material does, so this needs no token. It is the only part of the design
+system where that is true.
+
+Two rules are **ours, not the doc's**, and both are pinned by tests:
+
+- **The emboss starts at 26px.** Below that the bevel is not a bevel: the
+  offsets are fractions of a 24-unit viewBox, so at 18px — the app's
+  commonest icon size — the shadow lands 0.41 CSS pixels away and reads as a
+  smudge. The doc lights icons down to 21px. Deliberate departure, Jon's call
+  on those measurements.
+- **The brand mark is never lit**, which *is* the doc's choice: the tri-mark
+  is the single un-embossed icon in its sheet of 32. The app draws the logo at
+  26, 34 and 64, so the size rule alone would have lit it.
+
+A consequence worth knowing: **the workout-row tiles draw their icon at 22px,
+so they stay flat.** The surfaces that do get lit are the detail-sheet hero,
+the calendar's discipline tiles, the wellness hero and the empty states.
+Raising the row icon to 26 would bring the rows in; that is a layout decision,
+not a styling one.
+
+See `icons.html` — every icon, every size, both backdrops, both themes.
+
 ---
 
 ## 7. Core components
