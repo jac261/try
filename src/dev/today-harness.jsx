@@ -9,6 +9,7 @@ import { createRoot } from 'react-dom/client';
 import { TodayView } from '@/features/today/TodayView.jsx';
 import { generatePlan, buildTrackerPlan } from '@/lib/plan.js';
 import { iso, addDays } from '@/lib/date.js';
+import { weekRange } from '@/lib/schedule.js';
 
 const today = new Date();
 const todayISO = iso(today);
@@ -66,6 +67,20 @@ const MODES = {
   'race-day': () => ({ plan: generatePlan(base({ startDate: iso(addDays(today, -112)), raceDate: todayISO })), moves: {} }),
   rest: () => ({ plan: scanPlan(day => day.length === 0, { trainingDays: [1, 3, 5], daysPerWeek: 3, fitness: 'beginner' }), moves: {} }),
   tracker: () => ({ plan: buildTrackerPlan(generatePlan(base()), new Date().toISOString()), moves: {} }),
+  /* The week card's own mode. Every other mode passes an empty log, so the
+     strip's ticked and missed days — half of what it exists to show — have
+     never been visible in this harness at all. This one logs the week's
+     sessions up to yesterday and leaves the rest, which is what a real
+     Wednesday looks like. */
+  'week-logged': () => {
+    const plan = generatePlan(base());
+    const days = weekRange(todayISO);
+    const log = {};
+    plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline !== 'rest' && w.date >= days[0] && w.date < todayISO)
+      .forEach((w, i) => { if (i % 3 !== 1) log[w.id] = { done: true, at: w.date }; });
+    return { plan, moves: {}, log };
+  },
 };
 
 /* Readiness fixtures. Three mornings that exercise the receipts block: one
@@ -96,7 +111,7 @@ function Harness() {
   const [mode, setMode] = useState('double');
   const [proven, setProven] = useState(false);
   const [rd, setRd] = useState('good');
-  const { plan, moves } = MODES[mode]();
+  const { plan, moves, log } = MODES[mode]();
   // With no history everything sits on the novice default, so the visible
   // demo is a proven tolerance RAISING the ceiling: 'solid' (60 g/h held)
   // lets a half-distance brick ask its full demand instead of the default.
@@ -116,7 +131,7 @@ function Harness() {
             onClick={() => setRd(k)}>rd:{k}</button>
         ))}
       </div>
-      <TodayView key={mode + proven + rd} plan={plan} log={{}} moves={moves} open={noop} onTune={noop}
+      <TodayView key={mode + proven + rd} plan={plan} log={log || {}} moves={moves} open={noop} onTune={noop}
         wellness={RD[rd]} onFeel={noop} onEditWellness={noop} easedOf={w => w} onEaseToday={noop}
         onRestoreToday={noop} weekly={null} onWeekly={noop} spotted={null} onLogSpotted={noop}
         onAddWorkout={noop} eftp={null} onEftp={noop} onToggleWorkout={noop} planEdge={null}

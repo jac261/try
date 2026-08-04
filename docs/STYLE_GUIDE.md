@@ -335,6 +335,16 @@ The durability design cards break the second and third of these (the bike
 crops to 100/94/88 %, the swim to two gridlines); the app deliberately does
 not follow them there. `PowerCurveChart` refuses the same cliff.
 
+**Your week (Today)** — one card, `.yw-*`. Header line, two pressed stat
+tiles (done over planned), a seven-day strip, what is next, and the week's
+own facts as chips. Every day presses IN and today lifts OUT, which is the
+same in-means-inert / out-means-actionable rule stated above rather than a
+special case. Discipline tiles ride `--grad-*`, so the smoked theme rebinds
+them with everything else. The weekly retrospective is a SECTION of this
+card (`.yw-review`), not a second card, and keeps its own range line because
+it reviews a finished week while the strip is live on the current one — from
+Monday to Wednesday those differ.
+
 **Discipline tile (the signature element)** — rounded square, discipline **gradient**,
 white icon, inset hairline. Sizes in-app: 46px (rows), 54px (sheet hero), 60px (building screen).
 
