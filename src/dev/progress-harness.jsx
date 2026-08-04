@@ -77,6 +77,30 @@ const coach = {
   disciplines: { run: { decision: 'hold', headline: 'Doing its job', evidence: [], clean: true } },
   progression: null,
 };
+/* Wellness was `[]` here, so the whole "Fitness & recovery" section — four
+   charts — could only ever render its empty state in this harness. That is the
+   shape-the-harness-cannot-make problem again, and the readiness trend moving
+   into that section (2026-08-04) is exactly when it starts to matter.
+
+   Sixty days ending today, so the trend is always in range whenever this is
+   opened: a slow fitness build with fatigue riding above it (form negative,
+   the interesting case), and readiness inputs that wander across the bands
+   rather than sitting flat. Deterministic — a sine, not a random walk, so two
+   runs of the harness look the same and a screenshot means something. */
+const WELLNESS = (() => {
+  const today = iso(new Date());
+  return Array.from({ length: 60 }, (_, i) => {
+    const ctl = 42 + i * 0.42;                          // building
+    const atl = ctl + 6 * Math.sin(i / 4.5) + 3;        // fatigue rides above it
+    return {
+      date: addDays(today, i - 59),                     // -59 .. 0
+      ctl: +ctl.toFixed(1), atl: +atl.toFixed(1), tsb: +(ctl - atl).toFixed(1),
+      hrv: Math.round(64 + 9 * Math.sin(i / 5.2)),
+      rhr: Math.round(48 - 3 * Math.sin(i / 5.2)),
+      sleepH: +(7.1 + 0.9 * Math.sin(i / 3.1)).toFixed(1),
+    };
+  });
+})();
 const MODES = {
   // durability rides on tri too: it is the only mode with all three tabs,
   // so it is the one that can show the per-discipline split at all
@@ -111,7 +135,7 @@ function Harness() {
         ))}
       </div>
       <ProgressView key={mode} plan={m.plan} log={{}} moves={{}} activities={m.activities || runs} coach={m.coach}
-        durability={m.durability || null} fuelLog={{}} wellness={[]} runLoad={m.runLoad || null} recovery={null}
+        durability={m.durability || null} fuelLog={{}} wellness={WELLNESS} runLoad={m.runLoad || null} recovery={null}
         onSupport={() => {}} onWhatIf={null} retest={null} ftpRetest={null}
         powerCurve={m.powerCurve || curve} previousPowerCurve={m.previousPowerCurve || null} positionLog={{}} decisionLog={m.decisionLog || []} />
     </div>

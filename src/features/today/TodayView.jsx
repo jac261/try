@@ -110,7 +110,7 @@ function WeekOverview({ plan, log, moves, open, easedOf, todayISO, onToggleWorko
   );
 }
 
-export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, recovery, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, runFail, onFixRun, ftpRetest, onFtpRetest, startShortfall, onDecision, fuelLog }) {
+export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, runFail, onFixRun, ftpRetest, onFtpRetest, startShortfall, onDecision, fuelLog }) {
   // Align the dismissal keys to THIS user before any lazy initialiser runs.
   // They were browser-global, so two accounts on one device shared them.
   DISMISS_NS = (storage && storage.ns) || 'try.';
@@ -289,7 +289,7 @@ export function TodayView({ plan, log, moves, open, onTune, wellness, onFeel, on
           it leads; in plan mode readiness keeps the top spot (Jon, 2026-07-16). */}
       {tracker && coachCard}
       <ReadinessCard wellness={wellness} today={today.map(w => ({ ...easedOf(w), done: !!log[w.id] }))} noPlan={tracker}
-        onEdit={onEditWellness} onFeel={onFeel} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} onSupport={onSupport} recovery={recovery}
+        onEdit={onEditWellness} onFeel={onFeel} onEase={onEaseToday} onRestore={onRestoreToday} onOpen={open} onSupport={onSupport}
         storage={storage} onDecision={onDecision} />
       {!tracker && coachCard}
       {/* The countdown self-gates to the final week (and hides for noRace

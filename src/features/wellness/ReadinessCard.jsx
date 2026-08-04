@@ -5,14 +5,13 @@ import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { Signed } from '@/components/Signed.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
-import { TrendChart } from '@/components/charts.jsx';
 
-// Everything analytical lives behind one "Details" fold: driver chips, the
-// readiness trend and the training-load charts. The default card is for the
-// athlete who just wants the answer (ring + advice + coach line); the fold is
-// for the one who wants the evidence. The fold starts closed on every load —
-// only the athlete's stored choice opens it (Jon, 2026-07-16); alarm states
-// speak through the headline, the coach line and the toggle row's chip colours.
+// The card answers the morning question and shows its receipts: the score, the
+// signals behind it, today's coaching, and the three load numbers. It carries
+// no charts. The "Details" fold that used to hold four of them came out on
+// 2026-08-04 — Fitness & Fatigue, Form and Ramp rate were already in Progress,
+// and the readiness trend moved there to join them (Jon), which is where a
+// fourteen-day line belongs rather than folded into a daily verdict.
 /* Phase 2 stray fix: these two keys were browser-global (bare try.*) —
    shared across every account on one device, the exact cross-account leak
    the TodayView dismissals were already migrated away from; a proposal
@@ -26,8 +25,6 @@ const cGet = name => {
   catch (e) { return null; }
 };
 const cSet = (name, v) => { try { localStorage.setItem(CARD_NS + name, v); } catch (e) { /* private mode */ } };
-const loadPref = () => cGet('showLoad');
-const saveLoadPref = v => cSet('showLoad', v ? '1' : '0');
 // A rejected proposal stays rejected: the signature is kind + band + workout
 // + day, so "Not today" holds for the rest of the day but a new day (or a
 // different proposal) speaks again.
@@ -100,9 +97,8 @@ function SignalBars({ signals }) {
   );
 }
 
-export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport, recovery, noPlan, storage, onDecision }) {
+export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport, noPlan, storage, onDecision }) {
   if (storage && storage.ns) CARD_NS = storage.ns;
-  const [loadChoice, setLoadChoice] = useState(loadPref);
   // Declared with the other hooks, ABOVE the !rec early return: a hook below
   // it changes the mounted instance's hook count the moment the first
   // readiness entry lands (the splash-hold crash class, 2026-07-15).
@@ -153,24 +149,18 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
   const tsbNow = hasLoad ? tsbSeries[tsbSeries.length - 1] : null;
   const zone = T.wellness.formZone(tsbNow);
   const ramp = hasLoad ? T.wellness.rampRate(wellness) : null;
-  const rZone = T.wellness.rampZone(ramp);
   const coach = hasLoad ? T.wellness.coachLine(tsbNow, ramp) : null;
-  const hist = T.wellness.history(wellness, 14);
-
-  // Folded on load, even in an alarm state: every panel starts tidy and the
-  // athlete reveals details (Jon, 2026-07-16). The alarm still shows without
-  // expanding — the toggle row's stat chips wear the zone colours, and the
-  // headline, coach line and any proposal carry the message. Only a stored
-  // choice opens it.
-  const open = loadChoice === '1';
-  const toggle = () => { saveLoadPref(!open); setLoadChoice(open ? '0' : '1'); };
 
   return (
     <div className={'card rd rd-glass rd-' + rd.band}>
       <div className="rd-top">
         <ScoreDisc score={rd.score} band={rd.band} />
         <div className="rd-main">
-          <div className="rd-headline">{rd.headline}</div>
+          {/* The explainer link used to live in the fold's trend header. The
+              fold is gone and the charts moved to Progress, but the route from
+              the score to what the score MEANS should not need a trip to
+              another tab, so it moves up here. */}
+          <div className="rd-headline">{rd.headline} <InfoLink onOpen={onSupport} topic="readiness" /></div>
           <div className="rd-advice">{adv}</div>
         </div>
       </div>
@@ -219,97 +209,21 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
           when the engine has nothing more specific to say for today — otherwise
           "room to push" stacks under a recovery ease and reads as a contradiction. */}
       {coach && !proposal && !eased && <div className="rd-coach">{coach}</div>}
-      <div className="rd-load-toggle" {...tap(toggle)} role="button"
-        aria-expanded={open} aria-label="Toggle readiness and training-load details">
-        <span className="rlt-title">Details</span>
-        {hasLoad && <span className="rlt-stats">
-          <span><i style={{ background: 'var(--blue)' }} />{Math.round(lastLoad.ctl)}</span>
-          <span><i style={{ background: zone ? zone.color : 'var(--muted)' }} /><Signed v={tsbNow} /></span>
-          {ramp != null && <span><i style={{ background: rZone ? rZone.color : 'var(--muted)' }} /><Signed v={ramp} /></span>}
-        </span>}
-        <span className="rlt-chev">{open ? '▾' : '▸'}</span>
-      </div>
-      {open && <>
-        {hist.length >= 3 && (() => {
-          // Readiness over the recent days, each scored against its own rolling
-          // baseline; the shaded band is the amber zone (55-75), so where the line
-          // sits tells you green/amber/red at a glance.
-          const amber = T.wellness.MODEL.bands.find(b => b.key === 'amber').min;
-          const green = T.wellness.MODEL.bands.find(b => b.key === 'green').min;
-          return (
-            <div className="rd-trend">
-              <div className="rd-trend-head">
-                <span>Readiness trend <InfoLink onOpen={onSupport} topic="readiness" label="What is this?" /></span>
-                <span>{T.fmtDate(hist[0].date, { month: 'short', day: 'numeric' })} – {T.fmtDate(hist[hist.length - 1].date, { month: 'short', day: 'numeric' })}</span>
-              </div>
-              <TrendChart height={84} band={{ lo: amber, hi: green }}
-                series={[{ values: hist.map(h => h.score), color: BAND_COLOR[rd.band], fill: true }]} />
-            </div>
-          );
-        })()}
-        {hasLoad && <>
-          <div className="rd-trend">
-            <div className="rd-trend-head">
-              <span>Fitness &amp; Fatigue <InfoLink onOpen={onSupport} topic="fitness-fatigue" /></span>
-              <span>{lastLoad.derived ? 'estimated · ' : ''}{load.length} days</span>
-            </div>
-            <div className="load-stats">
-              <span><b style={{ color: 'var(--blue)' }}>{Math.round(lastLoad.ctl)}</b> Fitness</span>
-              <span><b style={{ color: 'var(--danger)' }}>{Math.round(lastLoad.atl)}</b> Fatigue</span>
-            </div>
-            <TrendChart height={84} axis series={[
-              { values: load.map(r => r.ctl), color: 'var(--blue)', fill: true, width: 2 },
-              { values: load.map(r => r.atl), color: 'var(--danger)', width: 1.6 },
-            ]} />
-          </div>
-          <div className="rd-trend">
-            <div className="rd-trend-head">
-              <span>Form <InfoLink onOpen={onSupport} topic="form" /></span>
-            </div>
-            <div className="load-stats">
-              <span><b style={{ color: 'var(--brick)' }}><Signed v={tsbNow} /></b> Form</span>
-            </div>
-            <TrendChart height={84} domain={{ min: -35, max: 32 }}
-              zones={T.wellness.FORM_ZONES.map(z => ({ ...z, active: !!zone && z.key === zone.key }))}
-              series={[{ values: tsbSeries, color: (zone && zone.color) || 'var(--brick)', width: 2 }]} />
-            {/* Recovery timeline: only exists while form sits in high risk.
-                "should"/"around" are load-bearing; the beyond-horizon case is
-                never phrased as "never recovers" — day 15 wasn't looked at. */}
-            {recovery && <div className="rd-coach" style={{ marginTop: 8 }}>
-              {recovery.days == null
-                ? 'Following your plan as scheduled, form stays in high risk for at least the next couple of weeks.'
-                : recovery.days <= 1 ? 'Following your plan as scheduled, form should be out of high risk by tomorrow.'
-                  : recovery.days <= 7 ? 'Following your plan as scheduled, form should climb out of high risk around ' + T.fmtDate(recovery.readyDate, { weekday: 'short', day: 'numeric', month: 'short' }) + ' (about ' + recovery.days + ' days).'
-                    : 'Following your plan as scheduled, form should climb out of high risk in a week or two.'}
-            </div>}
-          </div>
-          {(() => {
-            // Ramp rate as a histogram: one bar per week, coloured by its zone
-            // (a weekly rate is discrete — bars say that; a line implies a
-            // continuity that isn't there). Dashed lines mark the +5
-            // sustainable ceiling and +8 injury territory.
-            const weekly = T.wellness.weeklyRamps(wellness, 8);
-            if (weekly.length < 2 || ramp == null) return null;
-            return (
-              <div className="rd-trend">
-                <div className="rd-trend-head">
-                  <span>Ramp rate <InfoLink onOpen={onSupport} topic="ramp-rate" /></span>
-                </div>
-                <div className="load-stats">
-                  <span title="Fitness (CTL) change over the trailing 7 days — sustained ramps above ~5/week raise injury risk"><b style={{ color: rZone ? rZone.color : 'var(--blue)' }}><Signed v={ramp} /></b> Ramp /wk · {rZone ? rZone.label : ''}</span>
-                </div>
-                <TrendChart height={84} domain={{ min: -3, max: 9 }}
-                  bars={weekly.map((e, i) => ({
-                    v: e.ramp,
-                    color: (T.wellness.rampZone(e.ramp) || {}).color,
-                    label: i === weekly.length - 1 ? 'now' : T.fmtDate(e.week, { day: 'numeric', month: 'numeric' }),
-                  }))}
-                  refLines={[{ v: 5, color: '#facc15' }, { v: 8, color: '#ef4444' }]} />
-              </div>
-            );
-          })()}
-        </>}
-      </>}
+      {/* The doc's load row, permanent. It replaces the "Details" fold whose
+          four charts all live in Progress now (Jon, 2026-08-04) — but the
+          fold's toggle row carried these three numbers as inline chips, so
+          they land here as the doc's pressed tiles rather than disappearing
+          with it. */}
+      {hasLoad && (
+        <div className="rd-pmc">
+          <div><b>{Math.round(lastLoad.ctl)}</b><span>Fitness</span></div>
+          <div><b>{Math.round(lastLoad.atl)}</b><span>Fatigue</span></div>
+          {/* The grey zone means "nothing notable", so it keeps the plain ink:
+              its colour measured 3.99:1 on the pressed tile, which is paying
+              legibility to signal nothing. Coloured here means worth a look. */}
+          <div><b style={{ color: zone && zone.key !== 'grey' ? zone.color : undefined }}><Signed v={tsbNow} /></b><span>Form</span></div>
+        </div>
+      )}
       <div className="rd-foot">
         <span>{stale ? 'From ' + T.fmtDate(rec.date, { month: 'short', day: 'numeric' }) : 'This morning'}</span>
         <a className="reset" {...tap(onEdit)}>Update →</a>

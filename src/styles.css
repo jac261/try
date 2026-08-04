@@ -576,43 +576,28 @@ body {
 .crash-detail { white-space: pre-wrap; word-break: break-word; font-size: 11px; line-height: 1.55; color: var(--muted); background: var(--chip); border-radius: 10px; padding: 10px 12px; margin: 0 0 14px; max-height: 180px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 /* readiness card */
-/* ---------- moulded glass, readiness card ONLY ----------
-   Ported from the "Try Design System Glassmorphism" project's materials
-   foundation (Jon, 2026-08-02), card 1f. Deliberately scoped to .rd-glass and
-   never to .card: this is one surface in a flat app, which Jon chose knowing
-   it would look unlike its neighbours.
+/* ---------- the readiness card ----------
+   This arrived (Jon, 2026-08-02, card 1f) as a self-contained port from the
+   glassmorphism project, BEFORE the app had a material of its own: it carried
+   its own private copies of --pane, --press, --well and the rest. Those copies
+   were the moulded values, and nothing ever rebound them for smoked, so from
+   the themes PR until now this card has been wearing moulded material inside
+   the night build — the failure §7a describes, at the scale of a whole token
+   block rather than one literal.
 
-   The four rules the kit states, all of which this obeys:
-     1. One light source — highlights top-left, shadows bottom-right.
-     2. Blur once — only the pane gets backdrop-filter. Nested blurs cost
-        frames and flatten the depth just built.
-     3. In means inert, out means actionable — tracks and wells press IN,
-        buttons and tiles swell OUT.
-     4. Status keeps its saturation — the band rail and the bar fills stay
-        opaque, so state never reads as haze.
-
-   The palette is unchanged: the kit's --run/--bike/--swim/--ink are already
-   byte-identical to this file's. */
+   They are gone. The card reads the same tokens as every other surface, which
+   is why it now changes with the theme. Deleting them was provably a no-op in
+   moulded: every value was byte-identical to the global it was shadowing. */
 .rd-glass {
-  --pane: linear-gradient(150deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .05));
-  --pane-blur: blur(24px) saturate(160%);
-  --press: inset 4px 4px 10px rgba(0, 0, 0, .5), inset -3px -3px 9px rgba(255, 255, 255, .14);
-  --press-sm: inset 3px 3px 8px rgba(0, 0, 0, .45), inset -2px -2px 7px rgba(255, 255, 255, .12);
-  --raise-sm: 3px 4px 9px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .25);
-  --well: rgba(255, 255, 255, .04);
-
   position: relative;
   isolation: isolate;                 /* the orbs stay this card's business */
   overflow: hidden;                   /* and are clipped to its radius */
   background: var(--pane);
   backdrop-filter: var(--pane-blur);
   -webkit-backdrop-filter: var(--pane-blur);
-  border: 1px solid rgba(255, 255, 255, .18);
-  border-left: 3px solid var(--muted);  /* the band rail survives the skin */
-  border-radius: 24px;
-  box-shadow: 0 20px 44px rgba(4, 7, 12, .5),
-              inset 0 1px 0 rgba(255, 255, 255, .4),
-              inset 0 -1px 0 rgba(0, 0, 0, .25);
+  border: var(--pane-border);           /* the band rail is ::after now */
+  border-radius: var(--pane-radius);
+  box-shadow: var(--pane-shadow);
 }
 /* Without something lit behind it the blur has nothing to refract and the
    pane reads as a flat grey fill — the kit says so outright. The app's body
@@ -626,6 +611,15 @@ body {
   filter: blur(50px);
   animation: rd-orb 24s ease-in-out infinite;
 }
+/* Smoked rations ambient light — it is the reason the topbar drops its blue
+   radial — and this card's orbs are the same kind of glow on a near-black
+   field. They stay, because without them the pane has nothing to refract, but
+   at roughly a third of the strength. */
+:root[data-theme='smoked'] .rd-glass::before {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(74, 116, 220, .18), rgba(74, 116, 220, 0) 60%),
+    radial-gradient(circle at 88% 82%, rgba(52, 211, 153, .08), rgba(52, 211, 153, 0) 62%);
+}
 @keyframes rd-orb {
   0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
   50% { transform: translate3d(18px, -22px, 0) scale(1.08); }
@@ -636,17 +630,19 @@ body {
   width: 64px; height: 64px; border-radius: 50%; flex: none;
   display: grid; place-items: center;
   font-size: 22px; font-weight: 800; letter-spacing: -.5px;
-  background: rgba(255, 255, 255, .05);
-  box-shadow: inset 4px 4px 10px rgba(0, 0, 0, .5),
-              inset -4px -4px 10px rgba(255, 255, 255, .22),
-              0 0 22px var(--rd-glow, transparent);
+  background: var(--well);
+  /* The press is the theme's; the glow is status and stays saturated in both
+     materials (rule 4) — it is the one thing on this card that must not dim. */
+  box-shadow: var(--press), 0 0 22px var(--rd-glow, transparent);
 }
 /* The receipts. The block presses in (inert), and so does every track. */
-.rd-signals { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: rgba(255, 255, 255, .03); box-shadow: var(--press); margin-top: 15px; }
+.rd-signals { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: var(--well); box-shadow: var(--press); margin-top: 15px; }
 .rd-signals-head { display: flex; justify-content: space-between; font-size: 9.5px; font-weight: 800; letter-spacing: .8px; color: var(--faint); }
 .rd-sig { display: flex; align-items: center; gap: 10px; }
 .rd-sig-label { width: 44px; flex: none; font-size: 11px; font-weight: 800; color: var(--muted); }
-.rd-sig-track { flex: 1; height: 16px; border-radius: 999px; background: rgba(0, 0, 0, .3); box-shadow: inset 2px 2px 5px rgba(0, 0, 0, .6); position: relative; }
+/* A track is the smallest well in the app and --press-sm is built for taller
+   objects, so it keeps its own tighter inset; the fill colour is themed. */
+.rd-sig-track { flex: 1; height: 16px; border-radius: 999px; background: var(--well); box-shadow: inset 2px 2px 5px rgba(0, 0, 0, .6); position: relative; }
 .rd-sig-tick { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1.5px; background: rgba(255, 255, 255, .35); }
 .rd-sig-fill { position: absolute; top: 3px; bottom: 3px; border-radius: 999px; }
 /* Scored: the model used this signal, so it reads as evidence. Unscored: a
@@ -659,25 +655,43 @@ body {
   .rd-glass::before { animation: none; }
 }
 
-.rd { border-left: 3px solid var(--muted); }
-.rd.rd-green { border-left-color: var(--run); }
-.rd.rd-amber { border-left-color: var(--bike); }
-.rd.rd-red { border-left-color: var(--danger); }
+/* The band rail. Readiness.dc.html draws it as a 3px bar fading from the band
+   colour down to a fifth of it, not the flat border it was — the card already
+   clips to its own radius, so it can be an inset bar rather than a border and
+   the fade reaches the bottom corner properly. Status, so it is saturated in
+   both materials (rule 4). */
+.rd { --rd-rail: var(--muted); }
+.rd.rd-green { --rd-rail: var(--run); }
+.rd.rd-amber { --rd-rail: var(--bike); }
+.rd.rd-red { --rd-rail: var(--danger); }
+.rd-glass::after {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--rd-rail), color-mix(in srgb, var(--rd-rail) 20%, transparent));
+}
 .rd-top { display: flex; gap: 15px; align-items: center; }
 .rd-main { min-width: 0; }
 .rd-headline { font-size: 17px; font-weight: 800; letter-spacing: -.3px; }
 .rd-advice { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 3px; }
-.rd-why { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
-.rd-why-toggle { width: 100%; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 6px; }
 /* The detail sheet's why-not-harder fold (phase 6): same chevroned-question
    idiom, sized for the sheet rather than the readiness card. */
 .wnh-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; margin: 6px 2px 2px; }
-.rd-chip { font-size: 11.5px; font-weight: 600; color: #cfd6e2; background: var(--chip); border-radius: 8px; padding: 5px 9px; }
-.rd-chip.bad { background: rgba(251, 146, 60, .14); color: #f6b27a; }
+/* The doc also draws a row of input chips (Sleep 7:42, HRV 68, RHR +3). The
+   app answers that with SignalBars instead — the same readings, but each one
+   placed against its own baseline rather than just stated. The chip rules that
+   used to serve it went with the fold; nothing had rendered them since card 1f
+   replaced them, so they were dead before this PR touched them. */
 .rd-pmc { display: flex; gap: 10px; margin-top: 14px; }
-.rd-pmc > div { flex: 1; background: var(--chip); border-radius: 12px; padding: 9px 4px; text-align: center; }
+/* The same pressed stat tile as .statline .s (PR #50) — one idiom that had
+   ended up with two class names. Shared by the dashboards, the digest, the
+   detail sheet and the athlete-state strip, all of which move with it. */
+.rd-pmc > div { flex: 1; background: var(--well); box-shadow: var(--press-sm); border-radius: 16px; padding: 9px 4px; text-align: center; }
 .rd-pmc b { display: block; font-size: 18px; font-weight: 800; letter-spacing: -.4px; }
-.rd-pmc span { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; }
+/* --sub, not --muted: pressing the tile into the pane made its surface
+   LIGHTER than the opaque chip it replaced, and --muted fell to 3.39:1 on it
+   at 10.5px. Measured, not guessed — the label is the caption for the number
+   above it and has to be readable. */
+.rd-pmc span { font-size: 10.5px; color: var(--sub); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; }
 /* Athlete state strip: 4 tiles reusing the .rd-pmc chip row. Tiles are
    buttons (tap → support topic), so reset button chrome and lay them out as
    centered columns; .rd-pmc b / span descendant rules still style the value
@@ -969,12 +983,6 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .rd-trend-head { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin-bottom: 6px; }
 /* collapsed training-load summary row: the numbers wear zone-coloured dots, so
    even folded shut the card still answers "am I OK?" at a glance */
-.rd-load-toggle { display: flex; align-items: center; gap: 10px; margin-top: 13px; padding: 10px 12px; background: var(--chip); border-radius: 12px; cursor: pointer; user-select: none; }
-.rd-load-toggle .rlt-title { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; flex: none; }
-.rd-load-toggle .rlt-stats { display: flex; gap: 12px; flex: 1; justify-content: flex-end; font-size: 12px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
-.rd-load-toggle .rlt-stats span { display: inline-flex; align-items: center; gap: 5px; }
-.rd-load-toggle .rlt-stats i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-.rd-load-toggle .rlt-chev { color: var(--faint); font-size: 11px; flex: none; }
 .rd-coach { margin-top: 8px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 
 /* colour-keyed load stats: the numbers ARE the legend (colours match the lines) */
