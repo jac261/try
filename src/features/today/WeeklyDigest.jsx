@@ -10,7 +10,7 @@ import { Icon } from '@/components/Icon.jsx';
  * 2026-07-15). Shows from Sunday evening through Wednesday, then lapses on
  * its own; dismiss hides this week's for good. Content is recomputed live —
  * only the seen flag persists. */
-export function WeeklyDigest({ embedded, plan, log, moves, adjust, adjustLog, wellness, activities, storage, todayISO, coachLog, blockReviewed, onBlockReviewed, onFocus }) {
+export function WeeklyDigest({ embedded, plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, storage, todayISO, coachLog, blockReviewed, onBlockReviewed, onFocus }) {
   const [gone, setGone] = useState(false);
   /* HOISTED above the early returns, where every hook must live. This sat
      below them, so the first render mounted two hooks and the render after
@@ -38,8 +38,8 @@ export function WeeklyDigest({ embedded, plan, log, moves, adjust, adjustLog, we
      nothing and still spares the rebuild on every unrelated Today render
      during the window it IS shown. */
   const d = useMemo(() => (hidden ? null
-    : T.buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday })),
-  [hidden, plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday]);
+    : T.buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, todayISO, weekMonday })),
+  [hidden, plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, todayISO, weekMonday]);
   if (hidden || !d) return null;
   // The permanent dismissed stamp is earned only by a SETTLED verdict: the
   // week over and the stored bundle not provisional. Gated on the week as

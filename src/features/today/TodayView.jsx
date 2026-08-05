@@ -313,12 +313,12 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
       {!tracker && (
         <WeekCard plan={plan} log={log} moves={moves} adjust={adjust} missedReasons={missedReasons}
           open={open} todayISO={todayISO}>
-          {storage && <WeeklyDigest embedded plan={plan} log={log} moves={moves} adjust={adjust} adjustLog={adjustLog}
+          {storage && <WeeklyDigest embedded plan={plan} log={log} moves={moves} adjust={adjust} adjustLog={adjustLog} missedReasons={missedReasons}
             wellness={wellness} activities={displayActivities || activities} storage={storage} todayISO={todayISO} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={onBlockReviewed} onFocus={onFocus} />}
         </WeekCard>
       )}
       {/* tracker has no plan week to strip, so the digest keeps its own card */}
-      {tracker && storage && <WeeklyDigest plan={plan} log={log} moves={moves} adjust={adjust} adjustLog={adjustLog}
+      {tracker && storage && <WeeklyDigest plan={plan} log={log} moves={moves} adjust={adjust} adjustLog={adjustLog} missedReasons={missedReasons}
         wellness={wellness} activities={displayActivities || activities} storage={storage} todayISO={todayISO} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={onBlockReviewed} onFocus={onFocus} />}
     </>
   );
