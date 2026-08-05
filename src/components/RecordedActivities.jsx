@@ -47,7 +47,10 @@ function Row({ disc, name, stat, tag, onOpen, manual, indoor }) {
     // (the pace or speed line): without it a screen reader gets no
     // explanation for the missing stat (gauntlet catch 2026-07-18).
     <div className="wk" {...tap(onOpen)}
-      aria-label={(manual ? 'Open ' : 'Recap: ') + name + (indoor ? ', indoor' : '')}>
+      /* the stat line rides along: aria-label REPLACES the accessible name,
+         so pace, distance and duration were announced to nobody (audit
+         2026-08-05) */
+      aria-label={(manual ? 'Open ' : 'Recap: ') + name + (indoor ? ', indoor' : '') + (stat ? ', ' + stat : '')}>
       <div className="dot" style={{ background: T.DISCIPLINES[disc].grad }}><Icon name={T.DISCIPLINES[disc].icon} size={22} /></div>
       <div className="meta">
         <div className="t">{name} {tag && <span className="tag key">{tag}</span>}{indoor && <span className="tag indoor">Indoor</span>}</div>

@@ -108,7 +108,11 @@ export function WeekCard({
              reading the strip across. */
           <div key={day.date} className={'yw-day' + (day.isToday ? ' today' : '') + (day.isPast && !day.isToday ? ' past' : '') + (day.rest ? ' inert' : '')}
             aria-label={spoken(day)}
-            {...(day.rest ? {} : tap(() => open(byId.get(day.key.id))))}>
+            /* role="img" on the inert ones: an aria-label on a role-less div
+               is ignored by most screen readers, so making rest days inert
+               in #61 quietly silenced them (audit 2026-08-05). The
+               interactive cells get their role from tap(). */
+            {...(day.rest ? { role: 'img' } : tap(() => open(byId.get(day.key.id))))}>
             <span className="yw-dow">{day.dow.slice(0, 3)}</span>
             <DayChips day={day} />
             {/* a goal race carries no planned duration, so its day totals 0;

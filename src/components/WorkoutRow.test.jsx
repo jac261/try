@@ -41,6 +41,17 @@ describe('the completion circle', () => {
     expect(html).not.toMatch(/check[^>]*style=/);
   });
 
+  it('a done row SAYS it is done, not just shows it', () => {
+    // the tick is aria-hidden by design (no button inside a button), so
+    // without this completion was carried by colour alone
+    const w = { id: 'x', discipline: 'run', type: 'Easy', title: 'Easy run', durationMin: 45, date: '2026-08-05' };
+    const done = renderToString(<WorkoutRow w={w} done eff={w.date} onClick={() => {}} />);
+    expect(done).toContain('sr-only');
+    expect(done).toContain('Completed');
+    const undone = renderToString(<WorkoutRow w={w} done={false} eff={w.date} onClick={() => {}} />);
+    expect(undone).not.toContain('Completed');
+  });
+
   it('undone rows render the same glyph, hidden by the pressed state', () => {
     const html = renderToString(<WorkoutRow w={w} done={false} eff={w.date} onClick={() => {}} onToggle={() => {}} />);
     expect(html).not.toContain('wk done');
