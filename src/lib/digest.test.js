@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { reviewedWeekMonday, digestWindowOpen, reviewedWeekFinal, coachDecisionStands, buildBlockReview, buildWeeklyDigest } from './digest.js';
 import { estimateTss } from './adapt.js';
+import { weekStrip } from './week-strip.js';
 
 // 2026-07-06 is a Monday; 2026-07-12 the Sunday closing that week.
 const MON = '2026-07-06', SUN = '2026-07-12', NEXT_MON = '2026-07-13';
@@ -121,6 +122,50 @@ describe('buildWeeklyDigest (plan mode)', () => {
       + estimateTss({ type: 'Endurance', durationMin: 75 }, undefined, 80));
     expect(d.load).toBe(expected);
     expect(d.load).not.toBe(d.totalMin);
+  });
+
+  /* An entry is NOT a completion. api.js admits a server log row whenever it
+     carries completed, feel OR notes (meaningfulLog), and maps it with
+     `done: !!l.completed` — so a session the athlete gave a feel or a note
+     but never ticked arrives as an entry with done:false. The digest used to
+     test the entry's EXISTENCE in three places at once, which counted that
+     session as trained, added its load, and kept it out of "didn't happen".
+     Meanwhile weekStrip, moved onto classifyCompletion in #62, called the
+     same session missed — two verdicts, one card. */
+  const feelOnly = { '0-1': { done: false, feel: 3, at: '2026-07-08T18:00:00Z' } };
+
+  it('a feel without a tick is not a completion: not counted, not paid, not silent', () => {
+    const d = buildWeeklyDigest({ ...base, log: { ...done, ...feelOnly } });
+    expect(d.done).toBe(2);                                  // the two real ticks, not three
+    expect(d.missed.map(m => m.title)).toContain('Threshold Run');
+    // and it buys no credit in either currency
+    const clean = buildWeeklyDigest({ ...base, log: done });
+    expect(d.totalMin).toBe(clean.totalMin);
+    expect(d.load).toBe(clean.load);
+  });
+
+  it('the digest and the week strip agree about that session, since they share one classifier', () => {
+    /* The lesson #62 left: the bug worth pinning is two surfaces in one card
+       disagreeing, not either surface alone. */
+    const log = { ...done, ...feelOnly };
+    // both surfaces looking at the SAME week, mid-week, so the strip's
+    // rolling window and the digest's Monday agree on which days exist
+    const midweek = '2026-07-09';
+    const d = buildWeeklyDigest({ ...base, log, todayISO: midweek });
+    const strip = weekStrip({ plan: plan(), log, moves: {}, adjust: {}, missedReasons: {}, todayISO: midweek });
+    const stripSaysMissed = strip.days.some(day => day.sessions.some(x => x.id === '0-1' && x.status.startsWith('missed')));
+    const digestSaysMissed = d.missed.some(m => m.title === 'Threshold Run');
+    expect(stripSaysMissed).toBe(digestSaysMissed);
+    expect(digestSaysMissed).toBe(true);
+  });
+
+  it("carries the athlete's own reason through, rather than dropping it", () => {
+    const d = buildWeeklyDigest({ ...base, log: done, missedReasons: { '0-1': { reason: 'niggle', at: '2026-07-09T08:00:00Z' } } });
+    const row = d.missed.find(m => m.title === 'Threshold Run');
+    expect(row.reason).toBe('niggle');
+    // no answer means no invention
+    const bare = buildWeeklyDigest({ ...base, log: done });
+    expect(bare.missed.find(m => m.title === 'Threshold Run').reason).toBe(null);
   });
 
   it('a moved session counts in the week it landed, not the week it left', () => {

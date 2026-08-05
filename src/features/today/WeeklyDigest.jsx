@@ -3,6 +3,12 @@ import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 
+// The reason labels are written as standalone sentences ("An injury
+// niggle") because every other surface shows them alone. Inlined mid
+// sentence they need their opening capital dropped; the label itself stays
+// the single source of the words.
+const lowerFirst = str => str.charAt(0).toLowerCase() + str.slice(1);
+
 /* The Sunday-evening wrap: one sober card on Today reviewing the week that
  * just finished. Deliberately NOT the recap deck's spectacle — a weekly
  * aggregate is coarser and partly estimated, and dressing it in count-ups
@@ -10,7 +16,7 @@ import { Icon } from '@/components/Icon.jsx';
  * 2026-07-15). Shows from Sunday evening through Wednesday, then lapses on
  * its own; dismiss hides this week's for good. Content is recomputed live —
  * only the seen flag persists. */
-export function WeeklyDigest({ embedded, plan, log, moves, adjust, adjustLog, wellness, activities, storage, todayISO, coachLog, blockReviewed, onBlockReviewed, onFocus }) {
+export function WeeklyDigest({ embedded, plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, storage, todayISO, coachLog, blockReviewed, onBlockReviewed, onFocus }) {
   const [gone, setGone] = useState(false);
   /* HOISTED above the early returns, where every hook must live. This sat
      below them, so the first render mounted two hooks and the render after
@@ -38,8 +44,8 @@ export function WeeklyDigest({ embedded, plan, log, moves, adjust, adjustLog, we
      nothing and still spares the rebuild on every unrelated Today render
      during the window it IS shown. */
   const d = useMemo(() => (hidden ? null
-    : T.buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday })),
-  [hidden, plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday]);
+    : T.buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, todayISO, weekMonday })),
+  [hidden, plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, todayISO, weekMonday]);
   if (hidden || !d) return null;
   // The permanent dismissed stamp is earned only by a SETTLED verdict: the
   // week over and the stored bundle not provisional. Gated on the week as
@@ -199,9 +205,14 @@ export function WeeklyDigest({ embedded, plan, log, moves, adjust, adjustLog, we
           </div>
         )}
 
+        {/* names the athlete's own one-tap answer where they gave one, and
+            stays bare where they didn't, so the line never invents an
+            explanation for an absence it cannot account for */}
         {d.missed.length > 0 && (
           <div className="muted" style={{ fontSize: 12.5, margin: '8px 2px 0' }}>
-            Didn't happen: {d.missed.map(m => m.title + ' (' + T.fmtDate(m.day, { weekday: 'short' }) + ')').join(', ')}
+            Didn't happen: {d.missed.map(m => m.title + ' (' + T.fmtDate(m.day, { weekday: 'short' })
+              + (m.reason && T.MISSED_REASONS[m.reason] ? ', ' + lowerFirst(T.MISSED_REASONS[m.reason]) : '')
+              + ')').join(', ')}
           </div>
         )}
 

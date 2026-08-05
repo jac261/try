@@ -12,6 +12,7 @@
 import { iso, addDays, startOfWeekMonday } from './date.js';
 import { effDate } from './schedule.js';
 import { estimateTss } from './adapt.js';
+import { classifyCompletion } from './coach.js';
 import { wellness as W } from './wellness.js';
 
 // The week under review. A week only wraps once it is genuinely over: from
@@ -144,7 +145,7 @@ export function buildBlockReview({ plan, coachLog, weekMonday, focus, lastReview
   };
 }
 
-export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday }) {
+export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, missedReasons, todayISO, weekMonday }) {
   if (!weekMonday) return null;
   const weekEnd = iso(addDays(weekMonday, 6));
   const range = { start: weekMonday, end: weekEnd };
@@ -172,7 +173,32 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
   const all = plan.weeks.flatMap(wk => wk.workouts);
   const eff = w => effDate(w, moves);
   const sessions = all.filter(w => w.discipline !== 'rest' && !w.race && inRange(eff(w), weekMonday, weekEnd));
-  const doneOnes = sessions.filter(w => (log || {})[w.id]);
+  /* ONE classification, three consumers. This file used to test the log
+     entry's EXISTENCE — for done, for missed, and for the unmarked tune-up
+     — but an entry is not a completion: api.js admits a server row carrying
+     a feel or a note alone (meaningfulLog) and maps it with
+     `done: !!l.completed`. A session the athlete gave a feel but never
+     ticked therefore counted as trained, paid its load into the bank, and
+     stayed out of "didn't happen", while weekStrip — on classifyCompletion
+     since #62 — called the same session missed. Two verdicts, one card.
+
+     classifyCompletion is the canonical state machine and it also carries
+     the athlete's own one-tap answer, which the hand-rolled filter dropped.
+     The reason is read back OFF the status rather than looked up a second
+     time, so the two can never disagree about which answers count. */
+  const reasonOf = id => {
+    const r = (missedReasons || {})[id];
+    return r && typeof r === 'object' ? r.reason : r;   // storage saves { reason, at }
+  };
+  const classified = sessions.map(w => ({
+    w,
+    status: classifyCompletion({
+      workout: w, entry: (log || {})[w.id], adjustEntry: (adjust || {})[w.id],
+      missedReason: reasonOf(w.id), day: eff(w), todayISO,
+    }),
+  }));
+  const DONE = new Set(['completed', 'completed-partial', 'modified']);
+  const doneOnes = classified.filter(c => DONE.has(c.status)).map(c => c.w);
   const races = all.filter(w => w.race && inRange(eff(w), weekMonday, weekEnd));
 
   const totalMin = Math.round(doneOnes.reduce((s, w) => {
@@ -185,14 +211,20 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
   const load = Math.round(doneOnes.reduce((s, w) =>
     s + estimateTss(w, (adjust || {})[w.id], log[w.id] && log[w.id].actualMin), 0));
 
-  // Missed = strictly past sessions with no log entry. A session sitting on
-  // today is not missed yet — the digest can be read before an evening swim.
-  // Races stay OUT of this list: the A race is unloggable by design — every
-  // toggle gates on !w.race, autolog too — so "no log entry" is the app's
-  // ignorance, not the athlete's absence; a "didn't happen" line here fired
-  // for every athlete post-race (gauntlet catch 2026-07-30).
-  const missed = sessions.filter(w => eff(w) < todayISO && !w.bRace && !(log || {})[w.id])
-    .map(w => ({ title: w.title || w.type, day: eff(w) }));
+  /* Missed = whatever the classifier called missed. It already keeps a
+     session sitting on today out of the list (the digest can be read before
+     an evening swim) and it already refuses to judge a race, which is the
+     rule that matters most here: the A race is unloggable by design, so "no
+     log entry" is the app's ignorance rather than the athlete's absence, and
+     a "didn't happen" line fired for every athlete post-race until it was
+     caught (2026-07-30). Those guarantees now come from one place. */
+  const missed = classified.filter(c => c.status && c.status.startsWith('missed'))
+    .map(c => ({
+      title: c.w.title || c.w.type, day: eff(c.w),
+      // off the status, so an unrecognised answer degrades to no reason
+      // exactly as it degrades to missed-unknown
+      reason: c.status === 'missed-unknown' ? null : c.status.slice('missed-'.length),
+    }));
   // The unmarked tune-up keeps its own prompt line rather than a "didn't
   // happen" verdict (2026-07-31, reconciling two rounds of gauntlet catches):
   // it must stay visible and actionable — brick tune-ups, ambiguous days and
@@ -201,8 +233,8 @@ export function buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellnes
   // the coach card on the same screen says the race counts neither way, so
   // asserting the miss here would contradict it. It also stays in the
   // planned count, so this line explains the shortfall the counts show.
-  const raceUnlogged = sessions.filter(w => w.bRace && eff(w) < todayISO && !(log || {})[w.id])
-    .map(w => ({ title: w.title || w.type, day: eff(w) }));
+  const raceUnlogged = classified.filter(c => c.status === 'unlogged-race')
+    .map(c => ({ title: c.w.title || c.w.type, day: eff(c.w) }));
 
   // Engine rows: the accepted weekly proposals quoted VERBATIM from the
   // accept-time log (one source of truth for "why" — never re-derived), plus

@@ -90,10 +90,15 @@ const MODES = {
     const monday = iso(addDays(startOfWeekMonday(todayISO), -7));
     const days = weekRange(monday);
     const log = {};
-    plan.weeks.flatMap(w => w.workouts)
-      .filter(w => w.discipline !== 'rest' && w.date >= days[0] && w.date <= days[6])
-      .forEach(w => { log[w.id] = { done: true, at: w.date, actualMin: w.durationMin }; });
-    return { plan, moves: {}, log };
+    const week = plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline !== 'rest' && w.date >= days[0] && w.date <= days[6]);
+    /* Two left unlogged so "Didn't happen" has something to say: the first
+       with the athlete's one-tap answer, the second without. Those are the
+       two forms of the line, and until missedReasons was threaded here the
+       answered one could not be seen anywhere in the harness. */
+    week.slice(2).forEach(w => { log[w.id] = { done: true, at: w.date, actualMin: w.durationMin }; });
+    const missedReasons = week.length ? { [week[0].id]: { reason: 'niggle', at: week[0].date } } : {};
+    return { plan, moves: {}, log, missedReasons };
   },
   /* The coach QUEUE. Every other mode passes each coach prop as null, so the
      queue can never hold more than one card and the cycle chip — the control
@@ -148,7 +153,7 @@ function Harness() {
   const [mode, setMode] = useState('double');
   const [proven, setProven] = useState(false);
   const [rd, setRd] = useState('good');
-  const { plan, moves, log, props } = MODES[mode]();
+  const { plan, moves, log, props, missedReasons } = MODES[mode]();
   // With no history everything sits on the novice default, so the visible
   // demo is a proven tolerance RAISING the ceiling: 'solid' (60 g/h held)
   // lets a half-distance brick ask its full demand instead of the default.
@@ -168,7 +173,7 @@ function Harness() {
             onClick={() => setRd(k)}>rd:{k}</button>
         ))}
       </div>
-      <TodayView key={mode + proven + rd} plan={plan} log={log || {}} moves={moves} open={noop} onTune={noop}
+      <TodayView key={mode + proven + rd} plan={plan} log={log || {}} moves={moves} missedReasons={missedReasons || {}} open={noop} onTune={noop}
         wellness={RD[rd]} onFeel={noop} onEditWellness={noop} easedOf={w => w} onEaseToday={noop}
         onRestoreToday={noop} weekly={null} onWeekly={noop} spotted={null} onLogSpotted={noop}
         onAddWorkout={noop} eftp={null} onEftp={noop} onToggleWorkout={noop} planEdge={null}
