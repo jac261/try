@@ -103,6 +103,8 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
   // it changes the mounted instance's hook count the moment the first
   // readiness entry lands (the splash-hold crash class, 2026-07-15).
   const [propDismissed, setPropDismissed] = useState(loadPropDismiss);
+  // the receipts fold is a glance choice, not a preference: fresh each mount
+  const [receipts, setReceipts] = useState(false);
   const todayISO = T.iso(new Date());
   const rec = wellness.find(r => r.date === todayISO) || (wellness.length ? wellness[wellness.length - 1] : null);
   if (!rec) {
@@ -164,10 +166,17 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
           <div className="rd-advice">{adv}</div>
         </div>
       </div>
-      {/* Card 1f: the score's receipts, always visible. They were two taps
-          deep before (Details, then Why?), which is what 1f is arguing
-          against — a number nobody can check. */}
-      <SignalBars signals={T.wellness.readinessSignals(rec, T.wellness.baseline(wellness, rec.date))} />
+      {/* The score's receipts, one tap away (Jon, 2026-08-05). Card 1f put
+          them permanently on show because they had been two taps deep; the
+          card then grew to half a phone viewport standing between the
+          athlete and today's session. One tap is the middle both decisions
+          can live with: the verdict stays glanceable, the receipts stay
+          checkable, and the chevron says they exist. */}
+      <div className="rd-receipts-toggle" {...tap(() => setReceipts(r => !r))} aria-expanded={receipts}
+        aria-label={(receipts ? 'Hide' : 'Show') + ' the readiness signals behind this score'}>
+        <span>Receipts</span><span className="rd-chev">{receipts ? '▾' : '▸'}</span>
+      </div>
+      {receipts && <SignalBars signals={T.wellness.readinessSignals(rec, T.wellness.baseline(wellness, rec.date))} />}
       {onFeel && !(rec.date === todayISO && rec.feel) && <FeelCheckin onFeel={onFeel} />}
       {/* The adaptive engine (Phase 1): at most one reasoned proposal for today,
           from this morning's band — rules & thresholds in docs/ADAPTIVE_ENGINE.md.

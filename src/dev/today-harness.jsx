@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TodayView } from '@/features/today/TodayView.jsx';
 import { generatePlan, buildTrackerPlan } from '@/lib/plan.js';
-import { iso, addDays } from '@/lib/date.js';
+import { iso, addDays, startOfWeekMonday } from '@/lib/date.js';
 import { weekRange } from '@/lib/schedule.js';
 
 const today = new Date();
@@ -45,6 +45,16 @@ const moveOntoToday = (pickIds, over = {}) => {
   return { plan: p, moves };
 };
 
+/* A memory-backed storage so the digest and race-week persistence actually
+   render here. Passing null gated the digest off entirely, which is how the
+   embedded "Week in review" shipped without ever having been seen — and it
+   also made harness dismissals write to the GLOBAL localStorage namespace
+   that production falls back to (audit, 2026-08-05). */
+const memStorage = () => {
+  const data = {};
+  return { ns: 'try.harness.', load: (k, d) => (k in data ? data[k] : d), save: (k, v) => { data[k] = v; } };
+};
+
 const MODES = {
   single: () => ({ plan: scanPlan(day => day.length === 1 && !day[0].race && !day[0].test), moves: {} }),
   double: () => moveOntoToday(all => {
@@ -72,6 +82,19 @@ const MODES = {
      never been visible in this harness at all. This one logs the week's
      sessions up to yesterday and leaves the rest, which is what a real
      Wednesday looks like. */
+  /* The digest's own mode: the REVIEWED week (last week, or this one from
+     Sunday evening) fully logged, so buildWeeklyDigest returns real content
+     and the embedded "Week in review" section is finally visible. */
+  digest: () => {
+    const plan = generatePlan(base());
+    const monday = iso(addDays(startOfWeekMonday(todayISO), -7));
+    const days = weekRange(monday);
+    const log = {};
+    plan.weeks.flatMap(w => w.workouts)
+      .filter(w => w.discipline !== 'rest' && w.date >= days[0] && w.date <= days[6])
+      .forEach(w => { log[w.id] = { done: true, at: w.date, actualMin: w.durationMin }; });
+    return { plan, moves: {}, log };
+  },
   'week-logged': () => {
     const plan = generatePlan(base());
     const days = weekRange(todayISO);
@@ -135,10 +158,10 @@ function Harness() {
         wellness={RD[rd]} onFeel={noop} onEditWellness={noop} easedOf={w => w} onEaseToday={noop}
         onRestoreToday={noop} weekly={null} onWeekly={noop} spotted={null} onLogSpotted={noop}
         onAddWorkout={noop} eftp={null} onEftp={noop} onToggleWorkout={noop} planEdge={null}
-        onSupport={noop} activities={[]} displayActivities={[]} recovery={null}
+        onSupport={noop} activities={[]} displayActivities={[]}
         onOpenRecording={noop} onEditPlan={noop} onEnterTracker={noop} offerTracker={false}
         adjust={{}} adjustLog={[]} coachLog={{}} blockReviewed={null} onBlockReviewed={noop}
-        onFocus={noop} storage={null} retest={null} onRetest={noop} cssFail={null} onFixCss={noop}
+        onFocus={noop} storage={memStorage()} retest={null} onRetest={noop} cssFail={null} onFixCss={noop}
         runFail={null} onFixRun={noop} ftpRetest={null} onFtpRetest={noop} startShortfall={null}
         onDecision={noop} fuelLog={fuelLog} />
     </div>
