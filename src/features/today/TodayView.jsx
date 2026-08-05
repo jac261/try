@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useState, useMemo } from 'react';
 import * as T from '@/lib';
 import { effDate } from '@/lib/schedule.js';
 import { paceSuggestions } from '@/lib/tuning.js';
@@ -58,13 +58,20 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
   DISMISS_NS = (storage && storage.ns) || 'try.';
   const tracker = plan.race === 'tracker';
   const todayISO = T.iso(new Date());
-  const all = plan.weeks.flatMap(w => w.workouts);
-  const sessions = all.filter(w => w.discipline !== 'rest' && !w.race);
-  const today = all.filter(w => effDate(w, moves) === todayISO);
+  /* Memoised because a coach-chip tap is a state change that changes no
+     input, and it used to re-run all of this — the plan flattened, the
+     briefing rebuilt, the pace suggestions recomputed (audit 2026-08-05).
+     The dependency lists are the honest inputs, which is what the stable
+     easedOf in App exists for: keyed on a fresh arrow these would
+     invalidate every render and buy nothing. */
+  const all = useMemo(() => plan.weeks.flatMap(w => w.workouts), [plan]);
+  const sessions = useMemo(() => all.filter(w => w.discipline !== 'rest' && !w.race), [all]);
+  const today = useMemo(() => all.filter(w => effDate(w, moves) === todayISO), [all, moves, todayISO]);
   // The daily briefing (phase 5): pure selector over the plan, same fuelLog
   // the detail sheet reads so the cue numbers agree one tap deeper.
-  const briefing = tracker ? null : T.todayBriefing({ plan, todayISO, moves, fuelLog, easedOf, log });
-  const suggestions = paceSuggestions(plan, log);
+  const briefing = useMemo(() => (tracker ? null : T.todayBriefing({ plan, todayISO, moves, fuelLog, easedOf, log })),
+    [tracker, plan, todayISO, moves, fuelLog, easedOf, log]);
+  const suggestions = useMemo(() => paceSuggestions(plan, log), [plan, log]);
   const [coachIdx, setCoachIdx] = useState(0);
   const [weeklyDismissed, setWeeklyDismissed] = useState(loadWeeklyDismiss);
   const [retestDismissed, setRetestDismissed] = useState(loadRetestDismiss);
@@ -199,13 +206,15 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
 
   // Closing the loop: when today's training is logged (or it is a rest day),
   // answer the evening question — what's next?
-  const todayReal = today.filter(w => w.discipline !== 'rest' && !w.race);
+  const todayReal = useMemo(() => today.filter(w => w.discipline !== 'rest' && !w.race), [today]);
   const allDone = todayReal.length > 0 && todayReal.every(w => log[w.id]);
   /* Unlogged only: a ticked session is not "next", and without this filter
      the row disagreed with the week card's own up-next on the same screen
      (audit, 2026-08-05). `sessions` already excludes the goal race. */
-  const next = sessions.filter(w => effDate(w, moves) > todayISO && !log[w.id])
-    .sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1)[0];
+  // the comparator calls effDate on every comparison, so this is the one
+  // derivation here that is more than a filter over a small array
+  const next = useMemo(() => sessions.filter(w => effDate(w, moves) > todayISO && !log[w.id])
+    .sort((a, b) => (effDate(a, moves) < effDate(b, moves) ? -1 : 1))[0], [sessions, moves, todayISO, log]);
   const restDay = todayReal.length === 0;
 
   /* The coach card holds up to three controls, so the card itself is NOT one

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as T from '@/lib';
 import { makeSync, mergeOverlay, mergeMoves, baseDates, sweepStale } from '@/app/sync.js';
 import { buildObservation, toNote, downloadCalibration } from '@/app/calibration.js';
@@ -279,13 +279,17 @@ export function App({ storage, getToken, user }) {
   // its temporal dead zone and throws — the 2026-07-11 and 2026-07-15
   // "something went wrong" field crashes were both exactly that, via this
   // binding. Anything an above-the-returns hook closes over must live up here.
-  const easedOf = w => {
+  /* Stable identity, because consumers memoise ON it. As a plain arrow this
+     was rebuilt every render, so any useMemo keyed on it invalidated every
+     render — memoisation that does nothing while looking like it does. Its
+     real inputs are the overlay and the plan, so those are its deps. */
+  const easedOf = useCallback(w => {
     const a = w && adjust[w.id];
     if (!a) return w;
     if (a.kind === 'trim') return T.trimWorkout(w, plan, a.factor || 0.8);
     if (a.kind === 'boost') return T.boostWorkout(w, plan, a.factor || 1.1);
     return T.easeWorkout(w, plan);
-  };
+  }, [adjust, plan]);
   /* The ADJUSTED workout each overlay surface renders and reviews against —
      memoised, and shared (gauntlet catch 2026-07-30, two defects at once):
      inline easedOf(detail) minted a new object every App render, so the
