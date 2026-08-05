@@ -10,6 +10,80 @@ const NS = 'try.';
   try { localStorage.removeItem(NS + k); localStorage.removeItem('triflow.' + k); } catch (e) {}
 });
 
+/* Every coach-card dismissal, and what it is a dismissal OF.
+
+   A dismissal is sticky per SIGNATURE: the engine re-derives the same nudge
+   on every render, so without a stored signature the card returns the moment
+   it is dismissed. The question this table answers is what makes a signature
+   go stale.
+
+   PLAN-scoped signatures are built from the plan's own structure — a week
+   INDEX, positional workout ids — and a regenerated plan produces them
+   byte-identical, so a rejection made about one week silently silenced a
+   materially different week of the next plan.
+
+   ATHLETE-scoped signatures are built from measurements and dates (a test
+   date, a threshold value, today). They already speak again the moment the
+   athlete's situation changes, and a new plan says nothing about whether a
+   CSS retest is due, so stamping them would just re-ask a question already
+   answered.
+
+   An unregistered key defaults to PLAN-scoped on purpose: a forgotten
+   registration then produces a card that asks once more, never one that
+   stays silent for the wrong athlete. Do not "fix" this toward silence. */
+export const DISMISS_SCOPE = {
+  weeklyProposalDismissed: 'plan',
+  startShortfallDismissed: 'plan',
+  cssTestFailDismissed: 'plan',
+  runTestFailDismissed: 'plan',
+  cssRetestDismissed: 'athlete',
+  ftpRetestDismissed: 'athlete',
+  eftpProposalDismissed: 'athlete',
+  todayProposalDismissed: 'athlete',
+};
+const planScoped = name => (DISMISS_SCOPE[name] || 'plan') === 'plan';
+const PLAN_DISMISS_KEYS = Object.keys(DISMISS_SCOPE).filter(planScoped);
+
+/* The last of the browser-global dismissals, retired.
+
+   These keys were once written un-namespaced. Namespacing them stopped new
+   leaks, but it left a permanent read fallback to the global key, so a fresh
+   account on a shared device still inherited whatever the previous athlete
+   had dismissed, for ever. The fallback is gone; this is what happens to the
+   values it used to read.
+
+   A global value has no owner, and the only honest way to give it one is to
+   ask whether the device has ever had more than one athlete. Exactly one
+   namespace present means the value is unambiguously theirs. Anything else,
+   including none at all, means it cannot be attributed and is dropped: one
+   card asking once more is a far smaller cost than a rejection handed to the
+   wrong athlete.
+
+   Even under one namespace, only ATHLETE-scoped values are adopted. A
+   plan-scoped one would arrive without a stamp, which loadDismiss reads as
+   no evidence, so importing it would leave bytes that mean nothing and
+   invite a later change to "honour" them.
+
+   Module scope on purpose, beside the sweep above: running this inside
+   storageForUser would find the arriving user's own namespace and call the
+   device single-athlete, which is the leak wearing a hat. */
+try {
+  const keys = Object.keys(localStorage);
+  const owners = new Set();
+  keys.forEach(k => { const m = /^try\.user\.([^.]+)\./.exec(k); if (m) owners.add(m[1]); });
+  const sole = owners.size === 1 ? [...owners][0] : null;
+  Object.keys(DISMISS_SCOPE).forEach(name => {
+    const raw = localStorage.getItem(NS + name);
+    if (raw == null) return;
+    if (sole && !planScoped(name)) {
+      const mine = NS + 'user.' + sole + '.' + name;
+      // never over an answer they have already given since
+      if (localStorage.getItem(mine) == null) localStorage.setItem(mine, JSON.stringify({ sig: raw, planCreatedAt: null }));
+    }
+    localStorage.removeItem(NS + name);
+  });
+} catch (e) { /* private mode, or no localStorage at all */ }
+
 export function storageForUser(userId) {
   const ns = NS + 'user.' + userId + '.';
   // exposed so surfaces that keep their own localStorage keys (TodayView's
@@ -38,7 +112,10 @@ export function storageForUser(userId) {
     save(k, v) { try { localStorage.setItem(ns + k, JSON.stringify(v)); } catch (e) {} },
     // Note: calibration and manualActivities deliberately survive clear() —
     // both are append-only diaries spanning plans, not current-plan state.
-    clear() { ['plan', 'log', 'moves', 'adjust', 'pendingMoves', 'missedReasons'].forEach(k => localStorage.removeItem(ns + k)); },
+    // Plan-scoped dismissals join the list: they are current-plan state in
+    // exactly the way moves and adjustments are, and "start a new plan"
+    // means every rejection about the old one is spent.
+    clear() { ['plan', 'log', 'moves', 'adjust', 'pendingMoves', 'missedReasons', ...PLAN_DISMISS_KEYS].forEach(k => localStorage.removeItem(ns + k)); },
     loadManualActivities: loadManual,
     // Replace-by-id upsert, date-sorted, capped like calibration so the diary
     // can't grow unbounded (500 sessions ≈ well over a year of training).
@@ -242,6 +319,53 @@ export function storageForUser(userId) {
     saveBlockReviewed(weekMonday, planCreatedAt) {
       try { localStorage.setItem(ns + 'blockReviewed', JSON.stringify({ weekMonday, planCreatedAt: planCreatedAt ?? null })); } catch (e) {}
       return weekMonday;
+    },
+    /* Coach-card dismissals, stamped the same way and living beside their
+       model — but with three deliberate differences from it, because a
+       dismissal is a stronger claim than a week marker:
+
+       1. A plan-scoped key with a NULL stamp returns null. loadBlockReviewed
+          above reads `planCreatedAt == null` as "matches anything", which
+          here would honour a foreign stamp for any caller that has no plan.
+       2. A legacy bare string (written before the stamp existed) is honoured
+          for athlete-scoped keys, where no stamp was ever needed, and
+          IGNORED for plan-scoped ones: it cannot answer the question being
+          asked, so it is not evidence, and the card gets one more say.
+       3. These are arrow closures over ns, not this-bound methods, so a test
+          double can borrow them onto its own object. Keep them that way.
+
+       Written as a bare name/sig pair rather than storage.load/save because
+       the components reach them through the storage prop only — features may
+       not import app (scripts/check-boundaries.mjs). */
+    loadDismiss: (name, planCreatedAt) => {
+      try {
+        const raw = localStorage.getItem(ns + name);
+        if (!raw) return null;
+        try {
+          const v = JSON.parse(raw);
+          if (v && typeof v === 'object') {
+            if (!planScoped(name)) return v.sig ?? null;
+            return planCreatedAt != null && v.planCreatedAt === planCreatedAt ? (v.sig ?? null) : null;
+          }
+        } catch (e2) { /* legacy bare signature string */ }
+        return planScoped(name) ? null : raw;
+      } catch (e) { return null; }
+    },
+    saveDismiss: (name, sig, planCreatedAt) => {
+      try {
+        localStorage.setItem(ns + name, JSON.stringify({ sig, planCreatedAt: planScoped(name) ? (planCreatedAt ?? null) : null }));
+      } catch (e) { /* private mode */ }
+      return sig;
+    },
+    /* The stamp alone cannot carry a REGENERATED plan: createdAt identifies
+       the server row, and a reshape keeps it while rebuilding the week grid.
+       So this sits beside its siblings at the two wholesale-wipe sites in
+       App, for the same stated reason they do — positional ids change
+       meaning, so an annotation about the old structure must not land on the
+       new one. Athlete-scoped keys survive: nothing about a reshape makes a
+       retest answer stale. */
+    clearDismiss: () => {
+      PLAN_DISMISS_KEYS.forEach(k => { try { localStorage.removeItem(ns + k); } catch (e) {} });
     },
     loadFeels,
     saveFeel(date, value) {

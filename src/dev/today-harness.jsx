@@ -49,10 +49,19 @@ const moveOntoToday = (pickIds, over = {}) => {
    render here. Passing null gated the digest off entirely, which is how the
    embedded "Week in review" shipped without ever having been seen — and it
    also made harness dismissals write to the GLOBAL localStorage namespace
-   that production falls back to (audit, 2026-08-05). */
+   that production then read (audit, 2026-08-05). Dismissals are in memory
+   here too, so the harness touches localStorage not at all: poking a card
+   and reloading gives a clean slate, which is what a dev wants. */
 const memStorage = () => {
   const data = {};
-  return { ns: 'try.harness.', load: (k, d) => (k in data ? data[k] : d), save: (k, v) => { data[k] = v; } };
+  const dismiss = {};
+  return {
+    ns: 'try.harness.',
+    load: (k, d) => (k in data ? data[k] : d), save: (k, v) => { data[k] = v; },
+    loadDismiss: name => (dismiss[name] === undefined ? null : dismiss[name]),
+    saveDismiss: (name, sig) => { dismiss[name] = sig; },
+    clearDismiss: () => { Object.keys(dismiss).forEach(k => delete dismiss[k]); },
+  };
 };
 
 const MODES = {

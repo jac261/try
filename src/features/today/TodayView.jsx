@@ -16,46 +16,26 @@ const D = T.DISCIPLINES;
 // targets) is unchanged: the engine re-derives the same proposal every render,
 // so without this the banner returns the moment it is dismissed. A materially
 // different proposal (new week, new targets, new kind) speaks again.
-/* Dismissal keys are PER USER, like every store in storage.js. They were
-   browser-global literals, so two accounts on one device shared dismissal
-   state: a nudge user A dismissed stayed silent for user B whenever the
-   signatures matched — a real coaching signal suppressed for the wrong
-   athlete. Reads fall back to the legacy global key once so existing
-   dismissals are honoured; writes go to the user key only. */
-let DISMISS_NS = 'try.';
-const dGet = name => {
-  try { return localStorage.getItem(DISMISS_NS + name) ?? localStorage.getItem('try.' + name); }
-  catch (e) { return null; }
-};
-const dSet = (name, v) => { try { localStorage.setItem(DISMISS_NS + name, v); } catch (e) { /* private mode */ } };
+/* Where a dismissal LIVES is the store's business now, not this file's. It
+   used to keep its own localStorage helpers, which is how they ended up
+   browser-global (one athlete's rejection silencing another's card), and how
+   the fix for that left a permanent read-fallback to the global key. It also
+   meant a module-level namespace variable assigned during render.
 
-const loadWeeklyDismiss = () => dGet('weeklyProposalDismissed');
-const saveWeeklyDismiss = v => dSet('weeklyProposalDismissed', v);
-
-// Phase 3b: the CSS retest nudge and the failed-test explanation dismiss the
-// same way the weekly proposal does — sticky per signature, so a dismissed
-// nudge stays quiet until the situation genuinely changes.
-const loadEftpDismiss = () => dGet('eftpProposalDismissed');
-const saveEftpDismiss = v => dSet('eftpProposalDismissed', v);
-const loadFtpRetestDismiss = () => dGet('ftpRetestDismissed');
-const saveFtpRetestDismiss = v => dSet('ftpRetestDismissed', v);
-const loadRetestDismiss = () => dGet('cssRetestDismissed');
-const saveRetestDismiss = v => dSet('cssRetestDismissed', v);
-const loadCssFailDismiss = () => dGet('cssTestFailDismissed');
-const loadRunFailDismiss = () => dGet('runTestFailDismissed');
-const saveRunFailDismiss = v => dSet('runTestFailDismissed', v);
-const saveCssFailDismiss = v => dSet('cssTestFailDismissed', v);
-/* The under-built warning's dismissal, in the SAME per-user namespace as its
-   siblings. It arrived on a branch cut before that refactor and carried a
-   browser-global literal; merging it unchanged would have reintroduced the
-   cross-account leak the audit had just closed, for one key. */
-const loadShortfallDismiss = () => dGet('startShortfallDismissed');
-const saveShortfallDismiss = v => dSet('startShortfallDismissed', v);
+   storage.loadDismiss/saveDismiss carry both answers: whose the rejection is,
+   and which plan it was about. The scope table in app/storage.js decides
+   whether the plan stamp matters for a given key, so nothing here has to
+   remember. */
 
 export function TodayView({ plan, log, moves, missedReasons, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, runFail, onFixRun, ftpRetest, onFtpRetest, startShortfall, onDecision, fuelLog }) {
-  // Align the dismissal keys to THIS user before any lazy initialiser runs.
-  // They were browser-global, so two accounts on one device shared them.
-  DISMISS_NS = (storage && storage.ns) || 'try.';
+  /* Computed before the lazy initialisers below, which read it once per
+     mount. That is enough because every plan-replacing path in App goes
+     through the work splash and unmounts this view (Splash.test.jsx pins
+     it) — with the one exception of a plan simply running out of days,
+     which is why the store is wiped there rather than the state re-read. */
+  const planStamp = (plan && plan.createdAt) || null;
+  const dLoad = name => (storage && storage.loadDismiss ? storage.loadDismiss(name, planStamp) : null);
+  const dSave = (name, sig) => { if (storage && storage.saveDismiss) storage.saveDismiss(name, sig, planStamp); };
   const tracker = plan.race === 'tracker';
   const todayISO = T.iso(new Date());
   /* Memoised because a coach-chip tap is a state change that changes no
@@ -73,13 +53,13 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
     [tracker, plan, todayISO, moves, fuelLog, easedOf, log]);
   const suggestions = useMemo(() => paceSuggestions(plan, log), [plan, log]);
   const [coachIdx, setCoachIdx] = useState(0);
-  const [weeklyDismissed, setWeeklyDismissed] = useState(loadWeeklyDismiss);
-  const [retestDismissed, setRetestDismissed] = useState(loadRetestDismiss);
-  const [ftpRetestDismissed, setFtpRetestDismissed] = useState(loadFtpRetestDismiss);
-  const [eftpDismissed, setEftpDismissed] = useState(loadEftpDismiss);
-  const [cssFailDismissed, setCssFailDismissed] = useState(loadCssFailDismiss);
-  const [runFailDismissed, setRunFailDismissed] = useState(loadRunFailDismiss);
-  const [shortfallDismissed, setShortfallDismissed] = useState(loadShortfallDismiss);
+  const [weeklyDismissed, setWeeklyDismissed] = useState(() => dLoad('weeklyProposalDismissed'));
+  const [retestDismissed, setRetestDismissed] = useState(() => dLoad('cssRetestDismissed'));
+  const [ftpRetestDismissed, setFtpRetestDismissed] = useState(() => dLoad('ftpRetestDismissed'));
+  const [eftpDismissed, setEftpDismissed] = useState(() => dLoad('eftpProposalDismissed'));
+  const [cssFailDismissed, setCssFailDismissed] = useState(() => dLoad('cssTestFailDismissed'));
+  const [runFailDismissed, setRunFailDismissed] = useState(() => dLoad('runTestFailDismissed'));
+  const [shortfallDismissed, setShortfallDismissed] = useState(() => dLoad('startShortfallDismissed'));
   const [reviewToday, setReviewToday] = useState(false);
   const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile onToggle={() => onToggleWorkout(w.id)} />;
 
@@ -123,7 +103,7 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
     const [cls, icon] = skin[weekly.kind] || ['banner', 'bolt'];
     coach.push({ key: 'weekly', cls, icon, title: weekly.headline, sub: weekly.why + ' Tap to apply →', act: () => onWeekly(weekly),
       dismiss: () => {
-        saveWeeklyDismiss(weeklySig); setWeeklyDismissed(weeklySig);
+        dSave('weeklyProposalDismissed', weeklySig); setWeeklyDismissed(weeklySig);
         if (onDecision) onDecision(T.fromWeeklyProposal(weekly), 'rejected');
       } });
   }
@@ -145,7 +125,7 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
     // every threshold change is reviewed, none is a single tap
     sub: eftp.why + ' Tap to review →', act: onEftp,
     dismiss: () => {
-      saveEftpDismiss(eftp.sig); setEftpDismissed(eftp.sig);
+      dSave('eftpProposalDismissed', eftp.sig); setEftpDismissed(eftp.sig);
       if (onDecision) onDecision(T.fromThresholdProposal(eftp), 'rejected');
     },
   });
@@ -157,7 +137,7 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
     title: 'We could not read a CSS from your test swim',
     sub: cssFail.issue + ' You can enter the result by hand. Tap to update fitness →',
     act: onFixCss,
-    dismiss: () => { saveCssFailDismiss(cssFail.sig); setCssFailDismissed(cssFail.sig); },
+    dismiss: () => { dSave('cssTestFailDismissed', cssFail.sig); setCssFailDismissed(cssFail.sig); },
   });
   // The run test's version of the same promise: a test that produced no 5 km
   // says why, and points at the by-hand path (audit catch 2026-07-30).
@@ -166,7 +146,7 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
     title: 'We could not read a 5 km time from your test run',
     sub: runFail.issue + ' You can enter the result by hand. Tap to update fitness →',
     act: onFixRun,
-    dismiss: () => { saveRunFailDismiss(runFail.sig); setRunFailDismissed(runFail.sig); },
+    dismiss: () => { dSave('runTestFailDismissed', runFail.sig); setRunFailDismissed(runFail.sig); },
   });
   // Phase 3b (§5): the retest nudge. A recommendation, never a change: it
   // opens the protocol sheet, and dismissing it sticks until its signature
@@ -180,13 +160,13 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
   if (!tracker && startShortfall && shortfallDismissed !== startShortfall.sig) coach.push({
     key: 'start-shortfall', cls: 'banner', icon: 'trend', title: 'Your race build starts below where this race usually peaks',
     sub: startShortfall.text,
-    dismiss: () => { saveShortfallDismiss(startShortfall.sig); setShortfallDismissed(startShortfall.sig); },
+    dismiss: () => { dSave('startShortfallDismissed', startShortfall.sig); setShortfallDismissed(startShortfall.sig); },
   });
   if (!tracker && ftpRetest && ftpRetestDismissed !== ftpRetest.sig) coach.push({
     key: 'ftp-retest', cls: 'banner', icon: 'trend', title: ftpRetest.headline,
     sub: ftpRetest.why + ' Tap to enter a result →', act: onFtpRetest,
     dismiss: () => {
-      saveFtpRetestDismiss(ftpRetest.sig); setFtpRetestDismissed(ftpRetest.sig);
+      dSave('ftpRetestDismissed', ftpRetest.sig); setFtpRetestDismissed(ftpRetest.sig);
       if (onDecision) onDecision(T.fromRetest(ftpRetest, { discipline: 'bike' }), 'rejected');
     },
   });
@@ -194,7 +174,7 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
     key: 'retest', cls: 'banner', icon: 'pace', title: retest.headline,
     sub: retest.why + ' Tap for the protocol →', act: onRetest,
     dismiss: () => {
-      saveRetestDismiss(retest.sig); setRetestDismissed(retest.sig);
+      dSave('cssRetestDismissed', retest.sig); setRetestDismissed(retest.sig);
       if (onDecision) onDecision(T.fromRetest(retest, { discipline: 'swim' }), 'rejected');
     },
   });

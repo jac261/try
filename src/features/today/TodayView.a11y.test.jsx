@@ -118,6 +118,17 @@ describe('every suggestion in the queue is reachable', () => {
     cleanup();
   });
 
+  it('with no storage it dismisses without throwing, and writes nothing', () => {
+    /* This file renders with storage={null}, which used to mean the
+       dismissal fell back to a browser-GLOBAL key: the test itself wrote one
+       on every run. No fallback exists now, so the card still closes for
+       this session and nothing outlives it. */
+    const { card, cleanup } = render({ weekly });
+    expect(() => press(card.querySelector('.bmore.bx'), ' ')).not.toThrow();
+    expect(Object.keys(localStorage).filter(k => k.startsWith('try.'))).toEqual([]);
+    cleanup();
+  });
+
   it('the dismiss stays reachable and keeps its own label', () => {
     const dismissed = [];
     const { card, cleanup } = render({ weekly, onDecision: (p, verdict) => dismissed.push(verdict) });

@@ -910,6 +910,10 @@ export function App({ storage, getToken, user }) {
     // with the plan they described: a niggle answer re-attaching to the next
     // plan's unrelated session would be a serious lie (gauntlet 2026-07-20).
     setMissedReasons(storage.clearMissedReasons());
+    /* Coach-card rejections are the same kind of annotation and die the same
+       way. The plan stamp cannot do this on its own: buildTrackerPlan keeps
+       the createdAt nonce, so the rejection would look current. */
+    storage.clearDismiss();
     // Stale workout GUIDs from the ended plan must not resolve for the next
     // plan's reused positional ids (the onRegenerate lesson): a truthy-but-
     // wrong gid() pushes at dead rows AND stops sweepStale's later re-push.
@@ -1573,6 +1577,12 @@ export function App({ storage, getToken, user }) {
     // missed answers must not re-attach to different sessions (retarget keeps
     // them: fitness-only updates preserve the calendar).
     setMissedReasons(storage.clearMissedReasons());
+    /* And the coach's rejections, for exactly the reason above: a weekly
+       proposal's signature is its week INDEX plus positional workout ids, so
+       a rejection about the old structure silently silences a materially
+       different proposal on the new one. The plan stamp cannot catch this
+       either, since a reshape keeps createdAt (the same server row). */
+    storage.clearDismiss();
     setRefToId({}); // regenerated id space: no stale GUID may resolve meanwhile
     setPlan(np);
     setEditPlan(false);

@@ -12,24 +12,11 @@ import { InfoLink } from '@/components/InfoLink.jsx';
 // 2026-08-04 — Fitness & Fatigue, Form and Ramp rate were already in Progress,
 // and the readiness trend moved there to join them (Jon), which is where a
 // fourteen-day line belongs rather than folded into a daily verdict.
-/* Phase 2 stray fix: these two keys were browser-global (bare try.*) —
-   shared across every account on one device, the exact cross-account leak
-   the TodayView dismissals were already migrated away from; a proposal
-   dismissed by one athlete was silenced for the next. Same pattern as
-   TodayView's DISMISS_NS: per-user namespace set from the storage prop
-   before any lazy initialiser runs, reads fall back to the legacy global
-   key once so existing choices are honoured, writes go per-user only. */
-let CARD_NS = 'try.';
-const cGet = name => {
-  try { return localStorage.getItem(CARD_NS + name) ?? localStorage.getItem('try.' + name); }
-  catch (e) { return null; }
-};
-const cSet = (name, v) => { try { localStorage.setItem(CARD_NS + name, v); } catch (e) { /* private mode */ } };
-// A rejected proposal stays rejected: the signature is kind + band + workout
-// + day, so "Not today" holds for the rest of the day but a new day (or a
-// different proposal) speaks again.
-const loadPropDismiss = () => cGet('todayProposalDismissed');
-const savePropDismiss = v => cSet('todayProposalDismissed', v);
+/* Where this dismissal lives is the store's business, like its siblings on
+   the Today card: storage.saveDismiss knows whose it is and whether a plan
+   stamp applies. This one is athlete-scoped, and the card has no plan prop
+   for good reason — the signature already carries the day, so "not today"
+   holds for today and a new day speaks again regardless of any plan. */
 
 const BAND_COLOR = { green: 'var(--run)', amber: 'var(--bike)', red: 'var(--danger)' };
 // the disc's glow: the band colour at low alpha, opaque per the kit's rule 4
@@ -98,11 +85,10 @@ function SignalBars({ signals }) {
 }
 
 export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onRestore, onOpen , onSupport, noPlan, storage, onDecision }) {
-  if (storage && storage.ns) CARD_NS = storage.ns;
   // Declared with the other hooks, ABOVE the !rec early return: a hook below
   // it changes the mounted instance's hook count the moment the first
   // readiness entry lands (the splash-hold crash class, 2026-07-15).
-  const [propDismissed, setPropDismissed] = useState(loadPropDismiss);
+  const [propDismissed, setPropDismissed] = useState(() => (storage && storage.loadDismiss ? storage.loadDismiss('todayProposalDismissed', null) : null));
   // the receipts fold is a glance choice, not a preference: fresh each mount
   const [receipts, setReceipts] = useState(false);
   const todayISO = T.iso(new Date());
@@ -138,7 +124,8 @@ export function ReadinessCard({ wellness, today, onEdit, onFeel, onEase, onResto
     ? rawProposal.kind + ':' + rd.band + ':' + (rawProposal.workout ? rawProposal.workout.id : '') + ':' + todayISO : null;
   const proposal = rawProposal && propDismissed !== propSig ? rawProposal : null;
   const rejectProposal = () => {
-    savePropDismiss(propSig); setPropDismissed(propSig);
+    if (storage && storage.saveDismiss) storage.saveDismiss('todayProposalDismissed', propSig, null);
+    setPropDismissed(propSig);
     if (onDecision && rawProposal) onDecision(T.fromTodayProposal(rawProposal), 'rejected');
   };
 
