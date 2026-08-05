@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import * as T from '@/lib';
 import { weekStrip } from '@/lib/week-strip.js';
 import { tap } from '@/utils/a11y.js';
@@ -68,13 +69,20 @@ const spoken = day => {
 export function WeekCard({
   plan, log, moves, adjust, missedReasons, open, todayISO, children,
 }) {
-  const wk = weekStrip({ plan, log, moves, adjust, missedReasons, todayISO });
+  /* Above the early return, where every hook must live. Memoised because
+     this card re-renders whenever ANY Today state changes — a coach-chip
+     tap, a readiness fold — and weekStrip walks the plan seven times over
+     and classifies every session (audit 2026-08-05). Its deps are its
+     arguments, so a real change still rebuilds it. */
+  const wk = useMemo(() => weekStrip({ plan, log, moves, adjust, missedReasons, todayISO }),
+    [plan, log, moves, adjust, missedReasons, todayISO]);
+  const byId = useMemo(() => new Map(plan.weeks.flatMap(w => w.workouts).map(w => [w.id, w])), [plan]);
   if (!wk) return null;
 
   const curWeek = plan.weeks.find(w => w.workouts.some(x => x.date >= todayISO)) || plan.weeks[plan.weeks.length - 1];
-  // the strip carries ids, not plan objects, so the sheet gets the real
-  // workout rather than the selector's flattened view of it
-  const byId = new Map(plan.weeks.flatMap(w => w.workouts).map(w => [w.id, w]));
+  // (byId is memoised above the early return: the strip carries ids, not
+  // plan objects, so the sheet gets the real workout rather than the
+  // selector's flattened view of it)
 
   return (
     <div className="card yw">
