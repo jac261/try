@@ -79,3 +79,33 @@ describe('the race week digest renders', () => {
     expect(html).not.toMatch(/happen:[^<]*RACE DAY/);
   });
 });
+
+/* The reason lives on the missed row now (the digest classifies through
+   classifyCompletion), so the line can say what the athlete told it. The
+   words come from MISSED_REASONS, not from a second copy here. */
+describe('the missed line', () => {
+  const plan = {
+    race: 'olympic', totalWeeks: 2,
+    weeks: [{ index: 0, phase: 'Build', workouts: [
+      { id: 'a', date: '2026-07-07', discipline: 'run', type: 'Threshold', title: 'Threshold Run', durationMin: 50 },
+      { id: 'b', date: '2026-07-09', discipline: 'bike', type: 'Endurance', title: 'Endurance Ride', durationMin: 75 },
+    ] }],
+  };
+  const storage = { load: () => null, save: () => {} };
+  const render = over => renderToString(
+    <WeeklyDigest plan={plan} log={{}} moves={{}} adjust={{}} adjustLog={[]}
+      wellness={[]} activities={null} storage={storage} todayISO="2026-07-13"
+      coachLog={null} blockReviewed={null} onBlockReviewed={() => {}} onFocus={() => {}} {...over} />);
+
+  it("names the athlete's answer beside the day, and stays bare without one", () => {
+    const html = render({ missedReasons: { a: { reason: 'niggle', at: '2026-07-08T08:00:00Z' } } });
+    expect(html).toContain('Threshold Run (Tue, an injury niggle)');
+    expect(html).toMatch(/Endurance Ride \(Thu\)/);   // no answer, no invention
+  });
+
+  it('invents nothing when the stored answer is not one of the four', () => {
+    const html = render({ missedReasons: { a: { reason: 'weather', at: '2026-07-08T08:00:00Z' } } });
+    expect(html).toContain('Threshold Run (Tue)');
+    expect(html).not.toContain('weather');
+  });
+});
