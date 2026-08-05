@@ -44,6 +44,46 @@ export const DISMISS_SCOPE = {
 const planScoped = name => (DISMISS_SCOPE[name] || 'plan') === 'plan';
 const PLAN_DISMISS_KEYS = Object.keys(DISMISS_SCOPE).filter(planScoped);
 
+/* The last of the browser-global dismissals, retired.
+
+   These keys were once written un-namespaced. Namespacing them stopped new
+   leaks, but it left a permanent read fallback to the global key, so a fresh
+   account on a shared device still inherited whatever the previous athlete
+   had dismissed, for ever. The fallback is gone; this is what happens to the
+   values it used to read.
+
+   A global value has no owner, and the only honest way to give it one is to
+   ask whether the device has ever had more than one athlete. Exactly one
+   namespace present means the value is unambiguously theirs. Anything else,
+   including none at all, means it cannot be attributed and is dropped: one
+   card asking once more is a far smaller cost than a rejection handed to the
+   wrong athlete.
+
+   Even under one namespace, only ATHLETE-scoped values are adopted. A
+   plan-scoped one would arrive without a stamp, which loadDismiss reads as
+   no evidence, so importing it would leave bytes that mean nothing and
+   invite a later change to "honour" them.
+
+   Module scope on purpose, beside the sweep above: running this inside
+   storageForUser would find the arriving user's own namespace and call the
+   device single-athlete, which is the leak wearing a hat. */
+try {
+  const keys = Object.keys(localStorage);
+  const owners = new Set();
+  keys.forEach(k => { const m = /^try\.user\.([^.]+)\./.exec(k); if (m) owners.add(m[1]); });
+  const sole = owners.size === 1 ? [...owners][0] : null;
+  Object.keys(DISMISS_SCOPE).forEach(name => {
+    const raw = localStorage.getItem(NS + name);
+    if (raw == null) return;
+    if (sole && !planScoped(name)) {
+      const mine = NS + 'user.' + sole + '.' + name;
+      // never over an answer they have already given since
+      if (localStorage.getItem(mine) == null) localStorage.setItem(mine, JSON.stringify({ sig: raw, planCreatedAt: null }));
+    }
+    localStorage.removeItem(NS + name);
+  });
+} catch (e) { /* private mode, or no localStorage at all */ }
+
 export function storageForUser(userId) {
   const ns = NS + 'user.' + userId + '.';
   // exposed so surfaces that keep their own localStorage keys (TodayView's

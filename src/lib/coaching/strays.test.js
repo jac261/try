@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { storageForUser, DISMISS_SCOPE } from '../../app/storage.js';
@@ -86,6 +86,58 @@ describe('a dismissal knows which plan it was about', () => {
     storage.clear();
     expect(storage.loadDismiss('startShortfallDismissed', 'plan-A')).toBe(null);
     expect(storage.loadDismiss('ftpRetestDismissed', 'plan-A')).toBe('f');
+  });
+});
+
+/* The other half of finding 2. Deleting the read fallback is what stops the
+   leak; this is what happens to the values it used to read, and the three
+   branches are the whole of the attribution argument. The sweep runs at
+   module scope, so each case re-imports the module against a prepared
+   localStorage. */
+describe('the ownerless dismissals are swept, once', () => {
+  const load = async () => { vi.resetModules(); return import('../../app/storage.js'); };
+  beforeEach(() => localStorage.clear());
+
+  it('one athlete on the device: their athlete-scoped answers are adopted, the rest dropped', async () => {
+    localStorage.setItem('try.user.user_2abc.wellness', '[]');       // the namespace exists
+    localStorage.setItem('try.cssRetestDismissed', 'old-retest');
+    localStorage.setItem('try.weeklyProposalDismissed', 'old-weekly');
+    const { storageForUser } = await load();
+    expect(localStorage.getItem('try.cssRetestDismissed')).toBe(null);
+    expect(localStorage.getItem('try.weeklyProposalDismissed')).toBe(null);
+    const s = storageForUser('user_2abc');
+    expect(s.loadDismiss('cssRetestDismissed', null)).toBe('old-retest');
+    /* A plan-scoped global is not adopted AT ALL, and the assertion has to
+       be on the bytes rather than on loadDismiss: an unstamped value reads
+       as no evidence either way, so importing one is invisible in behaviour
+       while leaving a row that a later "let's honour these" change would
+       turn straight back into the original bug. */
+    expect(localStorage.getItem('try.user.user_2abc.weeklyProposalDismissed')).toBe(null);
+    expect(s.loadDismiss('weeklyProposalDismissed', 'plan-A')).toBe(null);
+  });
+
+  it('two athletes: nothing can be attributed, so nothing is adopted', async () => {
+    localStorage.setItem('try.user.user_2abc.wellness', '[]');
+    localStorage.setItem('try.user.user_9zzz.wellness', '[]');
+    localStorage.setItem('try.cssRetestDismissed', 'old-retest');
+    const { storageForUser } = await load();
+    expect(localStorage.getItem('try.cssRetestDismissed')).toBe(null);
+    expect(storageForUser('user_2abc').loadDismiss('cssRetestDismissed', null)).toBe(null);
+    expect(storageForUser('user_9zzz').loadDismiss('cssRetestDismissed', null)).toBe(null);
+  });
+
+  it('no athlete yet: the globals are dropped and no namespace is invented', async () => {
+    localStorage.setItem('try.cssRetestDismissed', 'old-retest');
+    await load();
+    expect(Object.keys(localStorage)).toEqual([]);
+  });
+
+  it('never over an answer the athlete has given since', async () => {
+    localStorage.setItem('try.user.user_2abc.wellness', '[]');
+    localStorage.setItem('try.user.user_2abc.cssRetestDismissed', JSON.stringify({ sig: 'current', planCreatedAt: null }));
+    localStorage.setItem('try.cssRetestDismissed', 'old-retest');
+    const { storageForUser } = await load();
+    expect(storageForUser('user_2abc').loadDismiss('cssRetestDismissed', null)).toBe('current');
   });
 });
 
