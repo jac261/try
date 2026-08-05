@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import * as T from '@/lib';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
@@ -28,9 +28,19 @@ export function WeeklyDigest({ embedded, plan, log, moves, adjust, adjustLog, we
   const seen = seenRaw && typeof seenRaw === 'object'
     ? (seenRaw.planCreatedAt === (plan.createdAt || null) ? seenRaw.weekMonday : null)
     : seenRaw;
-  if (gone || seen === weekMonday || !T.digestWindowOpen(weekMonday, todayISO)) return null;
-  const d = T.buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday });
-  if (!d) return null;
+  const hidden = gone || seen === weekMonday || !T.digestWindowOpen(weekMonday, todayISO);
+  /* The GATE lives inside the memo, which is the only shape that satisfies
+     both constraints at once. Every hook must sit above the early returns
+     (a hook below one crashed the app on dismiss, weekly, for every
+     athlete — see the comment on reviewOpen), but hoisting a bare memo
+     would build a digest that is discarded for most of the week, which is
+     worse than not memoising at all. Returning null when hidden costs
+     nothing and still spares the rebuild on every unrelated Today render
+     during the window it IS shown. */
+  const d = useMemo(() => (hidden ? null
+    : T.buildWeeklyDigest({ plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday })),
+  [hidden, plan, log, moves, adjust, adjustLog, wellness, activities, todayISO, weekMonday]);
+  if (hidden || !d) return null;
   // The permanent dismissed stamp is earned only by a SETTLED verdict: the
   // week over and the stored bundle not provisional. Gated on the week as
   // well as the stamp because the card can render before the freeze has
