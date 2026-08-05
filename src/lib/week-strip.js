@@ -34,6 +34,23 @@ function dayStatus({ sessions, isToday, isPast }) {
   return isPast ? 'missed' : 'ahead';
 }
 
+/* The one session that represents its day. A day cell has room for exactly
+   one chip at a legible size, so the strip has to choose rather than shrink
+   everything until two fit — and the same choice decides what the cell's tap
+   opens, which is why it lives here and not in the card.
+
+   Most specific first:
+     1. the day's event, which IS the day
+     2. a test or tune-up, which already carries `key` from the generator
+     3. anything that is not a `second`: the volume and strength doubles are
+        add-ons by construction, so the session they hang off outranks them
+     4. the longest, then the id, so a stable schedule renders stably */
+function keySession(sessions) {
+  const rank = s => (s.race ? 0 : s.flagged ? 1 : !s.second ? 2 : 3);
+  return [...sessions].sort((a, b) =>
+    rank(a) - rank(b) || (b.min || 0) - (a.min || 0) || (a.id < b.id ? -1 : 1))[0] || null;
+}
+
 // "3 down, 3 to go" — the design's headline. Falls back to plain counts at
 // the edges, since "0 down, 0 to go" is a sentence about nothing.
 function headlineFor({ done, planned }) {
@@ -87,6 +104,10 @@ export function weekStrip({ plan, log, moves, adjust, missedReasons, todayISO })
       return {
         id: w.id, discipline: w.discipline, role: w.role || null,
         title: w.title, race: !!(w.race || w.bRace), done, min,
+        /* `flagged`, not `key`: the day's chosen session is `day.key`, and a
+           session carrying its own `key` would read as `day.key.key`. This
+           is the generator's key flag — tests, tune-ups, the CSS test. */
+        flagged: !!w.key, second: !!w.second,
         tss: Math.round(estimateTss(w, adj[w.id], entry && entry.actualMin)),
         colour: w.race || w.bRace ? '#facc15' : (DISCIPLINES[w.discipline] || {}).color,
         status: classifyCompletion({
@@ -100,6 +121,8 @@ export function weekStrip({ plan, log, moves, adjust, missedReasons, todayISO })
       dow: fmtDate(date, { weekday: 'short' }),
       rest: sessions.length === 0,
       sessions,
+      key: keySession(sessions),
+      extra: Math.max(0, sessions.length - 1),
       totalMin: sessions.reduce((t, s) => t + s.min, 0),
       status: dayStatus({ sessions, isToday, isPast }),
     };

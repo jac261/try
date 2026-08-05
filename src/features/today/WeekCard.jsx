@@ -1,10 +1,7 @@
-import { useState } from 'react';
 import * as T from '@/lib';
 import { weekStrip } from '@/lib/week-strip.js';
-import { effDate } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
-import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 
 /* Your week — the design's day strip (Your week day strip.dc.html).
  *
@@ -15,14 +12,17 @@ import { WorkoutRow } from '@/components/WorkoutRow.jsx';
  *
  * The mockup is display-only: no role, no tabindex, no cursor, no hover
  * anywhere in it. That is a property of a static mockup, not a decision
- * about the card, so every interaction the old strip had survives here —
- * tapping a day opens its session, the header folds out the rest of the
- * week, and each cell keeps its spoken label. A redesign that quietly
- * removed them would be a regression wearing a new coat.
+ * about the card, so tapping a day still opens that day's session and each
+ * cell still speaks its own state.
  *
  * The mockup also has no answer for a day with two sessions, a race day, or
  * a missed one. Those are ordinary in a real week, so they get treatments
  * built in the design's own vocabulary rather than borrowed from elsewhere.
+ *
+ * GLANCEABLE, and only that (Jon, 2026-08-04). The card used to fold out the
+ * week's remaining sessions in full; that detail lives in the calendar's week
+ * tab, so the fold is gone rather than duplicated. A day shows ONE chip — two
+ * at a reduced size overflowed a 39px cell on a phone — and counts the rest.
  */
 
 const NOUN = { swim: 'Swim', bike: 'Ride', run: 'Run', brick: 'Brick', strength: 'Strength' };
@@ -37,23 +37,20 @@ const MARK = {
   rest: { text: '·', cls: '' },
 };
 
-/* One day's chips. The design draws a single 28px gradient tile per day and
-   never shows a double, but Jon's weeks routinely hold two sessions, so a
-   second chip rides alongside at a reduced size and a third becomes a count
-   rather than a squeeze. */
+/* One day, one chip. Two chips side by side overflowed the cell even shrunk
+   to 21px — a day is about 39px wide on a phone — so the day's key session
+   wears the tile at full size and the others become a count. weekStrip picks
+   which one that is; the spoken label below still names them all. */
 function DayChips({ day }) {
   if (day.rest) return <span className="yw-chip rest" aria-hidden="true"><Icon name="rest" size={15} /></span>;
-  const shown = day.sessions.slice(0, 2);
-  const extra = day.sessions.length - shown.length;
+  const s = day.key;
   return (
-    <span className={'yw-chips' + (shown.length > 1 ? ' pair' : '')}>
-      {shown.map(s => (
-        <span key={s.id} className={'yw-chip' + (s.race ? ' race' : '') + (s.done ? ' done' : '')}
-          style={s.race ? undefined : { background: (T.DISCIPLINES[s.discipline] || {}).grad }} aria-hidden="true">
-          <Icon name={(T.DISCIPLINES[s.discipline] || {}).icon} size={shown.length > 1 ? 12 : 15} />
-        </span>
-      ))}
-      {extra > 0 && <span className="yw-more" aria-hidden="true">+{extra}</span>}
+    <span className="yw-chips">
+      <span className={'yw-chip' + (s.race ? ' race' : '') + (s.done ? ' done' : '')}
+        style={s.race ? undefined : { background: (T.DISCIPLINES[s.discipline] || {}).grad }} aria-hidden="true">
+        <Icon name={(T.DISCIPLINES[s.discipline] || {}).icon} size={15} />
+      </span>
+      {day.extra > 0 && <span className="yw-more" aria-hidden="true">+{day.extra}</span>}
     </span>
   );
 }
@@ -69,11 +66,8 @@ const spoken = day => {
 };
 
 export function WeekCard({
-  plan, log, moves, adjust, missedReasons, open, easedOf, todayISO, onToggleWorkout,
-  loadOpen, saveOpen, children,
+  plan, log, moves, adjust, missedReasons, open, todayISO, children,
 }) {
-  const [openWk, setOpenWk] = useState(() => loadOpen() === true);
-  const toggle = () => setOpenWk(o => { saveOpen(!o); return !o; });
   const wk = weekStrip({ plan, log, moves, adjust, missedReasons, todayISO });
   if (!wk) return null;
 
@@ -81,14 +75,11 @@ export function WeekCard({
   // the strip carries ids, not plan objects, so the sheet gets the real
   // workout rather than the selector's flattened view of it
   const byId = new Map(plan.weeks.flatMap(w => w.workouts).map(w => [w.id, w]));
-  const rest = plan.weeks.flatMap(w => w.workouts)
-    .filter(w => w.discipline !== 'rest' && !w.race && effDate(w, moves) > todayISO && effDate(w, moves) <= wk.range.end)
-    .sort((a, b) => (effDate(a, moves) < effDate(b, moves) ? -1 : 1));
 
   return (
     <div className="card yw">
-      <div className="yw-head" {...tap(toggle)} aria-expanded={openWk}
-        aria-label={'Your week, ' + wk.headline + ': show the rest of the week'}>
+      {/* not a button any more: the fold it used to open is gone */}
+      <div className="yw-head">
         <div className="yw-head-l">
           <div className="yw-eyebrow">Your week</div>
           <div className="yw-headline">{wk.headline}</div>
@@ -111,12 +102,16 @@ export function WeekCard({
 
       <div className="yw-strip">
         {wk.days.map(day => (
-          <div key={day.date} className={'yw-day' + (day.isToday ? ' today' : '') + (day.isPast && !day.isToday ? ' past' : '')}
+          /* A rest day is inert: it has nothing to open, and its tap used to
+             toggle the fold that no longer exists, so keyboard focus should
+             not stop on it. It keeps its spoken label for a screen reader
+             reading the strip across. */
+          <div key={day.date} className={'yw-day' + (day.isToday ? ' today' : '') + (day.isPast && !day.isToday ? ' past' : '') + (day.rest ? ' inert' : '')}
             aria-label={spoken(day)}
-            {...tap(e => { e.stopPropagation(); if (day.sessions.length) open(byId.get(day.sessions[0].id)); else toggle(); })}>
+            {...(day.rest ? {} : tap(() => open(byId.get(day.key.id))))}>
             <span className="yw-dow">{day.dow.slice(0, 3)}</span>
             <DayChips day={day} />
-            <span className="yw-min">{day.rest ? '—' : T.fmtDuration(day.totalMin)}</span>
+            <span className="yw-min">{day.rest ? '—' : T.fmtDurationCompact(day.totalMin)}</span>
             <span className={'yw-mark ' + MARK[day.status].cls}>{MARK[day.status].text}</span>
           </div>
         ))}
@@ -138,11 +133,6 @@ export function WeekCard({
       {!!wk.notes.length && (
         <div className="yw-notes">{wk.notes.map(n => <span className="yw-note" key={n}>{n}</span>)}</div>
       )}
-
-      {openWk && (rest.length
-        ? rest.map(w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
-          moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />)
-        : <div className="muted yw-empty">Nothing more this week — rest up.</div>)}
 
       {children}
     </div>
