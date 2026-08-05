@@ -52,10 +52,6 @@ const saveCssFailDismiss = v => dSet('cssTestFailDismissed', v);
 const loadShortfallDismiss = () => dGet('startShortfallDismissed');
 const saveShortfallDismiss = v => dSet('startShortfallDismissed', v);
 
-// The user's expand/collapse choice for the week tab sticks across visits.
-const loadWeekPref = () => { try { return JSON.parse(dGet('showWeek')); } catch (e) { return null; } };
-const saveWeekPref = v => dSet('showWeek', JSON.stringify(v));
-
 export function TodayView({ plan, log, moves, missedReasons, open, onTune, wellness, onFeel, onEditWellness, easedOf, onEaseToday, onRestoreToday, weekly, onWeekly, spotted, onLogSpotted, onAddWorkout, eftp, onEftp, onToggleWorkout, planEdge, onSupport, activities, displayActivities, onOpenRecording, onEditPlan, onEnterTracker, offerTracker, adjust, adjustLog, coachLog, blockReviewed, onBlockReviewed, onFocus, storage, retest, onRetest, cssFail, onFixCss, runFail, onFixRun, ftpRetest, onFtpRetest, startShortfall, onDecision, fuelLog }) {
   // Align the dismissal keys to THIS user before any lazy initialiser runs.
   // They were browser-global, so two accounts on one device shared them.
@@ -283,8 +279,7 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
           title this one now wears, so it rides inside instead. */}
       {!tracker && (
         <WeekCard plan={plan} log={log} moves={moves} adjust={adjust} missedReasons={missedReasons}
-          open={open} easedOf={easedOf} todayISO={todayISO} onToggleWorkout={onToggleWorkout}
-          loadOpen={loadWeekPref} saveOpen={saveWeekPref}>
+          open={open} todayISO={todayISO}>
           {storage && <WeeklyDigest embedded plan={plan} log={log} moves={moves} adjust={adjust} adjustLog={adjustLog}
             wellness={wellness} activities={displayActivities || activities} storage={storage} todayISO={todayISO} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={onBlockReviewed} onFocus={onFocus} />}
         </WeekCard>

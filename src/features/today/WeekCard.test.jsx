@@ -55,12 +55,36 @@ describe('the seven days render', () => {
     expect(out).toContain('yw-mark missed');  // Tuesday, past and not logged
   });
 
-  it('shows both chips on a double day, and counts a third', () => {
-    const two = html(planOf(w('a', WEEK[5], 'swim', 45), w('b', WEEK[5], 'bike', 120)));
-    expect(two).toContain('yw-chips pair');
-    expect((two.match(/class="yw-chip"/g) || []).length).toBeGreaterThanOrEqual(2);
-    const three = html(planOf(w('a', WEEK[5], 'swim', 45), w('b', WEEK[5], 'bike', 120), w('c', WEEK[5], 'run', 30)));
-    expect(three).toContain('+1');
+  it('shows ONE chip on a double day and counts the rest', () => {
+    /* Two chips side by side overflowed the cell even shrunk to 21px — a day
+       is about 39px wide on a phone (Jon, 2026-08-04). Counted inside the
+       STRIP: the up-next row wears a chip of its own, which is what made the
+       first version of this assertion pass while the bug was live. */
+    // counted in the SATURDAY cell: the rest days wear a chip of their own,
+    // and so does the up-next row
+    const sat = m => m.el.querySelectorAll('.yw-day')[5];
+    const two = mount(planOf(w('a', WEEK[5], 'swim', 45), w('b', WEEK[5], 'bike', 120)));
+    expect(sat(two).querySelectorAll('.yw-chip').length).toBe(1);
+    expect(two.el.querySelector('.yw-chips.pair')).toBe(null);
+    expect(sat(two).querySelector('.yw-more').textContent).toBe('+1');
+    two.cleanup();
+    const three = mount(planOf(w('a', WEEK[5], 'swim', 45), w('b', WEEK[5], 'bike', 120), w('c', WEEK[5], 'run', 30)));
+    expect(sat(three).querySelectorAll('.yw-chip').length).toBe(1);
+    expect(sat(three).querySelector('.yw-more').textContent).toBe('+2');
+    three.cleanup();
+  });
+
+  it('prints the day duration compactly, so it fits the cell', () => {
+    // "1h 55m" was the widest thing in a 39px cell; "1:55" is four characters.
+    // The up-next row keeps the long form — it has a whole line to itself.
+    const m = mount(planOf(w('a', WEEK[5], 'bike', 115)));
+    const mins = [...m.el.querySelectorAll('.yw-min')].map(e => e.textContent);
+    expect(mins).toContain('1:55');
+    expect(mins.some(x => /h /.test(x))).toBe(false);
+    m.cleanup();
+    const short = mount(planOf(w('b', WEEK[5], 'run', 45)));
+    expect([...short.el.querySelectorAll('.yw-min')].map(e => e.textContent)).toContain('45');
+    short.cleanup();
   });
 
   it('a rest day gets the recessed chip and an em dash, not an empty cell', () => {
@@ -109,42 +133,42 @@ describe('the card around the strip', () => {
 });
 
 describe('the interactions the mockup has no markup for', () => {
-  it('every day cell is reachable by keyboard and speaks its own state', () => {
+  it('a day with a session is reachable by keyboard; a rest day is inert', () => {
     const out = html(planOf(w('a', WEEK[0], 'run', 60, { title: 'Easy run' })), { log: { a: { done: true } } });
-    expect((out.match(/role="button"/g) || []).length).toBeGreaterThanOrEqual(8); // 7 days + the head
+    // exactly one tappable cell here — the header is no longer a button and
+    // the six rest days have nothing to open
+    expect((out.match(/role="button"/g) || []).length).toBe(1);
     expect(out).toContain('tabindex="0"');
     expect(out).toContain('aria-label="Monday: Easy run, done"');
+    // inert, but still spoken, so a screen reader reading across still hears it
+    expect(out).toContain('yw-day inert');
     expect(out).toContain('rest day');
   });
 
-  it('tapping a day opens that day\'s session, as the plan object', () => {
+  it('tapping a day opens its KEY session, as the plan object', () => {
     const open = vi.fn();
-    const plan = planOf(w('sat', WEEK[5], 'bike', 120));
+    // the volume double: the tempo is the day, the endurance ride hangs off it
+    const plan = planOf(
+      w('tempo', WEEK[5], 'bike', 55, { type: 'Tempo', role: 'quality' }),
+      w('vol', WEEK[5], 'bike', 40, { type: 'Endurance', second: true }),
+    );
     const { el, cleanup } = mount(plan, { open });
-    const sat = el.querySelectorAll('.yw-day')[5];
-    act(() => { sat.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    act(() => { el.querySelectorAll('.yw-day')[5].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(open).toHaveBeenCalledTimes(1);
-    // the real workout, not the strip's flattened view of it
+    // the real workout, not the strip's flattened view — and the tempo, not
+    // whichever the generator happened to emit first
     expect(open.mock.calls[0][0]).toBe(plan.weeks[0].workouts[0]);
+    expect(open.mock.calls[0][0].id).toBe('tempo');
     cleanup();
   });
 
-  it('the header folds out the rest of the week, and remembers the choice', () => {
-    const saveOpen = vi.fn();
-    const plan = planOf(w('sat', WEEK[5], 'bike', 120, { title: 'Long ride' }));
-    const { el, cleanup } = mount(plan, { saveOpen });
-    // counted as ROWS, not by title: the up-next row already names this
-    // session while the fold is shut, which is the point of it
-    expect(el.querySelectorAll('.wk').length).toBe(0);
-    act(() => { el.querySelector('.yw-head').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-    expect(saveOpen).toHaveBeenCalledWith(true);
-    expect(el.querySelectorAll('.wk').length).toBe(1);
+  it('a rest day tap does nothing at all', () => {
+    const open = vi.fn();
+    const { el, cleanup } = mount(planOf(w('a', WEEK[0], 'run', 60)), { open });
+    act(() => { el.querySelectorAll('.yw-day')[3].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(open).not.toHaveBeenCalled();
     cleanup();
   });
 
-  it('says so when the fold-out has nothing left in it', () => {
-    const { el, cleanup } = mount(planOf(w('a', WEEK[0], 'run', 60)), { loadOpen: () => true });
-    expect(el.innerHTML).toContain('Nothing more this week');
-    cleanup();
-  });
+
 });

@@ -25,6 +25,16 @@ export function fmtDuration(min) {
   return r ? h + 'h ' + r + 'm' : h + 'h';
 }
 
+/* The same duration where the space is measured in characters, not words:
+   the week strip's day cell is about 39px wide on a phone, and "1h 55m" is
+   the widest thing in it. Bare minutes under the hour, h:mm above — the form
+   the design's own day strip uses ("60", "2:30", "1:45"). */
+export function fmtDurationCompact(min) {
+  const m = Math.round(min);
+  if (m < 60) return String(m);
+  return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0');
+}
+
 // Race clock time: H:MM:SS above the hour, M:SS under it. fmtPace would print
 // a marathon as '215:12' and fmtDuration has no seconds, so predictions need
 // their own formatter.

@@ -1019,7 +1019,9 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 /* every day presses IN; today is the one that lifts OUT, which is the whole
    of the design's today treatment and the kit's rule for "this is the live
    one" at the same time */
-.yw-day { flex: 1; min-width: 0; border-radius: 16px; padding: 10px 4px; background: var(--well); box-shadow: var(--press-sm); display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.yw-day { flex: 1; min-width: 0; border-radius: 16px; padding: 10px 3px; background: var(--well); box-shadow: var(--press-sm); display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+/* a rest day has nothing to open, so it does not pretend to be tappable */
+.yw-day.inert { cursor: default; }
 .yw-day.today { background: var(--lift); box-shadow: var(--raise-sm); }
 .yw-day.today .yw-dow { color: var(--ink); }
 .yw-day.past { opacity: .62; }
@@ -1029,9 +1031,8 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 
 /* the discipline tile: the design's 28px gradient chip, on the kit's own
    gradient tokens so the smoked theme rebinds it with everything else */
-.yw-chips { display: flex; align-items: center; justify-content: center; gap: 3px; min-height: 28px; }
+.yw-chips { display: flex; align-items: center; justify-content: center; gap: 2px; min-height: 28px; }
 .yw-chip { width: 28px; height: 28px; flex: none; border-radius: 9px; display: grid; place-items: center; color: #fff; box-shadow: var(--raise-sm); }
-.yw-chips.pair .yw-chip { width: 21px; height: 21px; border-radius: 7px; }
 .yw-chip.race { background: linear-gradient(135deg, #facc15, #f59e0b); }
 .yw-chip.done { opacity: .55; }
 /* rest is the one recessed chip: nothing happened here, and nothing should */
@@ -1059,7 +1060,6 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .yw-review { border-top: 1px solid var(--line); padding-top: 12px; }
 .yw-review-head { font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--muted); font-weight: 800; margin-top: 4px; }
 .yw-review-head .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
-.yw-empty { font-size: 13px; padding: 2px 2px 0; }
 .yw .wk { border-top: 1px solid var(--line); }
 
 /* ---------- add a session (Today) ---------- */
