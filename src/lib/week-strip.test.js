@@ -204,3 +204,53 @@ describe('refusals', () => {
     expect(s.counts.planned).toBe(1);
   });
 });
+
+describe('the day\'s key session, since a cell fits one chip', () => {
+  it('Jon\'s Thursday: the tempo outranks the endurance double hanging off it', () => {
+    // the volume double, verbatim from an olympic week 1
+    const s = call(planOf(
+      w('tempo', WEEK[3], 'bike', 55, { type: 'Tempo', role: 'quality' }),
+      w('vol', WEEK[3], 'bike', 40, { type: 'Endurance', role: 'easy', second: true }),
+    ));
+    expect(s.days[3].key.id).toBe('tempo');
+    expect(s.days[3].extra).toBe(1);
+  });
+
+  it('the day\'s event outranks everything', () => {
+    const s = call(planOf(
+      w('race', WEEK[6], 'run', 90, { race: true }),
+      w('warm', WEEK[6], 'swim', 20),
+      w('str', WEEK[6], 'strength', 40, { second: true }),
+    ));
+    expect(s.days[6].key.id).toBe('race');
+    expect(s.days[6].extra).toBe(2);
+  });
+
+  it('a test or tune-up outranks an ordinary longer session', () => {
+    const s = call(planOf(
+      w('css', WEEK[1], 'swim', 45, { key: true, test: true }),
+      w('ride', WEEK[1], 'bike', 120),
+    ));
+    expect(s.days[1].key.id).toBe('css');
+  });
+
+  it('with nothing else to separate them, the longest wins', () => {
+    const s = call(planOf(w('short', WEEK[2], 'swim', 30), w('long', WEEK[2], 'bike', 90)));
+    expect(s.days[2].key.id).toBe('long');
+  });
+
+  it('an exact tie breaks on id, so a stable schedule renders stably', () => {
+    const a = call(planOf(w('aaa', WEEK[2], 'swim', 60), w('bbb', WEEK[2], 'bike', 60)));
+    const b = call(planOf(w('bbb', WEEK[2], 'bike', 60), w('aaa', WEEK[2], 'swim', 60)));
+    expect(a.days[2].key.id).toBe('aaa');
+    expect(b.days[2].key.id).toBe('aaa');
+  });
+
+  it('a single session is its own key, and a rest day has none', () => {
+    const s = call(planOf(w('only', WEEK[0], 'run', 60)));
+    expect(s.days[0].key.id).toBe('only');
+    expect(s.days[0].extra).toBe(0);
+    expect(s.days[1].key).toBe(null);
+    expect(s.days[1].extra).toBe(0);
+  });
+});
