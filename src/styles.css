@@ -636,7 +636,12 @@ body {
   box-shadow: var(--press), 0 0 22px var(--rd-glow, transparent);
 }
 /* The receipts. The block presses in (inert), and so does every track. */
-.rd-signals { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: var(--well); box-shadow: var(--press); margin-top: 15px; }
+/* the receipts' own toggle: a quiet row, raised nothing — it is a label
+   with a chevron, not a button pretending to be a card */
+.rd-receipts-toggle { display: flex; align-items: center; justify-content: space-between; margin-top: 13px; padding: 4px 2px; font-size: 10.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--faint); cursor: pointer; user-select: none; }
+.rd-receipts-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.rd-chev { font-size: 11px; }
+.rd-signals { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: var(--well); box-shadow: var(--press); margin-top: 6px; }
 .rd-signals-head { display: flex; justify-content: space-between; font-size: 9.5px; font-weight: 800; letter-spacing: .8px; color: var(--faint); }
 .rd-sig { display: flex; align-items: center; gap: 10px; }
 .rd-sig-label { width: 44px; flex: none; font-size: 11px; font-weight: 800; color: var(--muted); }

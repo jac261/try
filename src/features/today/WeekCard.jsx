@@ -111,7 +111,10 @@ export function WeekCard({
             {...(day.rest ? {} : tap(() => open(byId.get(day.key.id))))}>
             <span className="yw-dow">{day.dow.slice(0, 3)}</span>
             <DayChips day={day} />
-            <span className="yw-min">{day.rest ? '—' : T.fmtDurationCompact(day.totalMin)}</span>
+            {/* a goal race carries no planned duration, so its day totals 0;
+                "0" reads as a data error where the dash reads as "not a
+                number that applies" */}
+            <span className="yw-min">{day.rest || !day.totalMin ? '—' : T.fmtDurationCompact(day.totalMin)}</span>
             <span className={'yw-mark ' + MARK[day.status].cls}>{MARK[day.status].text}</span>
           </div>
         ))}

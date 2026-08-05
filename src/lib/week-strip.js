@@ -1,7 +1,6 @@
 import { effDate, weekRange } from './schedule.js';
 import { classifyCompletion } from './coach.js';
 import { estimateTss } from './adapt.js';
-import { DISCIPLINES } from './disciplines.js';
 import { fmtDate, toDate } from './date.js';
 
 /* Try — one week, seen as seven days.
@@ -23,15 +22,28 @@ import { fmtDate, toDate } from './date.js';
  * would drift from the coach's view of the same week within one release.
  */
 
-// The day's roll-up, from its sessions' statuses. Order matters: a day with
-// anything missed reads missed even if its other session was ticked, because
-// that is the fact the athlete needs to see from across the room.
-function dayStatus({ sessions, isToday, isPast }) {
+/* The day's roll-up, from its sessions' statuses ONLY. There used to be an
+   `isPast ? 'missed'` fallback here, and it was this module re-rolling the
+   exact judgement its own header comment forbids: classifyCompletion returns
+   null for a goal race (unloggable by design) and 'unlogged-race' for a
+   silent tune-up, both DELIBERATE refusals to call something missed — and
+   the fallback overrode them, so the strip marked race day with the missed
+   dash while the digest in the same card said "No result marked" (audit,
+   2026-08-05). A miss now comes only from a 'missed-*' status the classifier
+   actually issued.
+
+   Order still matters: one missed session marks the day even when its
+   sibling was ticked, because that is the fact the athlete needs to see
+   from across the room. */
+function dayStatus({ sessions, isToday }) {
   if (!sessions.length) return 'rest';
   if (sessions.some(s => s.status && s.status.startsWith('missed'))) return 'missed';
-  if (sessions.every(s => s.done)) return 'done';
+  // judgeable = the classifier issued a verdict; its refusals never count
+  // toward "done" and never count against it
+  const judged = sessions.filter(s => s.status && s.status !== 'unlogged-race');
+  if (judged.length && judged.every(s => s.done)) return 'done';
   if (isToday) return 'now';
-  return isPast ? 'missed' : 'ahead';
+  return 'ahead';
 }
 
 /* The one session that represents its day. A day cell has room for exactly
@@ -101,17 +113,29 @@ export function weekStrip({ plan, log, moves, adjust, missedReasons, todayISO })
       const entry = lg[w.id];
       const done = !!(entry && entry.done);
       const min = entry && entry.actualMin != null ? entry.actualMin : (w.durationMin || 0);
+      // storage saves { reason, at }; the classifier wants the reason itself,
+      // and MISSED_REASONS[wholeObject] silently discarded every one-tap
+      // answer (audit, 2026-08-05). Legacy bare strings still pass through.
+      const mr = missed[w.id];
       return {
         id: w.id, discipline: w.discipline, role: w.role || null,
-        title: w.title, race: !!(w.race || w.bRace), done, min,
+        /* `race` is the DISPLAY flag (gold chip) and includes tune-ups;
+           `goalRace` is the accounting flag. The goal race can never be
+           logged, so counting it made "week complete" unreachable in the
+           one week it matters most. Tune-ups are loggable and stay counted. */
+        title: w.title, race: !!(w.race || w.bRace), goalRace: !!w.race, done, min,
+        // planned survives the log: the tiles' denominators must not shrink
+        // to match a shortfall or inflate to match an overrun
+        plannedMin: w.durationMin || 0,
         /* `flagged`, not `key`: the day's chosen session is `day.key`, and a
            session carrying its own `key` would read as `day.key.key`. This
            is the generator's key flag — tests, tune-ups, the CSS test. */
         flagged: !!w.key, second: !!w.second,
         tss: Math.round(estimateTss(w, adj[w.id], entry && entry.actualMin)),
-        colour: w.race || w.bRace ? '#facc15' : (DISCIPLINES[w.discipline] || {}).color,
+        plannedTss: Math.round(estimateTss(w, adj[w.id])),
         status: classifyCompletion({
-          workout: w, entry, adjustEntry: adj[w.id], missedReason: missed[w.id],
+          workout: w, entry, adjustEntry: adj[w.id],
+          missedReason: mr && typeof mr === 'object' ? mr.reason : mr,
           day: date, todayISO,
         }),
       };
@@ -124,18 +148,20 @@ export function weekStrip({ plan, log, moves, adjust, missedReasons, todayISO })
       key: keySession(sessions),
       extra: Math.max(0, sessions.length - 1),
       totalMin: sessions.reduce((t, s) => t + s.min, 0),
-      status: dayStatus({ sessions, isToday, isPast }),
+      status: dayStatus({ sessions, isToday }),
     };
   });
 
-  const flat = days.flatMap(d => d.sessions);
+  // the goal race is out of every aggregate — buildWeeklyDigest's own rule —
+  // because nothing can ever tick it; it still renders as its day's session
+  const flat = days.flatMap(d => d.sessions).filter(s => !s.goalRace);
   const doneOnes = flat.filter(s => s.done);
   const counts = { done: doneOnes.length, planned: flat.length, remaining: flat.length - doneOnes.length };
 
   /* Strictly AFTER today, so this never repeats the session the Today screen
      is already leading with in full detail above this card. */
   const next = days.filter(d => d.date > todayISO)
-    .flatMap(d => d.sessions.filter(s => !s.done && !s.race).map(s => ({ d, s })))[0] || null;
+    .flatMap(d => d.sessions.filter(s => !s.done && !s.goalRace).map(s => ({ d, s })))[0] || null;
   const whenFor = date => {
     const i = dates.indexOf(date);
     const t = dates.indexOf(todayISO);
@@ -162,11 +188,11 @@ export function weekStrip({ plan, log, moves, adjust, missedReasons, todayISO })
     headline: headlineFor(counts),
     minutes: {
       done: doneOnes.reduce((t, s) => t + s.min, 0),
-      planned: flat.reduce((t, s) => t + s.min, 0),
+      planned: flat.reduce((t, s) => t + s.plannedMin, 0),
     },
     tss: {
       done: doneOnes.reduce((t, s) => t + s.tss, 0),
-      planned: flat.reduce((t, s) => t + s.tss, 0),
+      planned: flat.reduce((t, s) => t + s.plannedTss, 0),
     },
     days,
     upNext: next ? { ...next.s, date: next.d.date, when: whenFor(next.d.date) } : null,

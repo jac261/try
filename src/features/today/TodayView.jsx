@@ -201,7 +201,10 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
   // answer the evening question — what's next?
   const todayReal = today.filter(w => w.discipline !== 'rest' && !w.race);
   const allDone = todayReal.length > 0 && todayReal.every(w => log[w.id]);
-  const next = sessions.filter(w => effDate(w, moves) > todayISO)
+  /* Unlogged only: a ticked session is not "next", and without this filter
+     the row disagreed with the week card's own up-next on the same screen
+     (audit, 2026-08-05). `sessions` already excludes the goal race. */
+  const next = sessions.filter(w => effDate(w, moves) > todayISO && !log[w.id])
     .sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1)[0];
   const restDay = todayReal.length === 0;
 
@@ -225,7 +228,12 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
           lines at most. Tracker has no plan to brief. */}
       {briefing && <div className="tb-context">
         <div className="tb-ctx-line">{briefing.contextLine}</div>
-        {briefing.priorityLine && <div className="tb-priority">{briefing.priorityLine}</div>}
+        {/* One voice for the priority (review, 2026-08-05): with any
+            readiness record the verdict below already names today's session
+            ("attack today's Tempo Run"), and this line said it a second
+            time. It speaks only in the no-readiness state, where the card
+            shows the add-your-morning banner and nothing else would. */}
+        {briefing.priorityLine && !(wellness && wellness.length) && <div className="tb-priority">{briefing.priorityLine}</div>}
       </div>}
       {/* With no plan the tab's one call to action is the next-plan prompt, so
           it leads; in plan mode readiness keeps the top spot (Jon, 2026-07-16). */}
