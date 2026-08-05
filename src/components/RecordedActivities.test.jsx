@@ -43,6 +43,16 @@ describe('RecordedActivities (production ReferenceError 2026-07-30)', () => {
     expect(html).toMatch(/\/100/); // the pace it exists to show
   });
 
+  it('speaks its stats: the label must not replace the line it sits above', () => {
+    /* aria-label REPLACES the accessible name, so pace, distance and
+       duration were rendered for the eye and announced to nobody (audit
+       2026-08-05). */
+    const html = renderToString(<RecordedActivities activities={[swim]} date={DATE} plan={plan} log={{}} moves={{}} onOpen={() => {}} />);
+    const label = (html.match(/aria-label="([^"]*Morning swim[^"]*)"/) || [])[1] || '';
+    expect(label).toContain('Morning swim');
+    expect(label).toMatch(/\/100/);   // the same pace the row shows
+  });
+
   it('renders a swim with no plan at all, and with no profile', () => {
     // poolFor must absorb both: a tracker has no weeks, and a half-hydrated
     // plan can arrive without a profile.

@@ -39,6 +39,12 @@ export function WorkoutRow({ w, done, onClick, eff, moved, profile, onToggle, ri
         {profile && <ProfileStrip w={w} />}
       </div>
       <div className="right">{right !== undefined ? right : T.fmtDate(eff || w.date, { weekday: 'short' })}</div>
+      {/* .wk.done is a visual class and the tick below is aria-hidden, so
+          completion reached the eye and nothing else (audit 2026-08-05).
+          Spoken rather than labelled: an aria-label here would have to
+          restate the title, type, distance, duration, day and seven possible
+          tags, and would drift from them the first time any changed. */}
+      {done && <span className="sr-only">Completed</span>}
       {/* pointer-only quick-complete: kept out of the accessibility tree so the
           row is not a button-inside-a-button; keyboard and screen-reader users
           complete sessions via the detail sheet's button. */}

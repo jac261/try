@@ -95,6 +95,20 @@ const MODES = {
       .forEach(w => { log[w.id] = { done: true, at: w.date, actualMin: w.durationMin }; });
     return { plan, moves: {}, log };
   },
+  /* The coach QUEUE. Every other mode passes each coach prop as null, so the
+     queue can never hold more than one card and the cycle chip — the control
+     that reaches suggestions 2..N — has never been visible here at all. That
+     is how it shipped aria-hidden and pointer-only (audit 2026-08-05). This
+     mode holds three: two with actions and a dismiss, and the one card in
+     the app that is informational only. */
+  'coach-queue': () => ({
+    plan: generatePlan(base()), moves: {},
+    props: {
+      weekly: { kind: 'trim-week', week: 3, targets: ['bike'], headline: 'Trim this week', why: 'Fatigue is running ahead of fitness.' },
+      retest: { sig: 'retest:swim:1', headline: 'Time to retest your CSS', why: 'Your last one is six weeks old.' },
+      startShortfall: { sig: 'start-shortfall:bike20', text: 'Your bike starts about 20% under where this race usually peaks.' },
+    },
+  }),
   'week-logged': () => {
     const plan = generatePlan(base());
     const days = weekRange(todayISO);
@@ -134,7 +148,7 @@ function Harness() {
   const [mode, setMode] = useState('double');
   const [proven, setProven] = useState(false);
   const [rd, setRd] = useState('good');
-  const { plan, moves, log } = MODES[mode]();
+  const { plan, moves, log, props } = MODES[mode]();
   // With no history everything sits on the novice default, so the visible
   // demo is a proven tolerance RAISING the ceiling: 'solid' (60 g/h held)
   // lets a half-distance brick ask its full demand instead of the default.
@@ -163,7 +177,7 @@ function Harness() {
         adjust={{}} adjustLog={[]} coachLog={{}} blockReviewed={null} onBlockReviewed={noop}
         onFocus={noop} storage={memStorage()} retest={null} onRetest={noop} cssFail={null} onFixCss={noop}
         runFail={null} onFixRun={noop} ftpRetest={null} onFtpRetest={noop} startShortfall={null}
-        onDecision={noop} fuelLog={fuelLog} />
+        onDecision={noop} fuelLog={fuelLog} {...(props || {})} />
     </div>
   );
 }

@@ -208,15 +208,31 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
     .sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1)[0];
   const restDay = todayReal.length === 0;
 
-  const coachCard = slot && <div className={slot.cls} {...tap(slot.act)}>
-    <div className="bi"><Icon name={slot.icon} size={20} /></div>
-    <div style={{ flex: 1 }}><div className="bt">{slot.title}</div>
-      <div className="bs">{slot.sub}</div></div>
-    {slot.dismiss && <div className="bmore bx" role="button" tabIndex={0} aria-label="Dismiss this suggestion"
-      onClick={e => { e.stopPropagation(); slot.dismiss(); }}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); slot.dismiss(); } }}>✕</div>}
-    {coach.length > 1 && <div className="bmore" aria-hidden="true"
-      onClick={e => { e.stopPropagation(); setCoachIdx(i => i + 1); }}>
+  /* The coach card holds up to three controls, so the card itself is NOT one
+     of them. It used to be a role="button" with the dismiss and the cycle
+     chip nested inside it — invalid ARIA, and the reason the cycle chip was
+     aria-hidden rather than labelled: hiding it was the only way to stop a
+     button appearing inside a button. That left every suggestion after the
+     first reachable by pointer alone (audit, 2026-08-05). The action now
+     lives on a wrapper around the icon and the text, so all three are
+     siblings and each can be a real control. */
+  const cycleTo = coach.length ? ((coachIdx % coach.length) + 1) % coach.length : 0;
+  const coachBody = slot && <>
+    <div className="bi" aria-hidden="true"><Icon name={slot.icon} size={20} /></div>
+    <div className="btx"><div className="bt">{slot.title}</div><div className="bs">{slot.sub}</div></div>
+  </>;
+  const coachCard = slot && <div className={slot.cls + (slot.act ? '' : ' inert')}>
+    {/* No act, no button: exactly one card (the under-built warning) is
+        informational, and spreading tap() on it both advertised an action it
+        did not have and threw on Enter, because the handler was undefined.
+        The controls below no longer stopPropagation — they are siblings of
+        the action now, not children of it. */}
+    {slot.act
+      ? <div className="b-act" {...tap(slot.act)}>{coachBody}</div>
+      : <div className="b-act">{coachBody}</div>}
+    {slot.dismiss && <div className="bmore bx" {...tap(slot.dismiss)} aria-label="Dismiss this suggestion">✕</div>}
+    {coach.length > 1 && <div className="bmore" {...tap(() => setCoachIdx(i => i + 1))}
+      aria-label={'Show suggestion ' + (cycleTo + 1) + ' of ' + coach.length}>
       {(coachIdx % coach.length) + 1}/{coach.length} ▸</div>}
   </div>;
 

@@ -140,9 +140,11 @@ describe('the interactions the mockup has no markup for', () => {
     expect((out.match(/role="button"/g) || []).length).toBe(1);
     expect(out).toContain('tabindex="0"');
     expect(out).toContain('aria-label="Monday: Easy run, done"');
-    // inert, but still spoken, so a screen reader reading across still hears it
+    // inert, but still ANNOUNCED: an aria-label on a role-less div is
+    // ignored by most screen readers, so role="img" carries it
     expect(out).toContain('yw-day inert');
     expect(out).toContain('rest day');
+    expect(out).toMatch(/role="img"[^>]*aria-label="[^"]*rest day|aria-label="[^"]*rest day[^>]*"[^>]*role="img"/);
   });
 
   it('tapping a day opens its KEY session, as the plan object', () => {
