@@ -94,10 +94,13 @@ describe('status, delegated to the coach\'s own classifier', () => {
     expect(s.days[5].status).toBe('ahead');
   });
 
-  it('a race day is flagged and keeps its own colour', () => {
+  it('a race day is flagged, and a tune-up wears the flag without the accounting', () => {
     const s = call(planOf(w('r', WEEK[6], 'run', 90, { race: true, title: 'Olympic' })));
     expect(s.days[6].sessions[0].race).toBe(true);
-    expect(s.days[6].sessions[0].colour).toBe('#facc15');
+    expect(s.days[6].sessions[0].goalRace).toBe(true);
+    const b = call(planOf(w('t', WEEK[5], 'run', 20, { bRace: true, title: 'Parkrun' })));
+    expect(b.days[5].sessions[0].race).toBe(true);      // gold chip
+    expect(b.days[5].sessions[0].goalRace).toBe(false); // still counted
   });
 });
 
@@ -108,8 +111,8 @@ describe('the totals come from the days', () => {
     );
     const s = call(plan, { log: { a: { done: true, actualMin: 50 } } });
     expect(s.counts).toEqual({ done: 1, planned: 3, remaining: 2 });
-    expect(s.minutes.done).toBe(50);
-    expect(s.minutes.planned).toBe(200);   // 50 recorded + 90 + 60
+    expect(s.minutes.done).toBe(50);       // the recording counts for done...
+    expect(s.minutes.planned).toBe(195);   // ...but planned stays 45 + 90 + 60
     expect(s.tss.planned).toBeGreaterThan(s.tss.done);
     expect(s.tss.done).toBeGreaterThan(0);
   });
@@ -252,5 +255,82 @@ describe('the day\'s key session, since a cell fits one chip', () => {
     expect(s.days[0].extra).toBe(0);
     expect(s.days[1].key).toBe(null);
     expect(s.days[1].extra).toBe(0);
+  });
+});
+
+describe('the audit probes, pinned (2026-08-05)', () => {
+  /* Each of these reproduced a live bug through this exact selector. They
+     are the regression suite for the isPast fallback, the race accounting,
+     the mutating denominators and the swallowed missed reasons. */
+
+  it('a past goal-race day is never called missed: the classifier refused, so we refuse', () => {
+    // race Saturday, athlete opens the app Sunday: classifyCompletion
+    // returns null for the race (unloggable by design), and the old
+    // isPast fallback overrode that into a missed dash
+    const sun = weekStrip({
+      plan: planOf(w('race', WEEK[5], 'run', 0, { race: true, title: 'Olympic' })),
+      log: {}, moves: {}, adjust: {}, missedReasons: {}, todayISO: WEEK[6],
+    });
+    expect(sun.days[5].sessions[0].status).toBe(null);
+    expect(sun.days[5].status).not.toBe('missed');
+  });
+
+  it('a silent past tune-up is unlogged-race, not a miss — matching the digest beside it', () => {
+    const s = weekStrip({
+      plan: planOf(w('tune', WEEK[4], 'run', 20, { bRace: true })),
+      log: {}, moves: {}, adjust: {}, missedReasons: {}, todayISO: WEEK[6],
+    });
+    expect(s.days[4].sessions[0].status).toBe('unlogged-race');
+    expect(s.days[4].status).not.toBe('missed');
+  });
+
+  it('a race week can complete: the unloggable race is out of every count', () => {
+    const sessions5 = [0, 1, 2, 3, 4].map(i => w('s' + i, WEEK[i], 'run', 60));
+    const plan = planOf(...sessions5, w('race', WEEK[6], 'run', 0, { race: true }));
+    const logAll = Object.fromEntries(sessions5.map(x => [x.id, { done: true }]));
+    const s = call(plan, { log: logAll });
+    expect(s.counts).toEqual({ done: 5, planned: 5, remaining: 0 });
+    expect(s.headline).toBe('5 done, week complete');
+    // and the race day cell shows the dash convention, not a zero
+    expect(s.days[6].totalMin).toBe(0);
+  });
+
+  it('the planned denominators hold still while the actuals move', () => {
+    const plan = planOf(w('a', WEEK[0], 'run', 60), w('b', WEEK[5], 'bike', 120));
+    const before = call(plan);
+    const after = call(plan, { log: { a: { done: true, actualMin: 30 } } });
+    // cut the run in half: done reflects it, planned does not budge
+    expect(after.minutes.done).toBe(30);
+    expect(after.minutes.planned).toBe(before.minutes.planned);
+    expect(after.minutes.planned).toBe(180);
+    expect(after.tss.planned).toBe(before.tss.planned);
+    // and an overrun inflates nothing
+    const over = call(plan, { log: { a: { done: true, actualMin: 95 } } });
+    expect(over.minutes.planned).toBe(180);
+    expect(over.minutes.done).toBe(95);
+  });
+
+  it("the athlete's one-tap reason survives storage's {reason, at} wrapper", () => {
+    const plan = planOf(w('a', WEEK[0], 'run', 60));
+    const wrapped = call(plan, { missedReasons: { a: { reason: 'niggle', at: '2026-08-03T20:00:00Z' } } });
+    expect(wrapped.days[0].sessions[0].status).toBe('missed-niggle');
+    // the legacy bare string still works
+    const bare = call(plan, { missedReasons: { a: 'life' } });
+    expect(bare.days[0].sessions[0].status).toBe('missed-life');
+  });
+
+  it('an eased session estimates its planned load from the adjustment, not the raw card', () => {
+    const plan = planOf(w('a', WEEK[5], 'bike', 60, { type: 'Tempo' }));
+    const plain = call(plan);
+    const eased = call(plan, { adjust: { a: { kind: 'ease' } } });
+    expect(eased.tss.planned).toBeLessThan(plain.tss.planned);
+  });
+
+  it('a fully refused day (race only) reads neutral, not done', () => {
+    const s = weekStrip({
+      plan: planOf(w('race', WEEK[5], 'run', 0, { race: true })),
+      log: {}, moves: {}, adjust: {}, missedReasons: {}, todayISO: WEEK[6],
+    });
+    expect(s.days[5].status).toBe('ahead');
   });
 });

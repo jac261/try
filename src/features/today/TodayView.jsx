@@ -201,7 +201,10 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
   // answer the evening question — what's next?
   const todayReal = today.filter(w => w.discipline !== 'rest' && !w.race);
   const allDone = todayReal.length > 0 && todayReal.every(w => log[w.id]);
-  const next = sessions.filter(w => effDate(w, moves) > todayISO)
+  /* Unlogged only: a ticked session is not "next", and without this filter
+     the row disagreed with the week card's own up-next on the same screen
+     (audit, 2026-08-05). `sessions` already excludes the goal race. */
+  const next = sessions.filter(w => effDate(w, moves) > todayISO && !log[w.id])
     .sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1)[0];
   const restDay = todayReal.length === 0;
 
