@@ -10,6 +10,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { TodayView } from './TodayView.jsx';
 import { generatePlan, buildTrackerPlan } from '@/lib/plan.js';
+import { storageForUser } from '@/app/storage.js';
 import { iso, addDays } from '@/lib/date.js';
 
 /* TodayView's behaviour, which had no test of any kind before the audit
@@ -22,10 +23,10 @@ import { iso, addDays } from '@/lib/date.js';
  * follows: computation may move anywhere as long as the screen still says
  * the same things.
  *
- * Deliberately absent: the two audit findings still open in this file — that
- * dismissal signatures are not plan-stamped, and that dGet's legacy-global
- * fallback is permanent. A test written now would enshrine the bug and make
- * its fix read as a regression. */
+ * The two audit findings this file once declined to test are closed: a
+ * dismissal is stamped with the plan it was about, and there is no
+ * legacy-global read fallback left to leak one athlete's rejection to the
+ * next. Both are covered below and in coaching/strays.test.js. */
 
 const today = new Date();
 const todayISO = iso(today);
@@ -50,8 +51,23 @@ const CARDS = {
   retest: { sig: 'retest:swim:1', headline: 'Time to retest your CSS', why: 'It is six weeks old.' },
 };
 
-// a memory storage so dismissals persist across mounts within a test
-const memStore = (ns = 'try.user.tv.') => ({ ns, load: (k, d) => d, save: () => {} });
+/* Plan and log stay in memory (this file asserts on rendered output, not on
+   persistence), but the DISMISSAL methods are the real ones: composed off
+   storageForUser so "stays dismissed on the next visit" keeps exercising the
+   store's own stamp logic rather than a double's memory. beforeEach clears
+   localStorage, which is what isolates them. They are arrow closures over
+   the namespace, which is why they can be borrowed like this. */
+const memStore = (ns = 'try.user.tv.') => {
+  const real = storageForUser('tv');
+  return { ns, load: (k, d) => d, save: () => {},
+    loadDismiss: real.loadDismiss, saveDismiss: real.saveDismiss, clearDismiss: real.clearDismiss };
+};
+
+/* ONE plan identity across the mounts of a test. render() used to call
+   generatePlan per mount, and now that dismissals are plan-stamped that
+   would hand the second mount a different plan and let a remount test pass
+   for the wrong reason. Tests that WANT a second plan build one explicitly. */
+const PLAN = generatePlan(profile);
 
 const render = (over = {}, mountInto) => {
   const el = mountInto || document.createElement('div');
@@ -59,7 +75,7 @@ const render = (over = {}, mountInto) => {
   const root = createRoot(el);
   const noop = () => {};
   act(() => {
-    root.render(<TodayView plan={generatePlan(profile)} log={{}} moves={{}} missedReasons={{}}
+    root.render(<TodayView plan={PLAN} log={{}} moves={{}} missedReasons={{}}
       open={noop} onTune={noop} wellness={[]} onFeel={noop} onEditWellness={noop}
       easedOf={w => w} onEaseToday={noop} onRestoreToday={noop}
       weekly={null} onWeekly={noop} spotted={null} onLogSpotted={noop} onAddWorkout={noop}
@@ -175,6 +191,38 @@ describe('dismissal is per card and it sticks', () => {
     const moved = render({ weekly: { ...CARDS.weekly, targets: ['run'] }, storage: store });
     expect(title(moved)).toBe('Trim this week'); // a different proposal speaks
     moved.cleanup();
+  });
+
+  it('does not carry into the next plan: the same nudge speaks again', () => {
+    /* The audit finding. weeklySig is kind + week INDEX + positional workout
+       ids, all of which a regenerated plan reproduces byte-identical, so a
+       rejection about one plan's week used to silence a materially different
+       week of the next. */
+    const store = memStore();
+    const planB = { ...PLAN, createdAt: '2026-08-05T10:00:00.000Z' };
+    const first = render({ weekly: CARDS.weekly, storage: store });
+    dismiss(first);
+    expect(title(first)).toBe(null);
+    first.cleanup();
+
+    const onB = render({ weekly: CARDS.weekly, plan: planB, storage: store });
+    expect(title(onB)).toBe('Trim this week');
+    onB.cleanup();
+  });
+
+  it('a retest nudge, which is about the athlete not the plan, does carry', () => {
+    /* The other half, and the one that makes the scope table earn its keep:
+       a CSS retest is due because of when the athlete last tested. Re-asking
+       on every new plan would be a regression dressed as caution. */
+    const store = memStore();
+    const planB = { ...PLAN, createdAt: '2026-08-05T10:00:00.000Z' };
+    const first = render({ retest: CARDS.retest, storage: store });
+    dismiss(first);
+    first.cleanup();
+
+    const onB = render({ retest: CARDS.retest, plan: planB, storage: store });
+    expect(title(onB)).toBe(null);
+    onB.cleanup();
   });
 
   it('journals the rejection, because a refused proposal is still history', () => {

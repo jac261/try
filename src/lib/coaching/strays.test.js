@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { storageForUser } from '../../app/storage.js';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { storageForUser, DISMISS_SCOPE } from '../../app/storage.js';
 import { swimThreshold, hasRealCss } from '../domain.js';
 
 /* Phase 2 commit 6: the strays. Each of these is a small instance of a
@@ -89,14 +90,37 @@ describe('a dismissal knows which plan it was about', () => {
 });
 
 describe('ReadinessCard dismissals are per-user (the TodayView migration, completed)', () => {
-  it('no browser-global keys remain; the legacy global is a read fallback only', () => {
+  it('neither card touches localStorage at all any more', () => {
+    /* Stronger than the assertion this replaces, which pinned the SHAPE of
+       the per-user namespace dance and so could only ever catch a regression
+       that looked exactly like the last one. A surface with no localStorage
+       reference cannot leak across accounts and cannot grow a read fallback
+       to a global key, which is the whole of both audit findings. */
+    ['src/features/wellness/ReadinessCard.jsx', 'src/features/today/TodayView.jsx'].forEach(f => {
+      const src = readFileSync(f, 'utf8');
+      const code = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');   // comments may name it
+      expect(code).not.toMatch(/localStorage/);
+    });
     const src = readFileSync('src/features/wellness/ReadinessCard.jsx', 'utf8');
-    expect(src).not.toMatch(/localStorage\.setItem\('try\./);          // writes never global
-    expect(src).toMatch(/let CARD_NS = 'try\.'/);                       // pattern matches TodayView's
-    expect(src).toMatch(/storage && storage\.ns\) CARD_NS = storage\.ns/);
     // and the proposal's accept AND reject journal through the shared layer
     expect(src).toMatch(/onDecision\(T\.fromTodayProposal\(rawProposal\), 'rejected'\)/);
     expect(src).toMatch(/onDecision\(T\.fromTodayProposal\(proposal\), 'accepted'\)/);
+  });
+
+  it('every dismissal key a surface uses is registered in the scope table', () => {
+    /* Bidirectional on purpose: an unregistered key would silently take the
+       plan-scoped default (a card that re-asks for ever), and an orphaned
+       table entry means a card was deleted and its rule left behind. The
+       naming convention is the index: every key ends in Dismissed. */
+    const used = new Set();
+    const walk = dir => readdirSync(dir).forEach(e => {
+      const full = join(dir, e);
+      if (statSync(full).isDirectory()) return walk(full);
+      if (!/\.jsx?$/.test(full) || /\.test\.jsx?$/.test(full) || full.endsWith('app/storage.js')) return;
+      for (const m of readFileSync(full, 'utf8').matchAll(/'([A-Za-z]+Dismissed)'/g)) used.add(m[1]);
+    });
+    walk('src');
+    expect([...used].sort()).toEqual(Object.keys(DISMISS_SCOPE).sort());
   });
 
   it('digestSeenWeek dismissals are plan-scoped', () => {

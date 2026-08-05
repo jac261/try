@@ -36,6 +36,11 @@ import { iso, addDays } from '@/lib/date.js';
  * to happen, and the number that matters here is "how many times", not "how
  * fast". The wall-clock measurement lives in the PR body. */
 
+/* Dismissals are deliberately dead here: this file counts selector calls,
+   so nothing stored may change which cards render. Hoisted because a fresh
+   object each render is exactly the prop-identity churn it exists to police. */
+const MEMO_STORE = { ns: 'try.memo.', load: (k, d) => d, save: () => {}, loadDismiss: () => null, saveDismiss: () => {}, clearDismiss: () => {} };
+
 const today = new Date();
 const todayISO = iso(today);
 const profile = {
@@ -62,7 +67,7 @@ const mount = () => {
       onWeekly={noop} spotted={null} onLogSpotted={noop} onAddWorkout={noop} onEftp={noop} onToggleWorkout={noop}
       planEdge={null} onSupport={noop} activities={[]} displayActivities={[]} onOpenRecording={noop}
       onEditPlan={noop} onEnterTracker={noop} offerTracker={false} adjust={{}} adjustLog={[]} coachLog={{}}
-      blockReviewed={null} onBlockReviewed={noop} onFocus={noop} storage={{ ns: 'try.memo.', load: (k, d) => d, save: noop }}
+      blockReviewed={null} onBlockReviewed={noop} onFocus={noop} storage={MEMO_STORE}
       onRetest={noop} cssFail={null} onFixCss={noop} runFail={null} onFixRun={noop} ftpRetest={null}
       onFtpRetest={noop} startShortfall={null} onDecision={noop} fuelLog={{}} {...CARDS} {...over} />);
   });
