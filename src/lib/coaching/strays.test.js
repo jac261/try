@@ -123,6 +123,18 @@ describe('ReadinessCard dismissals are per-user (the TodayView migration, comple
     expect([...used].sort()).toEqual(Object.keys(DISMISS_SCOPE).sort());
   });
 
+  it('both wholesale-wipe sites take the coach rejections with them', () => {
+    /* The stamp cannot cover a reshape: createdAt identifies the SERVER ROW,
+       and reshapePlan keeps it while rebuilding the week grid. So the wipe
+       rides with its siblings, and this is the only net that catches its
+       removal. Source text because driving reshapePlan end to end through a
+       mounted App is far heavier than the thing it would prove. */
+    const src = readFileSync('src/app/App.jsx', 'utf8');
+    const between = (from, to) => src.slice(src.indexOf(from), src.indexOf(to, src.indexOf(from)));
+    expect(between('const enterTracker = () =>', 'setRefToId({})')).toContain('storage.clearDismiss()');
+    expect(between('const reshapePlan = ', 'setRefToId({})')).toContain('storage.clearDismiss()');
+  });
+
   it('digestSeenWeek dismissals are plan-scoped', () => {
     const src = readFileSync('src/features/today/WeeklyDigest.jsx', 'utf8');
     expect(src).toMatch(/planCreatedAt: plan\.createdAt \|\| null/);
