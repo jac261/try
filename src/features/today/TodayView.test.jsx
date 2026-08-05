@@ -193,3 +193,119 @@ describe('dismissal is per card and it sticks', () => {
     c.cleanup();
   });
 });
+
+/* ---- the modes, and the states that close the day ---- */
+
+// land exactly the chosen sessions on today, clearing the rest out of the way
+const onlyToday = (plan, keepIds) => {
+  const moves = {};
+  plan.weeks.flatMap(w => w.workouts)
+    .filter(w => w.date === todayISO && w.discipline !== 'rest' && !keepIds.includes(w.id))
+    .forEach(w => { moves[w.id] = iso(addDays(today, 3)); });
+  keepIds.forEach(id => { moves[id] = todayISO; });
+  return moves;
+};
+const firstSession = plan => plan.weeks.flatMap(w => w.workouts)
+  .find(w => w.discipline !== 'rest' && !w.race && w.date > todayISO);
+
+describe('tracker mode reorders the screen', () => {
+  const trackerPlan = () => buildTrackerPlan(generatePlan(profile), new Date().toISOString());
+
+  it('leads with the coach card and drops the week card entirely', () => {
+    const c = render({ plan: trackerPlan() });
+    const cards = [...c.el.querySelectorAll('.banner, .card')];
+    const coachAt = cards.findIndex(n => n.querySelector('.b-act'));
+    const readyAt = cards.findIndex(n => n.className.includes('rd'));
+    expect(coachAt).toBeGreaterThanOrEqual(0);
+    expect(coachAt).toBeLessThan(readyAt);       // with no plan the call to action leads
+    expect(c.el.querySelector('.yw')).toBe(null); // no plan week to strip
+    c.cleanup();
+  });
+
+  it('speaks tracker language: log a session, and no plan is active', () => {
+    const c = render({ plan: trackerPlan() });
+    expect(c.el.textContent).toContain('Log a session');
+    expect(c.el.textContent).toContain('No plan active');
+    expect(c.el.textContent).not.toContain('Add a session');
+    c.cleanup();
+  });
+
+  it('in plan mode readiness leads and the week card is there', () => {
+    const c = render({});
+    const cards = [...c.el.querySelectorAll('.banner, .card')];
+    const readyAt = cards.findIndex(n => n.className.includes('rd'));
+    const coachAt = cards.findIndex(n => n.querySelector('.b-act'));
+    expect(readyAt).toBeGreaterThanOrEqual(0);
+    if (coachAt >= 0) expect(readyAt).toBeLessThan(coachAt);
+    expect(c.el.querySelector('.yw')).not.toBe(null);
+    expect(c.el.textContent).toContain('Add a session');
+    c.cleanup();
+  });
+});
+
+describe('the day closes honestly', () => {
+  it('swaps the rows for a done card once every session is logged, and Review brings them back', () => {
+    const plan = generatePlan(profile);
+    const mine = plan.weeks.flatMap(w => w.workouts).find(w => w.discipline !== 'rest' && !w.race);
+    const moves = onlyToday(plan, [mine.id]);
+    const c = render({ plan, moves, log: { [mine.id]: { done: true, at: todayISO } } });
+    expect(c.el.textContent).toContain('Done for today');
+    expect(c.el.querySelector('.today-done')).not.toBe(null);
+    press(c.el.querySelector('.today-done .reset'));
+    expect(c.el.querySelector('.today-done')).toBe(null);   // the rows are back
+    expect(c.el.querySelector('.wk')).not.toBe(null);
+    c.cleanup();
+  });
+
+  it('names what is next once the day is spent', () => {
+    const plan = generatePlan(profile);
+    const mine = plan.weeks.flatMap(w => w.workouts).find(w => w.discipline !== 'rest' && !w.race);
+    const c = render({ plan, moves: onlyToday(plan, [mine.id]), log: { [mine.id]: { done: true, at: todayISO } } });
+    const row = c.el.querySelector('.tmrw');
+    expect(row).not.toBe(null);
+    expect(row.getAttribute('aria-label')).toContain('Next up');
+    c.cleanup();
+  });
+
+  it('skips a session already logged when choosing what is next', () => {
+    /* Pins #62's fix at this surface: the row used to ignore the log, so it
+       could name a session the athlete had already ticked while the week
+       card beside it named a different one. */
+    const plan = generatePlan(profile);
+    const mine = plan.weeks.flatMap(w => w.workouts).find(w => w.discipline !== 'rest' && !w.race);
+    const moves = onlyToday(plan, [mine.id]);
+    const nextOne = firstSession(plan);
+    const withNextOpen = render({ plan, moves, log: { [mine.id]: { done: true, at: todayISO } } });
+    const named = withNextOpen.el.querySelector('.tmrw').getAttribute('aria-label');
+    withNextOpen.cleanup();
+
+    const withNextDone = render({ plan, moves, log: { [mine.id]: { done: true, at: todayISO }, [nextOne.id]: { done: true, at: nextOne.date } } });
+    const namedNow = withNextDone.el.querySelector('.tmrw').getAttribute('aria-label');
+    expect(named).toContain(nextOne.title);
+    expect(namedNow).not.toContain(nextOne.title);   // ticked, so no longer next
+    withNextDone.cleanup();
+  });
+
+  it('a rest day says so and still points at what is coming', () => {
+    const plan = generatePlan(profile);
+    const c = render({ plan, moves: onlyToday(plan, []) });
+    expect(c.el.textContent).toContain('No session scheduled today');
+    expect(c.el.querySelector('.tmrw')).not.toBe(null);
+    c.cleanup();
+  });
+});
+
+describe('one voice for the day\'s priority', () => {
+  it('the briefing line speaks only when no readiness record does', () => {
+    /* #62: the verdict names today's session too, so with a reading in hand
+       this line was the same sentence twice above the fold. */
+    const bare = render({ wellness: [] });
+    expect(bare.el.querySelector('.tb-priority')).not.toBe(null);
+    bare.cleanup();
+
+    const withReading = render({ wellness: [{ date: todayISO, hrv: 70, rhr: 47, sleepSec: 8 * 3600 }] });
+    expect(withReading.el.querySelector('.tb-priority')).toBe(null);
+    expect(withReading.el.querySelector('.tb-ctx-line')).not.toBe(null); // the context line stays
+    withReading.cleanup();
+  });
+});
