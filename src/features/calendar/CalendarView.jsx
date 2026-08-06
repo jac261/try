@@ -390,7 +390,6 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                   );
                 })}
                 <RecordedActivities bare activities={activities} date={d} plan={plan} log={log} moves={moves}
-                  counted={new Set((load.days[d].unclaimed || []).map(u => u.activity.id))}
                   ledger={load.days[d].ledger}
                   onOpen={onOpenRecording} />
                 {!ws.length && !hasActs && <div className="wd-none">{tracker ? 'Nothing recorded.'

@@ -389,8 +389,12 @@ describe('the week header counts what happened', () => {
     const rows = [...el.querySelectorAll('.wk-day .wk')];
     const num = r => (r.querySelector('.right b') ? Number(r.querySelector('.right b').textContent.replace('~', '')) : null);
     const byTitle = t => rows.find(r => r.querySelector('.t').textContent.includes(t));
-    // the claimed recording is evidence, not a second contribution
-    expect(num(byTitle('The file that did it'))).toBe(null);
+    /* The claimed recording is evidence, not a second contribution — and it
+       must be numberless in the STAT LINE too, which is where the double
+       print hid from an assertion that only read the right-hand slot. */
+    const claimedRow = byTitle('The file that did it');
+    expect(num(claimedRow)).toBe(null);
+    expect(claimedRow.querySelector('.s').textContent).not.toContain('load');
     expect(num(byTitle('Extra ride'))).toBe(44);
     // and everything the week counts as done is on screen, exactly once
     const shown = rows.filter(r => r.classList.contains('done') || r.querySelector('.t').textContent.includes('Extra ride'));
@@ -442,6 +446,30 @@ describe('add a session targets an honest day', () => {
     // the shown week is entirely before the plan: no honest target exists
     expect(el.textContent).toContain('Before this plan began.');
     expect(addCards(el)).toHaveLength(0);
+    await act(async () => root.unmount());
+  });
+});
+
+/* The month day card shares the row component but has no right-hand slot, so
+   the same rule lands differently there: an unclaimed recording keeps its
+   load in the stat line, a claimed one still carries nothing. */
+describe('the month day card says a claimed load once too', () => {
+  const planFor2 = () => generatePlan(profile());
+  it('keeps the load on an unclaimed row and drops it from a claimed one', async () => {
+    const plan = planFor2();
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && weekRange(todayISO).includes(x.date));
+    const acts = [
+      { id: 'm1', date: w.date, type: w.discipline === 'run' ? 'Run' : w.discipline === 'swim' ? 'Swim' : 'Ride',
+        name: 'Matched file', movingTimeSec: (w.durationMin || 60) * 60, trainingLoad: 66 },
+      { id: 'm2', date: w.date, type: 'Ride', name: 'Unclaimed spin', movingTimeSec: 1800, trainingLoad: 22 },
+    ];
+    const { el, root } = await mount(plan, { activities: acts, log: { [w.id]: { done: true } } });
+    const cell = el.querySelector('.cal-day[data-caldate="' + w.date + '"]');
+    await act(async () => cell.click());
+    const rowFor = t => [...el.querySelectorAll('.wk')].find(r => r.querySelector('.t') && r.querySelector('.t').textContent.includes(t));
+    expect(rowFor('Unclaimed spin').querySelector('.s').textContent).toContain('load 22');
+    expect(rowFor('Matched file').querySelector('.s').textContent).not.toContain('load');
     await act(async () => root.unmount());
   });
 });
