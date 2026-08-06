@@ -19,6 +19,21 @@ discipline and date. `brickPairFor` handles a brick's two legs. Indoor types
 be suppressed while their duration and power still count. `DISCIPLINE` maps
 intervals.icu activity types onto Try's disciplines.
 
+`recordingFor` is the one place that answers "which recording is this
+session's": the brick pair folded into one via `brickRecording`, or the single
+activity that matches. It takes the RAW FEED, never the display list, and
+enforces that itself with a `!a.manual` filter — a hand-typed diary entry must
+never become a session's recording, or a typed duration enters the log and the
+calibration corpus and plan-relative verdicts get drawn against numbers nobody
+measured. `brickRecording` reports a pair as measured only when BOTH legs
+carried a load, and estimates the leg that did not.
+
+`ownerFor` answers the reverse, and is not its inverse: it requires the
+session to be TICKED. Anything counting work must build its ledger from the
+recording side with `ownerFor` (see `calendar-load.js`), because `recordingFor`
+has no tick requirement and would let an unticked session and an unclaimed
+recording both claim the same ride.
+
 ## Load model (`loadmodel.js`)
 
 `deriveLoadRecords` / `deriveActivityLoadRecords` / `withLogLoad` turn logged and

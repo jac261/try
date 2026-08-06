@@ -366,6 +366,16 @@ zero), Connections, Support, Account, then the lone destructive reset. `openSett
 in App opens Settings scrolled to a card; in-copy mentions of Settings should become
 links via a nullable `onOpenSettings` callback where cheap.
 
+**The `~` estimate marker** — one meaning app-wide: this number was modelled,
+not measured. The Assumption Center wears it on an estimated anchor, the digest
+on a load it derived, and the calendar week on any row or total that had to
+fall back to the plan's forecast because no recording carried a load of its
+own. A number that is entirely modelled says so in words instead (the calendar
+week with nothing recorded still reads "512 TSS, estimated"), because a tilde
+alone is a footnote and a whole-number-is-a-guess deserves a sentence. The
+marker is visual only, so anywhere it appears the accessible name must say
+"about" — a screen reader gets no tilde.
+
 **Chevroned-question fold** — a muted bold question ending in a chevron
 (`▸`/`▾`), `role="button"` + `aria-expanded`, folding out derived reasons.
 One consumer now: the detail sheet's "Why not harder?" (`.wnh-toggle`, phase

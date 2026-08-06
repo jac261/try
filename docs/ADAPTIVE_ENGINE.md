@@ -128,6 +128,16 @@ Rules (`src/lib/loadmodel.js`):
   stays server-shaped and the sync can never upload estimates as measurements.
 - **Measured data wins absolutely.** One real CTL anywhere in the store and
   the derived model stays out; mixing scales would lie at the seam.
+- **A series and a snapshot answer different questions, and the calendar week
+  deliberately does the opposite of the load bars.** A SERIES has one currency
+  because its bars are compared with each other across weeks as sync coverage
+  shifts, and a bar half-measured half-modelled is comparable neither
+  bar-to-bar nor week-to-week (this is why `ProgressView` refuses recorded
+  `trainingLoad`). A SNAPSHOT of one week has nothing to compare itself
+  against but itself, so `calendar-load.js` takes the best number available
+  per session, labels each one with the `~` marker, and sums them into a
+  done-of-planned pair. Both rules are right; whoever changes one should read
+  the other first rather than harmonising them.
 - **Only logged sessions count**, on their effective (moved) dates, with the
   adjustment overlay applied — identical accounting to `projectRaceForm`.
 - Records carry `derived: true`; the charts label themselves "estimated", and
