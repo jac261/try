@@ -93,6 +93,20 @@ const MODES = {
         movingTimeSec: 40 * 60, distance: 2225 },
     ],
   },
+  /* An athlete far above what the plan can hold: history seeded at CTL 80
+     against a mid-season intermediate plan, so the season range shows the
+     shortfall banner. Every other mode ramps to ~38-47 and never trips it. */
+  shortfall: {
+    plan: midSeason,
+    activities: [], log: {},
+    wellness: (() => {
+      const out = [];
+      for (let d = midSeason.weeks[0].start; d <= todayISO; d = iso(addDays(d, 1))) {
+        out.push({ date: d, ctl: 80, atl: 76, tsb: 4 });
+      }
+      return out;
+    })(),
+  },
   // no plan, recordings only: the week range must say "Nothing recorded."
   tracker: { plan: trackerPlan, activities: trackerActs, log: {} },
   // ten weeks done, eight to go: the season's solid half meeting its dashed one
@@ -146,7 +160,7 @@ function Harness() {
       <CalendarView key={mode} plan={m.plan} log={m.log} moves={{}} open={noop} easedOf={w => w}
         onToggleWorkout={noop} onMove={noop} activities={m.activities}
         onOpenRecording={noop} onAddWorkout={noop}
-        wellness={m.wellness || historyFor(m.plan)} adjust={{}} />
+        wellness={m.wellness || historyFor(m.plan)} adjust={{}} onOpenSettings={() => {}} />
     </div>
   );
 }

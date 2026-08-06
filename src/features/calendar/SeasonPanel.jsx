@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import * as T from '@/lib';
 import { TrendChart } from '@/components/charts.jsx';
 import { Icon } from '@/components/Icon.jsx';
+import { tap } from '@/utils/a11y.js';
 
 /* Season — the long view (design: screens/Season Screen.dc.html).
  *
@@ -12,11 +13,12 @@ import { Icon } from '@/components/Icon.jsx';
  */
 const PHASE = T.PHASE_INFO;
 
-export function SeasonPanel({ plan, wellness, log, moves, adjust, todayISO }) {
+export function SeasonPanel({ plan, wellness, log, moves, adjust, todayISO, onOpenSettings }) {
   const s = useMemo(() => T.seasonCurve({ plan, wellness, log, moves, adjust, todayISO }),
     [plan, wellness, log, moves, adjust, todayISO]);
   const milestones = useMemo(() => T.seasonMilestones({ plan, moves, todayISO, limit: 4 }),
     [plan, moves, todayISO]);
+  const shortfall = useMemo(() => T.seasonShortfall(s), [s]);
 
   /* No plan, no season. The Plan tab's own words rather than a new phrase for
      the same state — an athlete who reads both should not have to work out
@@ -76,6 +78,25 @@ export function SeasonPanel({ plan, wellness, log, moves, adjust, todayISO }) {
               on sessions the athlete has not done yet. */}
           <p className="sr-note">Solid is what you have done. Dashed is what this plan would give you if you
             complete it, estimated — it moves every time you do.</p>
+          {/* The caption escalates when the dashed line never regains the
+              solid one: the plan's load is below what this athlete's fitness
+              needs to hold. Not dismissible on purpose — the season view is
+              visited deliberately, the words caption a picture that stays
+              either way, and the condition clears itself when the level or
+              the days change, or the measured line comes down. Engine
+              parameters stay out of the copy: the two lines ARE the
+              explanation. */}
+          {shortfall && (
+            <div className="banner ramp" style={{ margin: '12px 0 0' }}
+              {...(onOpenSettings ? tap(() => onOpenSettings('profile')) : {})}>
+              <div className="bi"><Icon name="trend" size={20} /></div>
+              <div className="btx">
+                <div className="bt">Planned load sits below your fitness</div>
+                <div className="bs">The dashed line never reaches where the solid one ends.
+                  {onOpenSettings ? ' Update your level or training days and the plan re-targets. →' : ''}</div>
+              </div>
+            </div>
+          )}
         </> : (
           <div className="empty" style={{ padding: '22px 8px' }}>
             No fitness readings yet. Log a few sessions, or connect a feed, and the ramp fills in.

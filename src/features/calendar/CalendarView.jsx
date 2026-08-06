@@ -17,7 +17,7 @@ const RANGES = [['week', 'Week'], ['month', 'Month'], ['season', 'Season']];
    (writes the existing moves overlay, so it syncs and tags exactly like the
    detail sheet's reschedule — which remains the keyboard/screen-reader path).
    The week-by-week programme listing lives on the Plan tab now. */
-export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove, activities, onOpenRecording, onAddWorkout, wellness, adjust }) {
+export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove, activities, onOpenRecording, onAddWorkout, wellness, adjust, onOpenSettings }) {
   const todayISO = T.iso(new Date());
   // Tracker mode has no plan weeks: browse a rolling window around today so the
   // month grid still works and detected activities land on their days.
@@ -282,7 +282,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
       </div>}
 
       {range === 'season' && <SeasonPanel plan={plan} wellness={wellness} log={log}
-        moves={moves} adjust={adjust} todayISO={todayISO} />}
+        moves={moves} adjust={adjust} todayISO={todayISO} onOpenSettings={onOpenSettings} />}
 
       {range === 'week' && <>
         {weekHeader && <div className="wk-head">{weekHeader}</div>}
