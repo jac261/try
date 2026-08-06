@@ -6,6 +6,7 @@ import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 import { dayLedger, weekLoad } from '@/lib/calendar-load.js';
+import { LoadSlot } from '@/components/LoadSlot.jsx';
 import { SeasonPanel } from '@/features/calendar/SeasonPanel.jsx';
 const D = T.DISCIPLINES;
 const RANGES = [['week', 'Week'], ['month', 'Month'], ['season', 'Season']];
@@ -112,6 +113,12 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
      trim/boost/ease overlay, so the total can never disagree with the rows
      under it. "Estimated" is said once, because it is: duration times
      intensity-factor squared, not a measurement. */
+  /* One pass over the week for every number on it: the rows and the header
+     read the same ledger, so the total is always the sum of what is visible.
+     Memoised on the same inputs the rows themselves render from. */
+  const load = useMemo(() => weekLoad({ dates: week, byDate, activities, log, moves, easedOf }),
+    [week, byDate, activities, log, moves, easedOf]);
+
   const weekHeader = useMemo(() => {
     const shown = week.flatMap(d => (byDate[d] || [])).filter(w => !w.race);
     if (!shown.length) return null;
@@ -274,14 +281,17 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
               </div>
               <div className="wd-rows">
                 {ws.map(w => {
-                  const shown = easedOf(w);
+                  const row = (load.days[d].sessions || []).find(x => x.w.id === w.id);
+                  const shown = row ? row.shown : easedOf(w);
                   return <WorkoutRow key={w.id} w={shown} done={!!log[w.id]} eff={effDate(w, moves)}
                     moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)}
                     /* The A race's durationMin is a placeholder — WorkoutRow
                        suppresses its duration for the same reason — so a load
-                       estimated off it would be invented. Tune-ups keep
-                       theirs; they have real durations. */
-                    right={w.race ? null : <><b>{Math.round(T.estimateTss(shown))}</b><span>TSS</span></>} />;
+                       estimated off it would be invented. Its recordings still
+                       count: they arrive as their own rows, each carrying what
+                       it actually measured. Tune-ups keep theirs; they have
+                       real durations. */
+                    right={w.race ? null : <LoadSlot tss={row ? row.tss : T.estimateTss(shown)} measured={!!row && row.measured} />} />;
                 })}
                 <RecordedActivities bare activities={activities} date={d} plan={plan} log={log} moves={moves}
                   onOpen={onOpenRecording} />

@@ -94,7 +94,11 @@ describe('no component references an identifier it does not have', () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('src/components/RecordedActivities.jsx', 'utf8');
     const helper = src.slice(src.indexOf('function statBits('), src.indexOf('function Row('));
-    expect(helper).toMatch(/function statBits\(a, disc, pool\)/);
+    /* The signature is pinned by its ARGUMENTS, not its arity: it gained a
+       withLoad flag when the week's rows moved the number into their own
+       slot, and the guard that matters is that every value it uses arrives
+       as one of them. */
+    expect(helper).toMatch(/function statBits\(a, disc, pool(, \w+)*\)/);
     expect(helper).not.toMatch(/\bplan\b/);
   });
 });

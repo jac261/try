@@ -248,3 +248,72 @@ describe('WorkoutRow keeps its old shape', () => {
     expect(withSlot).toContain('Easy Run');
   });
 });
+
+/* The week's rows price themselves off what happened. Before this the row for
+   a session you had finished still showed the number it was forecast to cost,
+   and a ride that was never in the plan showed no number at all. */
+describe('a week row says what it cost', () => {
+  const planFor = () => generatePlan(profile());
+  const firstSession = plan => plan.weeks.flatMap(w => w.workouts)
+    .find(w => w.discipline !== 'rest' && !w.race && weekRange(todayISO).includes(w.date));
+  const rowFor = (el, title) => [...el.querySelectorAll('.wk-day .wk')].find(r => r.querySelector('.t').textContent.includes(title));
+
+  it('shows the measured number for a session its recording speaks for', async () => {
+    const plan = planFor();
+    const w = firstSession(plan);
+    const a = { id: 'a1', date: w.date, type: w.discipline === 'run' ? 'Run' : w.discipline === 'swim' ? 'Swim' : 'Ride',
+      name: 'Recorded', movingTimeSec: (w.durationMin || 60) * 60, trainingLoad: 137 };
+    const { el, root } = await mount(plan, { activities: [a], log: { [w.id]: { done: true } } });
+    await toWeek(el);
+    const b = rowFor(el, w.title).querySelector('.right b');
+    expect(b.textContent).toBe('137');            // measured: no tilde, not the plan's estimate
+    await act(async () => root.unmount());
+  });
+
+  it('marks a number it had to model', async () => {
+    const plan = planFor();
+    const w = firstSession(plan);
+    const { el, root } = await mount(plan);
+    await toWeek(el);
+    expect(rowFor(el, w.title).querySelector('.right b').textContent)
+      .toBe('~' + Math.round(estimateTss(w)));
+    await act(async () => root.unmount());
+  });
+
+  it('gives a recording the plan never asked for its own number, and speaks it', async () => {
+    const plan = planFor();
+    const a = { id: 'a9', date: todayISO, type: 'Ride', name: 'Bristol Road Cycling', movingTimeSec: 5400, trainingLoad: 103 };
+    const { el, root } = await mount(plan, { activities: [a] });
+    await toWeek(el);
+    const row = rowFor(el, 'Bristol Road Cycling');
+    expect(row.querySelector('.right b').textContent).toBe('103');
+    // and it says the number ONCE: the stat line gives it up when the row
+    // has a slot of its own
+    expect(row.querySelector('.s').textContent).not.toContain('load');
+    // the number is visible, so it must also be audible
+    expect(row.getAttribute('aria-label')).toContain('103 TSS');
+    await act(async () => root.unmount());
+  });
+
+  it('says an estimate out loud rather than only tilde-ing it', async () => {
+    const plan = planFor();
+    const a = { id: 'a9', date: todayISO, type: 'Ride', name: 'Unmetered ride', movingTimeSec: 3600, trainingLoad: null };
+    const { el, root } = await mount(plan, { activities: [a] });
+    await toWeek(el);
+    const row = rowFor(el, 'Unmetered ride');
+    expect(row.querySelector('.right b').textContent).toBe('~49');
+    expect(row.getAttribute('aria-label')).toContain('about 49 TSS');
+    await act(async () => root.unmount());
+  });
+
+  it('keeps the load in the month day card, where there is no slot for it', async () => {
+    // the two surfaces share the row; only the week has a right-hand column
+    const plan = planFor();
+    const a = { id: 'a9', date: todayISO, type: 'Ride', name: 'Bristol Road Cycling', movingTimeSec: 5400, trainingLoad: 103 };
+    const { el, root } = await mount(plan, { activities: [a] });
+    const row = [...el.querySelectorAll('.wk')].find(r => r.querySelector('.t').textContent.includes('Bristol'));
+    expect(row.querySelector('.s').textContent).toContain('load 103');
+    expect(row.querySelector('.right').textContent).toBe('\u203a');
+    await act(async () => root.unmount());
+  });
+});
