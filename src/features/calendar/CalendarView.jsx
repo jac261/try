@@ -391,6 +391,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                 })}
                 <RecordedActivities bare activities={activities} date={d} plan={plan} log={log} moves={moves}
                   counted={new Set((load.days[d].unclaimed || []).map(u => u.activity.id))}
+                  ledger={load.days[d].ledger}
                   onOpen={onOpenRecording} />
                 {!ws.length && !hasActs && <div className="wd-none">{tracker ? 'Nothing recorded.'
                   : d < planStart ? 'Before this plan began.'
@@ -413,7 +414,9 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                 moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />
             ))}
         </div>}
-        <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} noHeading={tracker} />
+        <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves}
+          ledger={dayLedger({ date: selected, sessions: byDate[selected] || [], activities: actByDate[selected] || [], log, moves })}
+          onOpen={onOpenRecording} noHeading={tracker} />
       </>}
 
       {/* One card per sport, full discipline colour with the icon front and

@@ -54,9 +54,11 @@ export function dayLedger({ date, sessions, activities, log, moves }) {
   const acts = (activities || []).filter(a => countable(a) && a.date === date);
   const ws = sessions || [];
   const bySession = {};
-  if (!acts.length) return { rows: ws.map(w => ({ w, recording: null })), unclaimed: [] };
+  if (!acts.length) return { rows: ws.map(w => ({ w, recording: null })), unclaimed: [], claims: {}, pairs: {} };
 
   const claimed = new Set();
+  const claims = {};
+  const pairs = {};
   // manual entries can be neither leg of a brick nor a session's recording;
   // they only ever stand for themselves
   const feed = acts.filter(a => !a.manual);
@@ -65,6 +67,8 @@ export function dayLedger({ date, sessions, activities, log, moves }) {
     if (pair) {
       claimed.add(pair.ride.id); claimed.add(pair.run.id);
       bySession[w.id] = brickRecording(pair.ride, pair.run);
+      pairs[w.id] = pair;
+      claims[pair.ride.id] = w; claims[pair.run.id] = w;
     }
   });
 
@@ -72,11 +76,22 @@ export function dayLedger({ date, sessions, activities, log, moves }) {
   const unclaimed = acts.filter(a => {
     if (claimed.has(a.id)) return false;
     const owner = ownerFor({ activity: a, sessions: ws, log, used });
-    if (owner) { used.add(owner.id); bySession[owner.id] = a; return false; }
+    if (owner) { used.add(owner.id); bySession[owner.id] = a; claims[a.id] = owner; return false; }
     return true;
   });
 
-  return { rows: ws.map(w => ({ w, recording: bySession[w.id] || null })), unclaimed };
+  /* `claims` and `pairs` are the ledger's answer published for the surfaces
+     that need to SAY who owns what, not just count it. The recorded list used
+     to re-run brickPairFor and ownerFor itself, which is two implementations
+     of one question: whichever drifted, a row would tag itself Matched while
+     the total counted it as its own work, or the reverse. One pass, one
+     answer, three consumers (week rows, month dots, recorded rows). */
+  return {
+    rows: ws.map(w => ({ w, recording: bySession[w.id] || null })),
+    unclaimed,
+    claims,        // activityId → the workout that speaks for it
+    pairs,         // workoutId → { ride, run }, the brick legs it folded
+  };
 }
 
 /* One session's number. Measured when a recording speaks for it, otherwise
@@ -121,7 +136,8 @@ export function weekLoad({ dates, byDate, activities, log, moves, easedOf }) {
 
   (dates || []).forEach(date => {
     const sessions = (byDate && byDate[date]) || [];
-    const { rows, unclaimed } = dayLedger({ date, sessions, activities, log: lg, moves });
+    const led = dayLedger({ date, sessions, activities, log: lg, moves });
+    const { rows, unclaimed } = led;
     const sessionRows = rows.map(({ w, recording }) => {
       const shown = ease(w);
       const entry = lg[w.id];
@@ -144,7 +160,9 @@ export function weekLoad({ dates, byDate, activities, log, moves, easedOf }) {
       if (!measured) estimated = true;
       return { activity: a, tss: Math.round(tss), measured };
     });
-    days[date] = { sessions: sessionRows, unclaimed: recordedRows };
+    // the ledger rides along so the recorded rows read the same claims the
+    // totals were summed from, rather than deriving their own
+    days[date] = { sessions: sessionRows, unclaimed: recordedRows, ledger: led };
   });
 
   return { days, doneMin, plannedMin, doneTss, plannedTss, estimated };
