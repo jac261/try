@@ -986,24 +986,13 @@ export function App({ storage, getToken, user }) {
   // the link opens the ride leg. Everything else resolves to its single match.
   // `pair: true` marks the fold, so display copy can present the rpe as the
   // harder leg's rating rather than quoting it as one rating of one session.
-  const brickRecording = (ride, run) => {
-    const rpes = [ride.rpe, run.rpe].filter(v => Number.isFinite(v));
-    const load = (ride.trainingLoad != null || run.trainingLoad != null)
-      ? (ride.trainingLoad || 0) + (run.trainingLoad || 0) : null;
-    return {
-      id: ride.id, date: ride.date, type: 'Ride', name: 'Brick — ride + run legs', pair: true,
-      movingTimeSec: ride.movingTimeSec + run.movingTimeSec,
-      trainingLoad: load, rpe: rpes.length ? Math.max(...rpes) : null,
-    };
-  };
-  const recordingFor = w => {
-    if (!w) return null;
-    if (w.discipline === 'brick') {
-      const pair = T.brickPairFor({ workout: w, activities, moves });
-      return pair ? brickRecording(pair.ride, pair.run) : null;
-    }
-    return T.activityFor({ workout: w, activities, moves });
-  };
+  /* Both of these now live in autolog.js beside the matchers they call: the
+     calendar needs the same pairing to say which session a recording belongs
+     to, and two copies of a matching rule is how surfaces start disagreeing
+     about the same day. The raw feed is the right input here — a hand-typed
+     diary entry must never become a session's recording — and the lifted
+     helper enforces that itself rather than trusting each caller. */
+  const recordingFor = w => T.recordingFor({ workout: w, activities, moves });
   const actualFor = w => {
     const a = recordingFor(w);
     return a ? Math.round(a.movingTimeSec / 60) : undefined;
@@ -1477,7 +1466,7 @@ export function App({ storage, getToken, user }) {
       // ambiguity (no deck at all) or hand the deck — and the synced review —
       // another session's recording (verified gauntlet catch 2026-07-30).
       const head = T.headlineSpot(spotted);
-      const headAct = head.activityRun ? brickRecording(head.activity, head.activityRun) : head.activity;
+      const headAct = head.activityRun ? T.brickRecording(head.activity, head.activityRun) : head.activity;
       markRecapSeen(headAct);
       setRecap({ workout: head.workout, activity: headAct });
     }
