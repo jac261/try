@@ -173,7 +173,9 @@ describe('ReadinessCard dismissals are per-user (the TodayView migration, comple
     });
     walk('src');
     expect([...used].sort()).toEqual(Object.keys(DISMISS_SCOPE).sort());
-  });
+    // 30s: walks and regexes the whole of src/, and a loaded machine has pushed
+    // that past the 5s default. See the same note in bike-durability.test.js.
+  }, 30000);
 
   it('both wholesale-wipe sites take the coach rejections with them', () => {
     /* The stamp cannot cover a reshape: createdAt identifies the SERVER ROW,

@@ -40,5 +40,7 @@ describe('the lib barrel', () => {
     expect(used.size).toBeGreaterThan(150);
     const missing = [...used].filter(name => !(name in T)).sort();
     expect(missing, 'used in app code but absent from src/lib/index.js: ' + missing.join(', ')).toEqual([]);
-  });
+    // 30s: walks and regexes four whole source roots, and a loaded machine has
+    // pushed that past the 5s default. See the note in bike-durability.test.js.
+  }, 30000);
 });

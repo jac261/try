@@ -219,9 +219,15 @@ describe('nothing here is a model without a caller', () => {
       else if (/\.jsx?$/.test(e.name) && !/\.test\./.test(e.name)) srcFiles.push(full);
     });
     walk(new URL('..', import.meta.url).pathname.replace(/\/$/, ''));
-    const prodUses = name => srcFiles.filter(f => !/\/(bike-dashboard|bike-readiness)\.js$/.test(f)
-      && !f.endsWith('/index.js')
-      && new RegExp('\\b' + name + '\\b').test(readFileSync(f, 'utf8'))).length;
+    // one read per file, not one per exported name — see the note in
+    // bike-durability.test.js
+    const prodSrc = srcFiles
+      .filter(f => !/\/(bike-dashboard|bike-readiness)\.js$/.test(f) && !f.endsWith('/index.js'))
+      .map(f => readFileSync(f, 'utf8'));
+    const prodUses = name => {
+      const re = new RegExp('\\b' + name + '\\b');
+      return prodSrc.filter(t => re.test(t)).length;
+    };
 
     MODULES.forEach(mod => {
       const src = readFileSync(new URL('./' + mod, import.meta.url), 'utf8');
@@ -235,7 +241,9 @@ describe('nothing here is a model without a caller', () => {
     expect(pv).toMatch(/<BikeDashboard/);
     const app = readFileSync(new URL('../app/App.jsx', import.meta.url), 'utf8');
     expect(app, 'App does not pass the position log the dashboard needs').toMatch(/positionLog=\{positionLog\}/);
-  });
+    // 30s: walks and regexes the whole of src/, and a loaded machine has pushed
+    // that past the 5s default. See the same note in bike-durability.test.js.
+  }, 30000);
 });
 
 
