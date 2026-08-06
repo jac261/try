@@ -70,7 +70,15 @@ function Row({ disc, name, stat, tag, onOpen, manual, indoor, right, spoken }) {
   );
 }
 
-export function RecordedActivities({ activities, date, plan, log, moves, onOpen, noHeading, bare }) {
+/* `counted` (bare mode only) is the set of activity ids the week's ledger
+   counts on their own. A recording a session already speaks for is NOT in it:
+   its number rides on that session's row, and printing it here as well would
+   put the same load on the screen twice and make the visible rows add up to
+   more than the header above them. Everything else — an unplanned ride, the
+   second ride inside one session's window — is in the set and carries its
+   own. The set comes from the same ledger the header is summed from, so the
+   two cannot drift. */
+export function RecordedActivities({ activities, date, plan, log, moves, onOpen, noHeading, bare, counted }) {
   // The DISCIPLINES guard keeps a future drift between the activity-type map
   // and the disciplines table from crashing the row render.
   const day = (activities || []).filter(a => a && a.date === date && DISC[a.type] && T.DISCIPLINES[DISC[a.type]] && a.movingTimeSec);
@@ -86,6 +94,7 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
   // matcher sees REAL recordings only: a hand-logged diary entry must never
   // be folded into a brick's Matched row as if it were a measured leg.
   const feedActs = (activities || []).filter(a => a && !a.manual);
+  const owns = id => bare && (!counted || counted.has(id));
   const rows = [];
   const claimed = new Set();
   sessions.filter(w => w.discipline === 'brick').forEach(w => {
@@ -102,9 +111,9 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
       tag: (log || {})[w.id] && log[w.id].done ? 'Matched' : null,
       stat: T.fmtDuration(Math.round(pair.ride.movingTimeSec / 60)) + (INDOOR[pair.ride.type] ? ' indoor ride + ' : ' ride + ')
         + T.fmtDuration(Math.round(pair.run.movingTimeSec / 60)) + (INDOOR[pair.run.type] ? ' indoor run' : ' run')
-        + (!bare && rec.trainingLoad != null ? ' · ' + (load.measured ? 'load ' : '~load ') + Math.round(load.tss) : ''),
-      right: bare ? <LoadSlot {...load} /> : null,
-      spoken: bare ? loadSpoken(load) : null,
+        + (!owns(pair.ride.id) && rec.trainingLoad != null ? ' · ' + (load.measured ? 'load ' : '~load ') + Math.round(load.tss) : ''),
+      right: owns(pair.ride.id) ? <LoadSlot {...load} /> : null,
+      spoken: owns(pair.ride.id) ? loadSpoken(load) : null,
     });
   });
 
@@ -124,11 +133,11 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
     // window, and re-deriving from the workout alone would resolve to the
     // recording closest to the planned duration, not the one actually tapped.
     const load = loadOf(a);
-    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc, pool, !bare), manual: !!a.manual,
+    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc, pool, !owns(a.id)), manual: !!a.manual,
       indoor: !!INDOOR[a.type],
       tag: a.manual ? 'Logged' : owner ? 'Matched' : null,
-      right: bare ? <LoadSlot {...load} /> : null,
-      spoken: bare ? loadSpoken(load) : null,
+      right: owns(a.id) ? <LoadSlot {...load} /> : null,
+      spoken: owns(a.id) ? loadSpoken(load) : null,
       open: owner ? { workout: owner, activity: a } : { activity: a } });
   });
 

@@ -105,30 +105,46 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     return T.fmtDate(week[0], sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'long' })
       + ' – ' + T.fmtDate(week[6], { day: 'numeric', month: 'long' });
   })();
-  /* "Week 2 of 4 · 9h 40m · 512 TSS, estimated".
-     Position is within the PHASE GROUP, not the plan: phaseGroups returns the
-     week index each group starts at, so it is week.index - group.start + 1,
-     and it is simply absent when the shown week is outside the plan.
-     Load is estimateTss over the sessions AS SHOWN — easedOf applies the
-     trim/boost/ease overlay, so the total can never disagree with the rows
-     under it. "Estimated" is said once, because it is: duration times
-     intensity-factor squared, not a measurement. */
   /* One pass over the week for every number on it: the rows and the header
      read the same ledger, so the total is always the sum of what is visible.
      Memoised on the same inputs the rows themselves render from. */
   const load = useMemo(() => weekLoad({ dates: week, byDate, activities, log, moves, easedOf }),
     [week, byDate, activities, log, moves, easedOf]);
 
+  /* "Week 2 of 4 · 6h 10m / 9h 40m · ~310 / 512 TSS".
+     Position is within the PHASE GROUP, not the plan: phaseGroups returns the
+     week index each group starts at, so it is week.index - group.start + 1,
+     and it is simply absent when the shown week is outside the plan.
+
+     Two pairs, done over planned, in the slash form the Your Week card
+     already uses. Done counts what happened — a session its recording speaks
+     for, a ticked session's estimate, and every recording the plan never
+     asked for — so a week with two extra rides finally shows them. Planned
+     stays the forecast, priced through easedOf like the rows themselves, so
+     the total can never disagree with what is under it.
+
+     Done may exceed planned. That is an ordinary week and it is displayed as
+     one: no clamp, no colour, no apology.
+
+     A week with nothing recorded says "512 TSS, estimated" exactly as it
+     always did — a number that is entirely modelled should admit it in words
+     rather than wear a tilde and a denominator it cannot use. And a week with
+     no plan sessions at all (tracker, or before the plan began) still gets a
+     header now, because it is precisely the week that is all recordings. */
   const weekHeader = useMemo(() => {
-    const shown = week.flatMap(d => (byDate[d] || [])).filter(w => !w.race);
-    if (!shown.length) return null;
-    const min = shown.reduce((s, w) => s + (easedOf(w).durationMin || 0), 0);
-    const tss = Math.round(shown.reduce((s, w) => s + T.estimateTss(easedOf(w)), 0));
+    const anyPlanned = week.some(d => (byDate[d] || []).length);
+    if (!anyPlanned && !load.doneTss && !load.doneMin) return null;
     const pw = plan.weeks.find(w => w.start === week[0]);
     const grp = pw && T.phaseGroups(plan).find(g => pw.index >= g.start && pw.index < g.start + g.weeks);
     const where = grp ? 'Week ' + (pw.index - grp.start + 1) + ' of ' + grp.weeks + ' · ' : '';
-    return where + T.fmtDuration(min) + ' · ' + tss + ' TSS, estimated';
-  }, [week, byDate, plan, easedOf]);
+    const tilde = load.estimated ? '~' : '';
+    if (!load.doneMin && !load.doneTss) {
+      return where + T.fmtDuration(load.plannedMin) + ' · ' + load.plannedTss + ' TSS, estimated';
+    }
+    if (!anyPlanned) return where + T.fmtDuration(load.doneMin) + ' · ' + tilde + load.doneTss + ' TSS';
+    return where + T.fmtDuration(load.doneMin) + ' / ' + T.fmtDuration(load.plannedMin)
+      + ' · ' + tilde + load.doneTss + ' / ' + load.plannedTss + ' TSS';
+  }, [week, byDate, plan, load]);
 
   const ym = s => s.slice(0, 7);
   /* "2026 season" / "Mar – Oct · week 22 of 34". Two years when the plan
@@ -294,6 +310,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                     right={w.race ? null : <LoadSlot tss={row ? row.tss : T.estimateTss(shown)} measured={!!row && row.measured} />} />;
                 })}
                 <RecordedActivities bare activities={activities} date={d} plan={plan} log={log} moves={moves}
+                  counted={new Set((load.days[d].unclaimed || []).map(u => u.activity.id))}
                   onOpen={onOpenRecording} />
                 {!ws.length && !hasActs && <div className="wd-none">{tracker ? 'Nothing recorded.'
                   : d < planStart ? 'Before this plan began.'
