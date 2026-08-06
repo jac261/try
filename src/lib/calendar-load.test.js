@@ -268,17 +268,54 @@ describe('a session moved off its recording', () => {
     expect(r.doneTss).toBe(40 + Math.round(estimateTss(sess('w1', { durationMin: 60 }), null, 62)));
   });
 
-  it('claims nothing across days for a session ticked by hand', () => {
-    // no actualMin means no recording was ever banked: the stray ride is
-    // its own work, and the session keeps its estimate
+  it('claims across days for a session ticked by hand, exactly as it would on the day', () => {
+    /* The cross-day test is Phase A's test, no stricter. A hand-ticked
+       session claims the recording on its own day; requiring banked minutes
+       HERE meant the same session, dragged one day over, stopped claiming —
+       an estimate on the new day plus a loose recording on the old one, and a
+       week total that changed because of a drag. */
     const w = sess('w1', { date: TUE, durationMin: 60 });
     const r = weekLoad({
       dates: DATES, byDate: { [THU]: [w] },
       activities: [ride()], log: { w1: { done: true } },
       moves: { w1: THU }, easedOf: x => x,
     });
-    expect(r.days[TUE].unclaimed).toHaveLength(1);
+    expect(r.days[TUE].unclaimed).toHaveLength(0);
+    expect(r.days[THU].sessions[0].measured).toBe(true);
+    expect(r.doneTss).toBe(70);
+  });
+
+  it('an UNTICKED session reaches back for nothing', () => {
+    /* The one thing Phase B asks that Phase A does not, and the reason it
+       asks: reaching back to a day the session no longer occupies is the
+       speculative direction, so it needs the athlete's word that the session
+       happened at all. A brick is the case that proves it — brickPairFor
+       reads no log, so without this the legs left on Tuesday would pair
+       themselves to a session nobody has ticked. */
+    const b = sess('b1', { date: TUE, discipline: 'brick', durationMin: 90 });
+    const legs = [
+      act('lr', { date: TUE, type: 'Ride', movingTimeSec: 60 * 60, trainingLoad: 50 }),
+      act('lu', { date: TUE, type: 'Run', movingTimeSec: 30 * 60, trainingLoad: 30 }),
+    ];
+    const r = weekLoad({
+      dates: DATES, byDate: { [THU]: [b] }, activities: legs, log: {},
+      moves: { b1: THU }, easedOf: x => x,
+    });
+    expect(r.days[TUE].unclaimed).toHaveLength(2);
     expect(r.days[THU].sessions[0].measured).toBe(false);
-    expect(r.doneTss).toBe(70 + Math.round(estimateTss(w)));
+  });
+
+  it('a move does not change what the week counts', () => {
+    /* The property the whole pass exists for, stated once as a property
+       rather than as three examples: dragging a completed session around the
+       week rearranges the rows and leaves the totals alone. Ticked by hand
+       here, which is the weaker of the two cases. */
+    const w = sess('w1', { date: TUE, durationMin: 60 });
+    const args = { dates: DATES, byDate: { [TUE]: [w] }, activities: [ride()],
+      log: { w1: { done: true } }, easedOf: x => x };
+    const still = weekLoad({ ...args, moves: {} });
+    const moved = weekLoad({ ...args, byDate: { [THU]: [w] }, moves: { w1: THU } });
+    expect(moved.doneTss).toBe(still.doneTss);
+    expect(moved.doneMin).toBe(still.doneMin);
   });
 });

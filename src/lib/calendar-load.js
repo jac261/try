@@ -155,18 +155,28 @@ const minutesOf = a => Math.round((a.movingTimeSec || 0) / 60);
    speaks for it, and which of them wins depends on iteration order.
 
    So the second pass is keyed by BASE date. A day's leftovers are offered
-   only to sessions scheduled on that day but effective elsewhere, still
-   unclaimed after the first pass (their own day's recording won), and ticked
-   with banked minutes (a hand-tick never claims across days). A session has
-   exactly one base date, so no two days ever contend, and the outcome does
-   not depend on the order the days are walked. */
+   only to sessions scheduled on that day but effective elsewhere, and still
+   unclaimed after the first pass (their own day's recording won). A session
+   has exactly one base date, so no two days ever contend, and the outcome
+   does not depend on the order the days are walked.
+
+   The claim test is Phase A's, unchanged — ticked, in the window, not a
+   manual entry — deliberately. This pass first also required banked minutes,
+   on the reasoning that a hand-tick has no evidence it belongs to the
+   recording. But Phase A asks for no such thing: a hand-ticked session claims
+   the recording sitting on its own day. Requiring more here only meant that
+   dragging such a session across the week turned one ride into an estimate
+   plus a stray recording, and the week's total jumped — which is this whole
+   pass's defect, re-entered through the gate meant to be careful about it.
+   The rule is now the same rule on two days: the day the session sits on, and
+   the day it was scheduled for. */
 function crossDayClaims({ dates, byDate, leftovers, log, moves, claimedBy }) {
   const out = {};
   const movedFrom = {};
   (dates || []).forEach(d => ((byDate && byDate[d]) || []).forEach(w => {
     const eff = (moves || {})[w.id] || w.date;
     const entry = (log || {})[w.id];
-    if (eff !== w.date && !claimedBy[w.id] && entry && entry.done && entry.actualMin != null) {
+    if (eff !== w.date && !claimedBy[w.id] && entry && entry.done) {
       (movedFrom[w.date] = movedFrom[w.date] || []).push(w);
     }
   }));
