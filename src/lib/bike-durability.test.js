@@ -425,9 +425,18 @@ describe('nothing here is a model without a caller', () => {
     });
     walk(new URL('..', import.meta.url).pathname.replace(/\/$/, ''));
 
-    const prodUses = name => srcFiles.filter(f => !/\/(bike-fuelling|bike-long|bike-position|brick)\.js$/.test(f)
-      && !f.endsWith('/index.js')
-      && new RegExp('\\b' + name + '\\b').test(readFileSync(f, 'utf8'))).length;
+    /* Read each file ONCE. The natural form puts readFileSync inside the
+       per-name filter, which is O(files × exports) — ~2000 reads here — and
+       that is what brought a guard with no real work in it within reach of
+       the timeout on a loaded machine. The exclusions do not depend on the
+       name, so hoisting them changes nothing but the cost. */
+    const prodSrc = srcFiles
+      .filter(f => !/\/(bike-fuelling|bike-long|bike-position|brick)\.js$/.test(f) && !f.endsWith('/index.js'))
+      .map(f => readFileSync(f, 'utf8'));
+    const prodUses = name => {
+      const re = new RegExp('\\b' + name + '\\b');
+      return prodSrc.filter(t => re.test(t)).length;
+    };
 
     MODULES.forEach(mod => {
       const src = readFileSync(new URL('./' + mod, import.meta.url), 'utf8');
@@ -454,7 +463,10 @@ describe('nothing here is a model without a caller', () => {
           .toBe(true);
       });
     });
-  });
+    // 30s, not the 5s default: this walks and regexes the whole of src/ — ~130ms
+    // idle, but on a loaded machine it has blown the default. The headroom is
+    // about the host's spare CPU, not about anything this assertion does.
+  }, 30000);
 
   it('the brick evidence has a real path from the plan to the athlete', () => {
     // not just importable: callable with the shapes the app actually holds

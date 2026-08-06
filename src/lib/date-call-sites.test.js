@@ -30,7 +30,7 @@ const files = [];
 
 // Comments and string/template literals must not count as call sites — the
 // prose form "daysBetween(new Date(), x)" appears in trap notes by design.
-const code = f => readFileSync(f, 'utf8')
+const code = src => src
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .split('\n').map(l => {
     const c = l.indexOf('//');
@@ -48,9 +48,18 @@ describe('daysBetween call sites (afternoon-clock guard)', () => {
   });
 
   it('no call takes a literal new Date() or Date.now() as either end — normalise with iso() first', () => {
-    const offenders = files.filter(f => OFFENDER.test(code(f)));
+    /* The `Between(` pre-check is a pure cost cut, not a narrowing: code()
+       only ever DELETES text, and OFFENDER cannot match without a literal
+       `Between(`, so a file whose raw bytes lack one can never become an
+       offender. It skips the line-by-line strip for the ~140 of 159 files
+       that never mention the helpers at all. */
+    const offenders = files.filter(f => {
+      const raw = readFileSync(f, 'utf8');
+      return raw.includes('Between(') && OFFENDER.test(code(raw));
+    });
     expect(offenders.map(f => relative(root, f))).toEqual([]);
-  });
+    // 30s rather than the 5s default — see the note in bike-durability.test.js.
+  }, 30000);
 
   it('the offender pattern still recognises the shapes it exists to catch', () => {
     for (const bad of [

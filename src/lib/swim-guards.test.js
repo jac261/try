@@ -138,16 +138,23 @@ describe('audit: the generalised guards now cover the swim modules too', () => {
       else if (/\.jsx?$/.test(e.name) && !/\.test\./.test(e.name)) srcFiles.push(full);
     });
     walk(new URL('..', import.meta.url).pathname.replace(/\/$/, ''));
+    /* One read per file, not one per (module × export). The exclusion here
+       depends on mod, so the list cannot be pre-filtered as it is in
+       bike-durability.test.js — the contents are cached instead. */
+    const text = new Map(srcFiles.map(f => [f, readFileSync(f, 'utf8')]));
     MODULES.forEach(mod => {
       const src = readFileSync(new URL('./' + mod, import.meta.url), 'utf8');
       const exported = [...src.matchAll(/export function (\w+)/g)].map(m => m[1]);
       if (!exported.length) return;
-      const called = exported.some(name => srcFiles.some(f => !f.endsWith('/' + mod)
-        && !f.endsWith('/index.js')
-        && new RegExp('\\b' + name + '\\b').test(readFileSync(f, 'utf8'))));
+      const called = exported.some(name => {
+        const re = new RegExp('\\b' + name + '\\b');
+        return srcFiles.some(f => !f.endsWith('/' + mod) && !f.endsWith('/index.js') && re.test(text.get(f)));
+      });
       expect(called, mod + ' has no export the app calls: a model with no caller').toBe(true);
     });
-  });
+    // 30s: walks and regexes the whole of src/, and a loaded machine has pushed
+    // that past the 5s default. See the same note in bike-durability.test.js.
+  }, 30000);
 });
 
 
