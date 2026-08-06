@@ -117,6 +117,7 @@ const historyFor = plan => {
 const noop = () => {};
 function Harness() {
   const [mode, setMode] = useState('starts-thursday');
+  const [moves, setMoves] = useState({});
   const m = MODES[mode];
   // A tracker plan has no weeks at all, which is the whole point of that mode
   // and is what this panel used to crash on.
@@ -143,8 +144,13 @@ function Harness() {
         week 1 sessions <b>{wk0 ? wk0.workouts.filter(w => w.discipline !== 'rest').length : 0}</b> ·
         sessions before the start: <b style={{ color: early.length ? 'var(--danger)' : 'var(--run)' }}>{early.length}</b>
       </div>
-      <CalendarView key={mode} plan={m.plan} log={m.log} moves={{}} open={noop} easedOf={w => w}
-        onToggleWorkout={noop} onMove={noop} activities={m.activities}
+      <CalendarView key={mode} plan={m.plan} log={m.log} moves={moves} open={noop} easedOf={w => w}
+        /* real move state, so the week range's drag is demonstrable here:
+           drop a session and the Moved tag appears, drop it home and it
+           clears — the app's own semantics, minus the sync */
+        onToggleWorkout={noop}
+        onMove={(id, date) => setMoves(mv => { const n = { ...mv }; if (date === null) delete n[id]; else n[id] = date; return n; })}
+        activities={m.activities}
         onOpenRecording={noop} onAddWorkout={noop}
         wellness={m.wellness || historyFor(m.plan)} adjust={{}} />
     </div>

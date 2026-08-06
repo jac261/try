@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as T from '@/lib';
 import { effDate, monthGrid, addMonths, weekRange } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
@@ -13,9 +13,11 @@ const RANGES = [['week', 'Week'], ['month', 'Month'], ['season', 'Season']];
 
 /* A real calendar: one month at a time as a grid of days, sessions shown as
    discipline dots on their EFFECTIVE dates. Tap a day to see its sessions
-   below; hold a session's grip and drag it onto another day to reschedule
-   (writes the existing moves overlay, so it syncs and tags exactly like the
-   detail sheet's reschedule — which remains the keyboard/screen-reader path).
+   below. Rescheduling by drag lives on the WEEK range only (Jon,
+   2026-08-06): its seven visible cards make within-week the natural
+   constraint, where a month grid let an athlete pile a whole month's
+   sessions into its last week. The detail sheet's day picker remains the
+   keyboard/screen-reader path, and both write the same moves overlay.
    The week-by-week programme listing lives on the Plan tab now. */
 export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove, activities, onOpenRecording, onAddWorkout, wellness, adjust }) {
   const todayISO = T.iso(new Date());
@@ -196,15 +198,51 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
     setDragBoth({ id: w.id, home: w.date, title: w.title, color: D[w.discipline].color, x: e.clientX, y: e.clientY, over: null });
   };
-  const moveDrag = e => {
-    if (!dragRef.current) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY);
+  /* The hit test, shared between pointer moves and the auto-scroll loop: the
+     nearest [data-caldate] under the point, valid inside the plan window and
+     never race day. In the week range the seven visible cards are the only
+     carriers, so within-week is structural — the athlete cannot pile a
+     month's sessions into its last week, which is why the drag lives here
+     and not on the month grid. */
+  const dropAt = (x, y) => {
+    const el = document.elementFromPoint(x, y);
     const cell = el && el.closest ? el.closest('[data-caldate]') : null;
     const over = cell ? cell.getAttribute('data-caldate') : null;
-    const valid = over && over >= planStart && over <= planEnd && over !== raceISO;
-    setDragBoth({ ...dragRef.current, x: e.clientX, y: e.clientY, over: valid ? over : null });
+    return over && over >= planStart && over <= planEnd && over !== raceISO ? over : null;
+  };
+  /* Edge auto-scroll. Seven stacked day cards outrun a phone viewport, and
+     touch-action: none plus pointer capture kill native scrolling — while a
+     finger held still at the screen edge fires no pointermove at all, which
+     is exactly the posture of someone reaching for Sunday. So the scroll
+     cannot ride the move events: a timer loop scrolls the window and re-runs
+     the hit test at the frozen finger. A timer, not requestAnimationFrame,
+     deliberately: rAF is paint-gated and observed suspended in an embedded
+     webview while the page was fully interactive — a stalled auto-scroll is
+     a drag that cannot reach Sunday, so the loop rides the mechanism every
+     environment services. */
+  const tickRef = useRef(0);
+  const edgeRef = useRef(0);       // -1 scroll up, 0 idle, +1 scroll down
+  const EDGE = 64, SPEED = 10, TICK = 16;  // px zone, px per tick, ms
+  const stopScroll = () => {
+    if (tickRef.current) clearInterval(tickRef.current);
+    tickRef.current = 0; edgeRef.current = 0;
+  };
+  // a drag interrupted by unmount must not leave a live timer behind
+  useEffect(() => stopScroll, []);
+  const moveDrag = e => {
+    if (!dragRef.current) return;
+    setDragBoth({ ...dragRef.current, x: e.clientX, y: e.clientY, over: dropAt(e.clientX, e.clientY) });
+    edgeRef.current = e.clientY < EDGE ? -1 : e.clientY > window.innerHeight - EDGE ? 1 : 0;
+    if (!edgeRef.current) { stopScroll(); return; }
+    if (!tickRef.current) tickRef.current = setInterval(() => {
+      if (!dragRef.current || !edgeRef.current) { stopScroll(); return; }
+      window.scrollBy(0, edgeRef.current * SPEED);
+      const d = dragRef.current;
+      setDragBoth({ ...d, over: dropAt(d.x, d.y) });
+    }, TICK);
   };
   const endDrag = () => {
+    stopScroll();
     const d = dragRef.current;
     if (d && d.over) { onMove(d.id, d.over === d.home ? null : d.over); setSelected(d.over); }
     setDragBoth(null);
@@ -236,7 +274,10 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
       <div className="segbar" role="tablist" aria-label="Calendar range">
         {RANGES.map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={range === k}
-            className={range === k ? 'on' : ''} onClick={() => setRange(k)}>{label}</button>
+            className={range === k ? 'on' : ''}
+            /* a second finger can switch range mid-drag, unmounting the
+               captured grip: the ghost must not outlive its surface */
+            onClick={() => { setRange(k); stopScroll(); setDragBoth(null); }}>{label}</button>
         ))}
       </div>
 
@@ -251,7 +292,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
               <div key={i} data-caldate={d || undefined}
                 className={'cal-day' + (!d ? ' blank' : '') + (d && !inPlan ? ' off' : '')
                   + (d === todayISO ? ' today' : '') + (d === selected ? ' sel' : '')
-                  + (d && d === raceISO ? ' race' : '') + (drag && d && drag.over === d ? ' drop' : '')}
+                  + (d && d === raceISO ? ' race' : '')}
                 aria-current={d === selected ? 'date' : undefined}
                 aria-label={d ? T.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })
                   + (ws.length ? ': ' + ws.map(w => w.title).join(' and ') : '')
@@ -290,7 +331,9 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
           const ws = (byDate[d] || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
           const hasActs = (actByDate[d] || []).length > 0;
           return (
-            <div className={'card wk-day' + (d < todayISO ? ' past' : '') + (d === todayISO ? ' today' : '')} key={d}>
+            <div key={d} data-caldate={d}
+              className={'card wk-day' + (d < todayISO ? ' past' : '') + (d === todayISO ? ' today' : '')
+                + (drag && drag.over === d ? ' drop' : '')}>
               <div className="wd-when">
                 <div className="wd-dow">{T.fmtDate(d, { weekday: 'short' }).toUpperCase()}</div>
                 <div className="wd-num">{Number(d.slice(8))}</div>
@@ -299,15 +342,25 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                 {ws.map(w => {
                   const row = (load.days[d].sessions || []).find(x => x.w.id === w.id);
                   const shown = row ? row.shown : easedOf(w);
-                  return <WorkoutRow key={w.id} w={shown} done={!!log[w.id]} eff={effDate(w, moves)}
-                    moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)}
-                    /* The A race's durationMin is a placeholder — WorkoutRow
-                       suppresses its duration for the same reason — so a load
-                       estimated off it would be invented. Its recordings still
-                       count: they arrive as their own rows, each carrying what
-                       it actually measured. Tune-ups keep theirs; they have
-                       real durations. */
-                    right={w.race ? null : <LoadSlot tss={row ? row.tss : T.estimateTss(shown)} measured={!!row && row.measured} />} />;
+                  return (
+                    <div className="cal-row" key={w.id}>
+                      {/* pointer-only grip, aria-hidden: the accessible
+                          reschedule path is the detail sheet's day picker */}
+                      {!w.race && !w.bRace && <div className="drag-handle" aria-hidden="true"
+                        onPointerDown={e => startDrag(w, e)} onPointerMove={moveDrag}
+                        onPointerUp={endDrag} onPointerCancel={endDrag}>
+                        <Icon name="grip" size={17} /></div>}
+                      <WorkoutRow w={shown} done={!!log[w.id]} eff={effDate(w, moves)}
+                        moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)}
+                        /* The A race's durationMin is a placeholder — WorkoutRow
+                           suppresses its duration for the same reason — so a load
+                           estimated off it would be invented. Its recordings still
+                           count: they arrive as their own rows, each carrying what
+                           it actually measured. Tune-ups keep theirs; they have
+                           real durations. */
+                        right={w.race ? null : <LoadSlot tss={row ? row.tss : T.estimateTss(shown)} measured={!!row && row.measured} />} />
+                    </div>
+                  );
                 })}
                 <RecordedActivities bare activities={activities} date={d} plan={plan} log={log} moves={moves}
                   counted={new Set((load.days[d].unclaimed || []).map(u => u.activity.id))}
@@ -327,20 +380,11 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
           {daySessions.length === 0
             ? <div className="empty" style={{ padding: '18px 8px' }}>{tracker ? 'Nothing recorded.'
               : selected < planStart ? 'Before this plan began.'
-                : 'Nothing planned — drop a session here, or rest.'}</div>
+                : 'Nothing planned — rest, or add a session below.'}</div>
             : daySessions.map(w => (
-              <div className="cal-row" key={w.id}>
-                {/* pointer-only grip, aria-hidden: the accessible reschedule path
-                    is the detail sheet's day picker */}
-                {!w.race && !w.bRace && <div className="drag-handle" aria-hidden="true"
-                  onPointerDown={e => startDrag(w, e)} onPointerMove={moveDrag}
-                  onPointerUp={endDrag} onPointerCancel={endDrag}>
-                  <Icon name="grip" size={17} /></div>}
-                <WorkoutRow w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
-                  moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />
-              </div>
+              <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
+                moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />
             ))}
-          {daySessions.some(w => !w.race && !w.bRace) && <div className="cal-hint">Hold a session's grip and drag it onto a day above to reschedule</div>}
         </div>}
         <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} noHeading={tracker} />
       </>}

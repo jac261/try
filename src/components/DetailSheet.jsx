@@ -274,9 +274,17 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
           <div className="days">
             {days.map((d, i) => {
               const lab = ['M', 'T', 'W', 'T', 'F', 'S', 'S'][i];
-              return <div key={d} className={'d' + (d === shown ? ' on' : '')}
-                aria-label={'Move to ' + T.fmtDate(d, { weekday: 'long', month: 'short', day: 'numeric' }) + (d === shown ? ' (current day)' : '')}
-                {...tap(() => onMove(w.id, d))}>
+              /* Race day is not offered, matching the week range's drag rule:
+                 with the grid drag retired this picker was the one path that
+                 could still pile a session onto the race. The cell renders
+                 disabled rather than vanishing, so the week keeps seven days
+                 and the athlete can see why one is off limits. */
+              const isRace = plan && plan.profile && d === plan.profile.raceDate;
+              return <div key={d} className={'d' + (d === shown ? ' on' : '') + (isRace ? ' off' : '')}
+                aria-label={isRace ? 'Race day — sessions cannot move here'
+                  : 'Move to ' + T.fmtDate(d, { weekday: 'long', month: 'short', day: 'numeric' }) + (d === shown ? ' (current day)' : '')}
+                aria-disabled={isRace || undefined}
+                {...(isRace ? {} : tap(() => onMove(w.id, d)))}>
                 <div style={{ fontSize: 10, fontWeight: 600, opacity: .7 }}>{lab}</div>
                 {Number(d.slice(8))}</div>;
             })}
