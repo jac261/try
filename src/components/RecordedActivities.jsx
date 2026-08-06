@@ -1,4 +1,6 @@
 import * as T from '@/lib';
+import { loadOf } from '@/lib/calendar-load.js';
+import { LoadSlot, loadSpoken } from '@/components/LoadSlot.jsx';
 import { effDate } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
@@ -23,7 +25,7 @@ const INDOOR = T.INDOOR_TYPES;
    calendar day view for any athlete with a recorded OUTDOOR swim carrying a
    distance — the only branch that touched it (shipped in the pool-profile
    phase, found 2026-07-30 from a production error report). */
-function statBits(a, disc, pool) {
+function statBits(a, disc, pool, withLoad) {
   const bits = [];
   const indoor = !!INDOOR[a.type];
   if (a.movingTimeSec) bits.push(T.fmtDuration(Math.round(a.movingTimeSec / 60)));
@@ -35,11 +37,14 @@ function statBits(a, disc, pool) {
   }
   if (a.averageWatts) bits.push(Math.round(a.averageWatts) + ' W avg');
   if (a.averageHeartrate) bits.push(Math.round(a.averageHeartrate) + ' bpm avg');
-  if (a.trainingLoad != null) bits.push((a.estimated ? '~load ' : 'load ') + Math.round(a.trainingLoad));
+  /* The week's rows carry the load in their own right-hand slot, so printing
+     it here too would say the same number twice on one line. The month's day
+     card has no such slot and keeps it. */
+  if (withLoad && a.trainingLoad != null) bits.push((a.estimated ? '~load ' : 'load ') + Math.round(a.trainingLoad));
   return bits.join(' · ');
 }
 
-function Row({ disc, name, stat, tag, onOpen, manual, indoor }) {
+function Row({ disc, name, stat, tag, onOpen, manual, indoor, right, spoken }) {
   return (
     // A manual row's first tap celebrates, later taps edit — the accessible
     // name stays neutral so it is never wrong about which one comes next.
@@ -50,18 +55,30 @@ function Row({ disc, name, stat, tag, onOpen, manual, indoor }) {
       /* the stat line rides along: aria-label REPLACES the accessible name,
          so pace, distance and duration were announced to nobody (audit
          2026-08-05) */
-      aria-label={(manual ? 'Open ' : 'Recap: ') + name + (indoor ? ', indoor' : '') + (stat ? ', ' + stat : '')}>
+      /* `spoken` carries the load when it has moved out of the stat line into
+         the right slot: a number that is visible must not be inaudible. */
+      aria-label={(manual ? 'Open ' : 'Recap: ') + name + (indoor ? ', indoor' : '') + (stat ? ', ' + stat : '') + (spoken ? ', ' + spoken : '')}>
       <div className="dot" style={{ background: T.DISCIPLINES[disc].grad }}><Icon name={T.DISCIPLINES[disc].icon} size={22} /></div>
       <div className="meta">
         <div className="t">{name} {tag && <span className="tag key">{tag}</span>}{indoor && <span className="tag indoor">Indoor</span>}</div>
         <div className="s">{stat}</div>
       </div>
-      <div className="right" aria-hidden="true">›</div>
+      {/* the chevron is the row's only affordance that it opens something, so
+          it stays wherever the caller has not asked for a number instead */}
+      <div className="right" aria-hidden="true">{right || '›'}</div>
     </div>
   );
 }
 
-export function RecordedActivities({ activities, date, plan, log, moves, onOpen, noHeading, bare }) {
+/* `counted` (bare mode only) is the set of activity ids the week's ledger
+   counts on their own. A recording a session already speaks for is NOT in it:
+   its number rides on that session's row, and printing it here as well would
+   put the same load on the screen twice and make the visible rows add up to
+   more than the header above them. Everything else — an unplanned ride, the
+   second ride inside one session's window — is in the set and carries its
+   own. The set comes from the same ledger the header is summed from, so the
+   two cannot drift. */
+export function RecordedActivities({ activities, date, plan, log, moves, onOpen, noHeading, bare, counted }) {
   // The DISCIPLINES guard keeps a future drift between the activity-type map
   // and the disciplines table from crashing the row render.
   const day = (activities || []).filter(a => a && a.date === date && DISC[a.type] && T.DISCIPLINES[DISC[a.type]] && a.movingTimeSec);
@@ -77,20 +94,26 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
   // matcher sees REAL recordings only: a hand-logged diary entry must never
   // be folded into a brick's Matched row as if it were a measured leg.
   const feedActs = (activities || []).filter(a => a && !a.manual);
+  const owns = id => bare && (!counted || counted.has(id));
   const rows = [];
   const claimed = new Set();
   sessions.filter(w => w.discipline === 'brick').forEach(w => {
     const pair = T.brickPairFor({ workout: w, activities: feedActs, moves, used: claimed });
     if (!pair) return;
     claimed.add(pair.ride.id); claimed.add(pair.run.id);
-    const load = (pair.ride.trainingLoad != null || pair.run.trainingLoad != null)
-      ? Math.round((pair.ride.trainingLoad || 0) + (pair.run.trainingLoad || 0)) : null;
+    /* The shared fold, so this row and the week's total price the pair the
+       same way — including the rule that a pair is measured only when both
+       legs were, which this file used to get wrong in its own copy. */
+    const rec = T.brickRecording(pair.ride, pair.run);
+    const load = loadOf(rec);
     rows.push({
       key: 'brick-' + w.id, disc: 'brick', name: w.title || 'Brick', open: { workout: w },
       tag: (log || {})[w.id] && log[w.id].done ? 'Matched' : null,
       stat: T.fmtDuration(Math.round(pair.ride.movingTimeSec / 60)) + (INDOOR[pair.ride.type] ? ' indoor ride + ' : ' ride + ')
         + T.fmtDuration(Math.round(pair.run.movingTimeSec / 60)) + (INDOOR[pair.run.type] ? ' indoor run' : ' run')
-        + (load != null ? ' · load ' + load : ''),
+        + (!owns(pair.ride.id) && rec.trainingLoad != null ? ' · ' + (load.measured ? 'load ' : '~load ') + Math.round(load.tss) : ''),
+      right: owns(pair.ride.id) ? <LoadSlot {...load} /> : null,
+      spoken: owns(pair.ride.id) ? loadSpoken(load) : null,
     });
   });
 
@@ -109,9 +132,12 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
     // two same-discipline recordings on one day can both fall in one session's
     // window, and re-deriving from the workout alone would resolve to the
     // recording closest to the planned duration, not the one actually tapped.
-    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc, pool), manual: !!a.manual,
+    const load = loadOf(a);
+    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc, pool, !owns(a.id)), manual: !!a.manual,
       indoor: !!INDOOR[a.type],
       tag: a.manual ? 'Logged' : owner ? 'Matched' : null,
+      right: owns(a.id) ? <LoadSlot {...load} /> : null,
+      spoken: owns(a.id) ? loadSpoken(load) : null,
       open: owner ? { workout: owner, activity: a } : { activity: a } });
   });
 

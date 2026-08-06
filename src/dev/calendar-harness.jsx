@@ -27,7 +27,7 @@ const startsThursday = generatePlan(base({ startDate: thursday, raceDate: iso(ad
 
 const firstBike = p => p.weeks.flatMap(w => w.workouts).find(w => w.discipline === 'bike' && w.durationMin > 0 && !w.race);
 const bike = firstBike(startsToday);
-const rideOn = (d, min, id) => ({ id, type: 'Ride', date: d, movingTimeSec: min * 60, distance: 30000 });
+const rideOn = (d, min, id, load) => ({ id, type: 'Ride', date: d, movingTimeSec: min * 60, distance: 30000, trainingLoad: load });
 
 /* A block with no race. It had no mode here, which is how the gold race ring
    survived on the horizon day of every maintenance plan: the bug was only
@@ -77,6 +77,22 @@ const MODES = {
   maintenance: { plan: maintenance, activities: [], log: {} },
   // off-plan, today, selected and race day together
   states: { plan: states, activities: [], log: {} },
+  /* The week priced from what happened: a matched-and-ticked session showing
+     its MEASURED number, an unplanned club ride carrying its own, and one
+     recording with no load at all so the modelled fallback and its tilde are
+     visible beside the measured ones. This is the mode to read the header on:
+     done over planned, both pairs. */
+  loads: {
+    plan: startsToday,
+    log: { [bike.id]: { done: true } },
+    activities: [
+      rideOn(bike.date, bike.durationMin, 'l-match', 71),
+      { id: 'l-club', type: 'Ride', name: 'Bristol Road Cycling', date: iso(addDays(today, 1)),
+        movingTimeSec: 146 * 60, distance: 56900, trainingLoad: 144 },
+      { id: 'l-swim', type: 'Swim', name: 'Club swim', date: iso(addDays(today, 2)),
+        movingTimeSec: 40 * 60, distance: 2225 },
+    ],
+  },
   // no plan, recordings only: the week range must say "Nothing recorded."
   tracker: { plan: trackerPlan, activities: trackerActs, log: {} },
   // ten weeks done, eight to go: the season's solid half meeting its dashed one

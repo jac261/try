@@ -6,6 +6,9 @@
  * philosophy as the engine — never silently rewrite training state).
  */
 import { iso, addDays } from './date.js';
+// adapt.js does not import this module, so the estimate for an unrecorded
+// brick leg costs no cycle.
+import { estimateTss } from './adapt.js';
 
 // intervals.icu activity type → our discipline. Bricks have no single type —
 // they match as a ride+run PAIR (see brickPairFor); the old strength exclusion
@@ -231,6 +234,52 @@ export function activityFor({ workout, activities, moves }) {
     .filter(x => x.min >= planned * MATCH_WINDOW.lo && x.min <= planned * MATCH_WINDOW.hi)
     .sort((x, y) => Math.abs(x.min - planned) - Math.abs(y.min - planned))[0];
   return best ? best.a : null;
+}
+
+/* The two legs of a brick as one recording. Lifted out of App (it closed over
+   nothing) so the calendar can pair a session with its recording by the same
+   rule the tick, the recap and the detail sheet already use, rather than
+   growing a second copy of it.
+ *
+ * `measured` is deliberately AND, not OR. The old sum treated a pair as
+ * measured when EITHER leg carried a load, so a ride with a power meter and a
+ * watch-less run reported half the work as though it were all of it. A pair
+ * is measured only when both legs were, and the missing leg falls back to the
+ * same duration estimate an unrecorded session would get. */
+export function brickRecording(ride, run) {
+  const rpes = [ride.rpe, run.rpe].filter(v => Number.isFinite(v));
+  const both = ride.trainingLoad != null && run.trainingLoad != null;
+  const legLoad = leg => (leg.trainingLoad != null ? leg.trainingLoad
+    : estimateTss({ durationMin: Math.round((leg.movingTimeSec || 0) / 60) }));
+  const any = ride.trainingLoad != null || run.trainingLoad != null;
+  return {
+    id: ride.id, date: ride.date, type: 'Ride', name: 'Brick — ride + run legs', pair: true,
+    movingTimeSec: ride.movingTimeSec + run.movingTimeSec,
+    trainingLoad: any ? legLoad(ride) + legLoad(run) : null,
+    // an estimated leg makes the whole pair an estimate, and the marker says so
+    estimated: !both || !!(ride.estimated || run.estimated),
+    rpe: rpes.length ? Math.max(...rpes) : null,
+  };
+}
+
+/* A session's recording: the brick pair folded into one, or the single
+   activity that matches. The pairing rule the tick banks minutes from and the
+   recap opens, in one place.
+ *
+ * The `!a.manual` filter is enforced here rather than left to the caller. App
+ * passes the raw feed and was safe by habit; the calendar's list is
+ * `displayActivities`, manual entries included, and a hand-typed diary entry
+ * must never become a session's recording — it would bank a typed duration
+ * into the log and the calibration corpus and open plan-relative verdicts
+ * against numbers nobody measured. */
+export function recordingFor({ workout, activities, moves }) {
+  if (!workout || !Array.isArray(activities)) return null;
+  const feed = activities.filter(a => a && !a.manual);
+  if (workout.discipline === 'brick') {
+    const pair = brickPairFor({ workout, activities: feed, moves });
+    return pair ? brickRecording(pair.ride, pair.run) : null;
+  }
+  return activityFor({ workout, activities: feed, moves });
 }
 
 // The athlete-facing intervals.icu page for a passthrough activity (ids come

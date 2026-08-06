@@ -257,7 +257,7 @@ describe('activityFor (link-out to the recording)', () => {
   });
 });
 
-import { brickPairFor, headlineSpot } from './autolog.js';
+import { brickPairFor, headlineSpot, recordingFor, brickRecording } from './autolog.js';
 
 describe('headlineSpot (which spotted session leads the recap)', () => {
   const spot = (id, { key, durationMin = 60, actMin = 0, runMin = 0 } = {}) => ({
@@ -336,5 +336,62 @@ describe('strength and brick matching (2026-07-11 field decisions)', () => {
       act('r1', 'Ride', '2026-07-09', 20), act('r2', 'Run', '2026-07-09', 10), // 30m vs planned 90m
     ] });
     expect(m.length).toBe(0);
+  });
+});
+
+/* The pairing rule App used to keep to itself. It is exported now because the
+   calendar has to name the same recording for the same session, and the two
+   must not be able to disagree. */
+describe('recordingFor: one session, one recording', () => {
+  const act = (over = {}) => ({ id: 'a1', date: '2026-07-06', type: 'Ride', movingTimeSec: 3600, trainingLoad: 60, ...over });
+  const ride = { id: 'w1', discipline: 'bike', date: '2026-07-06', durationMin: 60 };
+
+  it('finds the single matching activity', () => {
+    expect(recordingFor({ workout: ride, activities: [act()], moves: {} }).id).toBe('a1');
+  });
+
+  it('never hands back a hand-typed diary entry', () => {
+    /* The guard lives in the helper, not the call site: App passes the raw
+       feed but the calendar passes the display list, and a typed duration
+       banked as actualMin would enter the log and the calibration corpus. */
+    const typed = act({ id: 'm1', manual: true, estimated: true });
+    expect(recordingFor({ workout: ride, activities: [typed], moves: {} })).toBe(null);
+  });
+
+  it('folds a brick pair into one recording', () => {
+    const brick = { id: 'b1', discipline: 'brick', date: '2026-07-06', durationMin: 90 };
+    const pair = [act({ id: 'r1', movingTimeSec: 3600, trainingLoad: 60, startedAt: '2026-07-06T08:00:00Z', deviceName: 'w' }),
+      act({ id: 'r2', type: 'Run', movingTimeSec: 1800, trainingLoad: 30, startedAt: '2026-07-06T09:10:00Z', deviceName: 'w' })];
+    const rec = recordingFor({ workout: brick, activities: pair, moves: {} });
+    expect(rec.pair).toBe(true);
+    expect(rec.trainingLoad).toBe(90);
+    expect(rec.estimated).toBe(false);
+  });
+});
+
+describe('brickRecording: a pair is measured only if both legs were', () => {
+  const ride = { id: 'r1', date: '2026-07-06', movingTimeSec: 3600, trainingLoad: 60, rpe: 5 };
+  const run = { id: 'r2', date: '2026-07-06', movingTimeSec: 1800, trainingLoad: 30, rpe: 7 };
+
+  it('sums two measured legs and keeps the harder rpe', () => {
+    const r = brickRecording(ride, run);
+    expect(r.trainingLoad).toBe(90);
+    expect(r.estimated).toBe(false);
+    expect(r.rpe).toBe(7);
+  });
+
+  it('estimates the leg that carries no load, and says the pair is an estimate', () => {
+    /* The old sum treated the pair as measured when EITHER leg had a load, so
+       a metered ride plus a watch-less run reported 60 as though it were the
+       whole brick. */
+    const r = brickRecording(ride, { ...run, trainingLoad: null });
+    expect(r.estimated).toBe(true);
+    expect(r.trainingLoad).toBeGreaterThan(60);   // the run is not free
+    // unrounded, like estimateTss itself: the display rounds, the model does not
+    expect(r.trainingLoad).toBe(60 + (30 / 60) * 0.7 * 0.7 * 100);
+  });
+
+  it('a pair with no load at all reports none', () => {
+    expect(brickRecording({ ...ride, trainingLoad: null }, { ...run, trainingLoad: null }).trainingLoad).toBe(null);
   });
 });

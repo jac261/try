@@ -77,6 +77,11 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
   // neither bar-to-bar nor week-to-week as sync coverage shifts. The estimate
   // is the axis's single currency, and the section label says so (design
   // panel 2026-07-30).
+  // The calendar's week deliberately does the OPPOSITE, and that is not a
+  // drift to harmonise: a snapshot of one week has nothing to compare itself
+  // against but itself, so it takes the measured number where one exists and
+  // labels each one (calendar-load.js, and the rule is written down in
+  // docs/ADAPTIVE_ENGINE.md beside "measured data wins absolutely").
   const bars = plan.weeks.map(w => {
     const sess = w.workouts.filter(x => x.discipline !== 'rest' && !x.race);
     const planned = sess.reduce((a, b) => a + T.estimateTss(b), 0);

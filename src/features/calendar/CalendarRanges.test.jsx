@@ -99,7 +99,10 @@ describe('the week range', () => {
     const week = weekRange(todayISO);
     const shown = plan.weeks.flatMap(w => w.workouts)
       .filter(w => w.discipline !== 'rest' && !w.race && week.includes(w.date));
-    const want = Math.round(shown.reduce((s, w) => s + estimateTss(w), 0));
+    /* Rounded per session and then summed, not summed and then rounded: the
+       header has to equal the numbers the athlete can add up on the rows
+       beneath it, and a seven-row week is otherwise off by a few. */
+    const want = shown.reduce((s2, w) => s2 + Math.round(estimateTss(w)), 0);
     expect(el.querySelector('.wk-head').textContent).toContain(want + ' TSS, estimated');
     // and the rows are really there, one per session
     expect(el.querySelectorAll('.wk-day .wk')).toHaveLength(shown.length);
@@ -159,8 +162,11 @@ describe('the week range', () => {
     expect(el.querySelectorAll('.wd-none')).toHaveLength(6);   // the six without the ride
     expect(el.textContent).toContain('Nothing recorded.');
     expect(el.textContent).toContain('Commute');
-    // no planned sessions, so nothing to total
-    expect(el.querySelector('.wk-head')).toBeNull();
+    /* A week with no plan in it is exactly the week that is all recordings,
+       and it used to get no header at all. It gets one now, with no "week n
+       of m" to place it and no denominator to compare against: 40 minutes at
+       an estimated load, because this ride carries none of its own. */
+    expect(el.querySelector('.wk-head').textContent).toBe('40 min · ~33 TSS');
 
     root.unmount(); el.remove();
   }, 20000);
@@ -246,5 +252,149 @@ describe('WorkoutRow keeps its old shape', () => {
     expect(withSlot).not.toContain('Wed');
     expect(withSlot).toContain('42');
     expect(withSlot).toContain('Easy Run');
+  });
+});
+
+/* The week's rows price themselves off what happened. Before this the row for
+   a session you had finished still showed the number it was forecast to cost,
+   and a ride that was never in the plan showed no number at all. */
+describe('a week row says what it cost', () => {
+  const planFor = () => generatePlan(profile());
+  const firstSession = plan => plan.weeks.flatMap(w => w.workouts)
+    .find(w => w.discipline !== 'rest' && !w.race && weekRange(todayISO).includes(w.date));
+  const rowFor = (el, title) => [...el.querySelectorAll('.wk-day .wk')].find(r => r.querySelector('.t').textContent.includes(title));
+
+  it('shows the measured number for a session its recording speaks for', async () => {
+    const plan = planFor();
+    const w = firstSession(plan);
+    const a = { id: 'a1', date: w.date, type: w.discipline === 'run' ? 'Run' : w.discipline === 'swim' ? 'Swim' : 'Ride',
+      name: 'Recorded', movingTimeSec: (w.durationMin || 60) * 60, trainingLoad: 137 };
+    const { el, root } = await mount(plan, { activities: [a], log: { [w.id]: { done: true } } });
+    await toWeek(el);
+    const b = rowFor(el, w.title).querySelector('.right b');
+    expect(b.textContent).toBe('137');            // measured: no tilde, not the plan's estimate
+    await act(async () => root.unmount());
+  });
+
+  it('marks a number it had to model', async () => {
+    const plan = planFor();
+    const w = firstSession(plan);
+    const { el, root } = await mount(plan);
+    await toWeek(el);
+    expect(rowFor(el, w.title).querySelector('.right b').textContent)
+      .toBe('~' + Math.round(estimateTss(w)));
+    await act(async () => root.unmount());
+  });
+
+  it('gives a recording the plan never asked for its own number, and speaks it', async () => {
+    const plan = planFor();
+    const a = { id: 'a9', date: todayISO, type: 'Ride', name: 'Bristol Road Cycling', movingTimeSec: 5400, trainingLoad: 103 };
+    const { el, root } = await mount(plan, { activities: [a] });
+    await toWeek(el);
+    const row = rowFor(el, 'Bristol Road Cycling');
+    expect(row.querySelector('.right b').textContent).toBe('103');
+    // and it says the number ONCE: the stat line gives it up when the row
+    // has a slot of its own
+    expect(row.querySelector('.s').textContent).not.toContain('load');
+    // the number is visible, so it must also be audible
+    expect(row.getAttribute('aria-label')).toContain('103 TSS');
+    await act(async () => root.unmount());
+  });
+
+  it('says an estimate out loud rather than only tilde-ing it', async () => {
+    const plan = planFor();
+    const a = { id: 'a9', date: todayISO, type: 'Ride', name: 'Unmetered ride', movingTimeSec: 3600, trainingLoad: null };
+    const { el, root } = await mount(plan, { activities: [a] });
+    await toWeek(el);
+    const row = rowFor(el, 'Unmetered ride');
+    expect(row.querySelector('.right b').textContent).toBe('~49');
+    expect(row.getAttribute('aria-label')).toContain('about 49 TSS');
+    await act(async () => root.unmount());
+  });
+
+  it('keeps the load in the month day card, where there is no slot for it', async () => {
+    // the two surfaces share the row; only the week has a right-hand column
+    const plan = planFor();
+    const a = { id: 'a9', date: todayISO, type: 'Ride', name: 'Bristol Road Cycling', movingTimeSec: 5400, trainingLoad: 103 };
+    const { el, root } = await mount(plan, { activities: [a] });
+    const row = [...el.querySelectorAll('.wk')].find(r => r.querySelector('.t').textContent.includes('Bristol'));
+    expect(row.querySelector('.s').textContent).toContain('load 103');
+    expect(row.querySelector('.right').textContent).toBe('\u203a');
+    await act(async () => root.unmount());
+  });
+});
+
+/* The header. Two pairs, done over planned, and the invariant that matters
+   most: it is the sum of the rows underneath it. */
+describe('the week header counts what happened', () => {
+  const planFor = () => generatePlan(profile());
+  const sessionsThisWeek = plan => plan.weeks.flatMap(w => w.workouts)
+    .filter(w => w.discipline !== 'rest' && weekRange(todayISO).includes(w.date));
+  const head = el => el.querySelector('.wk-head').textContent;
+
+  it('says nothing new about a week with nothing recorded', async () => {
+    // entirely modelled, so it admits that in words rather than pairing
+    // itself against a number it has not earned
+    const { el, root } = await mount(planFor());
+    await toWeek(el);
+    expect(head(el)).toMatch(/· \d+ TSS, estimated$/);
+    expect(head(el)).not.toContain(' / ');
+    await act(async () => root.unmount());
+  });
+
+  it('pairs done against planned once anything is recorded', async () => {
+    const plan = planFor();
+    const w = sessionsThisWeek(plan)[0];
+    const a = { id: 'a1', date: w.date, type: 'Ride', name: 'Recorded', movingTimeSec: 3600, trainingLoad: 88 };
+    const { el, root } = await mount(plan, { activities: [a] });
+    await toWeek(el);
+    expect(head(el)).toMatch(/\d+ TSS$/);
+    expect(head(el)).toContain(' / ');
+    expect(head(el)).toContain('88 /');           // the unplanned ride is in the done side
+    await act(async () => root.unmount());
+  });
+
+  it('lets done exceed planned without comment', async () => {
+    /* An ordinary week. Nothing clamps it, nothing colours it, and the pair
+       does not swap round to hide it (Jon, 2026-08-06). */
+    const plan = planFor();
+    const acts = [1, 2, 3].map(i => ({ id: 'x' + i, date: todayISO, type: 'Ride', name: 'Big ride ' + i,
+      movingTimeSec: 4 * 3600, trainingLoad: 300 }));
+    const { el, root } = await mount(plan, { activities: acts });
+    await toWeek(el);
+    const [done, planned] = head(el).match(/(\d+) \/ (\d+) TSS/).slice(1).map(Number);
+    expect(done).toBeGreaterThan(planned);
+    expect(done).toBe(900 + 0);                    // three rides, nothing else logged
+    await act(async () => root.unmount());
+  });
+
+  it('equals the sum of the rows beneath it, each contribution shown once', async () => {
+    /* The invariant the whole feature rests on. A mixed week: a matched and
+       ticked session, an untouched planned session, and a ride the plan never
+       asked for. The recording that fulfilled the session carries NO number
+       of its own — that load rides on the session's row — or the numbers on
+       screen would add up to more than the header above them. */
+    const plan = planFor();
+    const w = sessionsThisWeek(plan).find(x => !x.race);
+    const acts = [
+      { id: 'a1', date: w.date, type: w.discipline === 'run' ? 'Run' : w.discipline === 'swim' ? 'Swim' : 'Ride',
+        name: 'The file that did it', movingTimeSec: (w.durationMin || 60) * 60, trainingLoad: 71 },
+      { id: 'a2', date: todayISO, type: 'Ride', name: 'Extra ride', movingTimeSec: 3600, trainingLoad: 44 },
+    ];
+    const { el, root } = await mount(plan, { activities: acts, log: { [w.id]: { done: true } } });
+    await toWeek(el);
+    const done = Number(head(el).match(/(\d+) \/ \d+ TSS/)[1]);
+    expect(done).toBe(71 + 44);
+
+    const rows = [...el.querySelectorAll('.wk-day .wk')];
+    const num = r => (r.querySelector('.right b') ? Number(r.querySelector('.right b').textContent.replace('~', '')) : null);
+    const byTitle = t => rows.find(r => r.querySelector('.t').textContent.includes(t));
+    // the claimed recording is evidence, not a second contribution
+    expect(num(byTitle('The file that did it'))).toBe(null);
+    expect(num(byTitle('Extra ride'))).toBe(44);
+    // and everything the week counts as done is on screen, exactly once
+    const shown = rows.filter(r => r.classList.contains('done') || r.querySelector('.t').textContent.includes('Extra ride'));
+    expect(shown.reduce((sum, r) => sum + (num(r) || 0), 0)).toBe(done);
+    await act(async () => root.unmount());
   });
 });
