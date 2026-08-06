@@ -928,6 +928,8 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .days { display: flex; gap: 6px; }
 .days .d { flex: 1; border: 0; border-radius: 12px; padding: 12px 0; text-align: center; font-weight: 800; cursor: pointer; transition: all .12s; color: var(--label); background: var(--well); box-shadow: var(--press-sm); }
 .days .d.on { background: var(--pill-on-bg); color: var(--pill-on-ink); box-shadow: var(--pill-on-shadow); }
+/* race day in the reschedule picker: visible, named, not tappable */
+.days .d.off { opacity: .35; cursor: default; }
 
 /* ---------- KPI ---------- */
 .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }

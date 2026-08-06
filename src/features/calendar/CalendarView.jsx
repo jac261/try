@@ -13,9 +13,11 @@ const RANGES = [['week', 'Week'], ['month', 'Month'], ['season', 'Season']];
 
 /* A real calendar: one month at a time as a grid of days, sessions shown as
    discipline dots on their EFFECTIVE dates. Tap a day to see its sessions
-   below; hold a session's grip and drag it onto another day to reschedule
-   (writes the existing moves overlay, so it syncs and tags exactly like the
-   detail sheet's reschedule — which remains the keyboard/screen-reader path).
+   below. Rescheduling by drag lives on the WEEK range only (Jon,
+   2026-08-06): its seven visible cards make within-week the natural
+   constraint, where a month grid let an athlete pile a whole month's
+   sessions into its last week. The detail sheet's day picker remains the
+   keyboard/screen-reader path, and both write the same moves overlay.
    The week-by-week programme listing lives on the Plan tab now. */
 export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout, onMove, activities, onOpenRecording, onAddWorkout, wellness, adjust }) {
   const todayISO = T.iso(new Date());
@@ -287,7 +289,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
               <div key={i} data-caldate={d || undefined}
                 className={'cal-day' + (!d ? ' blank' : '') + (d && !inPlan ? ' off' : '')
                   + (d === todayISO ? ' today' : '') + (d === selected ? ' sel' : '')
-                  + (d && d === raceISO ? ' race' : '') + (drag && d && drag.over === d ? ' drop' : '')}
+                  + (d && d === raceISO ? ' race' : '')}
                 aria-current={d === selected ? 'date' : undefined}
                 aria-label={d ? T.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })
                   + (ws.length ? ': ' + ws.map(w => w.title).join(' and ') : '')
@@ -375,20 +377,11 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
           {daySessions.length === 0
             ? <div className="empty" style={{ padding: '18px 8px' }}>{tracker ? 'Nothing recorded.'
               : selected < planStart ? 'Before this plan began.'
-                : 'Nothing planned — drop a session here, or rest.'}</div>
+                : 'Nothing planned — rest, or add a session below.'}</div>
             : daySessions.map(w => (
-              <div className="cal-row" key={w.id}>
-                {/* pointer-only grip, aria-hidden: the accessible reschedule path
-                    is the detail sheet's day picker */}
-                {!w.race && !w.bRace && <div className="drag-handle" aria-hidden="true"
-                  onPointerDown={e => startDrag(w, e)} onPointerMove={moveDrag}
-                  onPointerUp={endDrag} onPointerCancel={endDrag}>
-                  <Icon name="grip" size={17} /></div>}
-                <WorkoutRow w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
-                  moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />
-              </div>
+              <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
+                moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />
             ))}
-          {daySessions.some(w => !w.race && !w.bRace) && <div className="cal-hint">Hold a session's grip and drag it onto a day above to reschedule</div>}
         </div>}
         <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} noHeading={tracker} />
       </>}

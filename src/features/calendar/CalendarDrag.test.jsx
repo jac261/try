@@ -170,6 +170,22 @@ describe('dragging a session on the week range', () => {
 });
 
 describe('where grips exist at all', () => {
+  it('the month range mounts none, however a day is selected', async () => {
+    /* The guard replacing the month drag: data-caldate stays on the grid
+       (three tests use it as a date hook), so the thing that must never
+       return is the grip that would make those cells targets again. */
+    const plan = generatePlan(profile());
+    const c = await mount(plan);
+    // a session in the SHOWN month: the grid anchors on today
+    const w = sessionsThisWeek(plan).find(x => !x.race && !x.bRace);
+    const cell = c.el.querySelector('.cal-day[data-caldate="' + w.date + '"]');
+    await act(async () => cell.click());
+    expect(c.el.querySelector('.drag-handle')).toBe(null);
+    expect(c.el.textContent).not.toContain('drag it onto');
+    await c.cleanup();
+  });
+
+
   it('the week range: one per movable session, none on races', async () => {
     const plan = generatePlan(profile({ startDate: iso(addDays(mon, -28)), raceDate: iso(addDays(mon, 6)) }));
     const c = await mount(plan);

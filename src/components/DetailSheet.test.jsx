@@ -5,6 +5,7 @@ import { act } from 'react';
 import { DetailSheet } from './DetailSheet.jsx';
 import { generatePlan } from '@/lib/plan.js';
 import { swimKit } from '@/lib/swim-kit.js';
+import { weekRange } from '@/lib/schedule.js';
 
 /* Phase 6: the why-not-harder fold and the swim kit line, rendered. The
    selectors carry the logic (their own suites); these pin the wiring. */
@@ -73,6 +74,32 @@ describe('the swim kit line', () => {
     if (!swim) return; // every swim carries gear in this plan shape; selector suite covers it
     const { el, done } = await mount(swim);
     expect(el.innerHTML).not.toContain('Bring:');
+    done();
+  });
+});
+
+/* With the month-grid drag retired, this picker was the one remaining path
+   that could move a session onto race day. */
+describe('the reschedule picker and race day', () => {
+  it('offers race week minus the race itself', async () => {
+    const plan = generatePlan(profile);
+    const raceISO = plan.profile.raceDate;
+    /* A movable session whose BASE week contains the race (the plan's last
+       week is post-race recovery, so index from the calendar, not the end):
+       the picker offers weekRange(w.date), and race day must be in it. */
+    const inRaceWeek = weekRange(raceISO);
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && inRaceWeek.includes(x.date));
+    const { el, done } = await mount(w);
+    const cells = [...el.querySelectorAll('.days .d')];
+    expect(cells).toHaveLength(7);
+    const raceCell = cells.find(c => c.getAttribute('aria-label') && c.getAttribute('aria-label').includes('Race day'));
+    expect(raceCell).toBeTruthy();
+    expect(raceCell.classList.contains('off')).toBe(true);
+    expect(raceCell.getAttribute('role')).toBe(null);          // not a button at all
+    // and the other days still move
+    const movable = cells.filter(c => !c.classList.contains('off'));
+    expect(movable.length).toBe(6);
     done();
   });
 });
