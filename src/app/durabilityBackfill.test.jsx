@@ -8,7 +8,7 @@
    reached a shipped bundle, found only when Jon's charts refused to appear
    for the third time (2026-08-04). If this fails with "durabilityShape is
    not a function", the barrel lost the durability-shape line. */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('@clerk/react', () => ({
   useAuth: () => ({ signOut: () => {} }),
@@ -60,7 +60,20 @@ const BIKE_LAPS = Array.from({ length: 12 }, (_, i) => ({
   averageSpeed: 8.3 - i * 0.05, averageHeartrate: 138 + i, averageWatts: 240 - i * 4,
 }));
 
-beforeEach(() => { localStorage.clear(); globalThis.confirm = () => true; });
+/* App holds the splash for 4.4s (the tumbling mark). Sleeping that out on the
+   wall clock made the mount a race it could lose: under the full suite in
+   parallel the app's own timer fires late, the margin gets eaten, and the
+   assertions run against a splash instead of the app. The hold is a
+   setTimeout, so this file fakes setTimeout and winds the clock instead.
+   Anything past 4400 is spare. */
+const PAST_SPLASH_HOLD_MS = 4600;
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  localStorage.clear();
+  globalThis.confirm = () => true;
+});
+afterEach(() => { vi.useRealTimers(); });
 
 describe('the sweep in a mounted App', () => {
   it('attaches shapes to stored pre-shape records, even ones outside plan and feed', async () => {
@@ -88,8 +101,10 @@ describe('the sweep in a mounted App', () => {
     await act(async () => {
       root.render(<App storage={storage} getToken={async () => 'tok'} user={{ imageUrl: null }} />);
     });
-    await act(async () => { await new Promise(r => setTimeout(r, 4600)); });
-    await act(async () => { await new Promise(r => setTimeout(r, 400)); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PAST_SPLASH_HOLD_MS); });
+    if (el.querySelector('.splash')) throw new Error('splash still up past PAST_SPLASH_HOLD_MS');
+    // and again for the backfill sweep the mounted app kicks off behind it
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
 
     const store = storage.loadDurability();
     const byId = Object.fromEntries(store.map(e => [e.activityId, e]));
