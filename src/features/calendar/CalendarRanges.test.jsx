@@ -502,3 +502,45 @@ describe('the month dots follow a cross-day claim', () => {
     await act(async () => after.root.unmount());
   });
 });
+
+/* The month tells you how it is going, and a claimed row says what happened. */
+describe('the month subtitle and matched provenance', () => {
+  const setup = async (over = {}) => {
+    const plan = generatePlan(profile());
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && weekRange(todayISO).includes(x.date));
+    return { plan, w, ...(await mount(plan, over)) };
+  };
+
+  it('pairs done against planned once anything in the month is recorded', async () => {
+    const plan = generatePlan(profile());
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && weekRange(todayISO).includes(x.date));
+    const bare = await mount(plan);
+    expect(bare.el.querySelector('.cal-head .sub').textContent).toContain('h planned');
+    await act(async () => bare.root.unmount());
+
+    const withWork = await mount(plan, {
+      activities: [{ id: 'q1', date: w.date, type: 'Ride', name: 'Ride', movingTimeSec: 3600, trainingLoad: 50 }],
+    });
+    const sub = withWork.el.querySelector('.cal-head .sub').textContent;
+    expect(sub).toContain(' / ');
+    expect(sub).not.toContain('planned');
+    await act(async () => withWork.root.unmount());
+  });
+
+  it('a claimed session row shows the minutes actually recorded', async () => {
+    const plan = generatePlan(profile());
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && weekRange(todayISO).includes(x.date));
+    const realMin = (w.durationMin || 60) + 12;        // rode longer than planned
+    const a = { id: 'q2', date: w.date, type: w.discipline === 'run' ? 'Run' : w.discipline === 'swim' ? 'Swim' : 'Ride',
+      name: 'The file', movingTimeSec: realMin * 60, trainingLoad: 80 };
+    const { el, root } = await mount(plan, { activities: [a], log: { [w.id]: { done: true, actualMin: realMin } } });
+    await toWeek(el);
+    const row = [...el.querySelectorAll('.wk-day .wk')].find(r => r.querySelector('.t').textContent.includes(w.title));
+    expect(row.querySelector('.s').textContent).toContain(String(realMin));
+    expect(row.querySelector('.s').textContent).not.toContain(String(w.durationMin) + ' min');
+    await act(async () => root.unmount());
+  });
+});
