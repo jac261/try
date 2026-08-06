@@ -18,8 +18,8 @@ const profile = {
 };
 const noop = () => {};
 
-const mount = async w => {
-  const plan = generatePlan(profile);
+const mount = async (w, planOver) => {
+  const plan = planOver || generatePlan(profile);
   const el = document.createElement('div');
   document.body.appendChild(el);
   const root = createRoot(el);
@@ -100,6 +100,31 @@ describe('the reschedule picker and race day', () => {
     // and the other days still move
     const movable = cells.filter(c => !c.classList.contains('off'));
     expect(movable.length).toBe(6);
+    done();
+  });
+});
+
+/* A maintenance block has no race: its profile.raceDate is only the horizon
+   of the last week, which CalendarView already knows (it nulls raceISO for
+   noRace plans). The picker did not, so it greyed out an ordinary Sunday and
+   announced it as race day. */
+describe('the picker and a plan with no race', () => {
+  it('offers every day of the week, none of them called race day', async () => {
+    /* Built the way rollMaintenance builds it: the block is a fixed roll, and
+       the profile's raceDate is stamped as its FINAL SUNDAY — a horizon, not
+       a race (domain.js says so on the maintenance entry). */
+    const base = generatePlan({ ...profile, raceType: 'maintenance' });
+    const lastWeek = base.weeks[base.weeks.length - 1];
+    const horizon = weekRange(lastWeek.start)[6];
+    const maint = { ...base, profile: { ...base.profile, raceDate: horizon } };
+    const w = lastWeek.workouts.find(x => x.discipline !== 'rest' && !x.race && !x.bRace);
+    expect(w).toBeTruthy();                       // the fixture must reach the horizon week
+    const { el, done } = await mount(w, maint);
+    const cells = [...el.querySelectorAll('.days .d')];
+    expect(cells).toHaveLength(7);
+    expect(cells.filter(c => c.classList.contains('off'))).toHaveLength(0);
+    expect(el.querySelector('.days').textContent).not.toContain('Race day');
+    cells.forEach(c => expect(c.getAttribute('aria-label') || '').not.toContain('Race day'));
     done();
   });
 });

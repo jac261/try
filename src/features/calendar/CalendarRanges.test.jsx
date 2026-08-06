@@ -398,3 +398,50 @@ describe('the week header counts what happened', () => {
     await act(async () => root.unmount());
   });
 });
+
+/* The add row files onto a day the athlete can see, or it does not appear.
+   Clamping used to file silently under planStart/planEnd, and race day was
+   the third path onto the race after the drag and the sheet's picker were
+   closed (calendar audit + sweep, 2026-08-06). */
+describe('add a session targets an honest day', () => {
+  const addCards = el => [...el.querySelectorAll('.cal-add-card')];
+  const targetOf = el => {
+    const c = addCards(el)[0];
+    return c ? c.getAttribute('aria-label') : null;
+  };
+
+  it('targets a day of the month on screen, not an off-screen today', async () => {
+    const plan = generatePlan(profile());
+    const { el, root } = await mount(plan);
+    // step a month forward: the selection clears, and today leaves the screen
+    await act(async () => { navs(el)[1].click(); });
+    const label = targetOf(el);
+    expect(label).not.toBe(null);
+    const month = title(el).split(' ')[0];           // e.g. "September 2026"
+    expect(label).toContain(month);
+    await act(async () => root.unmount());
+  });
+
+  it('offers nothing on race day rather than filing a session onto the race', async () => {
+    const raceDate = iso(addDays(mon, 6));
+    const plan = generatePlan(profile({ startDate: iso(addDays(mon, -28)), raceDate }));
+    const { el, root } = await mount(plan);
+    const cell = el.querySelector('.cal-day[data-caldate="' + raceDate + '"]');
+    await act(async () => cell.click());
+    expect(addCards(el)).toHaveLength(0);
+    expect(el.textContent).not.toContain('Add a session');
+    await act(async () => root.unmount());
+  });
+
+  it('offers nothing on a day outside the plan rather than filing it inside', async () => {
+    // the plan starts next Monday; step back and the shown days are pre-plan
+    const plan = generatePlan(profile({ startDate: iso(addDays(mon, 7)), raceDate: iso(addDays(today, 84)) }));
+    const { el, root } = await mount(plan);
+    await toWeek(el);
+    await act(async () => { navs(el)[0].click(); });
+    // the shown week is entirely before the plan: no honest target exists
+    expect(el.textContent).toContain('Before this plan began.');
+    expect(addCards(el)).toHaveLength(0);
+    await act(async () => root.unmount());
+  });
+});
