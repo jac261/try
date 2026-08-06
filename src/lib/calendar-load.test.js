@@ -193,3 +193,92 @@ describe('dayLedger and loadOf', () => {
     expect(loadOf(null).tss).toBe(0);
   });
 });
+
+/* A ticked session dragged to another day. The tick banked its recording's
+   minutes at the time, and the recording stays on the day it happened, so a
+   per-day claim splits them: the recording counts as unclaimed work AND the
+   session counts again through the minutes taken from that same recording.
+   One ride, billed twice, and the moves overlay persists so it survives a
+   reload (calendar audit, reproduced under vitest by the verifier). */
+describe('a session moved off its recording', () => {
+  const TUE = '2026-07-07', THU = '2026-07-09';   // inside DATES, the shown week
+  const ride = over => act('a1', { date: TUE, movingTimeSec: 3720, trainingLoad: 70, ...over });
+
+  it('still owns it: the ride counts once, on the day the session now sits', () => {
+    const w = sess('w1', { date: TUE, durationMin: 60 });
+    const r = weekLoad({
+      dates: DATES, byDate: { [THU]: [w] },          // effective date, after the drag
+      activities: [ride()], log: { w1: { done: true, actualMin: 62 } },
+      moves: { w1: THU }, easedOf: x => x,
+    });
+    expect(r.doneTss).toBe(70);                       // not 70 + the estimate
+    expect(r.doneMin).toBe(62);
+    expect(r.days[TUE].unclaimed).toEqual([]);        // the recording is spoken for
+    expect(r.days[THU].sessions[0].measured).toBe(true);
+  });
+
+  it('will not steal a session that has a recording of its own', () => {
+    /* The attack the naive widening loses to: offering every leftover to
+       every session in the week lets a Tuesday ride claim a Thursday session
+       whose own Thursday recording already speaks for it. */
+    const moved = sess('w1', { date: TUE, durationMin: 60 });
+    const native = sess('w2', { date: THU, durationMin: 60 });
+    const r = weekLoad({
+      dates: DATES, byDate: { [THU]: [moved, native] },
+      activities: [ride(), act('a2', { date: THU, movingTimeSec: 3600, trainingLoad: 55 })],
+      log: { w1: { done: true, actualMin: 62 }, w2: { done: true, actualMin: 60 } },
+      moves: { w1: THU }, easedOf: x => x,
+    });
+    const byId = id => r.days[THU].sessions.find(x => x.w.id === id);
+    expect(byId('w2').tss).toBe(55);                  // its own day's recording
+    expect(byId('w1').tss).toBe(70);                  // the one it was moved away from
+    expect(r.doneTss).toBe(125);
+  });
+
+  it('takes one recording, not two, when it also found one on its new day', () => {
+    /* A session moved to Thursday that Thursday's own recording claims must
+       not ALSO reach back for the ride left on Tuesday: it did one session,
+       so it owns one recording, and the other is somebody's own work. */
+    const w = sess('w1', { date: TUE, durationMin: 60 });
+    const r = weekLoad({
+      dates: DATES, byDate: { [THU]: [w] },
+      activities: [ride(), act('a2', { date: THU, movingTimeSec: 3600, trainingLoad: 55 })],
+      log: { w1: { done: true, actualMin: 60 } },
+      moves: { w1: THU }, easedOf: x => x,
+    });
+    expect(r.days[THU].sessions[0].tss).toBe(55);        // the day it is on
+    expect(r.days[TUE].unclaimed.map(u => u.activity.id)).toEqual(['a1']);
+    expect(r.doneTss).toBe(55 + 70);                     // both rides, once each
+  });
+
+  it('reaches only the day it was moved FROM, not any day with a leftover', () => {
+    /* Base-keyed, not week-wide: a stray Wednesday ride is nobody's, and a
+       session moved from Tuesday must not swallow it just because it happens
+       to be the nearest unclaimed thing in the week. */
+    const WED = '2026-07-08';
+    const w = sess('w1', { date: TUE, durationMin: 60 });
+    const r = weekLoad({
+      dates: DATES, byDate: { [THU]: [w] },
+      activities: [act('a9', { date: WED, movingTimeSec: 3600, trainingLoad: 40 })],
+      log: { w1: { done: true, actualMin: 62 } },
+      moves: { w1: THU }, easedOf: x => x,
+    });
+    expect(r.days[WED].unclaimed.map(u => u.activity.id)).toEqual(['a9']);
+    expect(r.days[THU].sessions[0].measured).toBe(false);  // nothing to claim on Tuesday
+    expect(r.doneTss).toBe(40 + Math.round(estimateTss(sess('w1', { durationMin: 60 }), null, 62)));
+  });
+
+  it('claims nothing across days for a session ticked by hand', () => {
+    // no actualMin means no recording was ever banked: the stray ride is
+    // its own work, and the session keeps its estimate
+    const w = sess('w1', { date: TUE, durationMin: 60 });
+    const r = weekLoad({
+      dates: DATES, byDate: { [THU]: [w] },
+      activities: [ride()], log: { w1: { done: true } },
+      moves: { w1: THU }, easedOf: x => x,
+    });
+    expect(r.days[TUE].unclaimed).toHaveLength(1);
+    expect(r.days[THU].sessions[0].measured).toBe(false);
+    expect(r.doneTss).toBe(70 + Math.round(estimateTss(w)));
+  });
+});

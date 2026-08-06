@@ -72,13 +72,25 @@ export function dayLedger({ date, sessions, activities, log, moves }) {
     }
   });
 
+  /* NATIVE sessions claim first. A session moved onto this day and a session
+     always scheduled here are both candidates for a recording that happened
+     here, and ownerFor breaks a duration tie by id — so a moved session could
+     take the recording belonging to the one that never left, leaving the
+     native session with an estimate and the moved session's own recording
+     stranded on the day it was dragged from. Two tiers, native then arrived,
+     and a week with no moves is unchanged because tier two is empty. */
   const used = new Set();
-  const unclaimed = acts.filter(a => {
-    if (claimed.has(a.id)) return false;
-    const owner = ownerFor({ activity: a, sessions: ws, log, used });
-    if (owner) { used.add(owner.id); bySession[owner.id] = a; claims[a.id] = owner; return false; }
+  const native = ws.filter(w => w.date === date);
+  const arrived = ws.filter(w => w.date !== date);
+  const offer = (a, pool) => {
+    const owner = ownerFor({ activity: a, sessions: pool, log, used });
+    if (!owner) return false;
+    used.add(owner.id); bySession[owner.id] = a; claims[a.id] = owner;
     return true;
-  });
+  };
+  const pending = acts.filter(a => !claimed.has(a.id));
+  const afterNative = pending.filter(a => !offer(a, native));
+  const unclaimed = afterNative.filter(a => !offer(a, arrived));
 
   /* `claims` and `pairs` are the ledger's answer published for the surfaces
      that need to SAY who owns what, not just count it. The recorded list used
@@ -128,16 +140,93 @@ const minutesOf = a => Math.round((a.movingTimeSec || 0) / 60);
 
    Rounded per contribution, then summed, so the header is always the sum of
    the rows the athlete can see. */
+/* PHASE B: a session that was MOVED off the day its recording sits on.
+
+   The tick banks a recording's minutes at the time it is ticked, on the day
+   the session then sat. Drag the completed session to another day to tidy the
+   week and the two part company: per-day claiming leaves the recording
+   unclaimed on its old day while the session, now recording-less, counts
+   again through the very minutes that recording gave it. One ride, billed
+   twice, and the moves overlay persists so it survives a reload.
+
+   The tempting fix — offer every day's leftovers to every session in the week
+   — loses to its own attack: with no date affinity in ownerFor, a Tuesday
+   ride can claim a Thursday session whose own Thursday recording already
+   speaks for it, and which of them wins depends on iteration order.
+
+   So the second pass is keyed by BASE date. A day's leftovers are offered
+   only to sessions scheduled on that day but effective elsewhere, still
+   unclaimed after the first pass (their own day's recording won), and ticked
+   with banked minutes (a hand-tick never claims across days). A session has
+   exactly one base date, so no two days ever contend, and the outcome does
+   not depend on the order the days are walked. */
+function crossDayClaims({ dates, byDate, leftovers, log, moves, claimedBy }) {
+  const out = {};
+  const movedFrom = {};
+  (dates || []).forEach(d => ((byDate && byDate[d]) || []).forEach(w => {
+    const eff = (moves || {})[w.id] || w.date;
+    const entry = (log || {})[w.id];
+    if (eff !== w.date && !claimedBy[w.id] && entry && entry.done && entry.actualMin != null) {
+      (movedFrom[w.date] = movedFrom[w.date] || []).push(w);
+    }
+  }));
+  Object.keys(movedFrom).forEach(base => {
+    const pool = leftovers[base] || [];
+    if (!pool.length) return;
+    const used = new Set();
+    // bricks first, on the base date: an empty moves map IS "pair where it
+    // was scheduled", which is exactly where the legs still sit
+    movedFrom[base].filter(w => w.discipline === 'brick').forEach(w => {
+      const pair = brickPairFor({ workout: w, activities: pool.filter(a => !a.manual), moves: {}, used });
+      if (pair) {
+        used.add(pair.ride.id); used.add(pair.run.id);
+        out[w.id] = { recording: brickRecording(pair.ride, pair.run), claimed: [pair.ride.id, pair.run.id], pair, base };
+      }
+    });
+    const singles = movedFrom[base].filter(w => w.discipline !== 'brick' && !out[w.id]);
+    const taken = new Set();
+    pool.filter(a => !used.has(a.id)).forEach(a => {
+      const owner = ownerFor({ activity: a, sessions: singles, log, used: taken });
+      if (owner) { taken.add(owner.id); used.add(a.id); out[owner.id] = { recording: a, claimed: [a.id], base }; }
+    });
+  });
+  return out;
+}
+
 export function weekLoad({ dates, byDate, activities, log, moves, easedOf }) {
   const lg = log || {};
   const ease = easedOf || (w => w);
   const days = {};
   let doneMin = 0, plannedMin = 0, doneTss = 0, plannedTss = 0, estimated = false;
 
+  // first pass, per day, exactly as before
+  const ledgers = {};
+  const leftovers = {};
+  const claimedBy = {};
+  (dates || []).forEach(date => {
+    const led = dayLedger({ date, sessions: (byDate && byDate[date]) || [], activities, log: lg, moves });
+    ledgers[date] = led;
+    leftovers[date] = led.unclaimed;
+    led.rows.forEach(r => { if (r.recording) claimedBy[r.w.id] = true; });
+  });
+  const cross = crossDayClaims({ dates, byDate, leftovers, log: lg, moves, claimedBy });
+  const crossActs = new Set();
+  Object.keys(cross).forEach(id => cross[id].claimed.forEach(a => crossActs.add(a)));
+
   (dates || []).forEach(date => {
     const sessions = (byDate && byDate[date]) || [];
-    const led = dayLedger({ date, sessions, activities, log: lg, moves });
-    const { rows, unclaimed } = led;
+    const led = ledgers[date];
+    const rows = led.rows.map(r => (cross[r.w.id] ? { ...r, recording: cross[r.w.id].recording } : r));
+    const unclaimed = led.unclaimed.filter(a => !crossActs.has(a.id));
+    // the day's published claims gain the cross-day ones, so a recorded row
+    // on the day it happened still knows a session elsewhere speaks for it
+    Object.keys(cross).forEach(id => {
+      const c = cross[id];
+      if (c.base !== date) return;
+      const w = (dates || []).flatMap(d => (byDate && byDate[d]) || []).find(x => x.id === id);
+      c.claimed.forEach(a => { led.claims[a] = w; });
+      if (c.pair) led.pairs[id] = c.pair;
+    });
     const sessionRows = rows.map(({ w, recording }) => {
       const shown = ease(w);
       const entry = lg[w.id];
