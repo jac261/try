@@ -36,6 +36,15 @@ const quietFetch = () => {
     { status: 200, headers: { 'Content-Type': 'application/json' } }));
 };
 
+/* App holds the splash for 4.4s (the mark tumbling through all three faces).
+   Sleeping that out on the wall clock made every mount a race it could lose:
+   under the full suite running in parallel the app's own timer fires late,
+   the margin gets eaten, and the assertions read a splash instead of the app.
+   The hold is a setTimeout, so this file fakes setTimeout and winds the clock
+   instead — the mount is then instant AND deterministic. Anything past 4400
+   is spare. */
+const PAST_SPLASH_HOLD_MS = 4600;
+
 const mountApp = async storage => {
   const el = document.createElement('div');
   document.body.appendChild(el);
@@ -43,7 +52,10 @@ const mountApp = async storage => {
   await act(async () => {
     root.render(<App storage={storage} getToken={async () => 'tok'} user={{ imageUrl: null }} />);
   });
-  await act(async () => { await new Promise(r => setTimeout(r, 4600)); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(PAST_SPLASH_HOLD_MS); });
+  // Say so here rather than three lines later as a null querySelector, if the
+  // hold ever outgrows the wind.
+  if (el.querySelector('.splash')) throw new Error('splash still up past PAST_SPLASH_HOLD_MS');
   return { el, root };
 };
 
@@ -51,7 +63,7 @@ const tabNamed = (el, label) =>
   [...el.querySelectorAll('.nav button')].find(b => b.textContent.includes(label));
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   vi.setSystemTime(FROZEN_NOW);
   localStorage.clear();
   globalThis.confirm = () => true;

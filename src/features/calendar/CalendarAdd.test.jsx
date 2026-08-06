@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
@@ -55,11 +55,21 @@ describe('the add-a-session cards', () => {
 });
 
 describe('the full add and remove journey (tracker diary via the calendar)', () => {
+  /* App holds the splash for 4.4s (the mark tumbles all three faces). Sleeping
+     that out on the wall clock made the mount a race it could lose: under the
+     full suite in parallel the app's own timer fires late, the margin gets
+     eaten, and the clicks below land on a splash instead of the app. The hold
+     is a setTimeout, so fake setTimeout and wind the clock instead. Anything
+     past 4400 is spare. */
+  const PAST_SPLASH_HOLD_MS = 4600;
+
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     localStorage.clear();
     globalThis.fetch = () => Promise.reject(new Error('offline'));
     globalThis.confirm = () => true;
   });
+  afterEach(() => { vi.useRealTimers(); });
 
   it('adds a session from the calendar cards and removes it from its edit sheet', async () => {
     const storage = storageForUser('simuser');
@@ -70,8 +80,8 @@ describe('the full add and remove journey (tracker diary via the calendar)', () 
     await act(async () => {
       root.render(<App storage={storage} getToken={async () => null} user={{ imageUrl: null }} />);
     });
-    // splash hold runs 4.2s (the mark tumbles all three faces); let it settle
-    await act(async () => { await new Promise(r => setTimeout(r, 4600)); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PAST_SPLASH_HOLD_MS); });
+    if (el.querySelector('.splash')) throw new Error('splash still up past PAST_SPLASH_HOLD_MS');
 
     // to the calendar tab
     const navBtn = [...el.querySelectorAll('.nav button')].find(b => b.textContent.includes('Calendar'));

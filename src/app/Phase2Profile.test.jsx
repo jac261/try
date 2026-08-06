@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // SettingsView pulls Clerk hooks; the harness has no ClerkProvider, so give
 // it inert stand-ins (the tests never assert on auth UI).
@@ -63,6 +63,15 @@ const pushedSentinel = calls => calls.some(c =>
   (c.method === 'POST' || c.method === 'PUT') && /\/api\/plans/.test(c.url)
   && c.body && (c.body.race === 'tracker' || (Array.isArray(c.body.weeks) && c.body.weeks.length === 0)));
 
+/* App holds the splash for 4.4s (the tumbling mark). Sleeping that out on the
+   wall clock made every one of this file's ten mounts a race it could lose:
+   under the full suite in parallel the app's own timer fires late, the margin
+   gets eaten, and the assertions read a splash instead of the app. The hold
+   is a setTimeout, so this file fakes setTimeout and winds the clock instead.
+   Date stays real — the fixtures below build timestamps with new Date().
+   Anything past 4400 is spare. */
+const PAST_SPLASH_HOLD_MS = 4600;
+
 const mountApp = async storage => {
   const el = document.createElement('div');
   document.body.appendChild(el);
@@ -70,8 +79,9 @@ const mountApp = async storage => {
   await act(async () => {
     root.render(<App storage={storage} getToken={async () => 'tok'} user={{ imageUrl: null }} />);
   });
-  // splash hold runs 4.2s (the tumbling mark); let it and hydration settle
-  await act(async () => { await new Promise(r => setTimeout(r, 4600)); });
+  // past the splash hold, and hydration settled with it
+  await act(async () => { await vi.advanceTimersByTimeAsync(PAST_SPLASH_HOLD_MS); });
+  if (el.querySelector('.splash')) throw new Error('splash still up past PAST_SPLASH_HOLD_MS');
   return { el, root };
 };
 
@@ -87,9 +97,11 @@ const serverPlanResponse = (plan, id) => ({
 });
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   localStorage.clear();
   globalThis.confirm = () => true;
 });
+afterEach(() => { vi.useRealTimers(); });
 
 describe('plan identity (serverId on the plan object)', () => {
   it('hydrating a server plan stamps its GUID onto the local plan', async () => {
@@ -116,7 +128,7 @@ describe('entering tracker (the end-plan flow)', () => {
     const storage = storageForUser('p2end');
     const { el, root } = await mountApp(storage);
     // the finished plan auto-enters tracker after hydration stamped guid-END
-    await act(async () => { await new Promise(r => setTimeout(r, 120)); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(120); });
     expect(storage.load('plan', null).race).toBe('tracker');
     expect(storage.load('plan', null).endedServerId).toBe('guid-END');
     expect(calls.some(c => c.method === 'DELETE' && c.url.includes('/api/plans/guid-END'))).toBe(true);
@@ -133,7 +145,7 @@ describe('entering tracker (the end-plan flow)', () => {
     const finished = generatePlan({ ...profile, startDate: '2026-04-06', raceDate: '2026-06-14' });
     storage.save('plan', finished); // no serverId: planEnded routes it to tracker at hydrate
     const { el, root } = await mountApp(storage);
-    await act(async () => { await new Promise(r => setTimeout(r, 120)); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(120); });
     expect(storage.load('plan', null).race).toBe('tracker');
     expect(calls.some(c => c.method === 'DELETE')).toBe(false);
     expect(pushedSentinel(calls)).toBe(false);
@@ -264,7 +276,7 @@ describe('ending a plan whose create is still in flight (convergence-gate catch)
     expect(storage.load('plan', null).race).toBe('tracker');
     expect(calls.some(c => c.method === 'DELETE')).toBe(false); // nothing to delete yet
     // the create lands late: the sentinel finishes the end for the fresh row
-    await act(async () => { releasePost(); await new Promise(r => setTimeout(r, 80)); });
+    await act(async () => { releasePost(); await vi.advanceTimersByTimeAsync(80); });
     expect(calls.some(c => c.method === 'DELETE' && c.url.includes('guid-LATE'))).toBe(true);
     const cached = storage.load('plan', null);
     expect(cached.race).toBe('tracker');
