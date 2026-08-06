@@ -15,6 +15,12 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.{js,jsx}'],
     environment: 'node',
+    // The default 5s per-test budget is CPU time this suite never needs solo,
+    // but concurrent `npm run check` runs starve workers enough that even the
+    // source-scanning audit tests (bike-dashboard, swim-guards, strays) blew
+    // it. Nothing here legitimately runs long — the headroom is for load, and
+    // a genuine hang still fails, just later.
+    testTimeout: 20_000,
   },
   build: {
     outDir: 'dist',
