@@ -5,7 +5,7 @@ import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
-import { dayLedger, weekLoad } from '@/lib/calendar-load.js';
+import { dayLedger, spanLedger, weekLoad } from '@/lib/calendar-load.js';
 import { LoadSlot } from '@/components/LoadSlot.jsx';
 import { SeasonPanel } from '@/features/calendar/SeasonPanel.jsx';
 const D = T.DISCIPLINES;
@@ -90,9 +90,14 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
      for it. That claim now comes from the shared ledger in calendar-load,
      the same one the week's totals are built from, so the grid and the
      numbers can never disagree about who owns a ride. */
-  const unclaimedActs = d => dayLedger({
-    date: d, sessions: byDate[d] || [], activities: actByDate[d] || [], log, moves,
-  }).unclaimed;
+  /* One pass over the whole shown grid, not per cell: a session moved off the
+     day its recording sits on claims that recording from another day, and a
+     cell that cannot see the rest of the grid would dot a ride the week's
+     totals have already counted against its session. */
+  const gridSpan = useMemo(() => spanLedger({
+    dates: grid.cells.filter(Boolean), byDate, activities, log, moves,
+  }), [grid, byDate, activities, log, moves]);
+  const unclaimedActs = d => (gridSpan[d] ? gridSpan[d].unclaimed : []);
 
   /* One anchor date, two step sizes (the screen doc: "three ranges of the
      same plan, one set of chrome"). Switching range keeps the athlete on the
@@ -414,7 +419,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
             ))}
         </div>}
         <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves}
-          ledger={dayLedger({ date: selected, sessions: byDate[selected] || [], activities: actByDate[selected] || [], log, moves })}
+          ledger={gridSpan[selected]}
           onOpen={onOpenRecording} noHeading={tracker} />
       </>}
 

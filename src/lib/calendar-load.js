@@ -193,13 +193,12 @@ function crossDayClaims({ dates, byDate, leftovers, log, moves, claimedBy }) {
   return out;
 }
 
-export function weekLoad({ dates, byDate, activities, log, moves, easedOf }) {
+/* Both passes over a span of days, which is what every consumer actually
+   wants: the week's totals, and the month grid's dots, must agree about who
+   owns a ride or the grid contradicts the header (the no-drift invariant the
+   grid has carried since the dots moved onto the ledger). */
+export function spanLedger({ dates, byDate, activities, log, moves }) {
   const lg = log || {};
-  const ease = easedOf || (w => w);
-  const days = {};
-  let doneMin = 0, plannedMin = 0, doneTss = 0, plannedTss = 0, estimated = false;
-
-  // first pass, per day, exactly as before
   const ledgers = {};
   const leftovers = {};
   const claimedBy = {};
@@ -212,21 +211,37 @@ export function weekLoad({ dates, byDate, activities, log, moves, easedOf }) {
   const cross = crossDayClaims({ dates, byDate, leftovers, log: lg, moves, claimedBy });
   const crossActs = new Set();
   Object.keys(cross).forEach(id => cross[id].claimed.forEach(a => crossActs.add(a)));
+  const all = (dates || []).flatMap(d => (byDate && byDate[d]) || []);
 
+  const out = {};
   (dates || []).forEach(date => {
-    const sessions = (byDate && byDate[date]) || [];
     const led = ledgers[date];
-    const rows = led.rows.map(r => (cross[r.w.id] ? { ...r, recording: cross[r.w.id].recording } : r));
-    const unclaimed = led.unclaimed.filter(a => !crossActs.has(a.id));
-    // the day's published claims gain the cross-day ones, so a recorded row
-    // on the day it happened still knows a session elsewhere speaks for it
     Object.keys(cross).forEach(id => {
       const c = cross[id];
       if (c.base !== date) return;
-      const w = (dates || []).flatMap(d => (byDate && byDate[d]) || []).find(x => x.id === id);
+      const w = all.find(x => x.id === id);
       c.claimed.forEach(a => { led.claims[a] = w; });
       if (c.pair) led.pairs[id] = c.pair;
     });
+    out[date] = {
+      ...led,
+      rows: led.rows.map(r => (cross[r.w.id] ? { ...r, recording: cross[r.w.id].recording } : r)),
+      unclaimed: led.unclaimed.filter(a => !crossActs.has(a.id)),
+    };
+  });
+  return out;
+}
+
+export function weekLoad({ dates, byDate, activities, log, moves, easedOf }) {
+  const lg = log || {};
+  const ease = easedOf || (w => w);
+  const days = {};
+  let doneMin = 0, plannedMin = 0, doneTss = 0, plannedTss = 0, estimated = false;
+  const span = spanLedger({ dates, byDate, activities, log: lg, moves });
+
+  (dates || []).forEach(date => {
+    const led = span[date];
+    const { rows, unclaimed } = led;
     const sessionRows = rows.map(({ w, recording }) => {
       const shown = ease(w);
       const entry = lg[w.id];

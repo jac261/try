@@ -473,3 +473,32 @@ describe('the month day card says a claimed load once too', () => {
     await act(async () => root.unmount());
   });
 });
+
+/* The grid and the totals must agree about who owns a ride: when a ticked
+   session is dragged to another day, its recording goes with it, so the day
+   it happened on no longer dots a recording of its own. */
+describe('the month dots follow a cross-day claim', () => {
+  it('drops the recorded dot from the day the session was moved away from', async () => {
+    const plan = generatePlan(profile());
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && weekRange(todayISO).includes(x.date));
+    const to = weekRange(todayISO).find(d => d !== w.date
+      && !plan.weeks.flatMap(k => k.workouts).some(x => x.discipline !== 'rest' && x.date === d));
+    const a = { id: 'x1', date: w.date, type: w.discipline === 'run' ? 'Run' : w.discipline === 'swim' ? 'Swim' : 'Ride',
+      name: 'The file', movingTimeSec: (w.durationMin || 60) * 60, trainingLoad: 61 };
+    const dotsOn = (el, d) => {
+      const cell = el.querySelector('.cal-day[data-caldate="' + d + '"]');
+      return cell ? cell.querySelectorAll('.cd-dots i').length : null;
+    };
+    // before the move: the session sits on its own day with its recording
+    const before = await mount(plan, { activities: [a], log: { [w.id]: { done: true, actualMin: w.durationMin } } });
+    const dotsBefore = dotsOn(before.el, w.date);
+    await act(async () => before.root.unmount());
+    // after: the session is on another day, and the recording is not a second fact
+    const after = await mount(plan, {
+      activities: [a], log: { [w.id]: { done: true, actualMin: w.durationMin } }, moves: { [w.id]: to },
+    });
+    expect(dotsOn(after.el, w.date)).toBe(dotsBefore - 1);   // the session's dot left, no orphan appeared
+    await act(async () => after.root.unmount());
+  });
+});
