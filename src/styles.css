@@ -1201,6 +1201,11 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 /* Deliberately NOT raised: one extruded cell at a time, and a drag already
    has a ghost following the pointer. It only has to beat the press. */
 .cal-day.drop { border-color: var(--run); background: rgba(52, 211, 153, .22); box-shadow: none; }
+/* the week range's drop highlight: same green as the grid's was, but on a
+   card, whose border the .today variant already proves overridable — and no
+   box-shadow: none, that line existed to kill the grid well's press */
+.wk-day.drop { border-color: var(--run); background: rgba(52, 211, 153, .22); }
+
 /* ---------- week range ----------
    One card per day, the weekday in a fixed gutter so the dates line up down
    the column whatever the rows beside them are doing. */
