@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { seasonCurve, seasonMilestones, stepLoad } from './season.js';
+import { seasonCurve, seasonMilestones, seasonShortfall, stepLoad } from './season.js';
 import { projectRaceForm, estimateTss, RAMP_RULES } from './adapt.js';
 import { generatePlan } from './plan.js';
 import { iso, addDays, startOfWeekMonday } from './date.js';
@@ -175,5 +175,80 @@ describe('seasonMilestones', () => {
 
   it('is empty with no plan', () => {
     expect(seasonMilestones({ plan: { race: 'tracker', weeks: [] }, todayISO: TODAY })).toEqual([]);
+  });
+});
+
+/* The shortfall: the plan never regains the level the measured line ends at.
+   Every case is a way of warning when nothing is wrong, or staying silent
+   when the load genuinely cannot hold the athlete. */
+describe('seasonShortfall', () => {
+  const curveFor = (ctl, atl) => {
+    const plan = generatePlan(profile());
+    return seasonCurve({ plan, wellness: recs(ctl, atl, plan.weeks[0].start, TODAY), log: {}, moves: {}, adjust: {}, todayISO: TODAY });
+  };
+
+  it('fires when the athlete arrives far above what the plan can hold', () => {
+    const sf = seasonShortfall(curveFor(80, 75));
+    expect(sf).not.toBe(null);
+    expect(sf.current).toBe(80);
+    expect(sf.peak).toBeLessThan(80 - 3);
+    expect(sf.deficit).toBeGreaterThan(0);
+  });
+
+  it('stays silent on a plan the athlete fits', () => {
+    // the same fixture the curve test uses: from 50 the projection rises
+    expect(seasonShortfall(curveFor(50, 45))).toBe(null);
+  });
+
+  it('never counts the taper: a decline that is the plan working is not a shortfall', () => {
+    /* Hand-built, so the boundary is exact: measured ends at 60, everything
+       still to come is inside a Taper span and declines. Silence — when only
+       the taper remains there is nothing left for the warning to be about. */
+    const curve = {
+      points: [
+        { date: '2026-08-03', ctl: 60, projected: false },
+        { date: '2026-08-10', ctl: 55, projected: true },
+        { date: '2026-08-17', ctl: 50, projected: true },
+      ],
+      phases: [{ label: 'Build', from: 0, to: 0 }, { label: 'Taper', from: 1, to: 2 }],
+    };
+    expect(seasonShortfall(curve)).toBe(null);
+  });
+
+  it('a Maintain block that cannot hold fitness still fires', () => {
+    const curve = {
+      points: [
+        { date: '2026-08-03', ctl: 60, projected: false },
+        { date: '2026-08-10', ctl: 52, projected: true },
+        { date: '2026-08-17', ctl: 48, projected: true },
+      ],
+      phases: [{ label: 'Maintain', from: 0, to: 2 }],
+    };
+    const sf = seasonShortfall(curve);
+    expect(sf).not.toBe(null);
+    expect(sf.peak).toBe(52);
+  });
+
+  it('the tolerance is the model resolution: within 3 is silence, beyond it speaks', () => {
+    const mk = peak => ({
+      points: [
+        { date: '2026-08-03', ctl: 50, projected: false },
+        { date: '2026-08-10', ctl: peak, projected: true },
+      ],
+      phases: [{ label: 'Build', from: 0, to: 1 }],
+    });
+    expect(seasonShortfall(mk(47.5))).toBe(null);   // inside TOL
+    const sf = seasonShortfall(mk(46.5));
+    expect(sf).not.toBe(null);
+    expect(sf.deficit).toBe(3.5);
+  });
+
+  it('answers null rather than guessing when a half is missing', () => {
+    expect(seasonShortfall(null)).toBe(null);
+    expect(seasonShortfall({ points: [], phases: [] })).toBe(null);
+    // no measured half
+    expect(seasonShortfall({ points: [{ date: 'x', ctl: 50, projected: true }], phases: [] })).toBe(null);
+    // no projected half
+    expect(seasonShortfall({ points: [{ date: 'x', ctl: 50, projected: false }], phases: [] })).toBe(null);
   });
 });

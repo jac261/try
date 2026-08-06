@@ -140,6 +140,39 @@ export function seasonCurve({ plan, wellness, log, moves, adjust, todayISO }) {
   };
 }
 
+/* When the plan cannot hold the athlete's current fitness.
+
+   Reads seasonCurve's OUTPUT — the drawn points and phase spans — so it is
+   structurally incapable of disagreeing with the chart it captions. The rule:
+   the projection never regains the level the measured line ends at.
+
+   The taper is excluded by phase, not by heuristic: a taper declines by
+   design, so its weeks may not drag the projected peak down — and when only
+   taper (or the post-race Recovery relabel) remains, the eligible set is
+   empty and the answer is silence rather than a warning fired at every
+   healthy plan in its final fortnight. Maintain stays in scope: a
+   maintenance block projecting decline is exactly "load below fitness".
+
+   TOL is derived from the model's own resolution, not taste: the sustainable
+   ramp is ~5 CTL/week (RAMP_ZONES via the adapt.js anchor), the points are
+   weekly Monday samples that can undershoot a true peak by half a week of
+   ramp, and round1 plus a mid-week baseline add fractions more. A shortfall
+   the model itself cannot resolve is not worth a banner. */
+const SHORTFALL_TOL = 3;
+export function seasonShortfall(curve) {
+  if (!curve || !Array.isArray(curve.points)) return null;
+  const measured = curve.points.filter(p => p.ctl != null && !p.projected);
+  if (!measured.length) return null;
+  const current = measured[measured.length - 1].ctl;
+  const terminal = new Set(['Taper', 'Recovery']);
+  const eligible = curve.points.filter((p, i) => p.ctl != null && p.projected
+    && !(curve.phases || []).some(ph => terminal.has(ph.label) && i >= ph.from && i <= ph.to));
+  if (!eligible.length) return null;
+  const peak = Math.max(...eligible.map(p => p.ctl));
+  const deficit = current - SHORTFALL_TOL - peak;
+  return deficit > 0 ? { current, peak, deficit: Math.round((current - peak) * 10) / 10 } : null;
+}
+
 /* What the plan has already committed to between here and the end of it:
    benchmark tests, tune-up races, and the race itself. Read off the plan's own
    workouts rather than off the engine's retest nudges — those answer "should
