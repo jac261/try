@@ -5,6 +5,7 @@ import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
+import { dayLedger, weekLoad } from '@/lib/calendar-load.js';
 import { SeasonPanel } from '@/features/calendar/SeasonPanel.jsx';
 const D = T.DISCIPLINES;
 const RANGES = [['week', 'Week'], ['month', 'Month'], ['season', 'Season']];
@@ -83,29 +84,12 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
      rest-day ride beside a planned swim was dot-less while the card
      directly beneath the grid listed it.
      A recording earns its own dot unless a planned session already speaks
-     for it: half of a brick pair, or a ticked session that claims it under
-     the shared rule. The `used` set makes the claim one-to-one here, unlike
-     the recorded list: two rides inside one session's window must not both
-     vanish from a grid whose only job is to say what happened. */
-  const unclaimedActs = d => {
-    const acts = actByDate[d] || [];
-    if (!acts.length) return acts;
-    const sessions = byDate[d] || [];
-    if (!sessions.length) return acts;
-    const claimed = new Set();
-    const feedActs = (activities || []).filter(a => a && !a.manual);
-    sessions.filter(w => w.discipline === 'brick').forEach(w => {
-      const pair = T.brickPairFor({ workout: w, activities: feedActs, moves, used: claimed });
-      if (pair) { claimed.add(pair.ride.id); claimed.add(pair.run.id); }
-    });
-    const used = new Set();
-    return acts.filter(a => {
-      if (claimed.has(a.id)) return false;
-      const owner = T.ownerFor({ activity: a, sessions, log, used });
-      if (owner) { used.add(owner.id); return false; }
-      return true;
-    });
-  };
+     for it. That claim now comes from the shared ledger in calendar-load,
+     the same one the week's totals are built from, so the grid and the
+     numbers can never disagree about who owns a ride. */
+  const unclaimedActs = d => dayLedger({
+    date: d, sessions: byDate[d] || [], activities: actByDate[d] || [], log, moves,
+  }).unclaimed;
 
   /* One anchor date, two step sizes (the screen doc: "three ranges of the
      same plan, one set of chrome"). Switching range keeps the athlete on the
