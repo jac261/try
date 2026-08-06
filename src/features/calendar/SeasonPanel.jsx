@@ -13,9 +13,15 @@ import { tap } from '@/utils/a11y.js';
  */
 const PHASE = T.PHASE_INFO;
 
-export function SeasonPanel({ plan, wellness, log, moves, adjust, todayISO, onOpenSettings }) {
-  const s = useMemo(() => T.seasonCurve({ plan, wellness, log, moves, adjust, todayISO }),
-    [plan, wellness, log, moves, adjust, todayISO]);
+/* `curve` is the calendar's own seasonCurve, handed down so the same walk is
+   not done twice for one screen. It stays OPTIONAL: this panel is mounted on
+   its own by the harness and by its tests, and a panel that cannot draw
+   itself from its own inputs would be a worse component than one that
+   sometimes recomputes. */
+export function SeasonPanel({ plan, wellness, log, moves, adjust, todayISO, onOpenSettings, curve }) {
+  const own = useMemo(() => (curve || T.seasonCurve({ plan, wellness, log, moves, adjust, todayISO })),
+    [curve, plan, wellness, log, moves, adjust, todayISO]);
+  const s = own;
   const milestones = useMemo(() => T.seasonMilestones({ plan, moves, todayISO, limit: 4 }),
     [plan, moves, todayISO]);
   const shortfall = useMemo(() => T.seasonShortfall(s), [s]);
@@ -38,9 +44,17 @@ export function SeasonPanel({ plan, wellness, log, moves, adjust, todayISO, onOp
   const anyLoad = ctl.some(v => v != null);
   /* Two series off one set of points: the done half solid, the planned half
      dashed, overlapping by ONE point so the join is a continuous line rather
-     than a gap the width of a week. */
+     than a gap the width of a week.
+
+     `cut` is the FIRST projected point, so the solid half must end BEFORE it.
+     It ended AT it, which drew the whole segment from the last measurement to
+     the first projected Monday in opaque white with the dashed line invisible
+     underneath — a week the athlete had not trained yet, rendered as done,
+     overshooting the TODAY marker, while the note beneath promised "solid is
+     what you have done" and the shortfall banner spoke of where the solid one
+     ends (calendar audit, 2026-08-06). */
   const cut = s.points.findIndex(p => p.projected);
-  const done = cut < 0 ? ctl : ctl.map((v, i) => (i <= cut ? v : null));
+  const done = cut < 0 ? ctl : ctl.map((v, i) => (i < cut ? v : null));
   const ahead = cut < 0 ? ctl.map(() => null) : ctl.map((v, i) => (i >= cut - 1 && i > 0 ? v : null));
 
   const at = i => {

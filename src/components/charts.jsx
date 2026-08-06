@@ -113,10 +113,20 @@ export function TrendChart({ series, height, band, zones, domain, axis, bars, re
     });
     return out.trim();
   };
+  /* A fill closes down to the baseline under ONE contiguous run of points.
+     The old rule was "no nulls at all", which is the same thing for a full
+     series but silently dropped the fill from a series that is a PREFIX of
+     the x-axis — the season chart's done half, which ends where the
+     measurements do and is null the rest of the way. Two runs with a gap
+     between them still draw no area: there is no honest single shape for
+     "here, then not, then here again". */
   const area = vs => {
-    const solid = vs.filter(v => v != null);
-    if (solid.length !== vs.length) return null; // sparse series draw no area fill
-    return line(vs) + ' L' + X(vs.length - 1).toFixed(1) + ' ' + PB + ' L' + X(0).toFixed(1) + ' ' + PB + ' Z';
+    const first = vs.findIndex(v => v != null);
+    if (first < 0) return null;
+    let last = first;
+    while (last + 1 < vs.length && vs[last + 1] != null) last++;
+    if (vs.slice(last + 1).some(v => v != null)) return null; // a gap, not a run
+    return line(vs) + ' L' + X(last).toFixed(1) + ' ' + PB + ' L' + X(first).toFixed(1) + ' ' + PB + ' Z';
   };
   const zoneRects = (zones || [])
     .map(z => ({ ...z, lo: Math.max(z.lo, min), hi: Math.min(z.hi, max) }))

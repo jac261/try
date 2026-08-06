@@ -156,8 +156,13 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   const ym = s => s.slice(0, 7);
   /* "2026 season" / "Mar – Oct · week 22 of 34". Two years when the plan
      straddles New Year, because "2026 season" would be wrong for half of it. */
-  const season = useMemo(() => T.seasonCurve({ plan, wellness, log, moves, adjust, todayISO }),
-    [plan, wellness, log, moves, adjust, todayISO]);
+  /* Only on the Season range. This ran on Week and Month too, walking every
+     planned session and every wellness reading to produce a label neither
+     range shows — and then SeasonPanel computed the identical curve again for
+     the chart. It is computed here, once, and handed down. */
+  const season = useMemo(() => (range === 'season'
+    ? T.seasonCurve({ plan, wellness, log, moves, adjust, todayISO }) : null),
+  [range, plan, wellness, log, moves, adjust, todayISO]);
   const seasonLabel = season
     ? (season.from.slice(0, 4) === season.to.slice(0, 4)
       ? season.from.slice(0, 4) + ' season'
@@ -375,7 +380,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         </div>}
       </div>}
 
-      {range === 'season' && <SeasonPanel plan={plan} wellness={wellness} log={log}
+      {range === 'season' && <SeasonPanel plan={plan} wellness={wellness} log={log} curve={season}
         moves={moves} adjust={adjust} todayISO={todayISO} onOpenSettings={onOpenSettings} />}
 
       {range === 'week' && <>
