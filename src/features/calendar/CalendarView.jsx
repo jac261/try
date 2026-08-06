@@ -214,29 +214,32 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
      touch-action: none plus pointer capture kill native scrolling — while a
      finger held still at the screen edge fires no pointermove at all, which
      is exactly the posture of someone reaching for Sunday. So the scroll
-     cannot ride the move events: a rAF loop scrolls the window and re-runs
-     the hit test at the frozen finger. */
-  const rafRef = useRef(0);
-  const edgeRef = useRef(0);   // -1 scroll up, 0 idle, +1 scroll down
-  const EDGE = 64, SPEED = 10; // px activation zone, px per frame
-  const autoScroll = () => {
-    if (!dragRef.current || !edgeRef.current) { rafRef.current = 0; return; }
-    window.scrollBy(0, edgeRef.current * SPEED);
-    const d = dragRef.current;
-    setDragBoth({ ...d, over: dropAt(d.x, d.y) });
-    rafRef.current = requestAnimationFrame(autoScroll);
-  };
+     cannot ride the move events: a timer loop scrolls the window and re-runs
+     the hit test at the frozen finger. A timer, not requestAnimationFrame,
+     deliberately: rAF is paint-gated and observed suspended in an embedded
+     webview while the page was fully interactive — a stalled auto-scroll is
+     a drag that cannot reach Sunday, so the loop rides the mechanism every
+     environment services. */
+  const tickRef = useRef(0);
+  const edgeRef = useRef(0);       // -1 scroll up, 0 idle, +1 scroll down
+  const EDGE = 64, SPEED = 10, TICK = 16;  // px zone, px per tick, ms
   const stopScroll = () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = 0; edgeRef.current = 0;
+    if (tickRef.current) clearInterval(tickRef.current);
+    tickRef.current = 0; edgeRef.current = 0;
   };
-  // a drag interrupted by unmount must not leave a live frame behind
+  // a drag interrupted by unmount must not leave a live timer behind
   useEffect(() => stopScroll, []);
   const moveDrag = e => {
     if (!dragRef.current) return;
     setDragBoth({ ...dragRef.current, x: e.clientX, y: e.clientY, over: dropAt(e.clientX, e.clientY) });
     edgeRef.current = e.clientY < EDGE ? -1 : e.clientY > window.innerHeight - EDGE ? 1 : 0;
-    if (edgeRef.current && !rafRef.current) rafRef.current = requestAnimationFrame(autoScroll);
+    if (!edgeRef.current) { stopScroll(); return; }
+    if (!tickRef.current) tickRef.current = setInterval(() => {
+      if (!dragRef.current || !edgeRef.current) { stopScroll(); return; }
+      window.scrollBy(0, edgeRef.current * SPEED);
+      const d = dragRef.current;
+      setDragBoth({ ...d, over: dropAt(d.x, d.y) });
+    }, TICK);
   };
   const endDrag = () => {
     stopScroll();

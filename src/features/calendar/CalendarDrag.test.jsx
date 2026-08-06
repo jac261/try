@@ -137,13 +137,9 @@ describe('dragging a session on the week range', () => {
   });
 
   it('auto-scrolls at the bottom edge and stops when the finger lifts', async () => {
-    /* The loop re-renders every frame, so letting real frames run starves
-       act() forever — rAF is stubbed and driven by hand instead, which also
-       makes the frame count deterministic. */
-    const frames = [];
-    const realRaf = window.requestAnimationFrame, realCancel = window.cancelAnimationFrame;
-    window.requestAnimationFrame = cb => { frames.push(cb); return frames.length; };
-    window.cancelAnimationFrame = id => { frames[id - 1] = null; };
+    /* The loop is a timer, not rAF, because rAF was observed suspended in an
+       embedded webview while the page stayed fully interactive — and a
+       stalled auto-scroll is a drag that cannot reach Sunday. */
     const plan = generatePlan(profile());
     const w = sessionsThisWeek(plan).find(x => !x.race && !x.bRace);
     const c = await mount(plan, { onMove: vi.fn() });
@@ -154,17 +150,16 @@ describe('dragging a session on the week range', () => {
     const grip = gripIn(cardFor(c.el, w.date));
     await pointer('pointerdown', grip);
     aimAt(cardFor(c.el, w.date));
-    // a move deep in the bottom edge zone schedules the first frame
+    // a move deep in the bottom edge zone starts the loop
     await pointer('pointermove', grip, 100, Math.max(window.innerHeight - 10, 700));
-    expect(frames.filter(Boolean).length).toBeGreaterThan(0);
-    await act(async () => { const f = frames.pop(); f && f(); });   // one frame
+    await act(async () => { await new Promise(r => setTimeout(r, 60)); });
     expect(scrolled).toHaveBeenCalled();
-    expect(scrolled.mock.calls[0][1]).toBeGreaterThan(0);           // downward
+    expect(scrolled.mock.calls[0][1]).toBeGreaterThan(0);   // downward
 
     await pointer('pointerup', grip);
-    // the lift cancelled whatever frame was pending
-    expect(frames.filter(Boolean)).toHaveLength(0);
-    window.requestAnimationFrame = realRaf; window.cancelAnimationFrame = realCancel;
+    const after = scrolled.mock.calls.length;
+    await act(async () => { await new Promise(r => setTimeout(r, 60)); });
+    expect(scrolled.mock.calls.length).toBe(after);          // the lift stopped it
     await c.cleanup();
   });
 });
