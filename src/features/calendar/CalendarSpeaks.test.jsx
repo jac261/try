@@ -237,3 +237,49 @@ describe('the segbar keeps the promise its role makes', () => {
     await done();
   });
 });
+
+describe('the week says what it will do before you tap', () => {
+  it('a rest day compacts but stays a full drop target', async () => {
+    /* Jon's call: seven full-height cards saying "nothing here" is most of a
+       scroll. The compaction is a class, and everything a drag depends on has
+       to survive it — the day is still a .wk-day, still carries its
+       data-caldate, still says Rest day. */
+    const { el, toWeek, done } = await mount();
+    await toWeek();
+    const bare = [...el.querySelectorAll('.wk-day.bare')];
+    expect(bare.length).toBeGreaterThan(0);
+    bare.forEach(d => {
+      expect(d.getAttribute('data-caldate')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(d.querySelector('.wd-none')).not.toBe(null);
+    });
+    // and a day WITH sessions is not compacted
+    const busy = [...el.querySelectorAll('.wk-day')].filter(d => d.querySelector('.cal-row'));
+    expect(busy.length).toBeGreaterThan(0);
+    busy.forEach(d => expect(d.className).not.toContain('bare'));
+    await done();
+  });
+
+  it('the add block names the day it will file under', async () => {
+    /* The aria-label said it all along, so a screen reader knew the target
+       and the eye did not: in the week range nothing is selected, and four
+       cards sat under seven days with no sign which one they meant. */
+    const { el, toWeek, done } = await mount();
+    await toWeek();
+    const heading = [...el.querySelectorAll('.section-title')].find(h => h.textContent.includes('Add a session'));
+    const card = el.querySelector('.cal-add-card');
+    /* The space before "on" matters: without it the pattern matches the "on"
+       inside "session" and captures the word "on", which every heading
+       contains — the assertion then passes whatever the heading says. It did,
+       and the mutation that strips the date survived it.
+
+       Weekday and day number rather than the whole phrase, because the two
+       are formatted differently on purpose (the heading abbreviates the
+       month) and because the order varies by locale. */
+    const label = card.getAttribute('aria-label');
+    const weekday = label.match(/ on (\w+)/)[1];
+    const dayNum = label.match(/\d+/)[0];
+    expect(heading.textContent).toContain(weekday);    // the eye and the ear agree
+    expect(heading.textContent).toContain(dayNum);
+    await done();
+  });
+});

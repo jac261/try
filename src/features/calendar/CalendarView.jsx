@@ -412,8 +412,15 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
           const ws = (byDate[d] || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
           const hasActs = (actByDate[d] || []).length > 0;
           return (
+            /* `bare`: a day with nothing on it is ONE line, not a card the
+               height of a training day. Seven of those was most of a scroll
+               spent saying "nothing here" (Jon's call, 2026-08-06). It stays
+               a full .wk-day carrying its data-caldate and enough height to
+               be an easy target, because dropping a session onto a rest day
+               is the commonest drag on this screen. */
             <div key={d} data-caldate={d}
               className={'card wk-day' + (d < todayISO ? ' past' : '') + (d === todayISO ? ' today' : '')
+                + (!ws.length && !hasActs ? ' bare' : '')
                 + (drag && drag.over === d ? ' drop' : '')}>
               <div className="wd-when">
                 <div className="wd-dow">{T.fmtDate(d, { weekday: 'short' }).toUpperCase()}</div>
@@ -515,8 +522,16 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
            2026-08-06). Where there is no honest target, the row is simply
            absent — the same rule the season range already follows. */
         if (addTarget !== want || addTarget === raceISO) return null;
+        /* And it says WHICH day, on screen. The label already said it, so a
+           screen reader knew and the eye did not: in the week range nothing
+           is selected, so four cards sat under a week with no indication
+           which of its seven days they would file under (calendar audit,
+           2026-08-06). The month range's selection is visible in the grid,
+           but saying it costs nothing and keeps one voice across the two. */
         return <>
-          <div className="section-title">Add a session</div>
+          <div className="section-title">Add a session
+            <span className="st-when"> · {T.fmtDate(addTarget, { weekday: 'long', day: 'numeric', month: 'short' })}</span>
+          </div>
           <div className="cal-add">
             {['run', 'bike', 'swim', 'strength'].map(k => (
               <div key={k} className="card cal-add-card" style={{ background: D[k].grad }}
