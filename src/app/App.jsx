@@ -917,6 +917,16 @@ export function App({ storage, getToken, user }) {
   // 2026-07-13 gauntlet catch on this feature's first cut).
   const enterTracker = () => {
     const np = T.buildTrackerPlan(plan, new Date().toISOString());
+    /* Whether this plan ended past its race day, stamped NOW because the
+       race date itself is about to be nulled and the answer is otherwise
+       unrecoverable. The tracker card's "Start a maintenance block" reads
+       it, so an athlete who raced, ended to tracker, and then rolled a
+       block still gets the recovery week the direct post-race card bakes
+       in — this path used to hard-code postRace false and ship the ~25%
+       heavier first week the other two entry points were fixed for. */
+    np.profile = { ...np.profile,
+      postRace: !(T.RACES[plan.race] || {}).noRace && !!plan.profile.raceDate
+        && plan.profile.raceDate < T.iso(new Date()) };
     // Remember WHICH server plan this decision ends: if the DELETE below never
     // lands (offline), the next hydrate finishes the job — but only when the
     // server still holds this exact id. Any other id is someone's real plan.
@@ -1565,11 +1575,33 @@ export function App({ storage, getToken, user }) {
     setPlanWork(2600);
     const fromTracker = plan.race === 'tracker';
     const profile = withWeight(Object.assign({}, plan.profile, fields));
-    /* A caller supplying its own startDate is building a genuinely new block
-       (the maintenance roll does this, always on a Monday), so it derives a
-       fresh grid. Everything else is a reshape of a plan the athlete may
-       already have trained, and keeps the grid it has. */
-    const np = T.generatePlan(profile, fields && fields.startDate ? undefined : { grid: planGrid(plan) });
+    /* Keep the grid ONLY when this is a reshape of a LIVE race build — the
+       athlete may already have trained toward it, and the grid is where
+       their weeks live. Everything else is a genuinely NEW block and
+       anchors at TODAY, which engages generatePlan's mid-week trim/roll.
+
+       This used to be decided by "did the caller supply startDate", which
+       read as the same rule and was not: the tracker sentinel has no weeks
+       (planGrid null), so "Start a plan" fell through to the profile's
+       ONBOARDING startDate and built months of past-dated weeks (audit
+       2026-08-07, reproduced: a 34-week plan for a 12-week ask, ~20 weeks
+       instantly missed, progression denied on day one). And a maintenance
+       block or an ended race plan kept ITS old Monday the same way — the
+       "pick your next race" journey the extend card advertises anchored the
+       new build at the old block's week 1. */
+    const todayISO = T.iso(new Date());
+    const liveRace = !fromTracker && !(T.RACES[plan.race] || {}).noRace
+      && plan.profile.raceDate && plan.profile.raceDate >= todayISO;
+    /* postRace is a claim about THIS generation ("week 1 is the recovery
+       week after a race just run"), not a durable athlete property — but it
+       was merged into the profile by the post-race roll and never written
+       false again, so every later editor-built race plan generated week 1
+       as a deloaded recovery week, forever (audit 2026-08-07, reproduced:
+       220min vs 290min). It dies here unless the caller re-asserts it. */
+    if (!(fields && 'postRace' in fields)) profile.postRace = false;
+    if (!liveRace && !(fields && fields.startDate)) profile.startDate = todayISO;
+    const np = T.generatePlan(profile,
+      liveRace && !(fields && fields.startDate) ? { grid: planGrid(plan) } : undefined);
     // From tracker this is a brand-NEW plan: fresh identity (its own
     // createdAt nonce, no serverId — the old row was ended). From a real
     // plan it is a reshape of the same server row.
@@ -1585,6 +1617,22 @@ export function App({ storage, getToken, user }) {
     // session: same discipline on the same date.
     const oldById = {};
     plan.weeks.flatMap(w => w.workouts).forEach(w => { oldById[w.id] = w; });
+    /* User-added sessions are the athlete's own work, not the template's:
+       generatePlan cannot re-emit them, so without this they vanished from
+       every reshape and the survives-prune below deleted their completed
+       logs too — while the editor promised "completed sessions are kept for
+       the days that still exist" (audit 2026-08-07). Re-inject each custom
+       workout whose day still exists in the new plan, into the week that
+       now owns that day. One that falls outside the new range is dropped:
+       the day no longer exists, which is the promise's own boundary. */
+    const npStart = np.weeks.length ? np.weeks[0].start : null;
+    const npEnd = np.weeks.length ? T.iso(T.addDays(np.weeks[np.weeks.length - 1].start, 6)) : null;
+    plan.weeks.flatMap(w => w.workouts).filter(w => w.custom).forEach(w => {
+      if (!npStart || w.date < npStart || w.date > npEnd) return;
+      const wk = np.weeks.find(x => w.date >= x.start && w.date <= T.iso(T.addDays(x.start, 6)));
+      if (!wk || wk.workouts.some(x => x.id === w.id)) return;
+      wk.workouts.push({ ...w, week: wk.index, phase: wk.phase });
+    });
     const survives = {};
     np.weeks.flatMap(w => w.workouts).forEach(w => {
       const o = oldById[w.id];
@@ -1613,6 +1661,11 @@ export function App({ storage, getToken, user }) {
        different proposal on the new one. The plan stamp cannot catch this
        either, since a reshape keeps createdAt (the same server row). */
     storage.clearDismiss();
+    /* And the block-review marker, for exactly the reason the comment above
+       gives: a reshape keeps createdAt, so the stamp cannot catch it, and a
+       review answered on the OLD structure would suppress or mis-time the
+       review of the materially different new one (audit 2026-08-07). */
+    setBlockReviewed(storage.clearBlockReviewed());
     setRefToId({}); // regenerated id space: no stale GUID may resolve meanwhile
     setPlan(np);
     setEditPlan(false);
@@ -1683,10 +1736,35 @@ export function App({ storage, getToken, user }) {
   // recovery week baked in); a maintenance block near its horizon → offer to
   // roll another. Both reshape the plan, pruning overlays to the new graph.
   const rollMaintenance = afterRace => {
-    const mon = T.startOfWeekMonday(new Date());
+    /* One tap used to build and push a whole 12-week plan with no way to
+       say "not yet" — the only plan-replacing action without a confirm
+       (Jon's call, 2026-08-07). The confirm lives HERE so all entry points
+       (tracker CTA, post-race card, extend card, Settings) share one gate. */
+    if (!confirm(afterRace
+      ? 'Start a 12-week maintenance block? It begins with an easy recovery week.'
+      : 'Start a 12-week maintenance block?')) return;
+    /* Anchored at TODAY, not this week's Monday: the Monday anchor no-oped
+       generatePlan's trim/roll and laid sessions on days already gone — a
+       Sunday tap after a Saturday race created six days of instant misses
+       and consumed the recovery week before it began (audit 2026-08-07).
+       The synthetic raceDate is stamped AFTER generation from the block's
+       true final Sunday, so the countdown chip and the extend trigger read
+       the real end whichever day the roll happened on. reshapePlan derives
+       the fresh grid itself now (a maintenance roll is never a live-race
+       reshape); startDate is passed so the anchor is explicit, and bRaces
+       is cleared because a stale tune-up from the old race plan would be
+       scheduled for real inside the block (the maintenance path skips the
+       10-day race-window filter that would otherwise drop it). */
+    const today = T.iso(new Date());
+    const preview = T.generatePlan(withWeight({
+      ...plan.profile, raceType: 'maintenance', postRace: afterRace,
+      startDate: today, horizonWeeks: 12, bRaces: [],
+    }));
+    const lastWk = preview.weeks[preview.weeks.length - 1];
     reshapePlan({
       raceType: 'maintenance', postRace: afterRace,
-      startDate: T.iso(mon), raceDate: T.iso(T.addDays(mon, 12 * 7 - 1)), horizonWeeks: 12,
+      startDate: today, raceDate: T.iso(T.addDays(lastWk.start, 6)),
+      horizonWeeks: 12, bRaces: [],
     });
   };
   let planEdge = null;
@@ -1745,7 +1823,7 @@ export function App({ storage, getToken, user }) {
       </div>}
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} missedReasons={missedReasons} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} runFail={runFail} onFixRun={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} onDecision={journalDecision} fuelLog={fuelLog} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} wellness={recs} adjust={adjust} onOpenSettings={openSettings} />}
-      {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
+      {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(!!plan.profile.postRace)} onFocus={setBlockFocus} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} shapeLabelLog={shapeLabelLog} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} decisionLog={decisionLog} onOpenSettings={openSettings} />}
       {view === 'settings' && <SettingsView plan={plan} focus={settingsFocus} onFocusDone={() => setSettingsFocus(null)}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
@@ -1761,7 +1839,7 @@ export function App({ storage, getToken, user }) {
           // (postRace = the race is behind you), or the same athlete got a
           // ~25% heavier first week from this button (gauntlet 2026-07-31).
           !tracker && plan.race !== 'maintenance' && !(T.RACES[plan.race] || {}).solo
-            ? () => { if (confirm('Switch to a 12-week maintenance block? Your current race plan will be replaced.')) rollMaintenance(rawDaysToRace < 0); }
+            ? () => rollMaintenance(rawDaysToRace < 0)
             : null}
         onEnterTracker={endPlanToTracker} tracker={tracker}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) {

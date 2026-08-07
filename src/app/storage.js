@@ -320,6 +320,14 @@ export function storageForUser(userId) {
       try { localStorage.setItem(ns + 'blockReviewed', JSON.stringify({ weekMonday, planCreatedAt: planCreatedAt ?? null })); } catch (e) {}
       return weekMonday;
     },
+    /* For reshapePlan, which keeps createdAt (same server row): the stamp
+       above cannot tell a reshaped structure from the one the review was
+       answered on, so the reshape clears the marker outright — the same
+       mechanism note its own clears-comment records for dismissals. */
+    clearBlockReviewed() {
+      try { localStorage.removeItem(ns + 'blockReviewed'); } catch (e) {}
+      return null;
+    },
     /* Coach-card dismissals, stamped the same way and living beside their
        model — but with three deliberate differences from it, because a
        dismissal is a stronger claim than a week marker:
