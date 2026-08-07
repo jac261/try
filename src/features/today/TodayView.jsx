@@ -1,6 +1,7 @@
 import { Fragment, useState, useMemo } from 'react';
 import * as T from '@/lib';
 import { effDate } from '@/lib/schedule.js';
+import { isDone } from '@/lib/api.js';
 import { paceSuggestions } from '@/lib/tuning.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
@@ -61,7 +62,7 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
   const [runFailDismissed, setRunFailDismissed] = useState(() => dLoad('runTestFailDismissed'));
   const [shortfallDismissed, setShortfallDismissed] = useState(() => dLoad('startShortfallDismissed'));
   const [reviewToday, setReviewToday] = useState(false);
-  const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile onToggle={() => onToggleWorkout(w.id)} />;
+  const row = w => <WorkoutRow key={w.id} w={easedOf(w)} done={isDone(log[w.id])} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} profile onToggle={() => onToggleWorkout(w.id)} />;
 
   // One coach voice at a time: every possible nudge queues into a single slot,
   // most important first; a counter chip cycles through the rest. Applying a
@@ -187,13 +188,13 @@ export function TodayView({ plan, log, moves, missedReasons, open, onTune, welln
   // Closing the loop: when today's training is logged (or it is a rest day),
   // answer the evening question — what's next?
   const todayReal = useMemo(() => today.filter(w => w.discipline !== 'rest' && !w.race), [today]);
-  const allDone = todayReal.length > 0 && todayReal.every(w => log[w.id]);
+  const allDone = todayReal.length > 0 && todayReal.every(w => isDone(log[w.id]));
   /* Unlogged only: a ticked session is not "next", and without this filter
      the row disagreed with the week card's own up-next on the same screen
      (audit, 2026-08-05). `sessions` already excludes the goal race. */
   // the comparator calls effDate on every comparison, so this is the one
   // derivation here that is more than a filter over a small array
-  const next = useMemo(() => sessions.filter(w => effDate(w, moves) > todayISO && !log[w.id])
+  const next = useMemo(() => sessions.filter(w => effDate(w, moves) > todayISO && !isDone(log[w.id]))
     .sort((a, b) => (effDate(a, moves) < effDate(b, moves) ? -1 : 1))[0], [sessions, moves, todayISO, log]);
   const restDay = todayReal.length === 0;
 

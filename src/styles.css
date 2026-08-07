@@ -474,6 +474,10 @@ body {
 .banner.ramp { background: linear-gradient(150deg, rgba(250, 204, 21, .22), rgba(250, 204, 21, .06)); border-color: rgba(253, 230, 138, .32); }
 .banner.ramp .bi { color: #facc15; }
 .banner.ramp .bt { color: #fde68a; }
+/* The plan card's two advisory notes. Classes, not inline literals, so the
+   colours live beside every other use of these two inks (tokens-or-both). */
+.lead.note-warn { color: #fde68a; font-size: 13px; }
+.lead.note-info { color: #9ab8ff; font-size: 13px; }
 
 /* post-session feel picker */
 .feel { margin-top: 16px; }
@@ -508,7 +512,11 @@ body {
 /* ---------- calendar week ---------- */
 .weekhdr { display: flex; justify-content: space-between; align-items: center; margin: 4px 4px 6px; }
 .weekhdr .ttl { font-weight: 800; font-size: 15px; letter-spacing: -.3px; }
-.weekhdr .ph { font-size: 10.5px; font-weight: 800; padding: 4px 11px; border-radius: 20px; color: #fff; text-transform: uppercase; letter-spacing: .5px; }
+.weekhdr .ph { font-size: 10.5px; font-weight: 800; padding: 4px 11px; border-radius: 20px; color: #0b1220; text-transform: uppercase; letter-spacing: .5px; }
+/* Dark ink on the phase colours: white 10.5px text measured 1.9-2.9:1
+   against every PHASE_INFO colour (audit IA-2); #0b1220 clears 6.7:1 on the
+   worst (Peak) and 10:1 on the best. The pill is the only per-week phase
+   TEXT on the card, so it is the one place these colours carry copy. */
 .weekbar { height: 7px; border-radius: 4px; background: var(--track); overflow: hidden; margin: 8px 4px 2px; }
 .weekbar > span { display: block; height: 100%; border-radius: 4px; }
 

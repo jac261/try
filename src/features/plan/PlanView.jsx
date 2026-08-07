@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import * as T from '@/lib';
 import { effDate } from '@/lib/schedule.js';
+import { isDone } from '@/lib/api.js';
 import { tap } from '@/utils/a11y.js';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { InfoLink } from '@/components/InfoLink.jsx';
@@ -10,7 +11,36 @@ const D = T.DISCIPLINES;
 /* The plan tab owns the whole programme: the phase overview, then every week
    as an expandable card (moved here from the old calendar tab, which is now a
    real month calendar). */
-export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onSupport, onEditPlan, onStartMaintenance , onFocus }) {
+export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onSupport, onEditPlan, onStartMaintenance, onFocus }) {
+  /* EVERY hook above the tracker return. They sat below it — a
+     rules-of-hooks violation that React's runtime happens to tolerate in
+     this exact shape (a ZERO-hook early return advances no hook cursor, so
+     the fewer-hooks invariant never fires), which makes it worse, not
+     better: the first hook anyone adds above the return arms a real crash
+     on the enterTracker flip, the one plan.race change with no splash
+     unmount in front of it (audit 2026-08-07). Runtime cannot see this, so
+     the source pin in PlanView.test.jsx is the guard. */
+  // Every week card starts folded: the tab loads tidy and the athlete opens
+  // what they want to read (Jon, 2026-07-16).
+  const [openWeek, setOpenWeek] = useState(-1);
+  const [fxOpen, setFxOpen] = useState(false);
+  /* Closing the chooser puts keyboard focus back on the trigger it grew
+     from: opening unmounts the focused link and choosing unmounts the
+     buttons, so focus fell to document.body twice per visit (audit IA-5). */
+  const closeChooser = () => {
+    setFxOpen(false);
+    requestAnimationFrame(() => { const t = document.getElementById('fx-trigger'); if (t) t.focus(); });
+  };
+  const phaseGroups = useMemo(() => T.phaseGroups(plan), [plan]);
+  const race = T.RACES[plan.race];
+  // display-and-coach-only: the declared focus labels blocks; the limiter
+  // keeps actuating, and when they disagree both are said plainly.
+  // Memoised beside phaseGroups: weakestLink walks the ladder tables and was
+  // recomputed on every render while its sibling memo watched (audit SE-7).
+  const solo = race.solo || null;
+  const fx = useMemo(() => T.resolveFocus(plan.profile, T.weakestLink({ profile: plan.profile }), solo),
+    [plan, solo]);
+
   // Tracker mode: no programme to show, just the way back into one.
   if (plan.race === 'tracker') return (
     <>
@@ -27,33 +57,28 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
       </div>
     </>
   );
-  // Every week card starts folded: the tab loads tidy and the athlete opens
-  // what they want to read (Jon, 2026-07-16).
-  const [openWeek, setOpenWeek] = useState(-1);
-
-  const race = T.RACES[plan.race];
-  // The scheduled post-race recovery week (always the last week, isRecovery,
-  // race plans only) displays as its own 'Recovery' group and is excluded from
-  // the "N-week build" headline — the build is the build.
-  const hasRecoveryWeek = !race.noRace && plan.weeks.length > 0 && plan.weeks[plan.weeks.length - 1].isRecovery;
-  const buildLen = plan.totalWeeks - (hasRecoveryWeek ? 1 : 0);
-  const phaseGroups = useMemo(() => T.phaseGroups(plan), [plan]);
-  // display-and-coach-only: the declared focus labels blocks; the limiter
-  // keeps actuating, and when they disagree both are said plainly
-  const solo = race.solo || null;
-  const fx = T.resolveFocus(plan.profile, T.weakestLink({ profile: plan.profile }), solo);
-  const [fxOpen, setFxOpen] = useState(false);
-  const totalHrs = Math.round(plan.weeks.reduce((a, b) => a + b.totalMin, 0) / 60);
+  /* ONE phase boundary. hasRecoveryWeek reads the shared weekPhaseLabel
+     rather than re-deriving the rule — the drift the helper's own comment
+     was written to end, and this file was the consumer that never called
+     it. The relabel now also covers a postRace block's baked-in week-1
+     recovery, so the overview, the headline and the week cards agree there
+     too. */
+  const lastWeek = plan.weeks[plan.weeks.length - 1];
+  const hasRecoveryWeek = !!lastWeek && T.weekPhaseLabel(plan, lastWeek) === 'Recovery';
+  // The headline stops counting weeks it disowns one line later: lead-in
+  // maintenance weeks are not build, and the note under this line says so.
+  const buildLen = plan.totalWeeks - (hasRecoveryWeek ? 1 : 0) - (plan.leadIn || 0);
+  const totalMin = plan.weeks.reduce((a, b) => a + b.totalMin, 0);
 
   return (
     <>
       <div className="section-title"><InfoLink onOpen={onSupport} topic="plan-structure" />Plan overview</div>
       <div className="card">
         <h2>{race.noRace ? 'Maintenance block' : race.name + (race.solo ? '' : ' Triathlon')}</h2>
-        <p className="lead">{buildLen}-week {race.noRace ? 'block' : 'build'}{hasRecoveryWeek ? ' + recovery week' : ''} · {totalHrs} total training hours · {plan.profile.daysPerWeek} days/week</p>
-        {plan.shortRunway && <p className="lead" style={{ color: '#fde68a', fontSize: 13 }}>
+        <p className="lead">{plan.leadIn > 0 ? plan.leadIn + '-week lead-in + ' : ''}{buildLen}-week {race.noRace ? 'block' : 'build'}{hasRecoveryWeek ? ' + recovery week' : ''} · {T.fmtDuration(totalMin)} training · {plan.profile.daysPerWeek} days/week</p>
+        {plan.shortRunway && <p className="lead note-warn">
           Short runway: fewer weeks than the recommended minimum for this distance, so this plan sharpens what you have rather than building from scratch.</p>}
-        {plan.leadIn > 0 && <p className="lead" style={{ color: '#9ab8ff', fontSize: 13 }}>
+        {plan.leadIn > 0 && <p className="lead note-info">
           Your race is beyond the ideal build window, so the first {plan.leadIn} {plan.leadIn === 1 ? 'week is' : 'weeks are'} maintenance — the real build starts after.</p>}
         {phaseGroups.map((g, i) => {
           const pi = T.PHASE_INFO[g.phase];
@@ -81,32 +106,72 @@ export function PlanView({ plan, log, moves, open, easedOf, onToggleWorkout, onS
           </div> : null;
         })()}
         {fx.diverges && <div className="focus-note">Focus: {T.FOCUS_OPTIONS[fx.focus]}, your call. The plan's extra work still goes to {T.FOCUS_OPTIONS[fx.derived]}, your limiter.</div>}
-        {onFocus && !solo && !fxOpen && <a className="reset" role="button" {...tap(() => setFxOpen(true))} style={{ display: 'inline-block', marginTop: 6 }}>Change what this plan is about</a>}
-        {onFocus && !solo && fxOpen && <div className="feel-row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
-          {Object.entries(T.FOCUS_OPTIONS)
-            .filter(([k]) => k === 'general' || plan.profile.excludedDiscipline !== k)
-            .map(([k, lab]) => <button key={k} className="feelbtn" style={{ flex: '1 1 45%' }}
-              onClick={() => { onFocus(k === 'general' ? null : k); setFxOpen(false); }}>{k === 'general' ? 'Everything evenly' : 'Focus on ' + lab}</button>)}
+        {onFocus && !solo && !fxOpen && <a className="reset" role="button" id="fx-trigger"
+          {...tap(() => setFxOpen(true))} style={{ display: 'inline-block', marginTop: 6 }}>Change what this plan is about</a>}
+        {onFocus && !solo && fxOpen && <div style={{ marginTop: 8 }}
+          onKeyDown={e => { if (e.key === 'Escape') closeChooser(); }}>
+          {/* Honest at CHOOSE time, not only after a divergence exists: the
+              focus is labels and coach language by design (2026-07-21), and
+              this line is where the athlete learns it. */}
+          <p className="lead" style={{ fontSize: 13, margin: '0 0 8px' }}>
+            This changes what the blocks are called and what the coach talks about.
+            The plan's extra work still follows your limiter.</p>
+          <div className="feel-row" style={{ flexWrap: 'wrap' }}>
+            {Object.entries(T.FOCUS_OPTIONS)
+              .filter(([k]) => k === 'general' || plan.profile.excludedDiscipline !== k)
+              .map(([k, lab]) => {
+                /* The current choice is marked, and re-choosing it just
+                   closes: it used to fire a full plan push + splash for a
+                   no-op. 'Everything evenly' stores 'general' rather than
+                   null — null is "never declared", which silently reverted
+                   the labels to the derived limiter and made the tap look
+                   broken (audit SW-2). */
+                return <button key={k} className={'feelbtn' + (fx.declared === k ? ' on' : '')} style={{ flex: '1 1 45%' }}
+                  aria-pressed={fx.declared === k}
+                  onClick={() => { if (fx.declared !== k) onFocus(k); closeChooser(); }}>
+                  {k === 'general' ? 'Everything evenly' : 'Focus on ' + lab}</button>;
+              })}
+            <button className="feelbtn" style={{ flex: '1 1 45%' }}
+              onClick={closeChooser}>Never mind</button>
+          </div>
         </div>}
       </div>
 
       <div className="section-title"><InfoLink onOpen={onSupport} topic="workout-library" />Week by week</div>
       {plan.weeks.map(week => {
         const isOpen = week.index === openWeek;
-        const pi = T.PHASE_INFO[week.phase];
-        const sessions = week.workouts.filter(w => w.discipline !== 'rest');
-        const doneCount = sessions.filter(w => log[w.id]).length;
-        const ordered = week.workouts.slice().sort((a, b) => effDate(a, moves) < effDate(b, moves) ? -1 : 1);
+        // the pill says what the overview says: one boundary (weekPhaseLabel),
+        // not week.phase raw beside a Recovery tag reading differently
+        const phaseLabel = T.weekPhaseLabel(plan, week);
+        const pi = T.PHASE_INFO[phaseLabel];
+        /* The A-race is excluded from the denominator: it can never be
+           logged (every path blocks it), so race week's bar could never
+           read complete and "4 sessions" counted the race as one (audit
+           IA-7). The sort breaks effective-date ties by id so same-day
+           doubles keep a stable order. */
+        const sessions = week.workouts.filter(w => w.discipline !== 'rest' && !w.race);
+        const doneCount = sessions.filter(w => isDone(log[w.id])).length;
+        const ordered = week.workouts.slice().sort((a, b) => {
+          const da = effDate(a, moves), db = effDate(b, moves);
+          return da < db ? -1 : da > db ? 1 : (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+        });
         return (
           <div className="card" key={week.index} style={{ padding: '14px 16px' }}>
             <div className="weekhdr" {...tap(() => setOpenWeek(isOpen ? -1 : week.index))} aria-expanded={isOpen} style={{ cursor: 'pointer' }}>
               <div><div className="ttl">Week {week.index + 1} {week.isRecovery && <span className="tag recovery">Recovery</span>}</div>
-                <div className="muted" style={{ fontSize: 12 }}>{T.fmtDate(week.start, { month: 'short', day: 'numeric' })} · {sessions.length} sessions · {T.fmtDuration(week.totalMin)}</div></div>
-              <div className="ph" style={{ background: pi.color }}>{week.phase}</div>
+                <div className="muted" style={{ fontSize: 12 }}>{T.fmtDate(week.start, { month: 'short', day: 'numeric' })} · {doneCount > 0 ? doneCount + ' of ' + sessions.length + ' sessions done' : sessions.length + ' sessions'} · {T.fmtDuration(week.totalMin)}</div></div>
+              <div className="ph" style={{ background: pi.color }}>{phaseLabel}</div>
             </div>
-            <div className="weekbar"><span style={{ width: (sessions.length ? doneCount / sessions.length * 100 : 0) + '%', background: 'var(--accent)' }} /></div>
+            {/* the bar is a progressbar to AT, and the count is said in
+                text once anything is done — completion was width-only, so a
+                screen reader had to expand every week and count rows */}
+            <div className="weekbar" role="progressbar" aria-valuemin={0} aria-valuemax={sessions.length}
+              aria-valuenow={doneCount} aria-label={'Sessions done, week ' + (week.index + 1)}>
+              <span style={{ width: (sessions.length ? doneCount / sessions.length * 100 : 0) + '%', background: 'var(--accent)' }} /></div>
             {isOpen && <div style={{ marginTop: 8 }}>
-              {ordered.map(w => <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />)}
+              {/* profile strip deliberately omitted: this tab reads structure;
+                  paces live one tap deeper in the sheet (Jon, 2026-08-07) */}
+              {ordered.map(w => <WorkoutRow key={w.id} w={easedOf(w)} done={isDone(log[w.id])} eff={effDate(w, moves)} moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />)}
             </div>}
           </div>
         );

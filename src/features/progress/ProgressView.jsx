@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { isDone } from '@/lib/api.js';
 import { SegBar } from '@/components/SegBar.jsx';
 import * as T from '@/lib';
 import { PowerCurveCard } from '@/components/PowerCurveCard.jsx';
@@ -50,7 +51,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
     return { hide: !arb || candidates.length < 2, arb };
   }, [plan, log, moves, activities, todayISO, retest, ftpRetest, durability, fuelLog, positionLog]);
   const all = plan.weeks.flatMap(w => w.workouts).filter(w => w.discipline !== 'rest' && !w.race);
-  const done = all.filter(w => log[w.id]);
+  const done = all.filter(w => isDone(log[w.id]));
   // todayISO, not the raw Date: call-site uniformity, per the guard in
   // lib/date-call-sites.test.js — daysBetween now pins both ends to local
   // midnight itself (race-chip catch 2026-07-30, same shape as the App chip).
@@ -537,7 +538,7 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
   return (
     <>
       <AthleteStateStrip wellness={wellness} runLoad={runLoad} recovery={recovery} onSupport={onSupport}
-        excludedDiscipline={plan.weeks.some(wk => wk.workouts.some(w => w.discipline === 'run' && log[w.id]))
+        excludedDiscipline={plan.weeks.some(wk => wk.workouts.some(w => w.discipline === 'run' && isDone(log[w.id])))
           ? null : plan.profile.excludedDiscipline} />
       <div className="section-title">Progress</div>
 

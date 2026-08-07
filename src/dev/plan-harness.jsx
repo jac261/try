@@ -27,9 +27,10 @@ const standard = generatePlan(base());
 
 /* Ticked sessions for the progress bars, deliberately including one entry
    that is NOT done — a feel-only server row (meaningfulLog admits feel or
-   notes alone with done: false). The review flagged that the progress bar
-   counts entries by EXISTENCE, so this fixture makes the discrepancy
-   visible: the bar should read one session, not two. */
+   notes alone with done: false). The bar counted entries by EXISTENCE when
+   this fixture was built to expose it; it now counts isDone, so the bar
+   reads ONE session and the subtitle says "1 of N" — if it ever reads two
+   again, the regression is visible here first. */
 const firstTwo = standard.weeks[0].workouts.filter(w => w.discipline !== 'rest').slice(0, 2);
 const logDoneAndFeel = firstTwo.length === 2
   ? { [firstTwo[0].id]: { done: true }, [firstTwo[1].id]: { done: false, feel: 'ok' } }
