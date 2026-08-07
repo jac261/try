@@ -1231,10 +1231,11 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .wk-day .wd-rows { flex: 1; min-width: 0; }
 .wk-day .wd-none { color: var(--faint); font-size: 12.5px; font-weight: 600; padding: 14px 4px; }
 /* An empty day compacts to a single line. The date column keeps its own
-   width so the week still reads as a column of days, and the row keeps
-   enough height (about 44px) to remain the easiest drop target on the
-   screen — a rest day is where sessions get dragged TO. */
-.wk-day.bare { padding: 10px 14px; align-items: center; }
+   width so the week still reads as a column of days, and min-height holds
+   the row at the 44px touch target rather than letting the text decide —
+   measured at 40px before it was added, and a rest day is where sessions get
+   dragged TO. */
+.wk-day.bare { padding: 10px 14px; min-height: 44px; box-sizing: border-box; align-items: center; }
 .wk-day.bare .wd-when { width: 48px; display: flex; align-items: baseline; gap: 6px; padding-top: 0; }
 .wk-day.bare .wd-none { padding: 0 4px; }
 /* The load, where the weekday would otherwise repeat the heading beside it. */

@@ -253,6 +253,11 @@ describe('the week says what it will do before you tap', () => {
       expect(d.getAttribute('data-caldate')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(d.querySelector('.wd-none')).not.toBe(null);
     });
+    /* The height is a number, so it is pinned as one: the compacted row
+       measured 40px before min-height was added, and a drop target below the
+       44px touch minimum is the one thing this compaction must not cost. */
+    const css = readFileSync('src/styles.css', 'utf8');
+    expect(css).toMatch(/\.wk-day\.bare \{[^}]*min-height: 44px/);
     // and a day WITH sessions is not compacted
     const busy = [...el.querySelectorAll('.wk-day')].filter(d => d.querySelector('.cal-row'));
     expect(busy.length).toBeGreaterThan(0);
