@@ -1565,11 +1565,26 @@ export function App({ storage, getToken, user }) {
     setPlanWork(2600);
     const fromTracker = plan.race === 'tracker';
     const profile = withWeight(Object.assign({}, plan.profile, fields));
-    /* A caller supplying its own startDate is building a genuinely new block
-       (the maintenance roll does this, always on a Monday), so it derives a
-       fresh grid. Everything else is a reshape of a plan the athlete may
-       already have trained, and keeps the grid it has. */
-    const np = T.generatePlan(profile, fields && fields.startDate ? undefined : { grid: planGrid(plan) });
+    /* Keep the grid ONLY when this is a reshape of a LIVE race build — the
+       athlete may already have trained toward it, and the grid is where
+       their weeks live. Everything else is a genuinely NEW block and
+       anchors at TODAY, which engages generatePlan's mid-week trim/roll.
+
+       This used to be decided by "did the caller supply startDate", which
+       read as the same rule and was not: the tracker sentinel has no weeks
+       (planGrid null), so "Start a plan" fell through to the profile's
+       ONBOARDING startDate and built months of past-dated weeks (audit
+       2026-08-07, reproduced: a 34-week plan for a 12-week ask, ~20 weeks
+       instantly missed, progression denied on day one). And a maintenance
+       block or an ended race plan kept ITS old Monday the same way — the
+       "pick your next race" journey the extend card advertises anchored the
+       new build at the old block's week 1. */
+    const todayISO = T.iso(new Date());
+    const liveRace = !fromTracker && !(T.RACES[plan.race] || {}).noRace
+      && plan.profile.raceDate && plan.profile.raceDate >= todayISO;
+    if (!liveRace && !(fields && fields.startDate)) profile.startDate = todayISO;
+    const np = T.generatePlan(profile,
+      liveRace && !(fields && fields.startDate) ? { grid: planGrid(plan) } : undefined);
     // From tracker this is a brand-NEW plan: fresh identity (its own
     // createdAt nonce, no serverId — the old row was ended). From a real
     // plan it is a reshape of the same server row.
@@ -1683,10 +1698,28 @@ export function App({ storage, getToken, user }) {
   // recovery week baked in); a maintenance block near its horizon → offer to
   // roll another. Both reshape the plan, pruning overlays to the new graph.
   const rollMaintenance = afterRace => {
-    const mon = T.startOfWeekMonday(new Date());
+    /* Anchored at TODAY, not this week's Monday: the Monday anchor no-oped
+       generatePlan's trim/roll and laid sessions on days already gone — a
+       Sunday tap after a Saturday race created six days of instant misses
+       and consumed the recovery week before it began (audit 2026-08-07).
+       The synthetic raceDate is stamped AFTER generation from the block's
+       true final Sunday, so the countdown chip and the extend trigger read
+       the real end whichever day the roll happened on. reshapePlan derives
+       the fresh grid itself now (a maintenance roll is never a live-race
+       reshape); startDate is passed so the anchor is explicit, and bRaces
+       is cleared because a stale tune-up from the old race plan would be
+       scheduled for real inside the block (the maintenance path skips the
+       10-day race-window filter that would otherwise drop it). */
+    const today = T.iso(new Date());
+    const preview = T.generatePlan(withWeight({
+      ...plan.profile, raceType: 'maintenance', postRace: afterRace,
+      startDate: today, horizonWeeks: 12, bRaces: [],
+    }));
+    const lastWk = preview.weeks[preview.weeks.length - 1];
     reshapePlan({
       raceType: 'maintenance', postRace: afterRace,
-      startDate: T.iso(mon), raceDate: T.iso(T.addDays(mon, 12 * 7 - 1)), horizonWeeks: 12,
+      startDate: today, raceDate: T.iso(T.addDays(lastWk.start, 6)),
+      horizonWeeks: 12, bRaces: [],
     });
   };
   let planEdge = null;
