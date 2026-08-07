@@ -91,6 +91,7 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
   const shown = eff || w.date;
   const moved = shown !== w.date;
   const days = weekRange(w.date);
+  const raceISO = plan && plan.profile && !(T.RACES[plan.race] || {}).noRace ? plan.profile.raceDate : null;
   const sheetRef = useSheetFocus(onClose);
   return (
     <div className="scrim" onClick={onClose}>
@@ -279,7 +280,12 @@ export function DetailSheet({ w, plan, done, onClose, onToggle, eff, onMove, onR
                  could still pile a session onto the race. The cell renders
                  disabled rather than vanishing, so the week keeps seven days
                  and the athlete can see why one is off limits. */
-              const isRace = plan && plan.profile && d === plan.profile.raceDate;
+              /* A maintenance block's profile carries a raceDate that is only
+                 the horizon of its last week, not a race — the same reason
+                 CalendarView nulls its raceISO for noRace plans. Without this
+                 gate the picker greys out an ordinary Sunday and tells a
+                 screen reader it is race day, in a plan with no race at all. */
+              const isRace = !!raceISO && d === raceISO;
               return <div key={d} className={'d' + (d === shown ? ' on' : '') + (isRace ? ' off' : '')}
                 aria-label={isRace ? 'Race day — sessions cannot move here'
                   : 'Move to ' + T.fmtDate(d, { weekday: 'long', month: 'short', day: 'numeric' }) + (d === shown ? ' (current day)' : '')}

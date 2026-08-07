@@ -183,8 +183,15 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   /* Season steps nowhere. The design draws arrows either side of "2026
      season", but Try has exactly one plan at a time — there is no previous
      season to reach. Disabled says so; arrows that do nothing would not. */
+  /* Browsing reaches TODAY even when today is past the plan's last day. A
+     plan does not become a tracker the moment it ends: planEnded holds it for
+     a week of grace, and a plan with no appended recovery week (legacy, or an
+     exactly-40-week build) leaves the athlete inside a live plan whose
+     calendar cannot step to the day they are on — a ride recorded the Tuesday
+     after the race renders nowhere until the grace expires. */
+  const viewEnd = planEnd > todayISO ? planEnd : todayISO;
   const canPrev = range === 'season' ? false : range === 'week' ? week[0] > viewStart : ym(anchor) > ym(viewStart);
-  const canNext = range === 'season' ? false : range === 'week' ? week[6] < planEnd : ym(anchor) < ym(planEnd);
+  const canNext = range === 'season' ? false : range === 'week' ? week[6] < viewEnd : ym(anchor) < ym(viewEnd);
 
   // Pointer-based drag (touch and mouse): the grip captures the pointer, a
   // ghost chip follows it, and elementFromPoint hit-tests the day cells.
@@ -196,7 +203,8 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     e.preventDefault();
     if (dragRef.current) return; // a second finger must not hijack an active drag
     if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
-    setDragBoth({ id: w.id, home: w.date, title: w.title, color: D[w.discipline].color, x: e.clientX, y: e.clientY, over: null });
+    setDragBoth({ id: w.id, home: w.date, title: w.title, color: D[w.discipline].color,
+      pointer: e.pointerId, x: e.clientX, y: e.clientY, over: null });
   };
   /* The hit test, shared between pointer moves and the auto-scroll loop: the
      nearest [data-caldate] under the point, valid inside the plan window and
@@ -229,8 +237,12 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   };
   // a drag interrupted by unmount must not leave a live timer behind
   useEffect(() => stopScroll, []);
+  // Only the finger that started the drag may steer or end it. Without this
+  // a second finger's move drags the ghost and its lift COMMITS the move —
+  // the first finger is still down and never chose to drop.
+  const mine = e => dragRef.current && (dragRef.current.pointer == null || dragRef.current.pointer === e.pointerId);
   const moveDrag = e => {
-    if (!dragRef.current) return;
+    if (!mine(e)) return;
     setDragBoth({ ...dragRef.current, x: e.clientX, y: e.clientY, over: dropAt(e.clientX, e.clientY) });
     edgeRef.current = e.clientY < EDGE ? -1 : e.clientY > window.innerHeight - EDGE ? 1 : 0;
     if (!edgeRef.current) { stopScroll(); return; }
@@ -241,10 +253,21 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
       setDragBoth({ ...d, over: dropAt(d.x, d.y) });
     }, TICK);
   };
-  const endDrag = () => {
+  /* A LIFT commits; a CANCEL abandons. pointercancel means the browser or OS
+     took the gesture away — a notification shade pulled down, the phone
+     rotated, a palm rejected — so the athlete never chose a day, and
+     committing the move to whatever happened to be under the finger is the
+     app inventing an intent (calendar audit, 2026-08-06). */
+  const endDrag = e => {
+    if (e && !mine(e)) return;
     stopScroll();
     const d = dragRef.current;
     if (d && d.over) { onMove(d.id, d.over === d.home ? null : d.over); setSelected(d.over); }
+    setDragBoth(null);
+  };
+  const cancelDrag = e => {
+    if (e && !mine(e)) return;
+    stopScroll();
     setDragBoth(null);
   };
 
@@ -261,15 +284,19 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
           the month grid is one panel under it, and the ranges that are not a
           grid have no card for it to sit inside. */}
       <div className="cal-head">
+        {/* Stepping mid-drag unmounts the day cards under the finger, so the
+            grip's pointerup never arrives and the ghost is stranded over a
+            week that is no longer there. The segbar has carried this guard
+            since the drag moved here; the arrows are the other way out. */}
         <button className="cal-nav" type="button" disabled={!canPrev}
           aria-label={range === 'week' ? 'Previous week' : 'Previous month'}
-          onClick={() => { setAnchor(step(-1)); setSelected(null); }}>‹</button>
+          onClick={() => { cancelDrag(); setAnchor(step(-1)); setSelected(null); }}>‹</button>
         <div className="ttl">{range === 'season' ? seasonLabel : range === 'week' ? weekLabel : grid.label}
           {range === 'month' && monthSub && <div className="sub">{monthSub}</div>}
           {range === 'season' && seasonSub && <div className="sub">{seasonSub}</div>}</div>
         <button className="cal-nav" type="button" disabled={!canNext}
           aria-label={range === 'week' ? 'Next week' : 'Next month'}
-          onClick={() => { setAnchor(step(1)); setSelected(null); }}>›</button>
+          onClick={() => { cancelDrag(); setAnchor(step(1)); setSelected(null); }}>›</button>
       </div>
       <div className="segbar" role="tablist" aria-label="Calendar range">
         {RANGES.map(([k, label]) => (
@@ -277,7 +304,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
             className={range === k ? 'on' : ''}
             /* a second finger can switch range mid-drag, unmounting the
                captured grip: the ghost must not outlive its surface */
-            onClick={() => { setRange(k); stopScroll(); setDragBoth(null); }}>{label}</button>
+            onClick={() => { cancelDrag(); setRange(k); }}>{label}</button>
         ))}
       </div>
 
@@ -348,7 +375,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                           reschedule path is the detail sheet's day picker */}
                       {!w.race && !w.bRace && <div className="drag-handle" aria-hidden="true"
                         onPointerDown={e => startDrag(w, e)} onPointerMove={moveDrag}
-                        onPointerUp={endDrag} onPointerCancel={endDrag}>
+                        onPointerUp={endDrag} onPointerCancel={cancelDrag}>
                         <Icon name="grip" size={17} /></div>}
                       <WorkoutRow w={shown} done={!!log[w.id]} eff={effDate(w, moves)}
                         moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)}
@@ -401,14 +428,28 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         // off-plan days, and addCustomWorkout files any out-of-window date
         // under the LAST week (gauntlet 2026-07-16). Tracker's browse window
         // already covers any day worth logging.
-        /* The week range has no selected day, and falling back to today
-           would file a session onto a day that is not on screen whenever the
-           athlete has browsed away. So it targets today when today is in the
-           shown week, and that week's Monday otherwise. */
+        /* The target must be a day the athlete can SEE. The week range has no
+           selected day, and the month range clears its selection when the
+           arrows step, so falling back to today files a session onto a day
+           that left the screen the moment they browsed away. Both ranges
+           therefore prefer today when today is on screen and the shown
+           period's first day otherwise. */
+        const shownFirst = range === 'week' ? week[0] : grid.cells.find(Boolean);
+        const onScreen = range === 'week'
+          ? (todayISO >= week[0] && todayISO <= week[6])
+          : ym(todayISO) === ym(anchor);
         const want = range === 'week'
-          ? (todayISO >= week[0] && todayISO <= week[6] ? todayISO : week[0])
-          : (selected || todayISO);
+          ? (onScreen ? todayISO : shownFirst)
+          : (selected || (onScreen ? todayISO : shownFirst));
         const addTarget = tracker ? want : clampDay(want);
+        /* And it must be an HONEST target. Clamping silently files a session
+           under planStart/planEnd, so browsing before or after the plan shows
+           four inviting cards that put the session on a day the athlete is
+           not looking at; and race day is the third path onto the race that
+           the drag and the sheet's picker already refuse (calendar audit,
+           2026-08-06). Where there is no honest target, the row is simply
+           absent — the same rule the season range already follows. */
+        if (addTarget !== want || addTarget === raceISO) return null;
         return <>
           <div className="section-title">Add a session</div>
           <div className="cal-add">

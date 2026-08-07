@@ -164,6 +164,74 @@ describe('dragging a session on the week range', () => {
   });
 });
 
+describe('the drag ends only when the athlete says so', () => {
+  it('a cancelled gesture abandons the move rather than committing it', async () => {
+    /* pointercancel is the OS taking the gesture away — a notification shade,
+       a rotation, a rejected palm. The athlete never chose a day, so
+       committing to whatever sat under the finger is the app inventing an
+       intent (calendar audit, 2026-08-06). */
+    const plan = generatePlan(profile());
+    const w = sessionsThisWeek(plan).find(x => !x.race && !x.bRace);
+    const empty = weekRange(todayISO).find(d => !plan.weeks.flatMap(k => k.workouts)
+      .some(x => x.discipline !== 'rest' && x.date === d));
+    const onMove = vi.fn();
+    const c = await mount(plan, { onMove });
+    await toWeek(c.el);
+
+    const grip = gripIn(cardFor(c.el, w.date));
+    const target = cardFor(c.el, empty);
+    await pointer('pointerdown', grip);
+    aimAt(target);
+    await pointer('pointermove', grip);
+    expect(target.classList.contains('drop')).toBe(true);
+    await pointer('pointercancel', grip);
+    expect(onMove).not.toHaveBeenCalled();
+    expect(c.el.querySelector('.drag-ghost')).toBe(null);   // and the ghost goes with it
+    await c.cleanup();
+  });
+
+  it('a second finger can neither steer nor commit the drag', async () => {
+    const plan = generatePlan(profile());
+    const ws = sessionsThisWeek(plan).filter(x => !x.race && !x.bRace);
+    const empty = weekRange(todayISO).find(d => !plan.weeks.flatMap(k => k.workouts)
+      .some(x => x.discipline !== 'rest' && x.date === d));
+    const onMove = vi.fn();
+    const c = await mount(plan, { onMove });
+    await toWeek(c.el);
+
+    const grip = gripIn(cardFor(c.el, ws[0].date));
+    await pointer('pointerdown', grip);
+    aimAt(cardFor(c.el, empty));
+    await pointer('pointermove', grip);
+    // a second finger lifts somewhere else entirely
+    await act(async () => {
+      grip.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 5, clientY: 5, pointerId: 2 }));
+    });
+    expect(onMove).not.toHaveBeenCalled();          // the first finger is still down
+    // and the real finger still finishes the job
+    await pointer('pointerup', grip);
+    expect(onMove).toHaveBeenCalledWith(ws[0].id, empty);
+    await c.cleanup();
+  });
+
+  it('stepping the week mid-drag abandons it instead of stranding the ghost', async () => {
+    const plan = generatePlan(profile());
+    const w = sessionsThisWeek(plan).find(x => !x.race && !x.bRace);
+    const onMove = vi.fn();
+    const c = await mount(plan, { onMove });
+    await toWeek(c.el);
+    const grip = gripIn(cardFor(c.el, w.date));
+    await pointer('pointerdown', grip);
+    aimAt(cardFor(c.el, w.date));
+    await pointer('pointermove', grip);
+    const next = [...c.el.querySelectorAll('.cal-nav')][1];
+    await act(async () => next.click());
+    expect(c.el.querySelector('.drag-ghost')).toBe(null);
+    expect(onMove).not.toHaveBeenCalled();
+    await c.cleanup();
+  });
+});
+
 describe('where grips exist at all', () => {
   it('the month range mounts none, however a day is selected', async () => {
     /* The guard replacing the month drag: data-caldate stays on the grid
