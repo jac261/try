@@ -1617,6 +1617,22 @@ export function App({ storage, getToken, user }) {
     // session: same discipline on the same date.
     const oldById = {};
     plan.weeks.flatMap(w => w.workouts).forEach(w => { oldById[w.id] = w; });
+    /* User-added sessions are the athlete's own work, not the template's:
+       generatePlan cannot re-emit them, so without this they vanished from
+       every reshape and the survives-prune below deleted their completed
+       logs too — while the editor promised "completed sessions are kept for
+       the days that still exist" (audit 2026-08-07). Re-inject each custom
+       workout whose day still exists in the new plan, into the week that
+       now owns that day. One that falls outside the new range is dropped:
+       the day no longer exists, which is the promise's own boundary. */
+    const npStart = np.weeks.length ? np.weeks[0].start : null;
+    const npEnd = np.weeks.length ? T.iso(T.addDays(np.weeks[np.weeks.length - 1].start, 6)) : null;
+    plan.weeks.flatMap(w => w.workouts).filter(w => w.custom).forEach(w => {
+      if (!npStart || w.date < npStart || w.date > npEnd) return;
+      const wk = np.weeks.find(x => w.date >= x.start && w.date <= T.iso(T.addDays(x.start, 6)));
+      if (!wk || wk.workouts.some(x => x.id === w.id)) return;
+      wk.workouts.push({ ...w, week: wk.index, phase: wk.phase });
+    });
     const survives = {};
     np.weeks.flatMap(w => w.workouts).forEach(w => {
       const o = oldById[w.id];
@@ -1645,6 +1661,11 @@ export function App({ storage, getToken, user }) {
        different proposal on the new one. The plan stamp cannot catch this
        either, since a reshape keeps createdAt (the same server row). */
     storage.clearDismiss();
+    /* And the block-review marker, for exactly the reason the comment above
+       gives: a reshape keeps createdAt, so the stamp cannot catch it, and a
+       review answered on the OLD structure would suppress or mis-time the
+       review of the materially different new one (audit 2026-08-07). */
+    setBlockReviewed(storage.clearBlockReviewed());
     setRefToId({}); // regenerated id space: no stale GUID may resolve meanwhile
     setPlan(np);
     setEditPlan(false);

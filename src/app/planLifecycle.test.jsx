@@ -10,7 +10,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { App } from '@/app/App.jsx';
 import { storageForUser } from '@/app/storage.js';
-import { generatePlan, buildTrackerPlan } from '@/lib/plan.js';
+import { generatePlan, buildTrackerPlan, addCustomWorkout } from '@/lib/plan.js';
 import { iso, addDays, startOfWeekMonday } from '@/lib/date.js';
 
 /* The plan lifecycle: what reshapePlan does when the athlete is starting a
@@ -81,6 +81,15 @@ const acrossSplash = async () => act(async () => { await vi.advanceTimersByTimeA
 const tab = (el, label) => [...el.querySelectorAll('.tabbar button, nav button')]
   .find(b => b.textContent.trim() === label);
 const btn = (el, text) => [...el.querySelectorAll('button')].find(b => b.textContent.includes(text));
+/* React tracks controlled inputs through its own value descriptor, so a
+   plain .value assignment is invisible to onChange — the change silently
+   no-ops and the editor keeps its initial date (the FitnessEditor suite's
+   idiom, reused). */
+const typeDate = async (input, v) => act(async () => {
+  const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  set.call(input, v);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+});
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
@@ -141,11 +150,7 @@ describe('a new block anchors at today, not at a ghost start', () => {
     // give the new build a real runway: the maintenance profile's raceDate is
     // 13 days out, which would otherwise build a legitimate short plan
     const dateInput = app.el.querySelector('input[type="date"]');
-    await act(async () => {
-      dateInput.value = iso(addDays(mon, 12 * 7));
-      dateInput.dispatchEvent(new Event('input', { bubbles: true }));
-      dateInput.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await typeDate(dateInput, iso(addDays(mon, 12 * 7)));
     await act(async () => { btn(app.el, 'Save & rebuild plan').click(); });
     await acrossSplash();
 
@@ -179,15 +184,12 @@ describe('a new block anchors at today, not at a ghost start', () => {
     await act(async () => { app.el.querySelector('.avatar-btn').click(); });
     await act(async () => { btn(app.el, 'Edit race').click(); });
     const dateInput = app.el.querySelector('input[type="date"]');
-    await act(async () => {
-      dateInput.value = iso(addDays(mon, 10 * 7));
-      dateInput.dispatchEvent(new Event('input', { bubbles: true }));
-      dateInput.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await typeDate(dateInput, iso(addDays(mon, 10 * 7)));
     await act(async () => { btn(app.el, 'Save & rebuild plan').click(); });
     await acrossSplash();
 
     const np = storage.load('plan', null);
+    expect(np.profile.raceDate).toBe(iso(addDays(mon, 10 * 7)));   // the reshape really ran
     expect(np.weeks[0].start).toBe(live.weeks[0].start);   // the grid survived
     // and so did the Monday completion a fresh regeneration would have trimmed
     expect(np.weeks[0].workouts.some(w => w.id === monday1.id && w.date === monday1.date)).toBe(true);
@@ -281,11 +283,7 @@ describe('postRace dies unless the caller says otherwise', () => {
     const olympic = [...app.el.querySelectorAll('.opt')].find(o => o.textContent.includes('Olympic'));
     await act(async () => { olympic.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     const dateInput = app.el.querySelector('input[type="date"]');
-    await act(async () => {
-      dateInput.value = iso(addDays(mon, 12 * 7));
-      dateInput.dispatchEvent(new Event('input', { bubbles: true }));
-      dateInput.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await typeDate(dateInput, iso(addDays(mon, 12 * 7)));
     await act(async () => { btn(app.el, 'Save & rebuild plan').click(); });
     await acrossSplash();
 
@@ -350,6 +348,89 @@ describe('postRace dies unless the caller says otherwise', () => {
     const np = storage.load('plan', null);
     expect(np.race).toBe('tracker');
     expect(np.profile.postRace).toBe(true);
+    app.done();
+  }, 20000);
+});
+
+describe('reshape keeps what the athlete made', () => {
+  it('a completed custom session survives a race-date reshape, tick and all', async () => {
+    /* generatePlan emits only template ids, so the athlete's own '+ Add'
+       sessions vanished from every reshape and the survives-prune deleted
+       their completed logs — while the editor's lead promised the opposite
+       sentence. The re-inject keeps a custom session whose day still exists
+       in the new plan, and its completion with it. */
+    const live = generatePlan(profile({ startDate: iso(addDays(mon, -28)) }));
+    const added = addCustomWorkout(live, {
+      discipline: 'run', type: 'Tempo', durationMin: 40, dateISO: iso(addDays(mon, 8)),
+    });
+    const custom = added.workout;
+    expect(custom.id.startsWith('x-')).toBe(true);
+    const storage = storageForUser('cw-keep');
+    storage.save('plan', added.plan);
+    storage.save('log', { [custom.id]: { done: true } });
+    recordFetch(serverHasNothing);
+    const app = await mountApp(storage);
+
+    await act(async () => { app.el.querySelector('.avatar-btn').click(); });
+    await act(async () => { btn(app.el, 'Edit race').click(); });
+    const dateInput = app.el.querySelector('input[type="date"]');
+    await typeDate(dateInput, iso(addDays(mon, 10 * 7)));
+    await act(async () => { btn(app.el, 'Save & rebuild plan').click(); });
+    await acrossSplash();
+
+    const np = storage.load('plan', null);
+    expect(np.profile.raceDate).toBe(iso(addDays(mon, 10 * 7)));   // the reshape really ran
+    const kept = np.weeks.flatMap(w => w.workouts).find(w => w.id === custom.id);
+    expect(kept).toBeTruthy();
+    expect(kept.date).toBe(custom.date);
+    expect(storage.load('log', {})[custom.id]).toBeTruthy();   // the tick survived
+    app.done();
+  }, 20000);
+
+  it('a custom session outside the new range is dropped: the day no longer exists', async () => {
+    const live = generatePlan(profile({ startDate: iso(addDays(mon, -28)) }));
+    const added = addCustomWorkout(live, {
+      discipline: 'run', type: 'Tempo', durationMin: 40, dateISO: iso(addDays(mon, 7 * 7)),
+    });
+    const storage = storageForUser('cw-drop');
+    storage.save('plan', added.plan);
+    recordFetch(serverHasNothing);
+    const app = await mountApp(storage);
+
+    await act(async () => { app.el.querySelector('.avatar-btn').click(); });
+    await act(async () => { btn(app.el, 'Edit race').click(); });
+    const dateInput = app.el.querySelector('input[type="date"]');
+    // pull the race INSIDE the custom session's date: its week is cut off
+    await typeDate(dateInput, iso(addDays(mon, 4 * 7)));
+    await act(async () => { btn(app.el, 'Save & rebuild plan').click(); });
+    await acrossSplash();
+
+    const np = storage.load('plan', null);
+    expect(np.profile.raceDate).toBe(iso(addDays(mon, 4 * 7)));    // the reshape really ran
+    expect(np.weeks.flatMap(w => w.workouts).some(w => w.id === added.workout.id)).toBe(false);
+    app.done();
+  }, 20000);
+
+  it('a reshape clears the block-review marker; the stamp cannot', async () => {
+    /* reshapePlan keeps createdAt (same server row), so the stamped marker
+       reads as current on the reshaped plan — the exact mechanism the
+       adjacent dismissals comment records. The clear is the only tool. */
+    const live = generatePlan(profile({ startDate: iso(addDays(mon, -28)) }));
+    const storage = storageForUser('br-clear');
+    storage.save('plan', live);
+    storage.saveBlockReviewed(mon, live.createdAt);
+    expect(storage.loadBlockReviewed(live.createdAt)).toBe(mon);
+    recordFetch(serverHasNothing);
+    const app = await mountApp(storage);
+
+    await act(async () => { app.el.querySelector('.avatar-btn').click(); });
+    await act(async () => { btn(app.el, 'Edit race').click(); });
+    const dateInput = app.el.querySelector('input[type="date"]');
+    await typeDate(dateInput, iso(addDays(mon, 10 * 7)));
+    await act(async () => { btn(app.el, 'Save & rebuild plan').click(); });
+    await acrossSplash();
+
+    expect(storage.loadBlockReviewed(live.createdAt)).toBe(null);
     app.done();
   }, 20000);
 });
