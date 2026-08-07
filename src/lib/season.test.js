@@ -42,6 +42,32 @@ describe('seasonCurve', () => {
     expect(future.some(p => p.ctl !== 50)).toBe(true);
   });
 
+  it('a plan that has not started yet still draws a projection from the feed', () => {
+    /* A future start: nothing measured inside the plan's own window, but the
+       athlete has a live feed behind them. The window kept the drawing rules
+       and the seed came from outside it, so what showed instead was "no
+       fitness readings yet, connect a feed" for the whole of onboarding
+       (calendar audit, 2026-08-06). */
+    const start = iso(addDays(mon, 14));
+    const plan = generatePlan(profile({ startDate: start, raceDate: iso(addDays(start, 16 * 7 + 2)) }));
+    const w = recs(50, 45, iso(addDays(mon, -30)), TODAY);   // all of it BEFORE the plan
+    const s = seasonCurve({ plan, wellness: w, log: {}, moves: {}, adjust: {}, todayISO: TODAY });
+
+    const drawn = s.points.filter(p => p.ctl != null);
+    expect(drawn.length).toBeGreaterThan(2);
+    expect(drawn.every(p => p.projected)).toBe(true);        // dashed the whole way, correctly
+  });
+
+  it('a newest reading carrying ctl but no atl still projects', () => {
+    /* atl seeds only the acute half. Gating the whole projection on it meant
+       one field missing from one row erased the entire chart. */
+    const plan = generatePlan(profile());
+    const w = recs(50, 45, plan.weeks[0].start, iso(addDays(TODAY, -2)));
+    w.push({ date: iso(addDays(TODAY, -1)), ctl: 51, tsb: null });   // no atl
+    const s = seasonCurve({ plan, wellness: w, log: {}, moves: {}, adjust: {}, todayISO: TODAY });
+    expect(s.points.filter(p => p.projected && p.ctl != null).length).toBeGreaterThan(2);
+  });
+
   it('puts today and race day at fractional week positions, not rounded to Monday', () => {
     const plan = generatePlan(profile());
     const s = seasonCurve({ plan, wellness: recs(50, 45, plan.weeks[0].start, TODAY), log: {}, moves: {}, adjust: {}, todayISO: TODAY });
@@ -204,13 +230,59 @@ describe('seasonShortfall', () => {
     /* Hand-built, so the boundary is exact: measured ends at 60, everything
        still to come is inside a Taper span and declines. Silence — when only
        the taper remains there is nothing left for the warning to be about. */
+    /* The taper's FIRST Monday holds the build's last week (a point is a
+       week's start, so its reading is the preceding week's outcome), so the
+       fixture holds fitness there and declines only afterwards — inside the
+       taper proper, which is the decline this test is about. */
     const curve = {
       points: [
         { date: '2026-08-03', ctl: 60, projected: false },
-        { date: '2026-08-10', ctl: 55, projected: true },
+        { date: '2026-08-10', ctl: 60, projected: true },
+        { date: '2026-08-17', ctl: 55, projected: true },
+        { date: '2026-08-24', ctl: 50, projected: true },
+      ],
+      phases: [{ label: 'Build', from: 0, to: 0 }, { label: 'Taper', from: 1, to: 3 }],
+    };
+    expect(seasonShortfall(curve)).toBe(null);
+  });
+
+  it('the first taper Monday counts: it is the build finishing, not the taper starting', () => {
+    /* Same shape, except the build's own last week loses fitness. That week's
+       outcome is read at the taper's first Monday, and excluding the whole
+       taper span hid it: the plan looked like it peaked at 60 and tapered,
+       when in truth the last build week went backwards (calendar audit,
+       2026-08-06). */
+    const curve = {
+      points: [
+        { date: '2026-08-03', ctl: 60, projected: false },
+        { date: '2026-08-10', ctl: 54, projected: true },
         { date: '2026-08-17', ctl: 50, projected: true },
       ],
       phases: [{ label: 'Build', from: 0, to: 0 }, { label: 'Taper', from: 1, to: 2 }],
+    };
+    const sf = seasonShortfall(curve);
+    expect(sf).not.toBe(null);
+    expect(sf.peak).toBe(54);
+  });
+
+  it('a plan ending Taper into Recovery stays silent', () => {
+    /* The commonest ending shape, pinned because the boundary rule admits two
+       Mondays here (the taper's and the recovery's) and neither is a
+       shortfall: peak is a max, so the recovery Monday's low sample cannot
+       pull it down. Not a mutation killer, a behaviour pin. */
+    const curve = {
+      points: [
+        { date: '2026-08-03', ctl: 60, projected: false },
+        { date: '2026-08-10', ctl: 60, projected: true },
+        { date: '2026-08-17', ctl: 54, projected: true },
+        { date: '2026-08-24', ctl: 48, projected: true },
+        { date: '2026-08-31', ctl: 44, projected: true },
+      ],
+      phases: [
+        { label: 'Build', from: 0, to: 0 },
+        { label: 'Taper', from: 1, to: 2 },
+        { label: 'Recovery', from: 3, to: 4 },
+      ],
     };
     expect(seasonShortfall(curve)).toBe(null);
   });

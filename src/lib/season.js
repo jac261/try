@@ -71,7 +71,18 @@ export function seasonCurve({ plan, wellness, log, moves, adjust, todayISO }) {
     if (r && r.ctl != null && r.date >= firstDay && r.date <= today) byDate[r.date] = r;
   });
   const known = Object.keys(byDate).sort();
-  const lastKnown = known.length ? byDate[known[known.length - 1]] : null;
+  /* A plan that has not started yet has NO reading inside its window, so the
+     projection had nothing to seed from and every point came back null — an
+     athlete with a live feed was told "no fitness readings yet, connect a
+     feed" for the whole of their onboarding week, with no preview of the plan
+     they had just built. The seed falls back to the last reading before the
+     plan begins: it is not drawn (the window still governs the solid line),
+     it only gives the recurrence somewhere to start. */
+  const before = (wellness || [])
+    .filter(r => r && r.ctl != null && r.date < firstDay && r.date <= today)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  const lastKnown = known.length ? byDate[known[known.length - 1]]
+    : (before.length ? before[before.length - 1] : null);
 
   /* PROJECTED, ahead of it. Sessions already logged are excluded exactly as
      projectRaceForm excludes them: their load is in the measured series
@@ -84,9 +95,22 @@ export function seasonCurve({ plan, wellness, log, moves, adjust, todayISO }) {
     (plannedBy[d] = plannedBy[d] || []).push(w);
   });
 
+  /* atl seeds the acute half of the model, and a reading carrying ctl
+     without atl is common enough in a tracker export to matter: gating the
+     WHOLE projection on the newest reading having one drew no line at all,
+     which reads as "no data" on a screen that has plenty. Fall back to the
+     newest reading that does carry one, and to ctl itself when none does —
+     ctl == atl is the steady state, the least-wrong thing to assume about an
+     athlete whose acute load nobody measured. */
+  const withAtl = (wellness || [])
+    .filter(r => r && r.atl != null && r.date <= (lastKnown ? lastKnown.date : today))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  const atlSeed = lastKnown && (lastKnown.atl != null ? lastKnown.atl
+    : (withAtl.length ? withAtl[withAtl.length - 1].atl : lastKnown.ctl));
+
   const projected = {};
-  if (lastKnown && lastKnown.atl != null) {
-    let state = { ctl: lastKnown.ctl, atl: lastKnown.atl };
+  if (lastKnown) {
+    let state = { ctl: lastKnown.ctl, atl: atlSeed };
     for (let d = iso(addDays(lastKnown.date, 1)); d <= lastDay; d = iso(addDays(d, 1))) {
       const tss = (plannedBy[d] || []).reduce((s, w) => s + estimateTss(w, (adjust || {})[w.id]), 0);
       state = stepLoad(state, tss);
@@ -148,10 +172,12 @@ export function seasonCurve({ plan, wellness, log, moves, adjust, todayISO }) {
 
    The taper is excluded by phase, not by heuristic: a taper declines by
    design, so its weeks may not drag the projected peak down — and when only
-   taper (or the post-race Recovery relabel) remains, the eligible set is
-   empty and the answer is silence rather than a warning fired at every
-   healthy plan in its final fortnight. Maintain stays in scope: a
-   maintenance block projecting decline is exactly "load below fitness".
+   taper (or the post-race Recovery relabel) remains, all that is eligible is
+   its opening Monday, which either clears the measured line (silence, the
+   healthy case) or reports the last build week honestly. Either way no
+   warning fires at a plan that is simply in its final fortnight. Maintain
+   stays in scope: a maintenance block projecting decline is exactly "load
+   below fitness".
 
    TOL is derived from the model's own resolution, not taste: the sustainable
    ramp is ~5 CTL/week (RAMP_ZONES via the adapt.js anchor), the points are
@@ -165,8 +191,20 @@ export function seasonShortfall(curve) {
   if (!measured.length) return null;
   const current = measured[measured.length - 1].ctl;
   const terminal = new Set(['Taper', 'Recovery']);
-  const eligible = curve.points.filter((p, i) => p.ctl != null && p.projected
-    && !(curve.phases || []).some(ph => terminal.has(ph.label) && i >= ph.from && i <= ph.to));
+  /* The first Monday of a terminal phase carries the load of the week BEFORE
+     it — a point is a week's START, so its reading is the preceding week's
+     outcome — so excluding the whole span threw away the build's own peak and
+     made a plan whose last build week went backwards look like a plan that
+     peaked and tapered.
+
+     No read-back guard for a Taper straight into a Recovery: `peak` is a MAX,
+     so admitting a Monday that is genuinely mid-decline can only raise it,
+     which can only make this warning quieter. There is no mutation that could
+     kill such a clause, which is the tell that it would not be doing any
+     work. */
+  const terminalAt = i => (curve.phases || []).some(ph =>
+    terminal.has(ph.label) && i > ph.from && i <= ph.to);
+  const eligible = curve.points.filter((p, i) => p.ctl != null && p.projected && !terminalAt(i));
   if (!eligible.length) return null;
   const peak = Math.max(...eligible.map(p => p.ctl));
   const deficit = current - SHORTFALL_TOL - peak;

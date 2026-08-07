@@ -1,5 +1,5 @@
 import * as T from '@/lib';
-import { loadOf } from '@/lib/calendar-load.js';
+import { loadOf, dayLedger } from '@/lib/calendar-load.js';
 import { LoadSlot, loadSpoken } from '@/components/LoadSlot.jsx';
 import { effDate } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
@@ -78,7 +78,7 @@ function Row({ disc, name, stat, tag, onOpen, manual, indoor, right, spoken }) {
    second ride inside one session's window — is in the set and carries its
    own. The set comes from the same ledger the header is summed from, so the
    two cannot drift. */
-export function RecordedActivities({ activities, date, plan, log, moves, onOpen, noHeading, bare, counted }) {
+export function RecordedActivities({ activities, date, plan, log, moves, onOpen, noHeading, bare, ledger }) {
   // The DISCIPLINES guard keeps a future drift between the activity-type map
   // and the disciplines table from crashing the row render.
   const day = (activities || []).filter(a => a && a.date === date && DISC[a.type] && T.DISCIPLINES[DISC[a.type]] && a.movingTimeSec);
@@ -93,12 +93,34 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
   // Fold each brick session's recording pair into one combined row. The
   // matcher sees REAL recordings only: a hand-logged diary entry must never
   // be folded into a brick's Matched row as if it were a measured leg.
+  /* Who owns what comes from the ledger the totals are summed from, so a row
+     cannot tag itself Matched while the header counts the same ride as its
+     own work. Falling back to a local pass keeps the component usable on its
+     own (the month card and its tests mount it without a ledger), but the
+     calendar always hands one in. */
   const feedActs = (activities || []).filter(a => a && !a.manual);
-  const owns = id => bare && (!counted || counted.has(id));
+  const local = ledger || dayLedger({ date, sessions, activities: activities || [], log, moves });
+  const claims = local.claims || {};
+  const pairs = local.pairs || {};
+  /* One contribution, one number. A recording a session claims has its load
+     on that session's slot one row above, so it carries none of its own. The
+     rule, both modes:
+
+       stat-line load   iff  the row is UNCLAIMED and has no slot of its own
+       right-hand slot  iff  the row is UNCLAIMED and the caller gives it one
+
+     A CLAIMED row carries no number anywhere. This read `!owns(id)`, which
+     is that rule inverted for exactly the claimed case, so the week card
+     printed 71 in the session's slot and "load 71" in the Matched row
+     beneath it, and the rows on screen added up to twice the header
+     (calendar audit sweep, 2026-08-06). */
+  const isClaimed = id => !!claims[id];
+  const owns = id => bare && !isClaimed(id);
+  const showStatLoad = id => !owns(id) && !isClaimed(id);
   const rows = [];
   const claimed = new Set();
   sessions.filter(w => w.discipline === 'brick').forEach(w => {
-    const pair = T.brickPairFor({ workout: w, activities: feedActs, moves, used: claimed });
+    const pair = pairs[w.id];
     if (!pair) return;
     claimed.add(pair.ride.id); claimed.add(pair.run.id);
     /* The shared fold, so this row and the week's total price the pair the
@@ -111,7 +133,7 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
       tag: (log || {})[w.id] && log[w.id].done ? 'Matched' : null,
       stat: T.fmtDuration(Math.round(pair.ride.movingTimeSec / 60)) + (INDOOR[pair.ride.type] ? ' indoor ride + ' : ' ride + ')
         + T.fmtDuration(Math.round(pair.run.movingTimeSec / 60)) + (INDOOR[pair.run.type] ? ' indoor run' : ' run')
-        + (!owns(pair.ride.id) && rec.trainingLoad != null ? ' · ' + (load.measured ? 'load ' : '~load ') + Math.round(load.tss) : ''),
+        + (showStatLoad(pair.ride.id) && rec.trainingLoad != null ? ' · ' + (load.measured ? 'load ' : '~load ') + Math.round(load.tss) : ''),
       right: owns(pair.ride.id) ? <LoadSlot {...load} /> : null,
       spoken: owns(pair.ride.id) ? loadSpoken(load) : null,
     });
@@ -127,13 +149,13 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
        No `used` set here on purpose: two same-discipline recordings on one
        day can both fall in one session's window and BOTH still render as
        their own rows, each opening the file actually tapped. */
-    const owner = T.ownerFor({ activity: a, sessions, log });
+    const owner = claims[a.id] || null;
     // Always carry THIS activity, even when it matched a planned session:
     // two same-discipline recordings on one day can both fall in one session's
     // window, and re-deriving from the workout alone would resolve to the
     // recording closest to the planned duration, not the one actually tapped.
     const load = loadOf(a);
-    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc, pool, !owns(a.id)), manual: !!a.manual,
+    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc, pool, showStatLoad(a.id)), manual: !!a.manual,
       indoor: !!INDOOR[a.type],
       tag: a.manual ? 'Logged' : owner ? 'Matched' : null,
       right: owns(a.id) ? <LoadSlot {...load} /> : null,

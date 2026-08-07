@@ -389,8 +389,12 @@ describe('the week header counts what happened', () => {
     const rows = [...el.querySelectorAll('.wk-day .wk')];
     const num = r => (r.querySelector('.right b') ? Number(r.querySelector('.right b').textContent.replace('~', '')) : null);
     const byTitle = t => rows.find(r => r.querySelector('.t').textContent.includes(t));
-    // the claimed recording is evidence, not a second contribution
-    expect(num(byTitle('The file that did it'))).toBe(null);
+    /* The claimed recording is evidence, not a second contribution — and it
+       must be numberless in the STAT LINE too, which is where the double
+       print hid from an assertion that only read the right-hand slot. */
+    const claimedRow = byTitle('The file that did it');
+    expect(num(claimedRow)).toBe(null);
+    expect(claimedRow.querySelector('.s').textContent).not.toContain('load');
     expect(num(byTitle('Extra ride'))).toBe(44);
     // and everything the week counts as done is on screen, exactly once
     const shown = rows.filter(r => r.classList.contains('done') || r.querySelector('.t').textContent.includes('Extra ride'));
@@ -442,6 +446,101 @@ describe('add a session targets an honest day', () => {
     // the shown week is entirely before the plan: no honest target exists
     expect(el.textContent).toContain('Before this plan began.');
     expect(addCards(el)).toHaveLength(0);
+    await act(async () => root.unmount());
+  });
+});
+
+/* The month day card shares the row component but has no right-hand slot, so
+   the same rule lands differently there: an unclaimed recording keeps its
+   load in the stat line, a claimed one still carries nothing. */
+describe('the month day card says a claimed load once too', () => {
+  const planFor2 = () => generatePlan(profile());
+  it('keeps the load on an unclaimed row and drops it from a claimed one', async () => {
+    const plan = planFor2();
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && weekRange(todayISO).includes(x.date));
+    const acts = [
+      { id: 'm1', date: w.date, type: w.discipline === 'run' ? 'Run' : w.discipline === 'swim' ? 'Swim' : 'Ride',
+        name: 'Matched file', movingTimeSec: (w.durationMin || 60) * 60, trainingLoad: 66 },
+      { id: 'm2', date: w.date, type: 'Ride', name: 'Unclaimed spin', movingTimeSec: 1800, trainingLoad: 22 },
+    ];
+    const { el, root } = await mount(plan, { activities: acts, log: { [w.id]: { done: true } } });
+    const cell = el.querySelector('.cal-day[data-caldate="' + w.date + '"]');
+    await act(async () => cell.click());
+    const rowFor = t => [...el.querySelectorAll('.wk')].find(r => r.querySelector('.t') && r.querySelector('.t').textContent.includes(t));
+    expect(rowFor('Unclaimed spin').querySelector('.s').textContent).toContain('load 22');
+    expect(rowFor('Matched file').querySelector('.s').textContent).not.toContain('load');
+    await act(async () => root.unmount());
+  });
+});
+
+/* The grid and the totals must agree about who owns a ride: when a ticked
+   session is dragged to another day, its recording goes with it, so the day
+   it happened on no longer dots a recording of its own. */
+describe('the month dots follow a cross-day claim', () => {
+  it('drops the recorded dot from the day the session was moved away from', async () => {
+    const plan = generatePlan(profile());
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && weekRange(todayISO).includes(x.date));
+    const to = weekRange(todayISO).find(d => d !== w.date
+      && !plan.weeks.flatMap(k => k.workouts).some(x => x.discipline !== 'rest' && x.date === d));
+    const a = { id: 'x1', date: w.date, type: w.discipline === 'run' ? 'Run' : w.discipline === 'swim' ? 'Swim' : 'Ride',
+      name: 'The file', movingTimeSec: (w.durationMin || 60) * 60, trainingLoad: 61 };
+    const dotsOn = (el, d) => {
+      const cell = el.querySelector('.cal-day[data-caldate="' + d + '"]');
+      return cell ? cell.querySelectorAll('.cd-dots i').length : null;
+    };
+    // before the move: the session sits on its own day with its recording
+    const before = await mount(plan, { activities: [a], log: { [w.id]: { done: true, actualMin: w.durationMin } } });
+    const dotsBefore = dotsOn(before.el, w.date);
+    await act(async () => before.root.unmount());
+    // after: the session is on another day, and the recording is not a second fact
+    const after = await mount(plan, {
+      activities: [a], log: { [w.id]: { done: true, actualMin: w.durationMin } }, moves: { [w.id]: to },
+    });
+    expect(dotsOn(after.el, w.date)).toBe(dotsBefore - 1);   // the session's dot left, no orphan appeared
+    await act(async () => after.root.unmount());
+  });
+});
+
+/* The month tells you how it is going, and a claimed row says what happened. */
+describe('the month subtitle and matched provenance', () => {
+  const setup = async (over = {}) => {
+    const plan = generatePlan(profile());
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && weekRange(todayISO).includes(x.date));
+    return { plan, w, ...(await mount(plan, over)) };
+  };
+
+  it('pairs done against planned once anything in the month is recorded', async () => {
+    const plan = generatePlan(profile());
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && weekRange(todayISO).includes(x.date));
+    const bare = await mount(plan);
+    expect(bare.el.querySelector('.cal-head .sub').textContent).toContain('h planned');
+    await act(async () => bare.root.unmount());
+
+    const withWork = await mount(plan, {
+      activities: [{ id: 'q1', date: w.date, type: 'Ride', name: 'Ride', movingTimeSec: 3600, trainingLoad: 50 }],
+    });
+    const sub = withWork.el.querySelector('.cal-head .sub').textContent;
+    expect(sub).toContain(' / ');
+    expect(sub).not.toContain('planned');
+    await act(async () => withWork.root.unmount());
+  });
+
+  it('a claimed session row shows the minutes actually recorded', async () => {
+    const plan = generatePlan(profile());
+    const w = plan.weeks.flatMap(k => k.workouts)
+      .find(x => x.discipline !== 'rest' && !x.race && !x.bRace && weekRange(todayISO).includes(x.date));
+    const realMin = (w.durationMin || 60) + 12;        // rode longer than planned
+    const a = { id: 'q2', date: w.date, type: w.discipline === 'run' ? 'Run' : w.discipline === 'swim' ? 'Swim' : 'Ride',
+      name: 'The file', movingTimeSec: realMin * 60, trainingLoad: 80 };
+    const { el, root } = await mount(plan, { activities: [a], log: { [w.id]: { done: true, actualMin: realMin } } });
+    await toWeek(el);
+    const row = [...el.querySelectorAll('.wk-day .wk')].find(r => r.querySelector('.t').textContent.includes(w.title));
+    expect(row.querySelector('.s').textContent).toContain(String(realMin));
+    expect(row.querySelector('.s').textContent).not.toContain(String(w.durationMin) + ' min');
     await act(async () => root.unmount());
   });
 });

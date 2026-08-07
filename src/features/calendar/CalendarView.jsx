@@ -5,7 +5,7 @@ import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
-import { dayLedger, weekLoad } from '@/lib/calendar-load.js';
+import { dayLedger, spanLedger, sessionLoad, weekLoad } from '@/lib/calendar-load.js';
 import { LoadSlot } from '@/components/LoadSlot.jsx';
 import { SeasonPanel } from '@/features/calendar/SeasonPanel.jsx';
 const D = T.DISCIPLINES;
@@ -90,9 +90,14 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
      for it. That claim now comes from the shared ledger in calendar-load,
      the same one the week's totals are built from, so the grid and the
      numbers can never disagree about who owns a ride. */
-  const unclaimedActs = d => dayLedger({
-    date: d, sessions: byDate[d] || [], activities: actByDate[d] || [], log, moves,
-  }).unclaimed;
+  /* One pass over the whole shown grid, not per cell: a session moved off the
+     day its recording sits on claims that recording from another day, and a
+     cell that cannot see the rest of the grid would dot a ride the week's
+     totals have already counted against its session. */
+  const gridSpan = useMemo(() => spanLedger({
+    dates: grid.cells.filter(Boolean), byDate, activities, log, moves,
+  }), [grid, byDate, activities, log, moves]);
+  const unclaimedActs = d => (gridSpan[d] ? gridSpan[d].unclaimed : []);
 
   /* One anchor date, two step sizes (the screen doc: "three ranges of the
      same plan, one set of chrome"). Switching range keeps the athlete on the
@@ -151,8 +156,13 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   const ym = s => s.slice(0, 7);
   /* "2026 season" / "Mar – Oct · week 22 of 34". Two years when the plan
      straddles New Year, because "2026 season" would be wrong for half of it. */
-  const season = useMemo(() => T.seasonCurve({ plan, wellness, log, moves, adjust, todayISO }),
-    [plan, wellness, log, moves, adjust, todayISO]);
+  /* Only on the Season range. This ran on Week and Month too, walking every
+     planned session and every wellness reading to produce a label neither
+     range shows — and then SeasonPanel computed the identical curve again for
+     the chart. It is computed here, once, and handed down. */
+  const season = useMemo(() => (range === 'season'
+    ? T.seasonCurve({ plan, wellness, log, moves, adjust, todayISO }) : null),
+  [range, plan, wellness, log, moves, adjust, todayISO]);
   const seasonLabel = season
     ? (season.from.slice(0, 4) === season.to.slice(0, 4)
       ? season.from.slice(0, 4) + ' season'
@@ -167,14 +177,25 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
      blocks ("Build 3"); Try does not have those, so it uses the phase label
      the plan itself carries. Hours are the sessions whose EFFECTIVE date
      lands in the shown month, so a moved session counts where it now is. */
+  /* Done over planned, the pair the week header already uses. A month you are
+     halfway through described itself purely by intention, which made it the
+     one range that could not tell you how it was going. Summed from the same
+     ledger the week and the dots read, never a lighter parallel count: a
+     second currency drifts, and drift is the defect this whole surface has
+     been paying off. */
+  const monthLoad = useMemo(() => weekLoad({
+    dates: grid.cells.filter(Boolean).filter(d => ym(d) === ym(anchor)),
+    byDate, activities, log, moves, easedOf,
+  }), [grid, anchor, byDate, activities, log, moves, easedOf]);
   const monthSub = useMemo(() => {
-    const inMonth = Object.entries(byDate).filter(([d]) => ym(d) === ym(anchor));
-    const min = inMonth.reduce((s, [, ws]) =>
-      s + ws.filter(w => !w.race).reduce((t, w) => t + (easedOf(w).durationMin || 0), 0), 0);
-    if (!min) return null;
+    if (!monthLoad.plannedMin && !monthLoad.doneMin) return null;
     const phases = [...new Set(plan.weeks.filter(w => ym(w.start) === ym(anchor)).map(w => T.weekPhaseLabel(plan, w)))];
-    return (phases.length === 1 ? phases[0] + ' · ' : '') + Math.round(min / 60) + ' h planned';
-  }, [byDate, anchor, plan, easedOf]);
+    const where = phases.length === 1 ? phases[0] + ' · ' : '';
+    const hrs = m => Math.round(m / 60) + 'h';
+    return monthLoad.doneMin
+      ? where + hrs(monthLoad.doneMin) + ' / ' + hrs(monthLoad.plannedMin)
+      : where + Math.round(monthLoad.plannedMin / 60) + ' h planned';
+  }, [monthLoad, anchor, plan]);
 
   const step = n => (range === 'week' ? T.iso(T.addDays(anchor, n * 7)) : addMonths(anchor, n));
   /* Month compares months, week compares the days it would land on, so the
@@ -271,6 +292,16 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     setDragBoth(null);
   };
 
+  /* Once a recording speaks for a session, the row describes what HAPPENED:
+     the measured minutes replace the planned ones beside the measured number,
+     rather than a row reading "1h 20m" from the plan next to a load from a
+     ride that took an hour (Jon's call, 2026-08-06). The plan's own figures
+     stay one tap deeper, in the detail sheet. */
+  const recordedShape = (shown, rec) => {
+    const mins = Math.round((rec.movingTimeSec || 0) / 60);
+    return mins ? { ...shown, durationMin: mins, distance: null } : shown;
+  };
+
   const daySessions = (byDate[selected] || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
   // With no plan there are never day sessions, so the card exists only to say
   // "Nothing recorded." — which it must not while the Recorded list below has
@@ -349,7 +380,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         </div>}
       </div>}
 
-      {range === 'season' && <SeasonPanel plan={plan} wellness={wellness} log={log}
+      {range === 'season' && <SeasonPanel plan={plan} wellness={wellness} log={log} curve={season}
         moves={moves} adjust={adjust} todayISO={todayISO} onOpenSettings={onOpenSettings} />}
 
       {range === 'week' && <>
@@ -377,7 +408,8 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                         onPointerDown={e => startDrag(w, e)} onPointerMove={moveDrag}
                         onPointerUp={endDrag} onPointerCancel={cancelDrag}>
                         <Icon name="grip" size={17} /></div>}
-                      <WorkoutRow w={shown} done={!!log[w.id]} eff={effDate(w, moves)}
+                      <WorkoutRow w={row && row.recording ? recordedShape(shown, row.recording) : shown}
+                        done={!!log[w.id]} eff={effDate(w, moves)}
                         moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)}
                         /* The A race's durationMin is a placeholder — WorkoutRow
                            suppresses its duration for the same reason — so a load
@@ -390,7 +422,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                   );
                 })}
                 <RecordedActivities bare activities={activities} date={d} plan={plan} log={log} moves={moves}
-                  counted={new Set((load.days[d].unclaimed || []).map(u => u.activity.id))}
+                  ledger={load.days[d].ledger}
                   onOpen={onOpenRecording} />
                 {!ws.length && !hasActs && <div className="wd-none">{tracker ? 'Nothing recorded.'
                   : d < planStart ? 'Before this plan began.'
@@ -408,12 +440,22 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
             ? <div className="empty" style={{ padding: '18px 8px' }}>{tracker ? 'Nothing recorded.'
               : selected < planStart ? 'Before this plan began.'
                 : 'Nothing planned — rest, or add a session below.'}</div>
-            : daySessions.map(w => (
-              <WorkoutRow key={w.id} w={easedOf(w)} done={!!log[w.id]} eff={effDate(w, moves)}
-                moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)} />
-            ))}
+            : daySessions.map(w => {
+              /* The same number the week range shows. The right slot used to
+                 repeat the weekday the section title above already gives, so
+                 one surface priced a session and the other named a day the
+                 athlete had just tapped. */
+              const row = (gridSpan[selected] ? gridSpan[selected].rows : []).find(x => x.w.id === w.id);
+              const shown = easedOf(w);
+              const priced = sessionLoad({ shown, entry: log[w.id], recording: row && row.recording });
+              return <WorkoutRow key={w.id} w={shown} done={!!log[w.id]} eff={effDate(w, moves)}
+                moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)}
+                right={w.race ? null : <LoadSlot tss={priced.tss} measured={priced.measured} />} />;
+            })}
         </div>}
-        <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves} onOpen={onOpenRecording} noHeading={tracker} />
+        <RecordedActivities activities={activities} date={selected} plan={plan} log={log} moves={moves}
+          ledger={gridSpan[selected]}
+          onOpen={onOpenRecording} noHeading={tracker} />
       </>}
 
       {/* One card per sport, full discipline colour with the icon front and

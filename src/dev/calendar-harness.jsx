@@ -52,6 +52,24 @@ const midSeason = generatePlan(base({
   startDate: iso(addDays(mondayOf, -10 * 7)), raceDate: iso(addDays(mondayOf, 8 * 7 + 2)),
 }));
 
+/* A plan that has not started yet, with a feed that HAS been running: the
+   onboarding week. The season range drew nothing at all here and said "no
+   fitness readings yet, connect a feed" to an athlete with months of data,
+   because the wellness window opens at week 1 and the seed lived outside it.
+   The history is deliberately all in the past, ending yesterday. */
+const futureStart = generatePlan(base({
+  startDate: iso(addDays(mondayOf, 14)), raceDate: iso(addDays(mondayOf, 14 + 112)),
+}));
+const priorHistory = (() => {
+  const out = [];
+  let ctl = 40;
+  for (let d = iso(addDays(today, -60)); d < todayISO; d = iso(addDays(d, 1))) {
+    ctl += 0.1;
+    out.push({ date: d, ctl: Math.round(ctl * 10) / 10, atl: Math.round((ctl + 3) * 10) / 10, tsb: -3 });
+  }
+  return out;
+})();
+
 /* No plan at all, which is where the week range would be at its most wrong:
    plan.weeks is [] in tracker mode, so seven days of nothing must not come
    back as seven rest days for an athlete whose training is all recordings. */
@@ -111,6 +129,8 @@ const MODES = {
   tracker: { plan: trackerPlan, activities: trackerActs, log: {} },
   // ten weeks done, eight to go: the season's solid half meeting its dashed one
   'mid-season': { plan: midSeason, activities: [], log: {} },
+  // a plan two weeks from starting, with 60 days of feed behind it
+  'future-start': { plan: futureStart, activities: [], log: {}, wellness: priorHistory },
 };
 
 /* A fitness history for the season ramp: a rising CTL from the plan's start to
