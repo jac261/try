@@ -35,7 +35,11 @@ export function WorkoutRow({ w, done, onClick, eff, moved, profile, onToggle, ri
         {/* Estimated distances wear the tilde, like every estimated pace and
             watt range does. distEst has been set by the builders since the
             run pass but was never rendered (design panel 2026-07-18). */}
-        <div className="s">{w.type}{w.distance ? ' · ' + (w.distEst ? '~' : '') + w.distance + ' ' + w.unit : ''}{w.race ? '' : ' · ' + T.fmtDuration(w.durationMin || 0)}</div>
+        {/* The distance tilde is spoken too, by the same rule as the load
+            slot's: a marker the eye gets and the ear does not is a silent
+            difference between what the screen says and what the athlete
+            hears. */}
+        <div className="s">{w.type}{w.distance ? <>{' · '}{w.distEst && <><span className="sr-only">about </span>~</>}{w.distance + ' ' + w.unit}</> : ''}{w.race ? '' : ' · ' + T.fmtDuration(w.durationMin || 0)}</div>
         {profile && <ProfileStrip w={w} />}
       </div>
       <div className="right">{right !== undefined ? right : T.fmtDate(eff || w.date, { weekday: 'short' })}</div>

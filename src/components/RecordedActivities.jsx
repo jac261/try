@@ -25,7 +25,12 @@ const INDOOR = T.INDOOR_TYPES;
    calendar day view for any athlete with a recorded OUTDOOR swim carrying a
    distance — the only branch that touched it (shipped in the pool-profile
    phase, found 2026-07-30 from a production error report). */
-function statBits(a, disc, pool, withLoad) {
+/* `speak`: the same line for the ear. The tilde is the app's marker for a
+   modelled number, and a marker nobody reads aloud is a difference between
+   what the screen shows and what a screen reader hears — this row builds its
+   own aria-label, so the substitution has to happen here (audit 2026-08-06).
+   Everything else in the line reads the same either way. */
+function statBits(a, disc, pool, withLoad, speak) {
   const bits = [];
   const indoor = !!INDOOR[a.type];
   if (a.movingTimeSec) bits.push(T.fmtDuration(Math.round(a.movingTimeSec / 60)));
@@ -40,11 +45,13 @@ function statBits(a, disc, pool, withLoad) {
   /* The week's rows carry the load in their own right-hand slot, so printing
      it here too would say the same number twice on one line. The month's day
      card has no such slot and keeps it. */
-  if (withLoad && a.trainingLoad != null) bits.push((a.estimated ? '~load ' : 'load ') + Math.round(a.trainingLoad));
+  if (withLoad && a.trainingLoad != null) {
+    bits.push((a.estimated ? (speak ? 'about load ' : '~load ') : 'load ') + Math.round(a.trainingLoad));
+  }
   return bits.join(' · ');
 }
 
-function Row({ disc, name, stat, tag, onOpen, manual, indoor, right, spoken }) {
+function Row({ disc, name, stat, statSpoken, tag, onOpen, manual, indoor, right, spoken }) {
   return (
     // A manual row's first tap celebrates, later taps edit — the accessible
     // name stays neutral so it is never wrong about which one comes next.
@@ -57,7 +64,7 @@ function Row({ disc, name, stat, tag, onOpen, manual, indoor, right, spoken }) {
          2026-08-05) */
       /* `spoken` carries the load when it has moved out of the stat line into
          the right slot: a number that is visible must not be inaudible. */
-      aria-label={(manual ? 'Open ' : 'Recap: ') + name + (indoor ? ', indoor' : '') + (stat ? ', ' + stat : '') + (spoken ? ', ' + spoken : '')}>
+      aria-label={(manual ? 'Open ' : 'Recap: ') + name + (indoor ? ', indoor' : '') + ((statSpoken || stat) ? ', ' + (statSpoken || stat) : '') + (spoken ? ', ' + spoken : '')}>
       <div className="dot" style={{ background: T.DISCIPLINES[disc].grad }}><Icon name={T.DISCIPLINES[disc].icon} size={22} /></div>
       <div className="meta">
         <div className="t">{name} {tag && <span className="tag key">{tag}</span>}{indoor && <span className="tag indoor">Indoor</span>}</div>
@@ -128,12 +135,15 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
        legs were, which this file used to get wrong in its own copy. */
     const rec = T.brickRecording(pair.ride, pair.run);
     const load = loadOf(rec);
+    const legs = T.fmtDuration(Math.round(pair.ride.movingTimeSec / 60)) + (INDOOR[pair.ride.type] ? ' indoor ride + ' : ' ride + ')
+      + T.fmtDuration(Math.round(pair.run.movingTimeSec / 60)) + (INDOOR[pair.run.type] ? ' indoor run' : ' run');
+    const brickLoad = mark => (showStatLoad(pair.ride.id) && rec.trainingLoad != null
+      ? ' · ' + (load.measured ? 'load ' : mark) + Math.round(load.tss) : '');
     rows.push({
       key: 'brick-' + w.id, disc: 'brick', name: w.title || 'Brick', open: { workout: w },
       tag: (log || {})[w.id] && log[w.id].done ? 'Matched' : null,
-      stat: T.fmtDuration(Math.round(pair.ride.movingTimeSec / 60)) + (INDOOR[pair.ride.type] ? ' indoor ride + ' : ' ride + ')
-        + T.fmtDuration(Math.round(pair.run.movingTimeSec / 60)) + (INDOOR[pair.run.type] ? ' indoor run' : ' run')
-        + (showStatLoad(pair.ride.id) && rec.trainingLoad != null ? ' · ' + (load.measured ? 'load ' : '~load ') + Math.round(load.tss) : ''),
+      stat: legs + brickLoad('~load '),
+      statSpoken: legs + brickLoad('about load '),
       right: owns(pair.ride.id) ? <LoadSlot {...load} /> : null,
       spoken: owns(pair.ride.id) ? loadSpoken(load) : null,
     });
@@ -155,7 +165,9 @@ export function RecordedActivities({ activities, date, plan, log, moves, onOpen,
     // window, and re-deriving from the workout alone would resolve to the
     // recording closest to the planned duration, not the one actually tapped.
     const load = loadOf(a);
-    rows.push({ key: a.id, disc, name: a.name || a.type, stat: statBits(a, disc, pool, showStatLoad(a.id)), manual: !!a.manual,
+    rows.push({ key: a.id, disc, name: a.name || a.type,
+      stat: statBits(a, disc, pool, showStatLoad(a.id)),
+      statSpoken: statBits(a, disc, pool, showStatLoad(a.id), true), manual: !!a.manual,
       indoor: !!INDOOR[a.type],
       tag: a.manual ? 'Logged' : owner ? 'Matched' : null,
       right: owns(a.id) ? <LoadSlot {...load} /> : null,

@@ -144,13 +144,24 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     const pw = plan.weeks.find(w => w.start === week[0]);
     const grp = pw && T.phaseGroups(plan).find(g => pw.index >= g.start && pw.index < g.start + g.weeks);
     const where = grp ? 'Week ' + (pw.index - grp.start + 1) + ' of ' + grp.weeks + ' · ' : '';
+    // The tilde reaches the eye; `spoken` is the same fact for the ear, which
+    // gets no punctuation. The header is one string in one element, so the
+    // substitution happens where the string is built.
     const tilde = load.estimated ? '~' : '';
+    const said = load.estimated ? 'about ' : '';
     if (!load.doneMin && !load.doneTss) {
-      return where + T.fmtDuration(load.plannedMin) + ' · ' + load.plannedTss + ' TSS, estimated';
+      const only = where + T.fmtDuration(load.plannedMin) + ' · ' + load.plannedTss + ' TSS, estimated';
+      return { text: only, spoken: only };
     }
-    if (!anyPlanned) return where + T.fmtDuration(load.doneMin) + ' · ' + tilde + load.doneTss + ' TSS';
-    return where + T.fmtDuration(load.doneMin) + ' / ' + T.fmtDuration(load.plannedMin)
-      + ' · ' + tilde + load.doneTss + ' / ' + load.plannedTss + ' TSS';
+    if (!anyPlanned) {
+      return {
+        text: where + T.fmtDuration(load.doneMin) + ' · ' + tilde + load.doneTss + ' TSS',
+        spoken: where + T.fmtDuration(load.doneMin) + ' · ' + said + load.doneTss + ' TSS',
+      };
+    }
+    const both = mark => where + T.fmtDuration(load.doneMin) + ' / ' + T.fmtDuration(load.plannedMin)
+      + ' · ' + mark + load.doneTss + ' / ' + load.plannedTss + ' TSS';
+    return { text: both(tilde), spoken: both(said) };
   }, [week, byDate, plan, load]);
 
   const ym = s => s.slice(0, 7);
@@ -384,7 +395,9 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         moves={moves} adjust={adjust} todayISO={todayISO} onOpenSettings={onOpenSettings} />}
 
       {range === 'week' && <>
-        {weekHeader && <div className="wk-head">{weekHeader}</div>}
+        {weekHeader && (weekHeader.text === weekHeader.spoken
+          ? <div className="wk-head">{weekHeader.text}</div>
+          : <div className="wk-head" aria-label={weekHeader.spoken}>{weekHeader.text}</div>)}
         {week.map(d => {
           const ws = (byDate[d] || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
           const hasActs = (actByDate[d] || []).length > 0;
