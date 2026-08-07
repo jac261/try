@@ -362,10 +362,23 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                 className={'cal-day' + (!d ? ' blank' : '') + (d && !inPlan ? ' off' : '')
                   + (d === todayISO ? ' today' : '') + (d === selected ? ' sel' : '')
                   + (d && d === raceISO ? ' race' : '')}
-                aria-current={d === selected ? 'date' : undefined}
+                /* aria-current="date" means THIS IS TODAY, and it marked the
+                   selected cell instead — so every screen reader was told the
+                   date the athlete happened to tap was today's, and today's
+                   own cell said nothing (audit 2026-08-06). Selection is a
+                   state of this control, not a property of the calendar, so
+                   it goes in the label with the rest of what the cell shows.
+
+                   The label now carries what the DOTS carry: which sessions,
+                   which are done, whether the day is the race. A tick and a
+                   gold ring are facts, and a fact only the eye can reach is
+                   not in the accessible name at all. */
+                aria-current={d === todayISO ? 'date' : undefined}
                 aria-label={d ? T.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })
-                  + (ws.length ? ': ' + ws.map(w => w.title).join(' and ') : '')
-                  + (acts.length ? ': ' + acts.length + ' recorded ' + (acts.length === 1 ? 'session' : 'sessions') : '') : undefined}
+                  + (d === raceISO ? ', race day' : '')
+                  + (ws.length ? ': ' + ws.map(w => w.title + (log[w.id] ? ' done' : '')).join(' and ') : '')
+                  + (acts.length ? ': ' + acts.length + ' recorded ' + (acts.length === 1 ? 'session' : 'sessions') : '')
+                  + (d === selected ? ', selected' : '') : undefined}
                 {...(d ? tap(() => setSelected(d)) : {})}>
                 {d && <div className="cd-num">{Number(d.slice(8))}</div>}
                 {d && <div className="cd-dots">

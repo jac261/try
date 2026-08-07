@@ -21,8 +21,12 @@ import { iso, addDays, startOfWeekMonday } from '@/lib/date.js';
    its examples scattered across four suites is a rule that gets half-applied
    the next time somebody prints a number. */
 
-const mon = iso(startOfWeekMonday('2026-08-05'));
-const TODAY = '2026-08-05';
+/* CalendarView reads the real clock for "today" (it takes no prop for it),
+   so these fixtures are built around it rather than around a fixed date: the
+   thing under test here is which cell is marked today, and a plan that does
+   not contain today would not have one. */
+const TODAY = iso(new Date());
+const mon = iso(startOfWeekMonday(TODAY));
 const profile = (over = {}) => ({
   name: 'T', raceType: 'olympic', fitness: 'intermediate',
   fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70,
@@ -38,7 +42,7 @@ const mount = async (extra = {}) => {
   await act(async () => {
     root.render(<CalendarView plan={generatePlan(profile())} log={{}} moves={{}} open={noop}
       easedOf={w => w} onToggleWorkout={noop} onMove={noop} activities={null}
-      onOpenRecording={noop} onAddWorkout={noop} todayISO={TODAY} {...extra} />);
+      onOpenRecording={noop} onAddWorkout={noop} {...extra} />);
   });
   const toWeek = async () => act(async () => {
     [...el.querySelectorAll('.segbar button')].find(b => b.textContent === 'Week').click();
@@ -125,5 +129,48 @@ describe('the estimate marker is spoken, not just printed', () => {
       log={{}} moves={{}} onOpen={noop} />);
     expect(html).toContain('~load');
     expect(html).toMatch(/aria-label="[^"]*about load/);
+  });
+});
+
+describe('a grid cell says what its dots show', () => {
+  const cell = (el, dISO) => el.querySelector('[data-caldate="' + dISO + '"]');
+
+  it('aria-current marks TODAY, and selection is said in words', async () => {
+    /* aria-current="date" is a claim about the calendar, not about this
+       control: it means "this is today". It marked the SELECTED cell, so a
+       screen reader was told whichever day the athlete tapped was today's,
+       and today's own cell claimed nothing. */
+    const { el, done } = await mount();
+    const other = iso(addDays(TODAY, 2));
+    expect(cell(el, TODAY).getAttribute('aria-current')).toBe('date');
+    await act(async () => { cell(el, other).click(); });
+    expect(cell(el, TODAY).getAttribute('aria-current')).toBe('date');
+    expect(cell(el, other).getAttribute('aria-current')).toBe(null);
+    expect(cell(el, other).getAttribute('aria-label')).toContain('selected');
+    await done();
+  });
+
+  // The grid shows the month around today, so a fixture has to sit in it.
+  const thisMonth = d => d.slice(0, 7) === TODAY.slice(0, 7);
+
+  it('a completed session is done in the label, not only in the dot', async () => {
+    const plan = generatePlan(profile());
+    const w = plan.weeks.flatMap(x => x.workouts)
+      .find(x => x.discipline !== 'rest' && x.durationMin > 0 && thisMonth(x.date));
+    const { el, done } = await mount({ plan, log: { [w.id]: { done: true } } });
+    expect(cell(el, w.date).getAttribute('aria-label')).toContain(w.title + ' done');
+    const { el: el2, done: done2 } = await mount({ plan, log: {} });
+    expect(cell(el2, w.date).getAttribute('aria-label')).not.toContain(' done');
+    await done(); await done2();
+  });
+
+  it('race day says so, where the eye gets a gold ring', async () => {
+    // A race inside the shown month, so the cell exists to be read.
+    const raceDate = iso(addDays(TODAY, 10));
+    const plan = generatePlan(profile({ raceDate }));
+    const { el, done } = await mount({ plan });
+    expect(cell(el, raceDate).getAttribute('aria-label')).toContain('race day');
+    expect(cell(el, iso(addDays(raceDate, -1))).getAttribute('aria-label')).not.toContain('race day');
+    await done();
   });
 });
