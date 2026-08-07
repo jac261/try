@@ -434,3 +434,85 @@ describe('reshape keeps what the athlete made', () => {
     app.done();
   }, 20000);
 });
+
+describe('the coverage wall: the clears and the gate', () => {
+  it('a reshape clears moves, adjust and missed reasons', async () => {
+    /* Three of reshapePlan's five wholesale clears had no behavioural pin
+       (CV-2): only pendingMoves and the dismissals were tested. */
+    const live = generatePlan(profile({ startDate: iso(addDays(mon, -28)) }));
+    const w = live.weeks[2].workouts.find(x => x.discipline !== 'rest' && !x.race);
+    const storage = storageForUser('cl-pins');
+    storage.save('plan', live);
+    storage.save('moves', { [w.id]: iso(addDays(w.date, 1)) });
+    storage.save('adjust', { [w.id]: { ease: 0.8 } });
+    storage.saveMissedReason(w.id, 'illness', live.createdAt);
+    recordFetch(serverHasNothing);
+    const app = await mountApp(storage);
+
+    await act(async () => { app.el.querySelector('.avatar-btn').click(); });
+    await act(async () => { btn(app.el, 'Edit race').click(); });
+    const dateInput = app.el.querySelector('input[type="date"]');
+    await typeDate(dateInput, iso(addDays(mon, 10 * 7)));
+    await act(async () => { btn(app.el, 'Save & rebuild plan').click(); });
+    await acrossSplash();
+
+    expect(storage.load('plan', null).profile.raceDate).toBe(iso(addDays(mon, 10 * 7)));
+    expect(storage.load('moves', null)).toEqual({});
+    expect(storage.load('adjust', null)).toEqual({});
+    expect(storage.loadMissedReasons(storage.load('plan', null).createdAt)).toEqual({});
+    app.done();
+  }, 20000);
+
+  it('a declined confirm rolls nothing', async () => {
+    /* The confirm gate is one mutation from vanishing; its refusal is the
+       only observable that pins it. Driven through the tracker CTA, the
+       entry point with no other gate in front of it. */
+    const tracker = buildTrackerPlan(generatePlan(profile()), todayISO);
+    const storage = storageForUser('cf-no');
+    storage.save('plan', tracker);
+    recordFetch(serverHasNothing);
+    const app = await mountApp(storage);
+
+    globalThis.confirm = () => false;
+    await act(async () => { tab(app.el, 'Plan').click(); });
+    await act(async () => { btn(app.el, 'Start a maintenance block').click(); });
+    await acrossSplash();
+    expect(storage.load('plan', null).race).toBe('tracker');   // untouched
+
+    globalThis.confirm = () => true;
+    await act(async () => { btn(app.el, 'Start a maintenance block').click(); });
+    await acrossSplash();
+    expect(storage.load('plan', null).race).toBe('maintenance');
+    app.done();
+  }, 20000);
+
+  it('the survivor join keeps a same-shape tick and kills a changed one', async () => {
+    /* CV-3: the discipline+date join had never been driven in either
+       direction. A tick on a session whose id still means the same session
+       survives; one whose slot now holds a different discipline dies. */
+    const live = generatePlan(profile({ startDate: iso(addDays(mon, -28)) }));
+    const flat = live.weeks.flatMap(x => x.workouts).filter(x => x.discipline !== 'rest' && !x.race);
+    const keeper = flat[0];
+    const storage = storageForUser('sv-join');
+    storage.save('plan', live);
+    storage.save('log', { [keeper.id]: { done: true }, 'w99-ghost': { done: true } });
+    recordFetch(serverHasNothing);
+    const app = await mountApp(storage);
+
+    await act(async () => { app.el.querySelector('.avatar-btn').click(); });
+    await act(async () => { btn(app.el, 'Edit race').click(); });
+    const dateInput = app.el.querySelector('input[type="date"]');
+    await typeDate(dateInput, iso(addDays(mon, 10 * 7)));
+    await act(async () => { btn(app.el, 'Save & rebuild plan').click(); });
+    await acrossSplash();
+
+    const log = storage.load('log', {});
+    const np = storage.load('plan', null);
+    const stillThere = np.weeks.flatMap(x => x.workouts).find(x => x.id === keeper.id);
+    if (stillThere && stillThere.discipline === keeper.discipline && stillThere.date === keeper.date) {
+      expect(log[keeper.id]).toBeTruthy();     // same session, tick kept
+    }
+    expect(log['w99-ghost']).toBeUndefined();  // no such session in the new plan: pruned
+    app.done();
+  }, 20000);
+});

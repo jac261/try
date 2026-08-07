@@ -1736,6 +1736,13 @@ export function App({ storage, getToken, user }) {
   // recovery week baked in); a maintenance block near its horizon → offer to
   // roll another. Both reshape the plan, pruning overlays to the new graph.
   const rollMaintenance = afterRace => {
+    /* One tap used to build and push a whole 12-week plan with no way to
+       say "not yet" — the only plan-replacing action without a confirm
+       (Jon's call, 2026-08-07). The confirm lives HERE so all entry points
+       (tracker CTA, post-race card, extend card, Settings) share one gate. */
+    if (!confirm(afterRace
+      ? 'Start a 12-week maintenance block? It begins with an easy recovery week.'
+      : 'Start a 12-week maintenance block?')) return;
     /* Anchored at TODAY, not this week's Monday: the Monday anchor no-oped
        generatePlan's trim/roll and laid sessions on days already gone — a
        Sunday tap after a Saturday race created six days of instant misses
@@ -1832,7 +1839,7 @@ export function App({ storage, getToken, user }) {
           // (postRace = the race is behind you), or the same athlete got a
           // ~25% heavier first week from this button (gauntlet 2026-07-31).
           !tracker && plan.race !== 'maintenance' && !(T.RACES[plan.race] || {}).solo
-            ? () => { if (confirm('Switch to a 12-week maintenance block? Your current race plan will be replaced.')) rollMaintenance(rawDaysToRace < 0); }
+            ? () => rollMaintenance(rawDaysToRace < 0)
             : null}
         onEnterTracker={endPlanToTracker} tracker={tracker}
         onRegenerate={() => { if (confirm('Start a new plan? Your current plan will be replaced.')) {
