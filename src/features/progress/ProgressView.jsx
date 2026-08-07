@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { SegBar } from '@/components/SegBar.jsx';
 import * as T from '@/lib';
 import { PowerCurveCard } from '@/components/PowerCurveCard.jsx';
 import { DecisionHistory } from '@/components/coaching/DecisionHistory.jsx';
@@ -541,14 +542,8 @@ export function ProgressView({ plan, log, moves, activities, coach, durability, 
       <div className="section-title">Progress</div>
 
       {!tracker && TABS.length > 1 && (
-        <div className="segbar" role="tablist" aria-label="Progress sections">
-          {TABS.map(([k, lab]) => (
-            <button key={k} role="tab" id={'prog-tab-' + k} aria-controls={'prog-panel-' + k}
-              aria-selected={activeTab === k}
-              className={activeTab === k ? 'on' : ''}
-              onClick={() => setTab(k)}>{lab}</button>
-          ))}
-        </div>
+        <SegBar label="Progress sections" items={TABS} value={activeTab} onChange={setTab}
+          idFor={k => 'prog-tab-' + k} controlsFor={k => 'prog-panel-' + k} />
       )}
 
       {/* Tracker renders the Overview flow bare — no tabpanel wrapper, no

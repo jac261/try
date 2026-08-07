@@ -7,6 +7,7 @@ import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 import { dayLedger, spanLedger, sessionLoad, weekLoad } from '@/lib/calendar-load.js';
 import { LoadSlot } from '@/components/LoadSlot.jsx';
+import { SegBar } from '@/components/SegBar.jsx';
 import { SeasonPanel } from '@/features/calendar/SeasonPanel.jsx';
 const D = T.DISCIPLINES;
 const RANGES = [['week', 'Week'], ['month', 'Month'], ['season', 'Season']];
@@ -340,15 +341,11 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
           aria-label={range === 'week' ? 'Next week' : 'Next month'}
           onClick={() => { cancelDrag(); setAnchor(step(1)); setSelected(null); }}>›</button>
       </div>
-      <div className="segbar" role="tablist" aria-label="Calendar range">
-        {RANGES.map(([k, label]) => (
-          <button key={k} type="button" role="tab" aria-selected={range === k}
-            className={range === k ? 'on' : ''}
-            /* a second finger can switch range mid-drag, unmounting the
-               captured grip: the ghost must not outlive its surface */
-            onClick={() => { cancelDrag(); setRange(k); }}>{label}</button>
-        ))}
-      </div>
+      {/* a second finger can switch range mid-drag, unmounting the captured
+          grip: the ghost must not outlive its surface, so the guard rides the
+          change handler rather than the button */}
+      <SegBar label="Calendar range" items={RANGES} value={range}
+        onChange={k => { cancelDrag(); setRange(k); }} />
 
       {range === 'month' && <div className="card">
         <div className="cal-dow">{['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i}>{d}</span>)}</div>

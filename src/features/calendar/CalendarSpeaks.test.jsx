@@ -9,6 +9,7 @@ import { LoadSlot } from '@/components/LoadSlot.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 import { generatePlan } from '@/lib/plan.js';
 import { iso, addDays, startOfWeekMonday } from '@/lib/date.js';
+import { readFileSync } from 'node:fs';
 
 /* One house rule, four places it was broken: a visible ~ means "modelled,
    not measured", and a marker the eye gets while the ear gets nothing is a
@@ -171,6 +172,68 @@ describe('a grid cell says what its dots show', () => {
     const { el, done } = await mount({ plan });
     expect(cell(el, raceDate).getAttribute('aria-label')).toContain('race day');
     expect(cell(el, iso(addDays(raceDate, -1))).getAttribute('aria-label')).not.toContain('race day');
+    await done();
+  });
+});
+
+describe('the segbar keeps the promise its role makes', () => {
+  /* role="tablist" announces "this is a set of tabs, use the arrow keys".
+     Both copies of this row announced it and neither implemented it. There
+     were exactly two, identical in markup and in defect, which is why the fix
+     was an extraction rather than a patch: a widget that behaves one way on
+     Calendar and another on Progress is worse than one that is wrong twice. */
+  const tabs = el => [...el.querySelectorAll('.segbar [role="tab"]')];
+  const press = (btn, key) => act(async () => {
+    btn.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true }));
+  });
+
+  it('arrow keys walk the row and switch as they go', async () => {
+    const { el, done } = await mount();
+    const [week, month, season] = tabs(el);
+    expect(month.getAttribute('aria-selected')).toBe('true');   // Month is the default
+    await press(month, 'ArrowRight');
+    expect(tabs(el)[2].getAttribute('aria-selected')).toBe('true');
+    expect(el.querySelector('.season-ramp')).not.toBe(null);    // the view followed
+    await press(tabs(el)[2], 'ArrowLeft');
+    expect(tabs(el)[1].getAttribute('aria-selected')).toBe('true');
+    await press(tabs(el)[1], 'Home');
+    expect(tabs(el)[0].getAttribute('aria-selected')).toBe('true');
+    await press(tabs(el)[0], 'End');
+    expect(tabs(el)[2].getAttribute('aria-selected')).toBe('true');
+    expect(week).toBe(tabs(el)[0]);                             // same nodes throughout
+    expect(season).toBe(tabs(el)[2]);
+    await done();
+  });
+
+  it('wraps at both ends rather than stopping dead', async () => {
+    const { el, done } = await mount();
+    await press(tabs(el)[1], 'ArrowLeft');
+    expect(tabs(el)[0].getAttribute('aria-selected')).toBe('true');
+    await press(tabs(el)[0], 'ArrowLeft');
+    expect(tabs(el)[2].getAttribute('aria-selected')).toBe('true');
+    await done();
+  });
+
+  it('there is one implementation, and both surfaces use it', () => {
+    /* The source pin, because the defect was duplication rather than logic:
+       the next hand-rolled tablist would look right on screen and silently
+       lose the keyboard contract again. */
+    // Paths from the repo root: this file runs under happy-dom, where
+    // import.meta.url is not a file: URL and the node idiom does not apply.
+    const cal = readFileSync('src/features/calendar/CalendarView.jsx', 'utf8');
+    const prog = readFileSync('src/features/progress/ProgressView.jsx', 'utf8');
+    expect(cal).toContain("SegBar");
+    expect(prog).toContain("SegBar");
+    expect(cal).not.toContain('role="tablist"');
+    expect(prog).not.toContain('role="tablist"');
+  });
+
+  it('is ONE tab stop, not three', async () => {
+    // Roving tabindex: Tab moves past the set, the arrows move inside it.
+    const { el, done } = await mount();
+    expect(tabs(el).map(t => t.tabIndex)).toEqual([-1, 0, -1]);
+    await act(async () => { tabs(el)[0].click(); });
+    expect(tabs(el).map(t => t.tabIndex)).toEqual([0, -1, -1]);
     await done();
   });
 });
