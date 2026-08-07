@@ -33,6 +33,16 @@ const profile = {
   startDate: iso(addDays(mon, -28)), raceDate: iso(addDays(mon, 8 * 7)),
 };
 
+/* The two producer tests below reach through the UI: they open a session on
+   the Today view and move it with the day picker. That needs today to HAVE a
+   session, and the profile above trains five days a week — so the pair passed
+   on the Thursday they were written and failed on the Friday, with no source
+   change, because Friday is not in trainingDays. A plan that trains every day
+   removes the calendar from the test; the seven tests that exercise hydrate
+   and the merge keep the five-day profile, which is the realistic shape and
+   the one their assertions are written against. */
+const everyDay = { ...profile, trainingDays: [0, 1, 2, 3, 4, 5, 6], daysPerWeek: 7 };
+
 const recordFetch = routes => {
   const calls = [];
   globalThis.fetch = (url, opts) => {
@@ -188,7 +198,7 @@ describe('moveWorkout: the producer nobody had', () => {
     /* base is w.date, never the effective date: both consumers compare
        against baseDates' map, so a base that travelled with the overlay
        would void its own entry at the first check. */
-    const plan = generatePlan(profile);
+    const plan = generatePlan(everyDay);
     const storage = storageForUser('mv-prod');
     storage.save('plan', plan);
     const calls = recordFetch((u, m) => {
@@ -221,7 +231,7 @@ describe('moveWorkout: the producer nobody had', () => {
        the second entry records the first move's date, which the base guard
        then compares against the plan and drops — the write is silently
        voided at the next hydrate. */
-    const plan = generatePlan(profile);
+    const plan = generatePlan(everyDay);
     const storage = storageForUser('mv-twice');
     storage.save('plan', plan);
     recordFetch((u, m) => {
