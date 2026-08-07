@@ -9,6 +9,26 @@ export function weekRange(dateISO) {
   return Array.from({ length: 7 }, (_, i) => T.iso(T.addDays(mon, i)));
 }
 
+/* "3 – 9 August", "31 July – 6 August", "29 December 2026 – 4 January 2027".
+   The month is dropped from the first date when both ends share one, because
+   repeating it reads as two separate dates rather than a range.
+
+   The year appears only when the week straddles New Year, and then on BOTH
+   ends: it is the one week of the year where the label is genuinely ambiguous
+   (calendar audit, 2026-08-06), and neither end is the obvious one to leave
+   bare. Every other week is unmistakably in the year the athlete is looking
+   at, and stamping it would be noise fifty-one weeks out of fifty-two.
+
+   Lifted out of CalendarView so the New Year case can be exercised without
+   clicking the week arrows back through five months. */
+export function weekLabel(week) {
+  const sameMonth = week[0].slice(0, 7) === week[6].slice(0, 7);
+  const sameYear = week[0].slice(0, 4) === week[6].slice(0, 4);
+  const full = sameYear ? { day: 'numeric', month: 'long' }
+    : { day: 'numeric', month: 'long', year: 'numeric' };
+  return T.fmtDate(week[0], sameMonth ? { day: 'numeric' } : full) + ' – ' + T.fmtDate(week[6], full);
+}
+
 // NOTE: the "adaptive catch-up" (auto-spreading missed sessions onto the
 // emptiest upcoming days) was removed 2026-07-11 by field decision: a missed
 // session stays missed unless the athlete moves it themselves — the auto

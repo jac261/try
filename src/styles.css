@@ -377,6 +377,10 @@ body {
 .card h2 { margin: 0 0 4px; font-size: 17px; font-weight: 800; letter-spacing: -.4px; }
 .card .lead { color: var(--muted); font-size: 13px; margin: 0 0 14px; line-height: 1.45; }
 .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--muted); font-weight: 700; margin: 22px 4px 10px; }
+/* The day a section acts on, said beside its title: quieter than the title,
+   the same size, so it reads as part of the heading rather than a second
+   one. */
+.section-title .st-when { color: var(--faint); font-weight: 700; }
 
 /* ---------- workout row ---------- */
 .wk { display: flex; gap: 14px; align-items: center; cursor: pointer; padding: 12px 6px; border-radius: 14px; transition: background .15s; }
@@ -440,6 +444,11 @@ body {
    screen reader never receives. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .banner:hover { filter: brightness(1.1); }
+/* A banner with nowhere to tap is a caption: it keeps the colour it uses to
+   mean "this is worth reading" and gives up the affordances that promise a
+   destination. */
+.banner.inert { cursor: default; }
+.banner.inert:hover { filter: none; }
 /* The card is a CONTAINER, not a control: its action lives on .b-act so the
    dismiss and cycle chips can be siblings rather than buttons inside a
    button (which is why the cycle chip used to be aria-hidden — audit
@@ -1202,7 +1211,6 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .cal-day.race { border-color: #facc15; }
 /* Deliberately NOT raised: one extruded cell at a time, and a drag already
    has a ghost following the pointer. It only has to beat the press. */
-.cal-day.drop { border-color: var(--run); background: rgba(52, 211, 153, .22); box-shadow: none; }
 /* the week range's drop highlight: same green as the grid's was, but on a
    card, whose border the .today variant already proves overridable — and no
    box-shadow: none, that line existed to kill the grid well's press */
@@ -1222,6 +1230,14 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .wk-day .wd-num { font-size: 15px; font-weight: 800; letter-spacing: -.4px; }
 .wk-day .wd-rows { flex: 1; min-width: 0; }
 .wk-day .wd-none { color: var(--faint); font-size: 12.5px; font-weight: 600; padding: 14px 4px; }
+/* An empty day compacts to a single line. The date column keeps its own
+   width so the week still reads as a column of days, and min-height holds
+   the row at the 44px touch target rather than letting the text decide —
+   measured at 40px before it was added, and a rest day is where sessions get
+   dragged TO. */
+.wk-day.bare { padding: 10px 14px; min-height: 44px; box-sizing: border-box; align-items: center; }
+.wk-day.bare .wd-when { width: 48px; display: flex; align-items: baseline; gap: 6px; padding-top: 0; }
+.wk-day.bare .wd-none { padding: 0 4px; }
 /* The load, where the weekday would otherwise repeat the heading beside it. */
 .wk-day .wk .right { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
 .wk-day .wk .right b { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -.3px; }
@@ -1275,7 +1291,6 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .drag-handle { flex: none; width: 40px; height: 48px; -webkit-touch-callout: none; display: grid; place-items: center; color: var(--faint); cursor: grab; touch-action: none; border-radius: 8px; margin-right: 2px; }
 .drag-handle:active { cursor: grabbing; color: var(--ink); }
 .drag-ghost { position: fixed; z-index: 80; transform: translate(-50%, -130%); background: var(--card-2); border: 1.5px solid; border-radius: 999px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; color: var(--ink); pointer-events: none; box-shadow: 0 10px 26px rgba(0, 0, 0, .5); white-space: nowrap; }
-.cal-hint { font-size: 11.5px; color: var(--faint); text-align: center; margin-top: 10px; }
 /* The no-plan compass needle: a gentle settling sway, like a real compass
    orienting itself. fill-box centres the rotation on the needle's own bbox
    centre (12,12 in the icon grid), so it works at any rendered size. */

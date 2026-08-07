@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as T from '@/lib';
-import { effDate, monthGrid, addMonths, weekRange } from '@/lib/schedule.js';
+import { effDate, monthGrid, addMonths, weekRange, weekLabel } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 import { dayLedger, spanLedger, sessionLoad, weekLoad } from '@/lib/calendar-load.js';
 import { LoadSlot } from '@/components/LoadSlot.jsx';
+import { SegBar } from '@/components/SegBar.jsx';
 import { SeasonPanel } from '@/features/calendar/SeasonPanel.jsx';
 const D = T.DISCIPLINES;
 const RANGES = [['week', 'Week'], ['month', 'Month'], ['season', 'Season']];
@@ -102,16 +103,14 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   /* One anchor date, two step sizes (the screen doc: "three ranges of the
      same plan, one set of chrome"). Switching range keeps the athlete on the
      date they were looking at rather than resetting them, which is the whole
-     point of sharing the chrome. Season is not here yet: its panel is the one
-     part of the design doc that could not be read. */
+     point of sharing the chrome. Season steps nothing — it is the whole plan
+     at once — so its arrows are disabled rather than hidden, which says so.
+     (This comment used to end "Season is not here yet"; it arrived in the
+     ramp phase and the note stayed behind.) */
   const [range, setRange] = useState('month');
   const week = useMemo(() => weekRange(anchor), [anchor]);
   // "3 – 9 August", or "31 July – 6 August" when the week straddles two
-  const weekLabel = (() => {
-    const sameMonth = week[0].slice(0, 7) === week[6].slice(0, 7);
-    return T.fmtDate(week[0], sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'long' })
-      + ' – ' + T.fmtDate(week[6], { day: 'numeric', month: 'long' });
-  })();
+  const weekTitle = weekLabel(week);
   /* One pass over the week for every number on it: the rows and the header
      read the same ledger, so the total is always the sum of what is visible.
      Memoised on the same inputs the rows themselves render from. */
@@ -144,13 +143,24 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
     const pw = plan.weeks.find(w => w.start === week[0]);
     const grp = pw && T.phaseGroups(plan).find(g => pw.index >= g.start && pw.index < g.start + g.weeks);
     const where = grp ? 'Week ' + (pw.index - grp.start + 1) + ' of ' + grp.weeks + ' · ' : '';
+    // The tilde reaches the eye; `spoken` is the same fact for the ear, which
+    // gets no punctuation. The header is one string in one element, so the
+    // substitution happens where the string is built.
     const tilde = load.estimated ? '~' : '';
+    const said = load.estimated ? 'about ' : '';
     if (!load.doneMin && !load.doneTss) {
-      return where + T.fmtDuration(load.plannedMin) + ' · ' + load.plannedTss + ' TSS, estimated';
+      const only = where + T.fmtDuration(load.plannedMin) + ' · ' + load.plannedTss + ' TSS, estimated';
+      return { text: only, spoken: only };
     }
-    if (!anyPlanned) return where + T.fmtDuration(load.doneMin) + ' · ' + tilde + load.doneTss + ' TSS';
-    return where + T.fmtDuration(load.doneMin) + ' / ' + T.fmtDuration(load.plannedMin)
-      + ' · ' + tilde + load.doneTss + ' / ' + load.plannedTss + ' TSS';
+    if (!anyPlanned) {
+      return {
+        text: where + T.fmtDuration(load.doneMin) + ' · ' + tilde + load.doneTss + ' TSS',
+        spoken: where + T.fmtDuration(load.doneMin) + ' · ' + said + load.doneTss + ' TSS',
+      };
+    }
+    const both = mark => where + T.fmtDuration(load.doneMin) + ' / ' + T.fmtDuration(load.plannedMin)
+      + ' · ' + mark + load.doneTss + ' / ' + load.plannedTss + ' TSS';
+    return { text: both(tilde), spoken: both(said) };
   }, [week, byDate, plan, load]);
 
   const ym = s => s.slice(0, 7);
@@ -322,22 +332,18 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         <button className="cal-nav" type="button" disabled={!canPrev}
           aria-label={range === 'week' ? 'Previous week' : 'Previous month'}
           onClick={() => { cancelDrag(); setAnchor(step(-1)); setSelected(null); }}>‹</button>
-        <div className="ttl">{range === 'season' ? seasonLabel : range === 'week' ? weekLabel : grid.label}
+        <div className="ttl">{range === 'season' ? seasonLabel : range === 'week' ? weekTitle : grid.label}
           {range === 'month' && monthSub && <div className="sub">{monthSub}</div>}
           {range === 'season' && seasonSub && <div className="sub">{seasonSub}</div>}</div>
         <button className="cal-nav" type="button" disabled={!canNext}
           aria-label={range === 'week' ? 'Next week' : 'Next month'}
           onClick={() => { cancelDrag(); setAnchor(step(1)); setSelected(null); }}>›</button>
       </div>
-      <div className="segbar" role="tablist" aria-label="Calendar range">
-        {RANGES.map(([k, label]) => (
-          <button key={k} type="button" role="tab" aria-selected={range === k}
-            className={range === k ? 'on' : ''}
-            /* a second finger can switch range mid-drag, unmounting the
-               captured grip: the ghost must not outlive its surface */
-            onClick={() => { cancelDrag(); setRange(k); }}>{label}</button>
-        ))}
-      </div>
+      {/* a second finger can switch range mid-drag, unmounting the captured
+          grip: the ghost must not outlive its surface, so the guard rides the
+          change handler rather than the button */}
+      <SegBar label="Calendar range" items={RANGES} value={range}
+        onChange={k => { cancelDrag(); setRange(k); }} />
 
       {range === 'month' && <div className="card">
         <div className="cal-dow">{['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i}>{d}</span>)}</div>
@@ -351,10 +357,23 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                 className={'cal-day' + (!d ? ' blank' : '') + (d && !inPlan ? ' off' : '')
                   + (d === todayISO ? ' today' : '') + (d === selected ? ' sel' : '')
                   + (d && d === raceISO ? ' race' : '')}
-                aria-current={d === selected ? 'date' : undefined}
+                /* aria-current="date" means THIS IS TODAY, and it marked the
+                   selected cell instead — so every screen reader was told the
+                   date the athlete happened to tap was today's, and today's
+                   own cell said nothing (audit 2026-08-06). Selection is a
+                   state of this control, not a property of the calendar, so
+                   it goes in the label with the rest of what the cell shows.
+
+                   The label now carries what the DOTS carry: which sessions,
+                   which are done, whether the day is the race. A tick and a
+                   gold ring are facts, and a fact only the eye can reach is
+                   not in the accessible name at all. */
+                aria-current={d === todayISO ? 'date' : undefined}
                 aria-label={d ? T.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })
-                  + (ws.length ? ': ' + ws.map(w => w.title).join(' and ') : '')
-                  + (acts.length ? ': ' + acts.length + ' recorded ' + (acts.length === 1 ? 'session' : 'sessions') : '') : undefined}
+                  + (d === raceISO ? ', race day' : '')
+                  + (ws.length ? ': ' + ws.map(w => w.title + (log[w.id] ? ' done' : '')).join(' and ') : '')
+                  + (acts.length ? ': ' + acts.length + ' recorded ' + (acts.length === 1 ? 'session' : 'sessions') : '')
+                  + (d === selected ? ', selected' : '') : undefined}
                 {...(d ? tap(() => setSelected(d)) : {})}>
                 {d && <div className="cd-num">{Number(d.slice(8))}</div>}
                 {d && <div className="cd-dots">
@@ -384,13 +403,22 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         moves={moves} adjust={adjust} todayISO={todayISO} onOpenSettings={onOpenSettings} />}
 
       {range === 'week' && <>
-        {weekHeader && <div className="wk-head">{weekHeader}</div>}
+        {weekHeader && (weekHeader.text === weekHeader.spoken
+          ? <div className="wk-head">{weekHeader.text}</div>
+          : <div className="wk-head" aria-label={weekHeader.spoken}>{weekHeader.text}</div>)}
         {week.map(d => {
           const ws = (byDate[d] || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
           const hasActs = (actByDate[d] || []).length > 0;
           return (
+            /* `bare`: a day with nothing on it is ONE line, not a card the
+               height of a training day. Seven of those was most of a scroll
+               spent saying "nothing here" (Jon's call, 2026-08-06). It stays
+               a full .wk-day carrying its data-caldate and enough height to
+               be an easy target, because dropping a session onto a rest day
+               is the commonest drag on this screen. */
             <div key={d} data-caldate={d}
               className={'card wk-day' + (d < todayISO ? ' past' : '') + (d === todayISO ? ' today' : '')
+                + (!ws.length && !hasActs ? ' bare' : '')
                 + (drag && drag.over === d ? ' drop' : '')}>
               <div className="wd-when">
                 <div className="wd-dow">{T.fmtDate(d, { weekday: 'short' }).toUpperCase()}</div>
@@ -492,8 +520,16 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
            2026-08-06). Where there is no honest target, the row is simply
            absent — the same rule the season range already follows. */
         if (addTarget !== want || addTarget === raceISO) return null;
+        /* And it says WHICH day, on screen. The label already said it, so a
+           screen reader knew and the eye did not: in the week range nothing
+           is selected, so four cards sat under a week with no indication
+           which of its seven days they would file under (calendar audit,
+           2026-08-06). The month range's selection is visible in the grid,
+           but saying it costs nothing and keeps one voice across the two. */
         return <>
-          <div className="section-title">Add a session</div>
+          <div className="section-title">Add a session
+            <span className="st-when"> · {T.fmtDate(addTarget, { weekday: 'long', day: 'numeric', month: 'short' })}</span>
+          </div>
           <div className="cal-add">
             {['run', 'bike', 'swim', 'strength'].map(k => (
               <div key={k} className="card cal-add-card" style={{ background: D[k].grad }}
