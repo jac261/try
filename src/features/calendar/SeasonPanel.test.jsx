@@ -10,13 +10,21 @@ import { iso, addDays, startOfWeekMonday } from '@/lib/date.js';
    never regains the solid one. The rule lives in seasonShortfall (its own
    suite); these pin the wiring, the copy discipline and the tap. */
 
-const TODAY = iso(new Date());
-const mon = iso(startOfWeekMonday(new Date()));
+/* A FIXED today, not the real clock. These fixtures used `new Date()`, which
+   made the shortfall cases depend on how many days lay between the run and
+   the next Monday: the first projected sample is the one nearest the measured
+   line, so on some weekdays it landed inside SHORTFALL_TOL and the banner
+   went quiet. The suite passed on a Thursday and failed on the Friday, which
+   is a test measuring the calendar rather than the code. A Wednesday is kept
+   because it is mid-week, the position that exercises the fractional today
+   index. */
+const TODAY = '2026-05-13';
+const mon = iso(startOfWeekMonday(TODAY));
 const profile = {
   name: 'T', raceType: 'olympic', fitness: 'intermediate',
   fivekSec: 1500, css100Sec: 110, ftp: 250, weightKg: 70,
   trainingDays: [0, 1, 3, 5, 6], longDay: 5, daysPerWeek: 5,
-  startDate: iso(addDays(new Date(), -8 * 7)), raceDate: iso(addDays(new Date(), 8 * 7)),
+  startDate: iso(addDays(TODAY, -8 * 7)), raceDate: iso(addDays(TODAY, 8 * 7)),
 };
 const recs = (ctl, atl, from, end) => {
   const out = [];
