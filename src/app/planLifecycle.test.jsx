@@ -255,3 +255,101 @@ describe('rollMaintenance anchors at today and stamps the true end', () => {
     app.done();
   }, 20000);
 });
+
+describe('postRace dies unless the caller says otherwise', () => {
+  /* The second reproduced HIGH: rollMaintenance(true) merged postRace into
+     the durable profile and nothing ever wrote it false again, so every
+     later race build opened with a phantom recovery week. */
+
+  const postRaceMaint = () => {
+    const p = generatePlan(profile({
+      raceType: 'maintenance', horizonWeeks: 12, postRace: true,
+      startDate: iso(addDays(mon, -14)), raceDate: iso(addDays(mon, 69)),
+    }));
+    expect(p.weeks[0].isRecovery).toBe(true);   // fixture is honest
+    return p;
+  };
+
+  it('an editor-built race plan after a post-race roll opens at full load', async () => {
+    const storage = storageForUser('pr-clear');
+    storage.save('plan', postRaceMaint());
+    recordFetch(serverHasNothing);
+    const app = await mountApp(storage);
+
+    await act(async () => { app.el.querySelector('.avatar-btn').click(); });
+    await act(async () => { btn(app.el, 'Edit race').click(); });
+    const olympic = [...app.el.querySelectorAll('.opt')].find(o => o.textContent.includes('Olympic'));
+    await act(async () => { olympic.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    const dateInput = app.el.querySelector('input[type="date"]');
+    await act(async () => {
+      dateInput.value = iso(addDays(mon, 12 * 7));
+      dateInput.dispatchEvent(new Event('input', { bubbles: true }));
+      dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await act(async () => { btn(app.el, 'Save & rebuild plan').click(); });
+    await acrossSplash();
+
+    const np = storage.load('plan', null);
+    expect(np.race).toBe('olympic');
+    expect(np.profile.postRace).toBe(false);          // the flag died with the block
+    expect(np.weeks[0].isRecovery).toBeFalsy();       // no phantom recovery week
+    app.done();
+  }, 20000);
+
+  it('rollMaintenance(true) still gets its recovery week', async () => {
+    /* The strip must not overreach: the caller that ASSERTS postRace keeps
+       it. Driven through the tracker CTA with the stamped flag, which also
+       pins the third entry point — this path used to hard-code false and
+       ship the heavier first week the other two were fixed for. */
+    const ended = generatePlan(profile({ raceDate: iso(addDays(mon, -5)) }));
+    const tracker = buildTrackerPlan(ended, todayISO);
+    const storage = storageForUser('pr-keep');
+    storage.save('plan', tracker);
+    recordFetch(serverHasNothing);
+    const app = await mountApp(storage);
+
+    // enterTracker stamped the flag when the plan ended; buildTrackerPlan in
+    // the fixture cannot, so assert the App-level stamp separately below via
+    // the CTA behaviour: the fixture pre-stamps what enterTracker would.
+    expect(storage.load('plan', null).profile.postRace).toBeFalsy();
+    app.done();
+
+    // Now the stamped shape: the tracker profile carries postRace true.
+    const tracker2 = { ...tracker, profile: { ...tracker.profile, postRace: true } };
+    const storage2 = storageForUser('pr-keep2');
+    storage2.save('plan', tracker2);
+    recordFetch(serverHasNothing);
+    const app2 = await mountApp(storage2);
+    await act(async () => { tab(app2.el, 'Plan').click(); });
+    await act(async () => { btn(app2.el, 'Start a maintenance block').click(); });
+    await acrossSplash();
+
+    const np = storage2.load('plan', null);
+    expect(np.race).toBe('maintenance');
+    expect(np.profile.postRace).toBe(true);
+    expect(np.weeks[0].isRecovery).toBe(true);        // the recovery week survived the detour
+    app2.done();
+  }, 20000);
+
+  it('enterTracker stamps whether the plan ended past its race', async () => {
+    /* The stamp itself: end a LIVE plan whose race already passed and the
+       sentinel must carry postRace true; end one mid-build and it must not. */
+    const past = generatePlan(profile({ raceDate: iso(addDays(mon, -5)) }));
+    const storage = storageForUser('pr-stamp');
+    storage.save('plan', past);
+    recordFetch(serverHasNothing);
+    const app = await mountApp(storage);
+
+    // End the plan via the Today planEdge / settings path: endPlanToTracker
+    // confirm() is stubbed true in beforeEach.
+    await act(async () => { app.el.querySelector('.avatar-btn').click(); });
+    const endBtn = btn(app.el, 'End plan');
+    await act(async () => { endBtn.click(); });
+    await acrossSplash();
+
+    const np = storage.load('plan', null);
+    expect(np.race).toBe('tracker');
+    expect(np.profile.postRace).toBe(true);
+    app.done();
+  }, 20000);
+});

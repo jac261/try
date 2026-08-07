@@ -917,6 +917,16 @@ export function App({ storage, getToken, user }) {
   // 2026-07-13 gauntlet catch on this feature's first cut).
   const enterTracker = () => {
     const np = T.buildTrackerPlan(plan, new Date().toISOString());
+    /* Whether this plan ended past its race day, stamped NOW because the
+       race date itself is about to be nulled and the answer is otherwise
+       unrecoverable. The tracker card's "Start a maintenance block" reads
+       it, so an athlete who raced, ended to tracker, and then rolled a
+       block still gets the recovery week the direct post-race card bakes
+       in — this path used to hard-code postRace false and ship the ~25%
+       heavier first week the other two entry points were fixed for. */
+    np.profile = { ...np.profile,
+      postRace: !(T.RACES[plan.race] || {}).noRace && !!plan.profile.raceDate
+        && plan.profile.raceDate < T.iso(new Date()) };
     // Remember WHICH server plan this decision ends: if the DELETE below never
     // lands (offline), the next hydrate finishes the job — but only when the
     // server still holds this exact id. Any other id is someone's real plan.
@@ -1582,6 +1592,13 @@ export function App({ storage, getToken, user }) {
     const todayISO = T.iso(new Date());
     const liveRace = !fromTracker && !(T.RACES[plan.race] || {}).noRace
       && plan.profile.raceDate && plan.profile.raceDate >= todayISO;
+    /* postRace is a claim about THIS generation ("week 1 is the recovery
+       week after a race just run"), not a durable athlete property — but it
+       was merged into the profile by the post-race roll and never written
+       false again, so every later editor-built race plan generated week 1
+       as a deloaded recovery week, forever (audit 2026-08-07, reproduced:
+       220min vs 290min). It dies here unless the caller re-asserts it. */
+    if (!(fields && 'postRace' in fields)) profile.postRace = false;
     if (!liveRace && !(fields && fields.startDate)) profile.startDate = todayISO;
     const np = T.generatePlan(profile,
       liveRace && !(fields && fields.startDate) ? { grid: planGrid(plan) } : undefined);
@@ -1778,7 +1795,7 @@ export function App({ storage, getToken, user }) {
       </div>}
       {view === 'today' && <TodayView plan={plan} log={log} moves={moves} missedReasons={missedReasons} open={setDetail} onTune={applyTune} wellness={recs} onFeel={answerFeel} onEditWellness={() => setEditWellness(true)} easedOf={easedOf} onEaseToday={easeToday} onRestoreToday={restoreToday} weekly={weekly} onWeekly={applyWeekly} spotted={spotted} onLogSpotted={logSpotted} onAddWorkout={() => setAddOpen({})} eftp={eftp} onEftp={onEftp} retest={retest} ftpRetest={ftpRetest} onFtpRetest={() => setEditFitness(true)} startShortfall={startShortfall} onRetest={() => setRetestOpen(true)} cssFail={cssFail} onFixCss={() => setEditFitness(true)} runFail={runFail} onFixRun={() => setEditFitness(true)} onToggleWorkout={toggle} planEdge={planEdge} onSupport={openSupport} activities={activities} displayActivities={displayActivities} onOpenRecording={openRecording} onEditPlan={() => setEditPlan(true)} onEnterTracker={endPlanToTracker} offerTracker={plan.race === 'maintenance' && rawDaysToRace <= 14} adjust={adjust} adjustLog={adjustLog} coachLog={coachLog} blockReviewed={blockReviewed} onBlockReviewed={markBlockReviewed} onFocus={setBlockFocus} storage={storage} onDecision={journalDecision} fuelLog={fuelLog} />}
       {view === 'calendar' && <CalendarView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onMove={moveWorkout} activities={displayActivities} onOpenRecording={openRecording} onAddWorkout={(disc, dateISO) => setAddOpen({ disc, dateISO })} wellness={recs} adjust={adjust} onOpenSettings={openSettings} />}
-      {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(false)} onFocus={setBlockFocus} />}
+      {view === 'plan' && <PlanView plan={plan} log={log} moves={moves} open={setDetail} easedOf={easedOf} onToggleWorkout={toggle} onSupport={openSupport} onEditPlan={() => setEditPlan(true)} onStartMaintenance={() => rollMaintenance(!!plan.profile.postRace)} onFocus={setBlockFocus} />}
       {view === 'progress' && <ProgressView plan={plan} log={log} moves={moves} retest={retest} ftpRetest={ftpRetest} activities={displayActivities} coach={coachNow} durability={durability} fuelLog={fuelLog} positionLog={positionLog} powerCurve={T.powerCurve(powerCurveRaw)} previousPowerCurve={prevPowerCurve} shapeLabelLog={shapeLabelLog} wellness={recs} runLoad={runLoad} recovery={recovery} onSupport={openSupport} onWhatIf={tracker ? null : () => setWhatIf({})} decisionLog={decisionLog} onOpenSettings={openSettings} />}
       {view === 'settings' && <SettingsView plan={plan} focus={settingsFocus} onFocusDone={() => setSettingsFocus(null)}
         onEditTechnique={!tracker && !((T.RACES[plan.race] || {}).solo && (T.RACES[plan.race] || {}).solo !== 'swim')
