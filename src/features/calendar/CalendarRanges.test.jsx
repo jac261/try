@@ -11,7 +11,7 @@ import { iso, addDays, startOfWeekMonday } from '@/lib/date.js';
 import { weekRange } from '@/lib/schedule.js';
 
 /* The calendar's ranges (design: "three ranges of the same plan, one set of
-   chrome"). Season is not here — its panel could not be read.
+   chrome"). Season's own panel has its suite in SeasonPanel.test.jsx.
  *
  * The two shapes worth naming: TRACKER, where plan.weeks is empty and a
  * plan-only week range would answer seven days of nothing with seven rest

@@ -9,6 +9,7 @@ import { LoadSlot } from '@/components/LoadSlot.jsx';
 import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 import { generatePlan } from '@/lib/plan.js';
 import { iso, addDays, startOfWeekMonday } from '@/lib/date.js';
+import { weekRange, weekLabel } from '@/lib/schedule.js';
 import { readFileSync } from 'node:fs';
 
 /* One house rule, four places it was broken: a visible ~ means "modelled,
@@ -281,5 +282,82 @@ describe('the week says what it will do before you tap', () => {
     expect(heading.textContent).toContain(weekday);    // the eye and the ear agree
     expect(heading.textContent).toContain(dayNum);
     await done();
+  });
+});
+
+describe('the strays', () => {
+  it('the shortfall banner is inert when there is nowhere to go', async () => {
+    /* .banner styles itself as something you press. Without the settings
+       callback the copy already dropped its "update your level" sentence, but
+       the affordances stayed: a pointer cursar and a hover brighten promising
+       a destination that does not exist. */
+    /* The shortfall fixture is SeasonPanel.test.jsx's, fixed date and all:
+       whether the banner fires at all depends on how far the first projected
+       Monday falls below the measured line, which the real clock moves. */
+    const { SeasonPanel } = await import('@/features/calendar/SeasonPanel.jsx');
+    const day = '2026-05-13';
+    const plan = generatePlan(profile({
+      startDate: iso(addDays(day, -8 * 7)), raceDate: iso(addDays(day, 8 * 7)),
+    }));
+    const wellness = [];
+    for (let d = plan.weeks[0].start; d <= day; d = iso(addDays(d, 1))) {
+      wellness.push({ date: d, ctl: 80, atl: 75, tsb: 5 });
+    }
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const root = createRoot(el);
+    await act(async () => {
+      root.render(<SeasonPanel plan={plan} wellness={wellness} log={{}} moves={{}}
+        adjust={{}} todayISO={day} />);
+    });
+    const banner = el.querySelector('.season-ramp .banner');
+    expect(banner.className).toContain('inert');
+    expect(banner.getAttribute('role')).toBe(null);      // not a button either
+    expect(banner.textContent).not.toContain('→');
+
+    /* And with somewhere to go: pressable, and the arrow is decoration for
+       the sentence it ends — a screen reader reading "right arrow" aloud
+       after "the plan re-targets" is noise, so it is hidden. Asserted on the
+       ACTIVE banner because the inert one has no arrow to hide, which is how
+       the first version of this test passed while the arrow was still
+       spoken. */
+    await act(async () => {
+      root.render(<SeasonPanel plan={plan} wellness={wellness} log={{}} moves={{}}
+        adjust={{}} todayISO={day} onOpenSettings={() => {}} />);
+    });
+    const live = el.querySelector('.season-ramp .banner');
+    expect(live.className).not.toContain('inert');
+    expect(live.getAttribute('role')).toBe('button');
+    const arrow = [...live.querySelectorAll('[aria-hidden="true"]')]
+      .find(n => n.textContent.includes('→'));
+    expect(arrow).not.toBe(undefined);
+    await act(async () => root.unmount());
+    el.remove();
+  });
+
+  it('a week across New Year says which year each end is', () => {
+    /* "29 December – 4 January" is two years wearing no label, on the one
+       week of the year where that matters most. Testable at all because the
+       label moved out of the component: reaching this week through the UI
+       means clicking the arrows back through five months. */
+    const straddle = weekLabel(weekRange('2026-12-30'));
+    expect(straddle).toContain('2026');
+    expect(straddle).toContain('2027');
+    // and every other week is left alone: fifty-one years stamped for one
+    const ordinary = weekLabel(weekRange('2026-08-05'));
+    expect(ordinary).not.toMatch(/20\d\d/);
+    // the month is still dropped from the first date within one month
+    // (the order of day and month is the locale's business, not ours)
+    expect(ordinary).toMatch(/^\d+ – /);
+    const crossMonth = weekLabel(weekRange('2026-07-30'));
+    expect(crossMonth).toMatch(/July.*August/);
+  });
+
+  it('the calendar carries no CSS nobody renders', () => {
+    // .cal-day.drop and .cal-hint outlived the markup that used them: the
+    // month grid stopped being a drop range, and the hint line was removed.
+    const css = readFileSync('src/styles.css', 'utf8');
+    expect(css).not.toContain('.cal-day.drop');
+    expect(css).not.toContain('.cal-hint');
   });
 });

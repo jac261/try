@@ -101,13 +101,21 @@ export function SeasonPanel({ plan, wellness, log, moves, adjust, todayISO, onOp
               parameters stay out of the copy: the two lines ARE the
               explanation. */}
           {shortfall && (
-            <div className="banner ramp" style={{ margin: '12px 0 0' }}
+            /* `inert` when there is nowhere to go: .banner styles itself as
+               something you press (a pointer cursor, a hover brighten), and
+               without the callback it is a caption. The copy already knew —
+               it drops the "update your level" sentence — but the styling
+               went on inviting a tap that does nothing (audit 2026-08-06).
+               The arrow is decoration for that sentence and is hidden from
+               assistive tech, which reads "→" as nothing useful. */
+            <div className={'banner ramp' + (onOpenSettings ? '' : ' inert')} style={{ margin: '12px 0 0' }}
               {...(onOpenSettings ? tap(() => onOpenSettings('profile')) : {})}>
-              <div className="bi"><Icon name="trend" size={20} /></div>
+              <div className="bi" aria-hidden="true"><Icon name="trend" size={20} /></div>
               <div className="btx">
                 <div className="bt">Planned load sits below your fitness</div>
                 <div className="bs">The dashed line never reaches where the solid one ends.
-                  {onOpenSettings ? ' Update your level or training days and the plan re-targets. →' : ''}</div>
+                  {onOpenSettings ? <> Update your level or training days and the plan re-targets.
+                    <span aria-hidden="true"> →</span></> : ''}</div>
               </div>
             </div>
           )}

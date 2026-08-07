@@ -444,6 +444,11 @@ body {
    screen reader never receives. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .banner:hover { filter: brightness(1.1); }
+/* A banner with nowhere to tap is a caption: it keeps the colour it uses to
+   mean "this is worth reading" and gives up the affordances that promise a
+   destination. */
+.banner.inert { cursor: default; }
+.banner.inert:hover { filter: none; }
 /* The card is a CONTAINER, not a control: its action lives on .b-act so the
    dismiss and cycle chips can be siblings rather than buttons inside a
    button (which is why the cycle chip used to be aria-hidden — audit
@@ -1206,7 +1211,6 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .cal-day.race { border-color: #facc15; }
 /* Deliberately NOT raised: one extruded cell at a time, and a drag already
    has a ghost following the pointer. It only has to beat the press. */
-.cal-day.drop { border-color: var(--run); background: rgba(52, 211, 153, .22); box-shadow: none; }
 /* the week range's drop highlight: same green as the grid's was, but on a
    card, whose border the .today variant already proves overridable — and no
    box-shadow: none, that line existed to kill the grid well's press */
@@ -1286,7 +1290,6 @@ input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline
 .drag-handle { flex: none; width: 40px; height: 48px; -webkit-touch-callout: none; display: grid; place-items: center; color: var(--faint); cursor: grab; touch-action: none; border-radius: 8px; margin-right: 2px; }
 .drag-handle:active { cursor: grabbing; color: var(--ink); }
 .drag-ghost { position: fixed; z-index: 80; transform: translate(-50%, -130%); background: var(--card-2); border: 1.5px solid; border-radius: 999px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; color: var(--ink); pointer-events: none; box-shadow: 0 10px 26px rgba(0, 0, 0, .5); white-space: nowrap; }
-.cal-hint { font-size: 11.5px; color: var(--faint); text-align: center; margin-top: 10px; }
 /* The no-plan compass needle: a gentle settling sway, like a real compass
    orienting itself. fill-box centres the rotation on the needle's own bbox
    centre (12,12 in the icon grid), so it works at any rendered size. */

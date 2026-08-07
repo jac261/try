@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as T from '@/lib';
-import { effDate, monthGrid, addMonths, weekRange } from '@/lib/schedule.js';
+import { effDate, monthGrid, addMonths, weekRange, weekLabel } from '@/lib/schedule.js';
 import { tap } from '@/utils/a11y.js';
 import { Icon } from '@/components/Icon.jsx';
 import { WorkoutRow } from '@/components/WorkoutRow.jsx';
@@ -103,16 +103,14 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
   /* One anchor date, two step sizes (the screen doc: "three ranges of the
      same plan, one set of chrome"). Switching range keeps the athlete on the
      date they were looking at rather than resetting them, which is the whole
-     point of sharing the chrome. Season is not here yet: its panel is the one
-     part of the design doc that could not be read. */
+     point of sharing the chrome. Season steps nothing — it is the whole plan
+     at once — so its arrows are disabled rather than hidden, which says so.
+     (This comment used to end "Season is not here yet"; it arrived in the
+     ramp phase and the note stayed behind.) */
   const [range, setRange] = useState('month');
   const week = useMemo(() => weekRange(anchor), [anchor]);
   // "3 – 9 August", or "31 July – 6 August" when the week straddles two
-  const weekLabel = (() => {
-    const sameMonth = week[0].slice(0, 7) === week[6].slice(0, 7);
-    return T.fmtDate(week[0], sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'long' })
-      + ' – ' + T.fmtDate(week[6], { day: 'numeric', month: 'long' });
-  })();
+  const weekTitle = weekLabel(week);
   /* One pass over the week for every number on it: the rows and the header
      read the same ledger, so the total is always the sum of what is visible.
      Memoised on the same inputs the rows themselves render from. */
@@ -334,7 +332,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
         <button className="cal-nav" type="button" disabled={!canPrev}
           aria-label={range === 'week' ? 'Previous week' : 'Previous month'}
           onClick={() => { cancelDrag(); setAnchor(step(-1)); setSelected(null); }}>‹</button>
-        <div className="ttl">{range === 'season' ? seasonLabel : range === 'week' ? weekLabel : grid.label}
+        <div className="ttl">{range === 'season' ? seasonLabel : range === 'week' ? weekTitle : grid.label}
           {range === 'month' && monthSub && <div className="sub">{monthSub}</div>}
           {range === 'season' && seasonSub && <div className="sub">{seasonSub}</div>}</div>
         <button className="cal-nav" type="button" disabled={!canNext}
