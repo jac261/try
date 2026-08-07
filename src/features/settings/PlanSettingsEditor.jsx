@@ -12,12 +12,21 @@ export function PlanSettingsEditor({ profile, onClose, onSave }) {
     : (DEFAULT_DAYS[Math.max(3, Math.min(7, profile.daysPerWeek))] || DEFAULT_DAYS[5]);
   const initLong = (profile.longDay !== undefined && initDays.indexOf(profile.longDay) >= 0)
     ? profile.longDay : (initDays.indexOf(5) >= 0 ? 5 : initDays[initDays.length - 1]);
+  /* A maintenance block edits like the fresh choice it is. Its raceType
+     appears in NEITHER pill list (both filter noRace out), so initialising
+     f.raceType with it left nothing selected while keeping Save enabled —
+     and its raceDate is the roll's synthetic horizon Sunday, which the
+     extend card routes athletes here to replace at the exact moment it is
+     at most 14 days away (audit 2026-08-07). Both reset to the tracker
+     defaults: pick a race, and the date starts 12 weeks out. */
+  const noRace = !!(T.RACES[profile.raceType] || {}).noRace;
   const [f, setF] = useState({
-    raceType: profile.raceType,
+    raceType: noRace ? null : profile.raceType,
     // Tracker mode nulls raceDate; default the picker to 12 weeks out rather
     // than the epoch (T.iso(null) is 1970-01-01, which would build a broken
-    // past-dated plan if saved unchanged).
-    raceDate: profile.raceDate ? T.iso(profile.raceDate) : T.iso(T.addDays(new Date(), 12 * 7)),
+    // past-dated plan if saved unchanged). A noRace plan's synthetic horizon
+    // date defaults the same way.
+    raceDate: profile.raceDate && !noRace ? T.iso(profile.raceDate) : T.iso(T.addDays(new Date(), 12 * 7)),
     trainingDays: initDays,
     longDay: initLong,
   });
@@ -40,9 +49,23 @@ export function PlanSettingsEditor({ profile, onClose, onSave }) {
   // engine drops it onto its day with a mini-taper around it; entries too
   // close to the goal race are ignored at generation, so warn here instead.
   const [tune, setTune] = useState(() => (profile.bRaces && profile.bRaces[0]) || null);
+  const todayISO = T.iso(new Date());
   const tuneTooClose = tune && tune.date && f.raceDate
     && T.daysBetween(tune.date, f.raceDate) < 10 && T.daysBetween(tune.date, f.raceDate) >= 0;
-  const todayISO = T.iso(new Date());
+  /* The other side of the same boundary: a tune-up typed AFTER the goal race
+     (the input max constrains the picker, not the keyboard, and moving the
+     race date earlier never re-validates). It used to save silently and ride
+     into generation (audit 2026-08-07). */
+  const tuneAfterRace = tune && tune.date && f.raceDate && T.daysBetween(tune.date, f.raceDate) < 0;
+  /* Save refuses what generatePlan cannot build. An empty date produced a
+     zero-week NaN plan without throwing; a past one (reachable because the
+     prefill has no past guard and min= constrains only the picker) rebuilt a
+     dead plan while wholesale-clearing real overlay data. And a tune-up with
+     a kind but no date was silently discarded — the sheet closed as if it
+     saved. Each refusal says why, below the button. */
+  const dateInvalid = !f.raceDate || f.raceDate < todayISO;
+  const tuneIncomplete = !!tune && !tune.date;
+  const saveBlocked = !f.raceType || dateInvalid || tuneIncomplete || !!tuneAfterRace;
   const sheetRef = useSheetFocus(onClose);
   return (
     <div className="scrim" onClick={onClose}>
@@ -50,18 +73,25 @@ export function PlanSettingsEditor({ profile, onClose, onSave }) {
         aria-label="Edit plan" onClick={e => e.stopPropagation()}>
         <div className="grab" />
         <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 800 }}>Edit plan</h2>
-        <p className="lead">Change your race or schedule and the plan rebuilds around it. Completed sessions and reschedules are kept for the days that still exist; your fitness, paces and progress carry over.</p>
+        {/* Honest about all three discards: reshapePlan clears reschedules,
+            eases and coach adjustments wholesale (the id-reuse hazard its
+            comment documents), so this lead must not promise they survive —
+            it did, and the athlete read it seconds before losing them
+            (audit 2026-08-07). */}
+        <p className="lead">Change your race or schedule and the plan rebuilds around it. Completed sessions are kept for the days that still exist; your fitness and paces carry over. Reschedules and coach adjustments reset with the new structure.</p>
         <label className="field"><span className="lab">Race</span></label>
         <div className="lab muted" style={{ fontSize: 12, margin: '2px 0 6px' }}>Triathlon</div>
         <div className="choice">
           {Object.values(T.RACES).filter(r => !r.noRace && !r.solo).map(r => (
-            <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} {...tap(() => pickRace(r.key))}>{r.name}<small>{r.swim}k · {r.bike}k · {r.run}k</small></div>
+            <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} aria-pressed={f.raceType === r.key}
+              {...tap(() => pickRace(r.key))}>{r.name}<small>{r.swim}k · {r.bike}k · {r.run}k</small></div>
           ))}
         </div>
         <div className="lab muted" style={{ fontSize: 12, margin: '10px 0 6px' }}>Running</div>
         <div className="choice">
           {Object.values(T.RACES).filter(r => r.solo).map(r => (
-            <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} {...tap(() => pickRace(r.key))}>{r.name}<small>{r.run} km</small></div>
+            <div key={r.key} className={'opt' + (f.raceType === r.key ? ' on' : '')} aria-pressed={f.raceType === r.key}
+              {...tap(() => pickRace(r.key))}>{r.name}<small>{r.run} km</small></div>
           ))}
         </div>
         {selSolo && !curSolo && <p className="lead" style={{ fontSize: 13, margin: '8px 2px 0' }}>
@@ -78,7 +108,8 @@ export function PlanSettingsEditor({ profile, onClose, onSave }) {
         {tune ? <>
           <div className="choice">
             {tuneKinds.map(r => (
-              <div key={r.key} className={'opt' + (tune.kind === r.key ? ' on' : '')} {...tap(() => setTune(t => ({ ...t, kind: r.key })))}>{r.name}</div>
+              <div key={r.key} className={'opt' + (tune.kind === r.key ? ' on' : '')} aria-pressed={tune.kind === r.key}
+                {...tap(() => setTune(t => ({ ...t, kind: r.key })))}>{r.name}</div>
             ))}
           </div>
           <div style={{ height: 10 }} />
@@ -98,8 +129,14 @@ export function PlanSettingsEditor({ profile, onClose, onSave }) {
             undefined race type crashes (gauntlet critical 2026-07-17). The
             pills above select one; until then the build stays disabled. */}
         {!f.raceType && <p className="lead" style={{ margin: '0 2px 8px' }}>Pick a race distance above to build the plan.</p>}
-        <button className="btn primary" disabled={!f.raceType}
-          onClick={() => f.raceType && onSave({ raceType: f.raceType, raceDate: f.raceDate, daysPerWeek: f.trainingDays.length, trainingDays: f.trainingDays, longDay: f.longDay,
+        {f.raceType && dateInvalid && <p className="lead" style={{ margin: '0 2px 8px' }}>
+          {f.raceDate ? 'That race date has already passed — pick a day ahead.' : 'Pick a race date to build the plan.'}</p>}
+        {f.raceType && !dateInvalid && tuneIncomplete && <p className="lead" style={{ margin: '0 2px 8px' }}>
+          Pick a date for the tune-up race, or remove it.</p>}
+        {f.raceType && !dateInvalid && tuneAfterRace && <p className="lead" style={{ margin: '0 2px 8px' }}>
+          The tune-up is after your goal race — move it earlier, or remove it.</p>}
+        <button className="btn primary" disabled={saveBlocked}
+          onClick={() => !saveBlocked && onSave({ raceType: f.raceType, raceDate: f.raceDate, daysPerWeek: f.trainingDays.length, trainingDays: f.trainingDays, longDay: f.longDay,
             // a solo race cannot exclude its only discipline, and a stale
             // exclusion would turn the NEXT maintenance block run-free; the
             // declared focus dies with the sport switch for the same reason
