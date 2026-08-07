@@ -8,6 +8,7 @@ import { RecordedActivities } from '@/components/RecordedActivities.jsx';
 import { dayLedger, spanLedger, sessionLoad, weekLoad } from '@/lib/calendar-load.js';
 import { LoadSlot } from '@/components/LoadSlot.jsx';
 import { SegBar } from '@/components/SegBar.jsx';
+import { isDone } from '@/lib/api.js';
 import { SeasonPanel } from '@/features/calendar/SeasonPanel.jsx';
 const D = T.DISCIPLINES;
 const RANGES = [['week', 'Week'], ['month', 'Month'], ['season', 'Season']];
@@ -371,13 +372,13 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                 aria-current={d === todayISO ? 'date' : undefined}
                 aria-label={d ? T.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })
                   + (d === raceISO ? ', race day' : '')
-                  + (ws.length ? ': ' + ws.map(w => w.title + (log[w.id] ? ' done' : '')).join(' and ') : '')
+                  + (ws.length ? ': ' + ws.map(w => w.title + (isDone(log[w.id]) ? ' done' : '')).join(' and ') : '')
                   + (acts.length ? ': ' + acts.length + ' recorded ' + (acts.length === 1 ? 'session' : 'sessions') : '')
                   + (d === selected ? ', selected' : '') : undefined}
                 {...(d ? tap(() => setSelected(d)) : {})}>
                 {d && <div className="cd-num">{Number(d.slice(8))}</div>}
                 {d && <div className="cd-dots">
-                  {ws.slice(0, 3).map(w => <i key={w.id} className={log[w.id] ? 'done' : ''}
+                  {ws.slice(0, 3).map(w => <i key={w.id} className={isDone(log[w.id]) ? 'done' : ''}
                     style={{ background: w.race || w.bRace ? '#facc15' : D[w.discipline].color }} />)}
                   {/* recorded sessions are inherently done, so they wear the tick */}
                   {acts.slice(0, Math.max(0, 3 - ws.length)).map(a => <i key={'a' + a.id} className="done"
@@ -437,7 +438,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
                         onPointerUp={endDrag} onPointerCancel={cancelDrag}>
                         <Icon name="grip" size={17} /></div>}
                       <WorkoutRow w={row && row.recording ? recordedShape(shown, row.recording) : shown}
-                        done={!!log[w.id]} eff={effDate(w, moves)}
+                        done={isDone(log[w.id])} eff={effDate(w, moves)}
                         moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)}
                         /* The A race's durationMin is a placeholder — WorkoutRow
                            suppresses its duration for the same reason — so a load
@@ -476,7 +477,7 @@ export function CalendarView({ plan, log, moves, open, easedOf, onToggleWorkout,
               const row = (gridSpan[selected] ? gridSpan[selected].rows : []).find(x => x.w.id === w.id);
               const shown = easedOf(w);
               const priced = sessionLoad({ shown, entry: log[w.id], recording: row && row.recording });
-              return <WorkoutRow key={w.id} w={shown} done={!!log[w.id]} eff={effDate(w, moves)}
+              return <WorkoutRow key={w.id} w={shown} done={isDone(log[w.id])} eff={effDate(w, moves)}
                 moved={effDate(w, moves) !== w.date} onClick={() => open(w)} onToggle={() => onToggleWorkout(w.id)}
                 right={w.race ? null : <LoadSlot tss={priced.tss} measured={priced.measured} />} />;
             })}

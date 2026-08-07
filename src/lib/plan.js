@@ -2008,14 +2008,21 @@ export const upgradePlanSegments = function (plan) {
 // shares one boundary definition (design panel 2026-07-21: two independent
 // reimplementations had already begun to drift).
 export function weekPhaseLabel(plan, week) {
-  // The one place the terminal post-race week earns its 'Recovery' label
-  // (the backend phase catalog has no 'Recovery'; the raw phase stays
-  // 'Maintain'). Mid-plan recovery weeks keep their real phase: relabelling
-  // them would shatter contiguous blocks.
+  // The one place a recovery week earns its 'Recovery' label (the backend
+  // phase catalog has no 'Recovery'; the raw phase stays 'Maintain').
+  // Exactly two weeks qualify: the terminal post-race week of a race plan,
+  // and the BAKED-IN week 0 of a post-race maintenance block — the other
+  // place isRecovery exists at a block boundary. Mid-plan recovery weeks
+  // keep their real phase: relabelling them would shatter contiguous
+  // blocks. Before the second case, a rolled block's overview said
+  // 'Maintain · 12 weeks' while its week-1 card wore a Recovery tag beside
+  // a Maintain pill (audit 2026-08-07, SW-4).
   if (!week || !plan || !Array.isArray(plan.weeks) || !plan.weeks.length) return week ? week.phase : null;
   const race = RACES[plan.race] || {};
-  const hasRecoveryWeek = !race.noRace && plan.weeks[plan.weeks.length - 1].isRecovery;
-  return hasRecoveryWeek && week.index === plan.weeks.length - 1 ? 'Recovery' : week.phase;
+  if (!race.noRace && plan.weeks[plan.weeks.length - 1].isRecovery
+    && week.index === plan.weeks.length - 1) return 'Recovery';
+  if (race.noRace && plan.weeks[0].isRecovery && week.index === 0) return 'Recovery';
+  return week.phase;
 }
 
 export function phaseGroups(plan) {

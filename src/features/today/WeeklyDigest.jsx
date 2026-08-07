@@ -147,7 +147,7 @@ export function WeeklyDigest({ embedded, plan, log, moves, adjust, adjustLog, we
               {Object.entries(T.FOCUS_OPTIONS)
                 .filter(([k]) => k === 'general' || !(plan.profile && plan.profile.excludedDiscipline === k))
                 .map(([k, lab]) => <button key={k} className="feelbtn" style={{ flex: '1 1 45%' }}
-                  onClick={() => { onFocus(k === 'general' ? null : k); onBlockReviewed(weekMonday); }}>{k === 'general' ? 'Everything evenly' : 'Focus on ' + lab}</button>)}
+                  onClick={() => { onFocus(k); onBlockReviewed(weekMonday); }}>{k === 'general' ? 'Everything evenly' : 'Focus on ' + lab}</button>)}
             </div>}
           </div>
         )}

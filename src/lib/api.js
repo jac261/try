@@ -381,10 +381,19 @@ const toLogEntry = l => ({
   techniqueCue: l.techniqueCue || undefined,
 });
 // The server can return a log row for workouts that were never completed
-// (empty stubs from other write paths). An entry's EXISTENCE means "done"
-// throughout the app, so only meaningful rows may become entries — phantom
-// stubs once marked an entire upcoming week as done and emptied the watch push.
+// (empty stubs from other write paths). Only meaningful rows may become
+// entries — phantom stubs once marked an entire upcoming week as done and
+// emptied the watch push. But meaningful is NOT done: a feel-only or
+// notes-only row maps to { done: false }, so consumers must test isDone,
+// never an entry's existence.
 const meaningfulLog = l => !!l && !!(l.completed || l.feel || l.notes);
+
+/* THE completion test. digest.js learned this in PR #66 (a feel-only
+   session counted as trained in three places) and the views never did: a
+   progress bar filled and a row ticked off an entry with done: false
+   (Plan-page audit 2026-08-07, L3 — every tab). One predicate, exported
+   from beside the contract that makes it necessary. */
+export const isDone = entry => !!(entry && entry.done);
 
 export function toClientState(resp) {
   if (!resp) return null;
