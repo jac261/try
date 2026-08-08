@@ -1,12 +1,17 @@
 import { defineConfig } from 'vite'
 import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // Deployed under https://jac261.github.io/try/ — assets must be prefixed with /try/.
 // For local dev/preview pass `--base /` so the app serves from the root.
+// The splash's build tag (design 1b: "useful for support screenshots").
+const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8'))
+
 export default defineConfig({
   base: '/try/',
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   // `@` → src/, so modules import as `@/lib/date` instead of `../../lib/date`.
   resolve: {
     alias: { '@': resolve(import.meta.dirname, 'src') },

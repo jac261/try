@@ -227,51 +227,84 @@ body {
 .app { max-width: 760px; margin: 0 auto; padding: 0 16px 110px; }
 
 
-/* ---------- splash (hydration): the mark and the name, centred ---------- */
+/* ---------- splash (hydration): design 1b, the quick-resume screen ------
+   The mark on a glow stage over two drifting orbs, a static wordmark,
+   rotating status copy, and a dim build tag. The tumble is the brand's one
+   loading signature (design note: short resumes get no progress ring — a
+   ring that never reaches a believable value invites doubt). */
 .splash {
   position: fixed; inset: 0; z-index: 100;
-  background: linear-gradient(160deg, #101725, #0e1217 60%);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  background: linear-gradient(168deg, #101725, #0b0e13 66%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
   color: var(--text);
+  overflow: hidden;
 }
 :root[data-theme='smoked'] .splash { background: radial-gradient(120% 80% at 25% 0%, #0b1017, #04060a 60%); }
-.splash h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.8px; }
-/* The mark tumbles one face of the triangle at a time (Jon, 2026-07-17):
-   a slow 120 degree rotation brings a new side to the bottom, a pulse on
-   landing, then the next face, until all three have been down. Rotation is
-   about the triangle's centroid (14.69/24 of the box height = 61.2%) so an
-   equilateral 120 degree turn lands congruent instead of orbiting. The
-   wordmark keeps the soft opacity pulse; the splash hold in App.jsx is sized
-   to let the whole sequence play once. */
-.splash svg { color: var(--blue); }
-.splash > * { animation: splash-pulse 1.15s ease-in-out infinite; }
-.splash > svg { transform-origin: 50% 61.2%; animation: splash-tumble 4.2s ease-in-out both; }
-@keyframes splash-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-@keyframes splash-tumble {
-  0%   { transform: rotate(0deg)   scale(1); }
-  14%  { transform: rotate(120deg) scale(1); }     /* face 2 to the bottom */
-  22%  { transform: rotate(120deg) scale(1.16); }  /* pulse */
-  30%  { transform: rotate(120deg) scale(1); }
-  47%  { transform: rotate(240deg) scale(1); }     /* face 3 to the bottom */
-  55%  { transform: rotate(240deg) scale(1.16); }
-  63%  { transform: rotate(240deg) scale(1); }
-  80%  { transform: rotate(360deg) scale(1); }      /* face 1 back to the bottom */
-  88%  { transform: rotate(360deg) scale(1.16); }
-  100% { transform: rotate(360deg) scale(1); }
+/* The ambient orbs: blue upper-left, green lower-right, drifting on long
+   offset clocks so they never read as a loop. Sized in vmax so a phone and
+   a desktop both get fields larger than their corner. */
+.splash-orb { position: absolute; border-radius: 50%; filter: blur(30px); pointer-events: none; }
+.splash-orb.a {
+  width: 90vmax; height: 90vmax; max-width: 340px; max-height: 340px;
+  left: -100px; top: -80px;
+  background: radial-gradient(circle, rgba(74, 116, 220, .7), rgba(74, 116, 220, 0) 68%);
+  animation: splash-orb 17s ease-in-out infinite;
 }
-/* Plan-work one-liners under the wordmark. Declared AFTER .splash > * so its
-   animation wins the equal-specificity tie: the message fades in per line
-   rather than inheriting the wordmark's endless pulse. Fixed min-height so a
-   line appearing does not shove the mark upward mid-tumble. */
+.splash-orb.b {
+  width: 80vmax; height: 80vmax; max-width: 300px; max-height: 300px;
+  right: -120px; bottom: -40px;
+  background: radial-gradient(circle, rgba(52, 211, 153, .32), rgba(52, 211, 153, 0) 70%);
+  animation: splash-orb 25s ease-in-out infinite reverse;
+}
+@keyframes splash-orb { 0%, 100% { transform: translate3d(0, 0, 0) scale(1); } 50% { transform: translate3d(22px, -26px, 0) scale(1.09); } }
+.splash h1 { margin: 6px 0 0; font-size: 42px; font-weight: 800; letter-spacing: -1.6px; line-height: 1; }
+/* The mark stage: glow behind, land-scale on the wrapper, tumble on the
+   svg. Three elements rather than one keyframe list, because the design's
+   landing pulse (28/61/94%) overlaps the rotation's travel (14-31% etc.)
+   and a single transform list cannot carry both timings. Rotation is about
+   the triangle's centroid (14.69/24 of the box height = 61.2%) so an
+   equilateral 120 degree turn lands congruent instead of orbiting. The
+   splash hold in App.jsx is sized to let the whole 4.2s sequence play
+   once; 'both' fill means a long startup ends on a RESTING mark, glow
+   dimmed, not a looping one. */
+.splash-stage { position: relative; width: 132px; height: 132px; display: grid; place-items: center; }
+.splash-glow {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, rgba(91, 140, 255, .55), rgba(91, 140, 255, 0) 68%);
+  filter: blur(14px); opacity: .34;
+  animation: splash-mark-glow 4.2s ease-in-out both;
+}
+.splash-mark { position: relative; animation: splash-mark-land 4.2s ease-in-out both; }
+.splash svg { color: #dbe6ff; filter: drop-shadow(0 6px 18px rgba(4, 7, 12, .6)); }
+.splash-mark svg { transform-origin: 50% 61.2%; animation: splash-tumble 4.2s ease-in-out both; }
+@keyframes splash-tumble {
+  0%, 14%   { transform: rotate(0deg); }
+  31%, 47%  { transform: rotate(120deg); }   /* face 2 to the bottom */
+  64%, 80%  { transform: rotate(240deg); }   /* face 3 to the bottom */
+  97%, 100% { transform: rotate(360deg); }   /* face 1 back to the bottom */
+}
+@keyframes splash-mark-land {
+  0%, 26%, 29%, 43%, 59%, 62%, 76%, 92%, 95%, 100% { transform: scale(1); }
+  28%, 61%, 94% { transform: scale(1.07); }  /* the pulse on each landing */
+}
+@keyframes splash-mark-glow {
+  0%, 26%, 29%, 59%, 62%, 92%, 95%, 100% { opacity: .34; }
+  28%, 61%, 94% { opacity: .85; }            /* the glow flashes with it */
+}
+/* The rotating status line. Fixed min-height so a line appearing does not
+   shove the mark upward mid-tumble; the fade re-runs per keyed line. */
 .splash-msg {
-  font-size: 14px; color: var(--muted); min-height: 20px;
+  font-size: 13.5px; font-weight: 600; color: var(--muted); min-height: 20px;
   animation: splash-msg-in 240ms ease-out;
 }
 @keyframes splash-msg-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-/* Reduced-motion reset AFTER the animation rule it cancels — a media query
+/* The build number, for support screenshots (design note: present on both
+   splash variants, invisible otherwise). */
+.splash-ver { position: absolute; bottom: 34px; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: var(--faint); }
+/* Reduced-motion reset AFTER the animation rules it cancels — a media query
    adds no specificity, so source order decides (the recap cascade lesson). */
 @media (prefers-reduced-motion: reduce) {
-  .splash > *, .splash > svg, .splash-msg { animation: none; }
+  .splash-orb, .splash-glow, .splash-mark, .splash-mark svg, .splash-msg { animation: none; }
 }
 
 /* ---------- header (a raised pane, sticky) ----------

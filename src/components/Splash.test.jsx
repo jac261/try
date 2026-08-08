@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createRoot } from 'react-dom/client';
-import { Splash, splashShownForMs, PLAN_WORK_MESSAGES } from '@/components/Splash.jsx';
+import { Splash, splashShownForMs, PLAN_WORK_MESSAGES, RESUME_MESSAGES } from '@/components/Splash.jsx';
 
 /* Reported 2026-07-30: on the startup splash the first rotation of the logo
  * repeats twice.
@@ -40,13 +40,18 @@ describe('Splash keeps one animation across two mounts', () => {
     expect(second).not.toContain('animation-delay:0ms');
   });
 
-  it('the delay rides on both animated children, mark and wordmark', () => {
-    // styles.css puts the pulse on .splash > * and the tumble on .splash > svg;
-    // a delay on only one of them would desync the two on remount.
+  it('the delay rides on every animated element, and the wordmark carries none', () => {
+    /* Design 1b: five animated elements — two orbs, the glow, the land
+       wrapper, the tumbling svg. A delay missing from any one desyncs it
+       on remount (the glow would flash off-beat from the landing it
+       exists to light). The wordmark is static by design, so a delay
+       there would be a sixth animation waiting to happen. */
     const html = renderToString(<Splash />);
-    expect((html.match(/animation-delay:/g) || []).length).toBe(2);
+    expect((html.match(/animation-delay:/g) || []).length).toBe(5);
     expect(html).toMatch(/<svg[^>]*animation-delay:/);
-    expect(html).toMatch(/<h1[^>]*animation-delay:/);
+    expect(html).toMatch(/splash-glow[^>]*animation-delay:/);
+    expect(html).toMatch(/splash-mark[^>]*animation-delay:/);
+    expect(html).not.toMatch(/<h1[^>]*animation-delay:/);
   });
 
   it('splashShownForMs reports time since first appearance, for the App hold', () => {
@@ -69,15 +74,70 @@ describe('Splash keeps one animation across two mounts', () => {
   });
 });
 
-describe('plan-work messages (Jon, 2026-07-30)', () => {
-  it('cycles one-liners when given messages, and stays plain at startup', () => {
+describe('plan-work messages (Jon, 2026-07-30) and the resume trio (design 1b)', () => {
+  it('cycles one-liners when given messages, and the resume trio at startup', () => {
     const withMsgs = renderToString(<Splash messages={PLAN_WORK_MESSAGES} />);
     expect(withMsgs).toContain('splash-msg');
     expect(withMsgs).toContain('aria-label="Updating your plan"');
     expect(PLAN_WORK_MESSAGES.some(m => withMsgs.includes(m))).toBe(true);
+    // startup now speaks too — the 1b status copy, opening on line one
     const startup = renderToString(<Splash />);
-    expect(startup).not.toContain('splash-msg');
+    expect(startup).toContain('splash-msg');
+    expect(startup).toContain(RESUME_MESSAGES[0]);
     expect(startup).toContain('aria-label="Try is loading"');
+  });
+
+  it('the trio keeps its authored order at the design cadence; plan work keeps its quick shuffle', async () => {
+    /* "Almost there" is a closer, not an opener: the startup set is NEVER
+       shuffled, and it rotates at the design's 1.2s, not plan work's
+       700ms — at 700ms the trio would be through twice before the hold
+       ends, which reads as stuck. */
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    /* A 3-item shuffle lands on the identity order one run in six, so a
+       shuffle bug would slip this test that often. Pinning Math.random
+       LOW makes the comparator constantly negative, which V8's sort turns
+       into a deterministic REVERSAL — measured, not assumed: a constant
+       positive comparator leaves the array in identity order and hides
+       the mutation entirely. */
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const root = createRoot(el);
+    await act(async () => { root.render(<Splash />); });
+    const line = () => el.querySelector('.splash-msg').textContent;
+    expect(line()).toBe(RESUME_MESSAGES[0]);
+    await act(async () => { vi.advanceTimersByTime(700); });
+    expect(line()).toBe(RESUME_MESSAGES[0]);            // 700ms is not this clock
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(line()).toBe(RESUME_MESSAGES[1]);            // 1.2s is
+    await act(async () => { vi.advanceTimersByTime(1200); });
+    expect(line()).toBe(RESUME_MESSAGES[2]);            // in order, no shuffle
+    await act(async () => { root.unmount(); });
+    el.remove();
+    vi.useRealTimers();
+  });
+
+  it('reduced motion silences every splash animation (source pin)', async () => {
+    /* The browser harness cannot emulate prefers-reduced-motion, so the
+       pin is on the stylesheet: the reset must name every animated class
+       this redesign added, or an orb keeps drifting for the athlete who
+       asked for stillness. */
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('src/styles.css', 'utf8');
+    const block = css.match(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.splash[^}]*\}/);
+    expect(block).toBeTruthy();
+    for (const cls of ['.splash-orb', '.splash-glow', '.splash-mark', '.splash-msg']) {
+      expect(block[0]).toContain(cls);
+    }
+  });
+
+  it('the version tag renders the build version', () => {
+    // vite's define supplies __APP_VERSION__ in every environment this
+    // component can run in (dev server, build, vitest all load the
+    // config) — a typeof guard was written, proven unkillable by
+    // mutation, and removed: unkillable is the tell it protects nothing.
+    const html = renderToString(<Splash />);
+    expect(html).toMatch(/splash-ver[^>]*>v\d+\.\d+\.\d+/);
   });
 
   it('advances to a different line on the rotation tick', async () => {
