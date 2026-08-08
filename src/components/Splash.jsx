@@ -31,6 +31,16 @@ let firstShownAt = null;
 let lastSeenAt = null;
 const EPISODE_GAP_MS = 800;
 
+/* Quick-resume status copy (design 1b, 2026-08-07): shown by the STARTUP
+   splash, rotating in AUTHORED order — "Almost there" is a closer, not an
+   opener, so this set is never shuffled. Deliberately three lines: the
+   design's whole point is a short read while real work happens beneath. */
+export const RESUME_MESSAGES = [
+  'Waking up your plan',
+  "Checking today's session",
+  'Almost there',
+];
+
 /* Plan-work theatre (Jon, 2026-07-30). One-liners, cycled while the splash
    covers a plan build or update. Deliberately whimsical and deliberately
    free of anything that describes how the plan is actually made. */
@@ -58,7 +68,14 @@ export function splashShownForMs() {
   return firstShownAt == null ? 0 : performance.now() - firstShownAt;
 }
 
+/* Design 1b (quick resume), 2026-08-07. Everything MODE-dependent keys on
+   the `messages` PROP — plan work passes PLAN_WORK_MESSAGES (App:979),
+   startup passes nothing (AuthGate, App's hydrate hold) and gets the
+   RESUME trio by default. It must be the prop and not the resolved list:
+   both modes now always have lines, so "do I have lines" can no longer
+   tell the label, the cadence or the shuffle apart. */
 export function Splash({ messages }) {
+  const planWork = !!(messages && messages.length);
   const [delay] = useState(() => {
     const now = performance.now();
     if (firstShownAt == null || (lastSeenAt != null && now - lastSeenAt > EPISODE_GAP_MS)) {
@@ -72,24 +89,45 @@ export function Splash({ messages }) {
   // the startup handoff lastSeenAt is still unset and the episode continues.
   useEffect(() => () => { lastSeenAt = performance.now(); }, []);
 
-  // The message rotation. Shuffled once per mount so repeated plan updates
-  // do not always open on the same line; keyed so each line re-runs the
-  // entrance animation.
+  /* The message rotation. Plan work shuffles once per mount so repeated
+     plan updates do not always open on the same line, and keeps its quick
+     700ms theatre cadence (Jon, 2026-07-30). The startup trio keeps its
+     authored order at the design's 1.2s cadence. Keyed so each line
+     re-runs the entrance animation. */
   const [order] = useState(() =>
-    (messages && messages.length ? [...messages].sort(() => Math.random() - 0.5) : null));
+    (planWork ? [...messages].sort(() => Math.random() - 0.5) : RESUME_MESSAGES));
   const [msg, setMsg] = useState(0);
   useEffect(() => {
     if (!order || order.length < 2) return undefined;
-    const t = setInterval(() => setMsg(m => m + 1), 700);
+    const t = setInterval(() => setMsg(m => m + 1), planWork ? 700 : 1200);
     return () => clearInterval(t);
-  }, [order]);
+  }, [order, planWork]);
 
   const sync = { animationDelay: delay };
   return (
-    <div className="splash" role="status" aria-label={order ? 'Updating your plan' : 'Try is loading'}>
-      <Icon name="logo" size={64} style={sync} />
-      <h1 style={sync}>Try</h1>
-      {order && <div key={msg} className="splash-msg">{order[msg % order.length]}</div>}
+    <div className="splash" role="status" aria-label={planWork ? 'Updating your plan' : 'Try is loading'}>
+      {/* ambient orbs: the design's two blurred drifting fields */}
+      <div className="splash-orb a" style={sync} />
+      <div className="splash-orb b" style={sync} />
+      {/* the mark stage: glow behind, land-scale on the wrapper, tumble on
+          the svg — the design's own structure, because the land pulse
+          overlaps the rotation's travel and one transform list cannot
+          carry both timings */}
+      <div className="splash-stage">
+        <div className="splash-glow" style={sync} />
+        <div className="splash-mark" style={sync}>
+          <Icon name="logo" size={96} style={sync} />
+        </div>
+      </div>
+      <h1>Try</h1>
+      {/* aria-hidden: a role=status region re-announcing a rotating line
+          every cycle would chatter; the container's label carries the one
+          stable fact a screen reader needs */}
+      <div key={msg} className="splash-msg" aria-hidden="true">{order[msg % order.length]}</div>
+      {/* the build number, dim, for support screenshots (design note).
+          __APP_VERSION__ is vite's define off package.json — supplied in
+          dev, build and vitest alike, so no runtime guard. */}
+      <div className="splash-ver" aria-hidden="true">{'v' + __APP_VERSION__}</div>
     </div>
   );
 }
